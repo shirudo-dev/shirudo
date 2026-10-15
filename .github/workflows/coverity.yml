@@ -11,7 +11,7 @@ permissions:
 jobs:
   coverity:
     name: Coverity Scan
-    runs-on: ubuntu-latest-4cores-16gb
+    runs-on: ubuntu-latest
     if: github.repository == 'shirudo-dev/shirudo'
     env:
       COVERITY_SCAN_TOKEN: ${{ secrets.COVERITY_SCAN_TOKEN }}

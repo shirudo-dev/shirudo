@@ -14,7 +14,7 @@ permissions:
 jobs:
   test-op:
     name: ASan+UBSan (${{ matrix.compiler }})
-    runs-on: ubuntu-latest-4cores-16gb
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
