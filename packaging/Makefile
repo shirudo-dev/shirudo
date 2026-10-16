@@ -168,7 +168,9 @@ bindeb-pkg:
 	@printf '  CLEAN   (rebuild with prefix=$(PKG_PREFIX) for packaging)\n'
 	+$(Q)$(MAKE) -C $(ROOT) clean
 	+$(Q)$(MAKE) -C $(ROOT) $(PKG_PATHS) all $(if $(filter operator,$(PKG_ROLES)),shirudo-build)
-	$(Q)rm -rf $(DEB_STAGE_PATH) $(DEB_TARGET_PKG_PATH) $(DEB_OPERATOR_PKG_PATH)
+	$(Q)rm -rf $(DEB_STAGE_PATH) \
+	    $(if $(filter target,$(PKG_ROLES)),$(DEB_TARGET_PKG_PATH)) \
+	    $(if $(filter operator,$(PKG_ROLES)),$(DEB_OPERATOR_PKG_PATH))
 	$(if $(filter target,$(PKG_ROLES)),@printf '  STAGE   $(DEB_STAGE_PATH)/target\n')
 	$(if $(filter target,$(PKG_ROLES)),+$(Q)$(MAKE) -C $(ROOT) $(PKG_PATHS) DESTDIR=$(DEB_STAGE_PATH)/target install-target)
 	$(if $(filter operator,$(PKG_ROLES)),@printf '  STAGE   $(DEB_STAGE_PATH)/operator\n')
@@ -191,7 +193,9 @@ binrpm-pkg:
 	@printf '  CLEAN   (rebuild with prefix=$(PKG_PREFIX) for packaging)\n'
 	+$(Q)$(MAKE) -C $(ROOT) clean
 	+$(Q)$(MAKE) -C $(ROOT) $(PKG_PATHS) all $(if $(filter operator,$(PKG_ROLES)),shirudo-build)
-	$(Q)rm -rf $(RPM_STAGE_PATH) $(RPM_TARGET_PKG_PATH) $(RPM_OPERATOR_PKG_PATH)
+	$(Q)rm -rf $(RPM_STAGE_PATH) \
+	    $(if $(filter target,$(PKG_ROLES)),$(RPM_TARGET_PKG_PATH)) \
+	    $(if $(filter operator,$(PKG_ROLES)),$(RPM_OPERATOR_PKG_PATH))
 	$(if $(filter target,$(PKG_ROLES)),@printf '  STAGE   $(RPM_STAGE_PATH)/target\n')
 	$(if $(filter target,$(PKG_ROLES)),+$(Q)$(MAKE) -C $(ROOT) $(PKG_PATHS) DESTDIR=$(RPM_STAGE_PATH)/target install-target)
 	$(if $(filter operator,$(PKG_ROLES)),@printf '  STAGE   $(RPM_STAGE_PATH)/operator\n')

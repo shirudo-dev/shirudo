@@ -285,7 +285,7 @@ jobs:
       - name: Install the build dependencies
         run: |
           dnf -q install -y gcc make pkgconf-pkg-config git python3 rpm-build \
-            clang llvm openssl-devel libcurl-devel tpm2-tss-devel \
+            clang llvm openssl openssl-devel libcurl-devel tpm2-tss-devel \
             elfutils-libelf-devel zlib-ng-compat-devel luajit-devel
 
       - name: Check out repository
@@ -297,6 +297,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: shirudo-rpm-target
+          path: target-rpm
 
       - name: Download the bpf-next vmlinux.h
         uses: actions/download-artifact@v4
@@ -327,7 +328,7 @@ jobs:
       - name: Install, exercise and remove both packages
         run: |
           set -eux
-          dnf -q install -y ./shirudo-target-*.rpm
+          dnf -q install -y ./target-rpm/shirudo-target-*.rpm
           rpm -q shirudo-target
           rpm -qV shirudo-target
           rpm -q --scripts shirudo-target | grep -q 'systemctl enable shirudo.service'
@@ -349,6 +350,7 @@ jobs:
           shirudo build basic.bpf.c
           shirudo upatch info basic.bpf.upatch
           dnf -q remove -y shirudo-operator
+          hash -r
           ! command -v shirudo
 
       - name: Upload operator rpm package
