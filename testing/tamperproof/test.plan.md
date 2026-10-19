@@ -41,6 +41,7 @@ checks that Shirudo can still export the pre-existing Python exec record.
 | TP-19 | Root assigns Shirudo's executable identity using `PR_SET_MM` | Covered | `t1131-pr-set-mm-identity.sh` and `t1131-pr-set-mm-identity.py` | Requires `CAP_SYS_RESOURCE`; verify both `PR_SET_MM_EXE_FILE` and `PR_SET_MM_MAP` are denied to non-Shirudo callers. |
 | TP-20 | Obtain or transfer Shirudo's open map FDs via `/proc/<pid>/fd`, `pidfd_getfd`, or `SCM_RIGHTS` | Not covered | None | Test each applicable acquisition/transfer route and verify a received FD cannot be used to mutate protected maps. |
 | TP-21 | Concurrent or repeated serializer invocation changes/loses records | Not covered | None | Add after TP-14 policy fix; exercise repeated and concurrent export attempts and verify record integrity. |
+| TP-22 | Root puts the public seal label on a file, or runs a binary a mounted file system labels, and then writes, renames, unlinks or relabels a labelled file | Covered | `t1132-seal-scratch.sh` | Only Shirudo may set the label, and the seal admits the executable `init` recorded, not one that carries the label. A failure is a bypass of the seal. |
 
 ## Review notes
 
