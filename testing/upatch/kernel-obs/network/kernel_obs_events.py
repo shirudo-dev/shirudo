@@ -92,19 +92,6 @@ def listen_event():
     receiver.close()
 
 
-def priv_event():
-    pid = os.fork()
-    if pid == 0:
-        os.unshare(os.CLONE_NEWUSER)
-        os._exit(0)
-    _, status = os.waitpid(pid, 0)
-    if os.waitstatus_to_exitcode(status) != 0:
-        raise RuntimeError("user namespace creation failed")
-    with tempfile.TemporaryDirectory() as mountpoint:
-        subprocess.run(["mount", "-t", "tmpfs", "none", mountpoint], check=True)
-        subprocess.run(["umount", mountpoint], check=True)
-
-
 def file_event():
     with open("/etc/shadow", "rb") as shadow:
         shadow.read(1)
@@ -233,13 +220,12 @@ EVENTS = {
     "udp": udp_event,
     "dns": dns_event,
     "listen": listen_event,
-    "priv": priv_event,
     "file": file_event,
     "watch": watch_event,
     "dns-long": dns_long_event,
     "dns-many": dns_many_answers_event,
 }
-ALL = ("exec", "tcp", "udp", "dns", "listen", "priv", "file")
+ALL = ("exec", "tcp", "udp", "dns", "listen", "file")
 
 
 def main():

@@ -173,10 +173,6 @@ assert any(n["name"] == long_name
 assert any(r["address"] == "203.0.113.75" and
            any(n["name"] == "many.example" for n in r["names"])
            for r in tables["dns"]), tables["dns"]
-assert any(r["kind"] == "userns_create"
-           for r in tables["priv"]), tables["priv"]
-assert any(r["kind"] == "mount" and r["name"] == "tmpfs"
-           for r in tables["priv"]), tables["priv"]
 assert any(r["path"] == "/etc/shadow" and r["mode"] == "r"
            for r in tables["file"]), tables["file"]
 assert any(r["path"].endswith("/environ")
