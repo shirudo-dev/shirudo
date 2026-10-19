@@ -91,9 +91,6 @@ offset      size  type    field                  meaning
 356         4     u32     reserved1              zero
 ==========  ====  ======  =====================  ===========================================
 
-The legacy 352-byte header ended at ``reserved0`` and implied a BPF
-payload.  It remains readable for existing artifacts.
-
 magic
 ~~~~~
 
@@ -345,9 +342,8 @@ bump:
 - a signed decoder blob may be appended inside ``data`` and located by
   the trailer at its end.  Older loaders ignore the additional bytes;
   older readers treat them as opaque loader data;
-- the 360-byte header appended ``type`` and ``reserved1`` after
-  ``reserved0``; the 352-byte form is still read and means
-  ``type = bpf``;
+- the 360-byte header includes ``type`` and ``reserved1`` after
+  ``reserved0``;
 - ``reserved0`` and ``reserved1`` are zero in every file a writer
   emits; a reader rejects a file in which ``reserved0`` is not, so the
   slot can be given a meaning later without a flag day.
@@ -364,10 +360,9 @@ match, before trusting any offset.
 1. the file is a regular file, non-empty, and at most 16 MiB;
 2. ``magic`` and ``version`` match;
 3. each section ``(off, len)`` lies within the file, and any non-empty
-   section starts at or after the active header (360 bytes, or 352 for
-   the legacy form);
+   section starts at or after the 360-byte header;
 4. ``loader_insns_len`` and ``signature_len`` are non-zero, and
-   ``reserved0`` is zero;
+   ``reserved0`` and ``reserved1`` are zero;
 5. decoders are parsed only if ``data`` ends with a matching trailer,
    all blob and entry bounds fit, fixed strings are NUL-terminated, and
    every source range stays inside the blob.  Malformed decoder

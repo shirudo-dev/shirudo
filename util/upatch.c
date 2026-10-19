@@ -95,7 +95,8 @@ static int validate_bounds(const struct shirudo_upatch_header *h, size_t n)
 {
 	if (h->type != SHIRUDO_UPATCH_TYPE_BPF)
 		return -EINVAL;
-	if (!section_inside(h->loader_insns_off, h->loader_insns_len, n))
+	if (h->loader_insns_off < SHIRUDO_UPATCH_HEADER_SIZE ||
+	    !section_inside(h->loader_insns_off, h->loader_insns_len, n))
 		return -EINVAL;
 	if (!section_inside(h->signature_off, h->signature_len, n))
 		return -EINVAL;

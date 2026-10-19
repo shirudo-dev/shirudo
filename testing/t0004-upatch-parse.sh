@@ -52,4 +52,45 @@ test_expect_success 'a directory path rejected, no crash' '
 	reject "$WORK"
 '
 
+python3 - "$WORK" <<'PY'
+import pathlib, struct, sys
+root = pathlib.Path(sys.argv[1])
+header = bytearray(369)
+struct.pack_into("<QII", header, 0, 0x53485244554E4150, 1, 0)
+header[16:32] = b"structured-test".ljust(16, bytes([0]))
+struct.pack_into("<14I", header, 304, 360, 8, 368, 1, 0, 0, 0, 0,
+                 4096, 0, 0, 0, 1, 0)
+header[360:368] = b"12345678"
+header[368] = 0x41
+(root / "valid-structured").write_bytes(header)
+def mutate(name, off, fmt, value):
+    data = bytearray(header)
+    struct.pack_into(fmt, data, off, value)
+    (root / name).write_bytes(data)
+mutate("bad-version", 8, "<I", 2)
+mutate("reserved0", 348, "<I", 1)
+mutate("reserved1", 356, "<I", 1)
+mutate("zero-loader", 308, "<I", 0)
+mutate("zero-signature", 316, "<I", 0)
+mutate("loader-in-header", 304, "<I", 359)
+mutate("signature-oob", 312, "<I", 0xfffffff0)
+mutate("data-overflow", 328, "<I", 0xfffffff0)
+data = bytearray(header)
+struct.pack_into("<II", data, 320, 359, 1)
+(root / "metadata-in-header").write_bytes(data)
+mutate("data-len-overflow", 332, "<I", 0xffffffff)
+with (root / "oversized").open("wb") as f:
+    f.truncate(16 * 1024 * 1024 + 1)
+PY
+test_expect_success 'structured valid container parses' '
+	"$S" upatch info "$WORK/valid-structured" >/dev/null 2>&1
+'
+test_expect_success 'structured header and section bounds fail cleanly' '
+	for f in bad-version reserved0 reserved1 zero-loader zero-signature \
+		 loader-in-header signature-oob data-overflow metadata-in-header \
+		 data-len-overflow; do reject "$WORK/$f" || exit 1; done
+'
+test_expect_success 'file larger than 16 MiB is rejected without mapping it' '
+	reject "$WORK/oversized"
+'
 test_done
