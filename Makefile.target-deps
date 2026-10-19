@@ -33,7 +33,16 @@ CURL_VERSION ?= 8.18.0
 TSS_VERSION ?= 4.1.3
 
 TARGET_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || gcc -print-multiarch)
-TARGET_SYSTEM_LIBDIR ?= /usr/lib/$(TARGET_MULTIARCH)
+
+# The multiarch directory on Debian, /usr/lib64 on Fedora and RHEL: the
+# first that holds libelf.a, else the first candidate.
+TARGET_SYSTEM_ROOT ?= /usr
+TARGET_SYSTEM_LIBDIRS := \
+	$(if $(TARGET_MULTIARCH),$(TARGET_SYSTEM_ROOT)/lib/$(TARGET_MULTIARCH)) \
+	$(TARGET_SYSTEM_ROOT)/lib64 $(TARGET_SYSTEM_ROOT)/lib
+TARGET_SYSTEM_LIBDIR ?= $(firstword \
+	$(foreach d,$(TARGET_SYSTEM_LIBDIRS),$(if $(wildcard $(d)/libelf.a),$(d))) \
+	$(TARGET_SYSTEM_LIBDIRS))
 
 OPENSSL_PKG_CONFIG_PATH := $(TARGET_OPENSSL_PREFIX)/lib/pkgconfig
 
