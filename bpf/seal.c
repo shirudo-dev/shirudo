@@ -11,14 +11,15 @@
  * target's label and, if present, require the calling task to run the
  * executable shirudo init recorded in the identity map (the test bpf2
  * applies to the bpffs) -- so only shirudo may write, unlink, rename, or
- * relabel its own on-disk state. The label only marks a target: its
- * value is public, so a binary carrying it proves nothing about the
- * caller. The exec hooks cache whether the successfully executed file
- * carries a Shirudo label in task storage for later access-control
- * decisions. An unlabelled filesystem target is not ours and is allowed
- * through untouched. No bpf_d_path(), no path strings: the label rides
- * the inode, immune to bind-mount / namespace / TOCTOU games. Reads are
- * not gated; only write-mode opens and the mutating inode ops are.
+ * relabel its own on-disk state. The label only marks a target, and only
+ * shirudo may set it; its value is public and a mounted file system can
+ * present it, so a binary carrying it proves nothing about the caller.
+ * The exec hooks cache whether the successfully executed file carries a
+ * Shirudo label in task storage for later access-control decisions. An
+ * unlabelled filesystem target is not ours and is allowed through
+ * untouched. No bpf_d_path(), no path strings: the label rides the
+ * inode, immune to bind-mount / namespace / TOCTOU games. Reads are not
+ * gated; only write-mode opens and the mutating inode ops are.
  *
  * The filesystem and exec xattr hooks are sleepable (lsm.s/) because
  * reading an xattr can sleep. The xattr-reading kfuncs write into a
@@ -67,24 +68,41 @@ extern int bpf_get_dentry_xattr(struct dentry *dentry, const char *name__str,
 extern int bpf_get_file_xattr(struct file *file, const char *name__str,
 			      struct bpf_dynptr *value_p) __ksym;
 
-/*
- * With the length of the target's label already read (tlen), decide the
- * verdict. tlen != LABEL_LEN means the target is not one of shirudo's
- * labelled inodes -- allow. Otherwise the calling task must run the
- * executable recorded at init. 0 = allow, -EACCES = deny.
- */
-static __always_inline int seal_verdict(int tlen)
+/* 0 if the caller runs the executable recorded at init, else -EACCES. */
+static __always_inline int seal_caller(void)
 {
 	struct shirudo_sb_id *id;
 	__u32 zero = 0;
-
-	if (tlen != LABEL_LEN)
-		return 0;		/* not labelled (absent / wrong size) */
 
 	id = bpf_map_lookup_elem(&shirudo_bpffs_sb, &zero);
 	if (!id)
 		return -EACCES;
 	return shirudo_task_is_self(id) ? 0 : -EACCES;
+}
+
+/*
+ * With the length of the target's label already read (tlen), decide the
+ * verdict. tlen != LABEL_LEN means the target is not one of shirudo's
+ * labelled inodes -- allow. Otherwise the calling task must be shirudo.
+ * 0 = allow, -EACCES = deny.
+ */
+static __always_inline int seal_verdict(int tlen)
+{
+	if (tlen != LABEL_LEN)
+		return 0;		/* not labelled (absent / wrong size) */
+	return seal_caller();
+}
+
+/* Whether an xattr name is the label itself, not a longer name under it. */
+static __always_inline bool seal_is_label(const char *name)
+{
+	char buf[sizeof(SHIRUDO_XATTR) + 1];
+	long n;
+
+	n = bpf_probe_read_kernel_str(buf, sizeof(buf), name);
+	if (n != sizeof(SHIRUDO_XATTR))
+		return false;
+	return !bpf_strncmp(buf, sizeof(SHIRUDO_XATTR), SHIRUDO_XATTR);
 }
 
 static __always_inline struct seal_scratch *seal_scratch_get(
@@ -251,6 +269,8 @@ int BPF_PROG(shirudo_seal_inode_setxattr, struct mnt_idmap *idmap,
 	     struct dentry *dentry, const char *name, const void *value,
 	     __u64 size, int flags)
 {
+	if (seal_is_label(name))
+		return seal_caller();
 	return seal_dentry(dentry);
 }
 
