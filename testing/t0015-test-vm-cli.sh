@@ -219,6 +219,75 @@ test_expect_success 'the runtime image is built with the direct libguestfs backe
 	test "$(guestfs_env TEST_VM_QEMU="$WORK/gf-bin/none")" = "direct unset"
 '
 
+# Stand-ins for the tools prepare-test-vm-runtime.sh calls; every command it
+# runs is recorded, so the tests below read what it would have done.
+mkdir -p "$WORK/dns-bin" "$WORK/dns-cache"
+printf "%s\n" "#!/bin/sh" \
+	"printf \"%s\\n\" \"\$@\" >\"\$GF_ARGS\"" \
+	"for a in \"\$@\"; do case \$a in" \
+	"*:/root/shirudo-nameservers) cp \"\${a%%:/root/shirudo-nameservers}\" \"\$GF_NS\" ;;" \
+	"esac; done" >"$WORK/dns-bin/virt-customize"
+printf "%s\n" "#!/bin/sh" \
+	"if [ \"\$1\" = create ]; then for a in \"\$@\"; do last=\$a; done; : >\"\$last\"; fi" \
+	>"$WORK/dns-bin/qemu-img"
+chmod +x "$WORK/dns-bin/virt-customize" "$WORK/dns-bin/qemu-img"
+printf rootfs >"$WORK/dns-rootfs"
+printf "%s\n" "search example.com" "nameserver 127.0.0.53" \
+	"nameserver 2001:db8::53" "nameserver ::1" \
+	"nameserver fe80::1%eth0" "nameserver 192.0.2.53" \
+	>"$WORK/dns-resolv.conf"
+
+# Run prepare-test-vm-runtime.sh against stand-ins for the tools it needs:
+# run_dns RESOLV_CONF [VAR=value...].
+run_dns() {
+	resolv=$1
+	shift
+	rm -f "$WORK/dns-cache/img/dns-test.qcow2" &&
+	env -u http_proxy -u HTTP_PROXY -u https_proxy -u HTTPS_PROXY \
+		-u TEST_VM_APT_PROXY "$@" \
+		PATH="$WORK/dns-bin:$PATH" TEST_VM_ARCH=x86_64 TMPDIR="$WORK" \
+		GF_ARGS="$WORK/dns-args" GF_NS="$WORK/dns-ns" \
+		LIBGUESTFS_CACHEDIR="$WORK/dns-cache" \
+		TEST_VM_RESOLV_CONF="$resolv" \
+		../contrib/prepare-test-vm-runtime.sh \
+		--rootfs "$WORK/dns-rootfs" --cache-dir "$WORK/dns-cache/img" \
+		--package-file ../contrib/test-vm-runtime-packages \
+		--runtime-key dns-test --key-output "$WORK/dns-cache/key" \
+		>"$WORK/dns-run.out" 2>&1
+}
+
+test_expect_success 'the runtime image gives the appliance the host resolvers in the apt command' '
+	run_dns "$WORK/dns-resolv.conf" &&
+	printf "%s\n" "nameserver 2001:db8::53" "nameserver 192.0.2.53" \
+		>"$WORK/dns-expect" &&
+	cmp "$WORK/dns-expect" "$WORK/dns-ns" &&
+	! grep -qx -- "--install" "$WORK/dns-args" &&
+	grep -q "cat /root/shirudo-nameservers >>/etc/resolv.conf" "$WORK/dns-args" &&
+	grep -q "apt-get \$apt_opts update" "$WORK/dns-args" &&
+	grep -q "apt-get \$apt_opts install ca-certificates keyutils" "$WORK/dns-args" &&
+	grep -q "ripgrep rsync" "$WORK/dns-args" &&
+	run_dns "$WORK/no-such-resolv.conf" &&
+	! test -s "$WORK/dns-ns" &&
+	! grep -q "Acquire::http::Proxy" "$WORK/dns-args"
+'
+
+test_expect_success 'the runtime image passes the caller proxy to apt in the appliance' '
+	run_dns "$WORK/dns-resolv.conf" http_proxy=http://proxy.example:8080 &&
+	grep -q "Acquire::http::Proxy=http://proxy.example:8080" "$WORK/dns-args" &&
+	grep -q "Acquire::https::Proxy=http://proxy.example:8080" "$WORK/dns-args" &&
+	run_dns "$WORK/dns-resolv.conf" http_proxy=http://a.example:1 \
+		https_proxy=http://b.example:2 &&
+	grep -q "Acquire::http::Proxy=http://a.example:1" "$WORK/dns-args" &&
+	grep -q "Acquire::https::Proxy=http://b.example:2" "$WORK/dns-args" &&
+	run_dns "$WORK/dns-resolv.conf" http_proxy=http://a.example:1 \
+		TEST_VM_APT_PROXY=http://override.example:3 &&
+	grep -q "Acquire::http::Proxy=http://override.example:3" "$WORK/dns-args" &&
+	! grep -q "a.example" "$WORK/dns-args" &&
+	! run_dns "$WORK/dns-resolv.conf" "http_proxy=http://x;touch /tmp/pwned" &&
+	! run_dns "$WORK/dns-resolv.conf" "TEST_VM_APT_PROXY=ftp://x.example" &&
+	grep -q "plain http" "$WORK/dns-run.out"
+'
+
 test_expect_success 'the kernel package format follows the host package manager' '
 	printf "print:\n\t@echo \$(PACKAGE_FORMAT)\n" >"$WORK/print.mk" &&
 	format() {

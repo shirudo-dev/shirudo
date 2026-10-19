@@ -69,17 +69,47 @@ fi
 
 TMP_IMAGE="$CACHE_DIR/.${RUNTIME_KEY}.tmp.$$"
 MARKER="${TMP_IMAGE}.marker"
-cleanup() { rm -f -- "$TMP_IMAGE" "$MARKER"; }
+cleanup() { rm -f -- "$TMP_IMAGE" "$MARKER" "${TMP_IMAGE}.nameservers"; }
 trap cleanup EXIT
 
 # The cloud image is intentionally small.  Enlarge the backing overlay and
 # grow its existing root partition before installing the runtime packages.
 qemu-img create -q -f qcow2 -F qcow2 -b "$ROOTFS" "$TMP_IMAGE"
 qemu-img resize -q "$TMP_IMAGE" "$RUNTIME_DISK_SIZE"
-paste -sd, "$PACKAGE_FILE" >"${TMP_IMAGE}.packages"
-PACKAGES="$(<"${TMP_IMAGE}.packages")"
-rm -f -- "${TMP_IMAGE}.packages"
+PACKAGES="$(paste -sd' ' "$PACKAGE_FILE")"
 printf 'shirudo-test-vm-runtime-v1 %s\n' "$RUNTIME_KEY" >"$MARKER"
+
+# The appliance gets IPv4 DHCP only, so on a host with IPv6 or stub
+# resolvers it has no nameserver. It rebuilds resolv.conf for every command,
+# so the host's resolvers are added in the same command as apt rather than
+# through virt-customize --install.
+NAMESERVERS="${TMP_IMAGE}.nameservers"
+awk '$1 == "nameserver" && $2 !~ /^(127\.|::1$|fe80:)/ { print "nameserver " $2 }' \
+	"${TEST_VM_RESOLV_CONF:-/etc/resolv.conf}" >"$NAMESERVERS" 2>/dev/null ||
+	: >"$NAMESERVERS"
+# The appliance does not inherit the caller's proxy; pass it to apt.
+# TEST_VM_APT_PROXY overrides http_proxy and https_proxy. The URL goes into
+# a shell command, so only a plain one is accepted.
+APT_HTTP_PROXY="${TEST_VM_APT_PROXY:-${http_proxy:-${HTTP_PROXY:-}}}"
+APT_HTTPS_PROXY="${TEST_VM_APT_PROXY:-${https_proxy:-${HTTPS_PROXY:-$APT_HTTP_PROXY}}}"
+PROXY_OPTS=""
+for proxy_url in "$APT_HTTP_PROXY" "$APT_HTTPS_PROXY"; do
+	[[ -z "$proxy_url" || "$proxy_url" =~ ^https?://[]A-Za-z0-9._:@%/[-]+$ ]] ||
+		die "the apt proxy must be a plain http:// or https:// URL"
+done
+[[ -z "$APT_HTTP_PROXY" ]] ||
+	PROXY_OPTS+=" -o Acquire::http::Proxy=$APT_HTTP_PROXY"
+[[ -z "$APT_HTTPS_PROXY" ]] ||
+	PROXY_OPTS+=" -o Acquire::https::Proxy=$APT_HTTPS_PROXY"
+# shellcheck disable=SC2016 # expanded in the appliance
+INSTALL_SCRIPT='set -e
+export DEBIAN_FRONTEND=noninteractive
+if ! grep -q "^nameserver" /etc/resolv.conf; then
+	cat /root/shirudo-nameservers >>/etc/resolv.conf
+fi
+apt_opts="-q -y -o Dpkg::Options::=--force-confnew'"$PROXY_OPTS"'"
+apt-get $apt_opts update
+apt-get $apt_opts install '"$PACKAGES"
 
 printf '[test-vm-runtime] preparing %s\n' "$IMAGE" >&2
 CUSTOMIZE_LOG="${TMP_IMAGE}.virt-customize.log"
@@ -88,7 +118,9 @@ if ! TMPDIR="$GUESTFS_TMP_DIR" XDG_RUNTIME_DIR="$GUESTFS_RUNTIME_DIR" \
 	LIBGUESTFS_CACHEDIR="$GUESTFS_CACHE_DIR" virt-customize \
 	-a "$TMP_IMAGE" --network --no-selinux-relabel \
 	--run-command 'growpart /dev/sda 1 && resize2fs /dev/sda1' \
-	--install "$PACKAGES" \
+	--upload "$NAMESERVERS:/root/shirudo-nameservers" \
+	--run-command "$INSTALL_SCRIPT" \
+	--run-command 'rm -f /root/shirudo-nameservers' \
 	--upload "$MARKER:/etc/shirudo-test-vm-runtime" \
 	--run-command 'apt-get clean' \
 	--run-command 'rm -rf /var/lib/apt/lists/*' \
