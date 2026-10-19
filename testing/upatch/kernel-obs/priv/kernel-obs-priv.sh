@@ -11,9 +11,12 @@ FIXTURES=${SHIRUDO_TEST_FIXTURES_DIR:?target fixture directory is not set}
 NAME=kernel-obs
 LOAD="$FIXTURES/$NAME.upatch"
 UNLOAD="$FIXTURES/$NAME.unload.upatch"
+ANOMALY_LOAD="$FIXTURES/kernel-obs-cred-anomaly.upatch"
+ANOMALY_UNLOAD="$FIXTURES/kernel-obs-cred-anomaly.unload.upatch"
 PIN="/run/shirudo/bpffs/upatches/$NAME/link_0"
 MODPROBE_FILE=/proc/sys/kernel/modprobe
 WORK=$(mktemp -d)
+ACTIVE_UNLOAD=$UNLOAD
 MODPROBE_BACKUP="$WORK/kernel.modprobe"
 
 cleanup()
@@ -22,7 +25,7 @@ cleanup()
 		cat "$MODPROBE_BACKUP" >"$MODPROBE_FILE" || true
 	fi
 	if [ -e "$PIN" ] || [ -e "/run/shirudo/bpffs/upatches/$NAME/link" ]; then
-		"$SHIRUDO_BIN" upatch unload "$UNLOAD" --no-precheck \
+		"$SHIRUDO_BIN" upatch unload "$ACTIVE_UNLOAD" --no-precheck \
 			>/dev/null 2>&1 || true
 	fi
 	rm -f "/var/lib/shirudo/upatches/$NAME.upatch"
@@ -36,7 +39,7 @@ trap cleanup EXIT HUP INT TERM
 
 load_observability()
 {
-	if "$SHIRUDO_BIN" upatch load "$LOAD" --no-precheck --report=- \
+	if "$SHIRUDO_BIN" upatch load "$1" --no-precheck --report=- \
 		>"$WORK/load.log" 2>&1; then
 		return 0
 	fi
@@ -53,7 +56,7 @@ export_priv()
 }
 
 test_expect_success 'kernel-obs upatch loads with the priv serializer' '
-	load_observability &&
+	load_observability "$LOAD" &&
 	test -e "/run/shirudo/bpffs/upatches/$NAME/serializers/priv"
 '
 
@@ -78,6 +81,18 @@ test_expect_success 'privilege events produce attributed priv records' '
 	export_priv "$WORK/priv.ndjson" &&
 	python3 upatch/kernel-obs/priv/priv_events.py check \
 		"$WORK/expected.json" "$WORK/priv.ndjson"
+'
+
+test_expect_success 'credential anomalies are recorded once per task' '
+	[ -s "$ANOMALY_LOAD" ] && [ -s "$ANOMALY_UNLOAD" ] &&
+	"$SHIRUDO_BIN" upatch unload "$ACTIVE_UNLOAD" --no-precheck \
+		>/dev/null &&
+	ACTIVE_UNLOAD="$ANOMALY_UNLOAD" &&
+	load_observability "$ANOMALY_LOAD" &&
+	python3 upatch/kernel-obs/priv/priv_events.py anomaly &&
+	export_priv "$WORK/anomaly.ndjson" &&
+	python3 upatch/kernel-obs/priv/priv_events.py \
+		check-anomaly "$WORK/anomaly.ndjson"
 '
 
 test_done

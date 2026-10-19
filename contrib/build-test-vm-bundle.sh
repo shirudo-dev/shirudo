@@ -539,6 +539,19 @@ EOF
 		--key "$keys_dir/signing_key.pem" \
 		--cert "$keys_dir/cert.der"
 	)
+	sed 's/^#define BPF_NO_KFUNC_PROTOTYPES/#define SHIRUDO_TEST_CRED_ANOMALY\
+#define BPF_NO_KFUNC_PROTOTYPES/' \
+		"$source_dir/kernel-obs.bpf.c" \
+		>"$source_dir/kernel-obs-cred-anomaly.bpf.c"
+	(
+		cd "$REPO_ROOT"
+		"$REPO_ROOT/tools/shirudo-build/shirudo-build" \
+			"$source_dir/kernel-obs-cred-anomaly.bpf.c" \
+			-o "$TMP_DIR/fixtures/kernel-obs-cred-anomaly.upatch" \
+			--name kernel-obs --vmlinux "$REPO_ROOT/vendor/linux/vmlinux.h" \
+			--key "$keys_dir/signing_key.pem" \
+			--cert "$keys_dir/cert.der"
+	)
 }
 
 log "building target-test fixtures on the operator host"
@@ -598,6 +611,9 @@ serialized_metric_payload="$($REPO_ROOT/shirudo upatch info \
 observability_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/kernel-obs.upatch" --json |
 	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+observability_anomaly_payload="$($REPO_ROOT/shirudo upatch info \
+	"$TMP_DIR/fixtures/kernel-obs-cred-anomaly.upatch" --json |
+	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
 "$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
 	shirudo-test-basic --payload-sha256 "$basic_payload" \
 	-o "$TMP_DIR/fixtures/shirudo-test-basic.unload.upatch" \
@@ -650,6 +666,11 @@ build_tree_test_registry
 "$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
 	kernel-obs --payload-sha256 "$observability_payload" \
 	-o "$TMP_DIR/fixtures/kernel-obs.unload.upatch" \
+	--key "$FIXTURE_WORK/trusted/signing_key.pem" \
+	--cert "$FIXTURE_WORK/trusted/cert.der"
+"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
+	kernel-obs --payload-sha256 "$observability_anomaly_payload" \
+	-o "$TMP_DIR/fixtures/kernel-obs-cred-anomaly.unload.upatch" \
 	--key "$FIXTURE_WORK/trusted/signing_key.pem" \
 	--cert "$FIXTURE_WORK/trusted/cert.der"
 "$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \

@@ -291,6 +291,26 @@ def check_negative(path):
                    for record in records), records
 
 
+def check_anomaly(path):
+    records = records_from(path)
+    anomalies = [record for record in records
+                 if record["kind"] == "cred_anomaly"]
+    assert len(anomalies) == 1, anomalies
+    anomaly = anomalies[0]
+    assert anomaly["subtype"] == 1 and anomaly["euid"] == 0, anomaly
+    assert anomaly["uid"] == 0 and int(anomaly["aux"]) == 0, anomaly
+    assert anomaly["name"], anomaly
+    assert int(anomaly["count"]) == 1, anomaly
+    assert int(anomaly["pid"]) > 0, anomaly
+    assert int(anomaly["first_seen_unix_nano"]) > 0, anomaly
+    assert int(anomaly["last_seen_unix_nano"]) >= \
+        int(anomaly["first_seen_unix_nano"]), anomaly
+
+
+def anomaly_event():
+    os.execv("/bin/true", ["/bin/true"])
+
+
 def check_exec_unknown(path):
     with open(path, encoding="utf-8") as source:
         documents = [json.loads(line) for line in source]
@@ -326,7 +346,8 @@ def check_positive(expected_path, records_path):
         raise AssertionError({"missing": sorted(kinds - found),
                               "expected_executable": identity,
                               "available_records": available})
-    assert not any(record["kind"] == "cred_anomaly" for record in records), records
+    assert not any(record["kind"] == "cred_anomaly"
+                   for record in records), records
     for record in selected:
         assert int(record["count"]) > 0, record
         assert int(record["pid"]) > 0, record
@@ -371,7 +392,8 @@ def check_positive(expected_path, records_path):
 
     module_request = kind("module_request")[0]
     assert module_request["name"] == "net-pf-16-proto-31", module_request
-    assert module_request["subtype"] == 0 and int(module_request["aux"]) == 0, module_request
+    assert module_request["subtype"] == 0 and \
+        int(module_request["aux"]) == 0, module_request
     assert module_request["pid"] == expected["pid"], module_request
 
     userns = kind("userns_create")[0]
@@ -385,18 +407,20 @@ def check_positive(expected_path, records_path):
     assert int(bpf["aux"]) == 0 and int(bpf["count"]) == 1, bpf
 
     mmap_exec = kind("mmap_exec")[0]
-    assert mmap_exec["subtype"] == PROT_READ | PROT_EXEC, mmap_exec
+    assert mmap_exec["subtype"] == (PROT_READ | PROT_EXEC), mmap_exec
     assert mmap_exec["name"] == "true", mmap_exec
     assert int(mmap_exec["aux"]) == MAP_PRIVATE, mmap_exec
     mprotect_exec = kind("mprotect_exec")[0]
-    assert mprotect_exec["subtype"] == PROT_READ | PROT_EXEC, mprotect_exec
+    assert mprotect_exec["subtype"] == (PROT_READ | PROT_EXEC), mprotect_exec
     assert mprotect_exec["name"] == "anonymous", mprotect_exec
     assert int(mprotect_exec["aux"]) == PAGE_SIZE, mprotect_exec
 
 
 def main():
     if len(sys.argv) < 2:
-        raise SystemExit("usage: priv_events.py negative | generate FILE | check EXPECTED NDJSON | check-negative NDJSON | check-exec-unknown NDJSON")
+        raise SystemExit("usage: priv_events.py negative | generate FILE | "
+                         "check EXPECTED NDJSON | check-negative NDJSON | "
+                         "check-anomaly NDJSON | check-exec-unknown NDJSON")
     mode = sys.argv[1]
     if mode == "negative":
         nonexec_mapping_events()
@@ -406,6 +430,10 @@ def main():
         check_positive(sys.argv[2], sys.argv[3])
     elif mode == "check-negative" and len(sys.argv) == 3:
         check_negative(sys.argv[2])
+    elif mode == "check-anomaly" and len(sys.argv) == 3:
+        check_anomaly(sys.argv[2])
+    elif mode == "anomaly" and len(sys.argv) == 2:
+        anomaly_event()
     elif mode == "check-exec-unknown" and len(sys.argv) == 3:
         check_exec_unknown(sys.argv[2])
     else:

@@ -165,3 +165,28 @@ int BPF_PROG(obs_task_alloc, struct task_struct *child, __u64 clone_flags)
 	meta->flags = inherited->flags & OBS_TASK_INFERRED;
 	return 0;
 }
+
+#ifdef SHIRUDO_TEST_CRED_ANOMALY
+SEC("lsm/bprm_committed_creds")
+int BPF_PROG(obs_test_cred_anomaly, const struct linux_binprm *bprm)
+{
+	char name[OBS_NAME_LEN] = {};
+	struct obs_task_meta *meta;
+	struct task_struct *task;
+
+	if (!bprm->file)
+		return 0;
+	obs_name_from_file(bprm->file, name);
+	if (name[0] != 't' || name[1] != 'r' || name[2] != 'u' ||
+	    name[3] != 'e' || name[4])
+		return 0;
+	task = bpf_get_current_task_btf();
+	meta = obs_task_meta(task);
+	if (!meta)
+		return 0;
+	meta->euid = 1;
+	obs_cred_check(task, meta, obs_now());
+	obs_cred_check(task, meta, obs_now());
+	return 0;
+}
+#endif
