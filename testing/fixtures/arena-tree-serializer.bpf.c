@@ -45,6 +45,13 @@ struct {
 	__type(value, struct shirudo_serial_chunk);
 } shirudo_ser SEC(".maps");
 
+struct {
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, __u32);
+	__type(value, __u32);
+} tree_error SEC(".maps");
+
 struct tree_node {
 	__u32 key;
 	__u32 value;
@@ -268,6 +275,15 @@ int shirudo_serialize__tree_arena(struct shirudo_serialize_ctx *ctx)
 		}
 	}
 	return 0;
+}
+
+SEC("syscall")
+int shirudo_serialize__tree_error(struct shirudo_serialize_ctx *ctx)
+{
+	if (!ctx || !ctx->invocation_id)
+		return -EINVAL;
+	set_error(ctx, -EINVAL);
+	return -EINVAL;
 }
 
 char _license[] SEC("license") = "Dual BSD/GPL";

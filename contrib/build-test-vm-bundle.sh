@@ -576,6 +576,7 @@ build_fixture marker.bpf.c shirudo-test-marker "$FIXTURE_WORK/trusted"
 build_fixture map-export.bpf.c shirudo-test-map-export "$FIXTURE_WORK/trusted"
 build_fixture otel-backend.bpf.c shirudo-test-otel-backend "$FIXTURE_WORK/trusted"
 build_fixture serialized-metric.bpf.c shirudo-test-serialized-metric "$FIXTURE_WORK/trusted"
+build_fixture arena-tree-serializer.bpf.c shirudo-test-arena-tree "$FIXTURE_WORK/trusted"
 build_fixture uprobe-multi.bpf.c shirudo-test-uprobe-multi "$FIXTURE_WORK/trusted"
 build_fixture basic.bpf.c shirudo-test-foreign "$FIXTURE_WORK/foreign"
 build_fixture basic.bpf.c shirudo-test-own-keyring "$FIXTURE_WORK/own"
@@ -607,6 +608,9 @@ otel_backend_payload="$($REPO_ROOT/shirudo upatch info \
 	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
 serialized_metric_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/shirudo-test-serialized-metric.upatch" --json |
+	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+arena_tree_payload="$($REPO_ROOT/shirudo upatch info \
+	"$TMP_DIR/fixtures/shirudo-test-arena-tree.upatch" --json |
 	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
 observability_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/kernel-obs.upatch" --json |
@@ -661,6 +665,11 @@ build_tree_test_registry
 "$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
 	shirudo-test-serialized-metric --payload-sha256 "$serialized_metric_payload" \
 	-o "$TMP_DIR/fixtures/shirudo-test-serialized-metric.unload.upatch" \
+	--key "$FIXTURE_WORK/trusted/signing_key.pem" \
+	--cert "$FIXTURE_WORK/trusted/cert.der"
+"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
+	shirudo-test-arena-tree --payload-sha256 "$arena_tree_payload" \
+	-o "$TMP_DIR/fixtures/shirudo-test-arena-tree.unload.upatch" \
 	--key "$FIXTURE_WORK/trusted/signing_key.pem" \
 	--cert "$FIXTURE_WORK/trusted/cert.der"
 "$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \

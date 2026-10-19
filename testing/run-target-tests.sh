@@ -47,6 +47,8 @@ for t in \
 	tamperproof/t1130-map-lockdown.sh \
 	tamperproof/t1131-pr-set-mm-identity.sh \
 	tamperproof/t1125-key-permission.sh \
+	tamperproof/t1132-upatch-integrity.sh \
+	t1133-upatch-arena-serializer.sh \
 	tamperproof/t1106-keyring-swap.sh
 do
 	if sh "$t"; then

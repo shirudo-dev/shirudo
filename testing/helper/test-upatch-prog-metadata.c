@@ -63,30 +63,37 @@ static int expect_attach(const struct shirudo_upatch *u, __u32 kind,
 
 static int expect_serializer(const struct shirudo_upatch *u)
 {
+	struct shirudo_upatch_prog_entry progs[2];
 	struct shirudo_upatch_prog_metadata md;
-	struct shirudo_upatch_prog_entry prog;
+	bool arena = false, error = false;
 	const __u8 *raw;
+	size_t i;
 
-	if (u->hdr.nr_maps != 3 || u->hdr.nr_progs != 1)
+	if (u->hdr.nr_maps != 4 || u->hdr.nr_progs != 2)
 		return fail("unexpected map/prog counts");
-	if (u->hdr.metadata_len != sizeof(md) + sizeof(prog))
+	if (u->hdr.metadata_len != sizeof(md) + sizeof(progs))
 		return fail("unexpected metadata length");
 	raw = shirudo_upatch_metadata(u);
 	if (!raw)
 		return fail("missing metadata");
 	memcpy(&md, raw, sizeof(md));
-	memcpy(&prog, raw + sizeof(md), sizeof(prog));
+	memcpy(progs, raw + sizeof(md), sizeof(progs));
 	if (le32toh(md.magic) != SHIRUDO_UPATCH_PROG_MAGIC ||
-	    le32toh(md.version) != SHIRUDO_UPATCH_PROG_VERSION)
-		return fail("unexpected metadata magic/version");
-	if (le32toh(md.nr_progs) != 1)
-		return fail("unexpected metadata prog count");
-	if (le32toh(prog.role) != SHIRUDO_UPATCH_PROG_ROLE_SERIALIZER)
-		return fail("program is not a serializer");
-	if (!memchr(prog.map, '\0', sizeof(prog.map)) ||
-	    strcmp(prog.map, "tree_arena") != 0)
-		return fail("serializer map mismatch");
-	return 0;
+	    le32toh(md.version) != SHIRUDO_UPATCH_PROG_VERSION ||
+	    le32toh(md.nr_progs) != 2)
+		return fail("unexpected metadata header");
+	for (i = 0; i < 2; i++) {
+		if (le32toh(progs[i].role) != SHIRUDO_UPATCH_PROG_ROLE_SERIALIZER ||
+		    !memchr(progs[i].map, '\0', sizeof(progs[i].map)))
+			return fail("program is not a named serializer");
+		if (strcmp(progs[i].map, "tree_arena") == 0)
+			arena = true;
+		else if (strcmp(progs[i].map, "tree_error") == 0)
+			error = true;
+		else
+			return fail("unexpected serializer target map");
+	}
+	return arena && error ? 0 : fail("serializer map mismatch");
 }
 
 static int expect_uprobe_multi(const struct shirudo_upatch *u,
