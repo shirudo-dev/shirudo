@@ -32,6 +32,12 @@ def exec_event():
             os.chmod(fd_executable, 0o755)
             subprocess.run(["./upatch/kernel-obs/exec/exec-paths", f"--{method}",
                             fd_executable], check=True)
+        dirfd_executable = os.path.join(directory, "true-execveat-dirfd")
+        shutil.copyfile("/bin/true", dirfd_executable)
+        os.chmod(dirfd_executable, 0o755)
+        subprocess.run(["./upatch/kernel-obs/exec/exec-paths",
+                        "--execveat-dirfd", directory,
+                        os.path.basename(dirfd_executable)], check=True)
         subprocess.run(["./upatch/kernel-obs/exec/exec-paths", "--replace", executable],
                        check=True)
 

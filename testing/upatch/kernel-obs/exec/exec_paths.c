@@ -137,6 +137,28 @@ static int fd_exec_path(const char *path, int use_fexecve)
 	return wait_child(pid);
 }
 
+static void exec_dirfd(const char *directory, const char *path)
+{
+	char *const args[] = { (char *)path, NULL };
+	int dirfd = open(directory, O_RDONLY | O_DIRECTORY);
+
+	if (dirfd < 0)
+		_exit(126);
+	syscall(SYS_execveat, dirfd, path, args, environ, 0);
+	_exit(127);
+}
+
+static int dirfd_exec_path(const char *directory, const char *path)
+{
+	pid_t pid = fork();
+
+	if (pid == 0)
+		exec_dirfd(directory, path);
+	if (pid < 0)
+		return -1;
+	return wait_child(pid);
+}
+
 static int make_script(const char *directory, char *path, size_t path_size)
 {
 	static const char script[] = "#!/bin/sh\nexit 0\n";
@@ -187,6 +209,8 @@ int main(int argc, char **argv)
 		return fd_exec_path(argv[2], 0) ? 1 : 0;
 	if (argc == 3 && !strcmp(argv[1], "--fexecve"))
 		return fd_exec_path(argv[2], 1) ? 1 : 0;
+	if (argc == 4 && !strcmp(argv[1], "--execveat-dirfd"))
+		return dirfd_exec_path(argv[2], argv[3]) ? 1 : 0;
 	if (argc != 2 || make_script(argv[1], script, sizeof(script))) {
 		fprintf(stderr, "could not create shebang test executable\n");
 		return 1;
@@ -209,6 +233,10 @@ int main(int argc, char **argv)
 	}
 	if (fork_exec(script)) {
 		fprintf(stderr, "fork() -> shebang execve() case failed\n");
+		return 1;
+	}
+	if (fd_exec_path(script, 1)) {
+		fprintf(stderr, "fexecve() -> shebang case failed\n");
 		return 1;
 	}
 	if (thread_exec_path(self)) {
