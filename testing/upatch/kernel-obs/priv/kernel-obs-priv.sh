@@ -18,9 +18,14 @@ MODPROBE_FILE=/proc/sys/kernel/modprobe
 WORK=$(mktemp -d)
 ACTIVE_UNLOAD=$UNLOAD
 MODPROBE_BACKUP="$WORK/kernel.modprobe"
+EVENT_PID=
 
 cleanup()
 {
+	if [ -n "$EVENT_PID" ]; then
+		kill "$EVENT_PID" 2>/dev/null || true
+		wait "$EVENT_PID" 2>/dev/null || true
+	fi
 	if [ -s "$MODPROBE_BACKUP" ] || [ -e "$MODPROBE_BACKUP" ]; then
 		cat "$MODPROBE_BACKUP" >"$MODPROBE_FILE" || true
 	fi
@@ -36,6 +41,24 @@ trap cleanup EXIT HUP INT TERM
 [ -s "$LOAD" ] || test_skip_all "missing kernel-obs fixture"
 [ -s "$UNLOAD" ] || test_skip_all "missing kernel-obs unload fixture"
 [ -w "$MODPROBE_FILE" ] || test_skip_all "kernel.modprobe is not writable"
+
+mkfifo "$WORK/events.in" "$WORK/events.out"
+SHIRUDO_TEST_WORK_DIR="$WORK/events" \
+	python3 upatch/kernel-obs/priv/priv_events.py serve \
+		"$WORK/events.in" "$WORK/events.out" "$WORK/expected.json" &
+EVENT_PID=$!
+exec 3>"$WORK/events.in"
+exec 4<"$WORK/events.out"
+
+run_event()
+{
+	printf '%s\n' "$1" >&3
+	IFS= read -r result <&4
+	if [ "$result" != ok ]; then
+		printf '%s\n' "$result" >&2
+		return 1
+	fi
+}
 
 load_observability()
 {
@@ -61,24 +84,32 @@ test_expect_success 'kernel-obs upatch loads with the priv serializer' '
 '
 
 test_expect_success 'non-executable mappings do not produce exec protection records' '
-	SHIRUDO_TEST_WORK_DIR="$WORK/events" \
-		python3 upatch/kernel-obs/priv/priv_events.py negative &&
+	run_event negative &&
 	export_priv "$WORK/negative.ndjson" &&
-		python3 upatch/kernel-obs/priv/priv_events.py check-negative "$WORK/negative.ndjson"
+	python3 upatch/kernel-obs/priv/priv_events.py check-negative \
+		"$WORK/negative.ndjson" "$WORK/expected.json" &&
+	export_priv "$WORK/negative-drained.ndjson"
+'
+
+test_expect_success 'mprotect does not duplicate an existing executable mapping' '
+	run_event existing-exec &&
+	export_priv "$WORK/existing-exec.ndjson" &&
+	python3 upatch/kernel-obs/priv/priv_events.py check-existing-exec \
+		"$WORK/existing-exec.ndjson" "$WORK/expected.json" &&
+	export_priv "$WORK/existing-exec-drained.ndjson"
 '
 
 test_expect_success 'privilege events produce attributed priv records' '
 	cat "$MODPROBE_FILE" >"$MODPROBE_BACKUP" &&
 	printf '%s\n' /bin/false >"$MODPROBE_FILE" &&
-	SHIRUDO_TEST_WORK_DIR="$WORK/events" \
-		python3 upatch/kernel-obs/priv/priv_events.py generate "$WORK/expected.json" &&
+	run_event generate &&
 	cat "$MODPROBE_BACKUP" >"$MODPROBE_FILE" &&
 	rm -f "$MODPROBE_BACKUP" &&
+	export_priv "$WORK/priv.ndjson" &&
 	"$SHIRUDO_BIN" upatch map "$NAME" exec \
 		--json="$WORK/exec.ndjson" >/dev/null &&
 	python3 upatch/kernel-obs/priv/priv_events.py \
 		check-exec-unknown "$WORK/exec.ndjson" &&
-	export_priv "$WORK/priv.ndjson" &&
 	python3 upatch/kernel-obs/priv/priv_events.py check \
 		"$WORK/expected.json" "$WORK/priv.ndjson"
 '

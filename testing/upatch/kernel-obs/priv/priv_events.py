@@ -249,6 +249,55 @@ def nonexec_mapping_events():
             raise OSError(error, os.strerror(error))
 
 
+def existing_exec_mapping_event():
+    fd = os.open("/bin/true", os.O_RDONLY)
+    try:
+        address = libc.mmap(None, PAGE_SIZE, PROT_READ | PROT_EXEC,
+                            MAP_PRIVATE, fd, 0)
+        if address == ctypes.c_void_p(-1).value:
+            error = ctypes.get_errno()
+            raise OSError(error, os.strerror(error))
+        if libc.mprotect(address, PAGE_SIZE, PROT_READ | PROT_EXEC) < 0:
+            error = ctypes.get_errno()
+            raise OSError(error, os.strerror(error))
+        if libc.munmap(address, PAGE_SIZE) < 0:
+            error = ctypes.get_errno()
+            raise OSError(error, os.strerror(error))
+    finally:
+        os.close(fd)
+
+
+def write_expected(path, expected):
+    with open(path, "w", encoding="utf-8") as output:
+        json.dump(expected, output)
+
+
+def expected_identity():
+    return {"pid": os.getpid(), "identity": executable_identity()}
+
+
+def serve(request_path, response_path, expected_path):
+    with open(request_path, encoding="utf-8") as requests:
+        with open(response_path, "w", encoding="utf-8", buffering=1) as responses:
+            for request in requests:
+                try:
+                    command = request.strip()
+                    if command == "negative":
+                        nonexec_mapping_events()
+                        write_expected(expected_path, expected_identity())
+                    elif command == "existing-exec":
+                        existing_exec_mapping_event()
+                        write_expected(expected_path, expected_identity())
+                    elif command == "generate":
+                        generate(expected_path)
+                    else:
+                        raise ValueError(f"unknown event command: {command}")
+                except Exception as error:
+                    responses.write(f"error: {error}\n")
+                else:
+                    responses.write("ok\n")
+
+
 def generate(expected_path):
     workdir = os.environ["SHIRUDO_TEST_WORK_DIR"]
     os.makedirs(workdir, exist_ok=True)
@@ -284,11 +333,34 @@ def records_from(path):
     return document["records"]
 
 
-def check_negative(path):
+def check_negative(path, expected_path):
+    with open(expected_path, encoding="utf-8") as source:
+        expected = json.load(source)
     records = records_from(path)
+    identity = expected["identity"]
+    selected = [record for record in records
+                if int(record["executable"]["dev"]) == identity["dev"] and
+                int(record["executable"]["ino"]) == identity["ino"]]
     assert not any(record["kind"] in ("mmap_exec", "mprotect_exec",
                                       "cred_anomaly")
-                   for record in records), records
+                   for record in selected), selected
+
+
+def check_existing_exec(path, expected_path):
+    with open(expected_path, encoding="utf-8") as source:
+        expected = json.load(source)
+    identity = expected["identity"]
+    records = records_from(path)
+    selected = [record for record in records
+                if int(record["executable"]["dev"]) == identity["dev"] and
+                int(record["executable"]["ino"]) == identity["ino"]]
+    assert len(selected) == 1, selected
+    mmap_exec = selected[0]
+    assert mmap_exec["kind"] == "mmap_exec", selected
+    assert mmap_exec["name"] == "true", mmap_exec
+    assert mmap_exec["subtype"] == (PROT_READ | PROT_EXEC), mmap_exec
+    assert int(mmap_exec["aux"]) == MAP_PRIVATE, mmap_exec
+    assert int(mmap_exec["count"]) == 1, mmap_exec
 
 
 def check_anomaly(path):
@@ -418,18 +490,23 @@ def check_positive(expected_path, records_path):
 
 def main():
     if len(sys.argv) < 2:
-        raise SystemExit("usage: priv_events.py negative | generate FILE | "
+        raise SystemExit("usage: priv_events.py serve IN OUT EXPECTED | "
+                         "negative | generate FILE | "
                          "check EXPECTED NDJSON | check-negative NDJSON | "
                          "check-anomaly NDJSON | check-exec-unknown NDJSON")
     mode = sys.argv[1]
-    if mode == "negative":
+    if mode == "serve" and len(sys.argv) == 5:
+        serve(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif mode == "negative":
         nonexec_mapping_events()
     elif mode == "generate" and len(sys.argv) == 3:
         generate(sys.argv[2])
     elif mode == "check" and len(sys.argv) == 4:
         check_positive(sys.argv[2], sys.argv[3])
-    elif mode == "check-negative" and len(sys.argv) == 3:
-        check_negative(sys.argv[2])
+    elif mode == "check-negative" and len(sys.argv) == 4:
+        check_negative(sys.argv[2], sys.argv[3])
+    elif mode == "check-existing-exec" and len(sys.argv) == 4:
+        check_existing_exec(sys.argv[2], sys.argv[3])
     elif mode == "check-anomaly" and len(sys.argv) == 3:
         check_anomaly(sys.argv[2])
     elif mode == "anomaly" and len(sys.argv) == 2:
