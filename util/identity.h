@@ -18,11 +18,11 @@
 #define SHIRUDO_IDENTITY_KEYS_MAX	16
 
 /*
- * Must match struct shirudo_sb_id in bpf/bpf2.c byte for byte. exe is
- * the binary that keeps running the target; alt_exe, when set, the
- * initrd's copy that ran init and is gone after the switch to the root.
- * key_serials are the anchor keyring's keys, which lsm/key_permission
- * guards with the keyring itself.
+ * Must match struct shirudo_sb_id in bpf/lib/shirudo_identity.h byte for
+ * byte. exe is the binary that keeps running the target; alt_exe, when
+ * set, the initrd's copy that ran init and is gone after the switch to
+ * the root. key_serials are the anchor keyring's keys, which
+ * lsm/key_permission guards with the keyring itself.
  */
 struct shirudo_identity {
 	uint32_t	sb_dev;
