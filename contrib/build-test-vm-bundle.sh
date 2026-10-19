@@ -319,6 +319,7 @@ testing/helper/test-upatch-prog-metadata
 testing/helper/test-upatch-decode
 testing/helper/test-upatch-serializer-pages
 testing/helper/test-signed-load
+testing/helper/test-upatch-link-lockdown
 testing/helper/test-exec-churn
 testing/upatch/kernel-obs/exec/exec-paths
 testing/helper/otel-mock.py

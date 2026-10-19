@@ -26,7 +26,7 @@ checks that Shirudo can still export the pre-existing Python exec record.
 | TP-04 | Replace the named Shirudo keyring with a same-named keyring | Covered | `t1106-keyring-swap.sh` | Keep status mismatch and load refusal checks; this destructive test runs last. |
 | TP-05 | Add a key to the sealed BPF keyring | Covered | `t1121-bpf-keyring.sh` | Keep sealing denial and enrollment checks. |
 | TP-06 | Unlink, clear, revoke, invalidate, re-permission, timeout, or link a key in the anchor | Covered | `t1125-key-permission.sh` | Keep per-operation denial assertions and status check. |
-| TP-07 | Root modifies a labelled file under `/var/lib/shirudo` or changes its xattr | Covered | `t1101-seal.sh` | Keep write and xattr denial assertions. |
+| TP-07 | Root modifies a labelled file under `/var/lib/shirudo` or changes its xattr | Covered | `t1101-seal.sh` | Keep certificate and archived-upatch write, xattr, unlink, rename-away, and rename-over denial assertions. |
 | TP-08 | Direct or lazy unmount, remount, or mount over private bpffs, or lazy unmount of a mount above it | Covered | `t1113-mount-lockdown.sh` | Keep mountpoint and enforcement-survival checks; the ancestor case runs in a private mount namespace. |
 | TP-09 | Obtain writable serializer-array or arena FD by pinned path | Covered | `t1130-map-lockdown.sh` | Current test covers `shirudo_ser` and `obs_i_arena`. |
 | TP-10 | Obtain writable map FD by map ID | Covered | `t1130-map-lockdown.sh` | Current test covers both maps. |
@@ -49,6 +49,8 @@ checks that Shirudo can still export the pre-existing Python exec record.
 | TP-27 | Root binds a perf event to a running shirudo task | Covered | `t1134-seal-task.sh` | `perf_event_open` on the task is refused with `EACCES`; the same event on the caller's own task is the positive control. |
 | TP-28 | Root renames a pin in the private bpffs, or renames one over the lsm/bpf link's pin | Covered | `t1135-pin-rename.sh` | Both are refused with `EPERM`; the pins stay and enforcement survives. Before `lsm/inode_rename` the rename over a pin dropped the link with no guard firing. |
 | TP-29 | A refused attempt leaves no trace | Covered | `t1136-tamper-counters.sh` | Every guard counts its refusals by point in a frozen pinned map; `status` lists the non-zero counters, `status --json` and the keepalive carry them all, and root cannot reset them. |
+
+| TP-22 | Mutate a trusted upatch loader and recompute its userspace digest | Covered | `t1132-upatch-integrity.sh` | The kernel signature gate rejects the altered loader as `signature_rejected`; no pin or archive is created. |
 
 ## Review notes
 

@@ -544,6 +544,7 @@ TEST_HELPERS := testing/helper/test-json-parser \
                 testing/helper/test-upatch-decode \
                 testing/helper/test-upatch-serializer-pages \
                 testing/helper/test-signed-load \
+                testing/helper/test-upatch-link-lockdown \
                 testing/helper/test-exec-churn \
 		testing/upatch/kernel-obs/exec/exec-paths
 
@@ -619,6 +620,10 @@ testing/helper/test-bpf-load: testing/helper/test-bpf-load.c
 testing/helper/test-bpf-cmd: testing/helper/test-bpf-cmd.c
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^
+
+testing/helper/test-upatch-link-lockdown: testing/helper/test-upatch-link-lockdown.c
+	@printf '  CC      $@\n'
+	$(Q)$(CC) $(CFLAGS) -I$(BPF_UAPI_INCLUDE) -o $@ $^
 
 # Needs the vendored uapi bpf.h (excl_prog_hash / fd_array_cnt / keyring_id
 # are newer than a stock system header) and libcrypto for SHA-256.
