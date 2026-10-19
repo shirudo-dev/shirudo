@@ -545,7 +545,7 @@ TEST_HELPERS := testing/helper/test-json-parser \
                 testing/helper/test-upatch-serializer-pages \
                 testing/helper/test-signed-load \
                 testing/helper/test-exec-churn \
-		testing/kernel-obs/exec-paths
+		testing/upatch/kernel-obs/exec/exec-paths
 
 testing/helper/test-json-parser: testing/helper/test-json-parser.c util/json.o util/hex.o util/malloc.o
 	@printf '  CC      $@\n'
@@ -668,7 +668,7 @@ testing/helper/test-exec-churn: testing/helper/test-exec-churn.c util/io.o util/
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^
 
-testing/kernel-obs/exec-paths: testing/kernel-obs/exec_paths.c
+testing/upatch/kernel-obs/exec/exec-paths: testing/upatch/kernel-obs/exec/exec_paths.c
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -pthread -o $@ $^
 

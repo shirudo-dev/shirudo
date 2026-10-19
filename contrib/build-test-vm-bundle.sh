@@ -303,7 +303,7 @@ trap cleanup EXIT
 make -C "$REPO_ROOT" DESTDIR="$TMP_DIR/root" install-target
 
 install -d "$TMP_DIR/test-helpers/testing/helper" \
-	"$TMP_DIR/test-helpers/testing/kernel-obs"
+	"$TMP_DIR/test-helpers/testing/upatch/kernel-obs/exec"
 while IFS= read -r helper; do
 	install -m 0755 "$REPO_ROOT/$helper" "$TMP_DIR/test-helpers/$helper"
 done <<'EOF'
@@ -320,7 +320,7 @@ testing/helper/test-upatch-decode
 testing/helper/test-upatch-serializer-pages
 testing/helper/test-signed-load
 testing/helper/test-exec-churn
-testing/kernel-obs/exec-paths
+testing/upatch/kernel-obs/exec/exec-paths
 testing/helper/otel-mock.py
 testing/helper/test-oci-registry.py
 EOF

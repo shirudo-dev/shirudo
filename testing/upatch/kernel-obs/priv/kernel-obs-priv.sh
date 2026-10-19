@@ -59,20 +59,20 @@ test_expect_success 'kernel-obs upatch loads with the priv serializer' '
 
 test_expect_success 'non-executable mappings do not produce exec protection records' '
 	SHIRUDO_TEST_WORK_DIR="$WORK/events" \
-		python3 kernel-obs/priv_events.py negative &&
+		python3 upatch/kernel-obs/priv/priv_events.py negative &&
 	export_priv "$WORK/negative.ndjson" &&
-	python3 kernel-obs/priv_events.py check-negative "$WORK/negative.ndjson"
+	python3 upatch/kernel-obs/priv/priv_events.py check-negative "$WORK/negative.ndjson"
 '
 
 test_expect_success 'privilege events produce attributed priv records' '
 	cat "$MODPROBE_FILE" >"$MODPROBE_BACKUP" &&
 	printf '%s\n' /bin/false >"$MODPROBE_FILE" &&
 	SHIRUDO_TEST_WORK_DIR="$WORK/events" \
-		python3 kernel-obs/priv_events.py generate "$WORK/expected.json" &&
+		python3 upatch/kernel-obs/priv/priv_events.py generate "$WORK/expected.json" &&
 	cat "$MODPROBE_BACKUP" >"$MODPROBE_FILE" &&
 	rm -f "$MODPROBE_BACKUP" &&
 	export_priv "$WORK/priv.ndjson" &&
-	python3 kernel-obs/priv_events.py check \
+	python3 upatch/kernel-obs/priv/priv_events.py check \
 		"$WORK/expected.json" "$WORK/priv.ndjson"
 '
 

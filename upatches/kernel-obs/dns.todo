@@ -4,7 +4,7 @@ The UDP DNS parser correlates requests with a canonical key made from
 the network-namespace cookie, address family, client/resolver addresses
 and ports, and transaction ID, and attributes the answer to the querying
 socket's owner. The items below are the remaining parser and
-correlation gaps. `testing/kernel-obs/dns_obs_matrix.py` now validates
+correlation gaps. `testing/upatch/kernel-obs/dns/dns_obs_matrix.py` now validates
 case construction and batch encoding only. Its former target runner used
 `BPF_PROG_TEST_RUN`, which is restricted to Shirudo. The target suite uses
 live loopback UDP exchanges for representative query and response

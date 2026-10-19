@@ -28,7 +28,7 @@ for t in t0[0-9][0-9][0-9]-*.sh; do
 	fi
 done
 
-for t in kernel-obs/t0[0-9][0-9][0-9]-*.sh; do
+for t in upatch/kernel-obs/dns/t0[0-9][0-9][0-9]-*.sh; do
 	[ -e "$t" ] || continue
 	found=1
 	if sh "$t"; then

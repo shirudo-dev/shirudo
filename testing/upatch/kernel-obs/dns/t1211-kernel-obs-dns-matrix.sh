@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../../.."
 . ./integration-lib.sh
 target_guard
 command -v python3 >/dev/null 2>&1 || test_skip_all "no python3"
@@ -55,8 +55,8 @@ PYTHON
 
 test_expect_success 'DNS observations use real loopback UDP traffic' '
 	"$SHIRUDO_BIN" upatch load "$LOAD" --no-precheck >/dev/null 2>&1 &&
-	python3 kernel-obs/kernel_obs_events.py dns-long &&
-	python3 kernel-obs/kernel_obs_events.py dns-many &&
+	python3 upatch/kernel-obs/network/kernel_obs_events.py dns-long &&
+	python3 upatch/kernel-obs/network/kernel_obs_events.py dns-many &&
 	"$SHIRUDO_BIN" upatch map "$NAME" dns --json="$WORK/dns.ndjson" >/dev/null &&
 	python3 "$WORK/check.py" "$WORK/dns.ndjson" &&
 	"$SHIRUDO_BIN" upatch map "$NAME" dns --json="$WORK/dns-empty.ndjson" >/dev/null &&
