@@ -42,9 +42,8 @@
  *                       attacker's `rm` (seal excludes the bpffs
  *                       mount, so bpf2 is the only protector here),
  *                       while letting `shirudo upatch unload` remove
- *                       a pin to detach a program. The exe-inode check
- *                       is the interim of the xattr-based identity
- *                       seal will use. The task_prctl hook below
+ *                       a pin to detach a program. seal applies the
+ *                       same exe-inode check. The task_prctl hook below
  *                       prevents non-Shirudo callers from changing
  *                       mm->exe_file through PR_SET_MM.
  *   lsm/key_permission -- guards the trust anchor in the kernel's

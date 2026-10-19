@@ -285,18 +285,21 @@ otherwise detach everything.
 Filesystem seal.  ``bpf/seal.c`` relies on every inode under
 ``/var/lib/shirudo/`` and the installed binary carrying the xattr
 ``security.bpf.shirudo`` with one fixed 64-byte value, the same for
-every build, so that a newer shirudo keeps its access to the state an
-older one labelled.  Its ``file_open`` (for write), ``inode_unlink``,
+every build.  The label says what is protected, not who may touch it:
+its value is public, and a binary that carries it proves nothing, since
+root can set it on any file it creates and any file system it mounts can
+present it.  The ``file_open`` (for write), ``inode_unlink``,
 ``inode_rename``, ``inode_setxattr`` and ``inode_removexattr`` hooks
-read the label of the target inode and the label of the caller's
-``exe_file`` and allow only when both exist and match, compared in
-constant time.  No ``bpf_d_path()``, no path strings, nothing a bind
-mount or a mount namespace can confuse.  ``bprm_check_security`` and
-``bprm_committed_creds`` mark tasks that exec the labelled binary in
+read the label of the target inode and, when there is one, allow only
+the task that runs the executable ``init`` recorded in the frozen
+identity map, the same ``(dev, ino)`` test the bpffs guards use.  No
+``bpf_d_path()``, no path strings, nothing a bind mount or a mount
+namespace can confuse.  ``bprm_check_security`` and
+``bprm_committed_creds`` mark tasks that exec a labelled binary in
 task-local storage, ``task_alloc`` inherits the mark, and
 ``ptrace_access_check`` and ``perf_event_alloc`` deny against marked
 tasks, so a root debugger or profiler cannot attach to a running
-shirudo.
+shirudo; a forged label can only mark its forger.
 
 Process hardening.  ``util/harden.c`` runs at startup on the target:
 ``PR_SET_DUMPABLE`` off, ``PR_SET_NO_NEW_PRIVS``, ``PR_SET_PTRACER`` to

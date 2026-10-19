@@ -638,8 +638,11 @@ static int attach_pin(struct bpf_program *p, const char *pin,
  * down together). Must run BEFORE lsm/bpf is attached: seal is loaded
  * unsigned and is not prog_type SYSCALL, so once the bpf() gate is live
  * it would refuse this very load -- the same bootstrap window bpf2 uses.
+ * identity_fd is bpf2's frozen identity map, which the seal reads to
+ * recognise shirudo's executable instead of declaring its own copy.
  */
-static int attach_seal(struct bpf_object **obj_out, struct bpf_link **links)
+static int attach_seal(struct bpf_object **obj_out, struct bpf_link **links,
+		       int identity_fd)
 {
 	static const struct {
 		const char	*prog;
@@ -658,6 +661,7 @@ static int attach_seal(struct bpf_object **obj_out, struct bpf_link **links)
 	};
 	const struct shirudo_embedded_bpf *blob = shirudo_seal_blob();
 	struct bpf_object *obj;
+	struct bpf_map *m;
 	int err, i;
 
 	*obj_out = NULL;
@@ -669,6 +673,18 @@ static int attach_seal(struct bpf_object **obj_out, struct bpf_link **links)
 	err = libbpf_get_error(obj);
 	if (err) {
 		pr_err("seal: bpf_object__open_mem: %d", err);
+		return err;
+	}
+	m = bpf_object__find_map_by_name(obj, "shirudo_bpffs_sb");
+	if (!m) {
+		pr_err("seal: shirudo_bpffs_sb map not in embedded seal");
+		bpf_object__close(obj);
+		return -ENOENT;
+	}
+	err = bpf_map__reuse_fd(m, identity_fd);
+	if (err) {
+		pr_err("seal: share the identity map: %s", strerror(-err));
+		bpf_object__close(obj);
 		return err;
 	}
 	err = bpf_object__load(obj);
@@ -981,7 +997,7 @@ static int init_lsm(bool attach_filesystem_seal)
 	}
 
 	if (attach_filesystem_seal) {
-		err = attach_seal(&seal_obj, seal_links);
+		err = attach_seal(&seal_obj, seal_links, map_fd);
 		if (err)
 			goto out;
 	}

@@ -57,7 +57,7 @@ int shirudo_seal_label_tree(void)
 	struct stat st;
 	ssize_t n;
 
-	/* The binary's own inode carries the label too (exe-file identity). */
+	/* Label the binary too: the seal protects it and marks its tasks. */
 	n = readlink("/proc/self/exe", self, sizeof(self) - 1);
 	if (n > 0) {
 		self[n] = '\0';
