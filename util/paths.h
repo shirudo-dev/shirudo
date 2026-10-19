@@ -72,6 +72,7 @@
 #define SHIRUDO_SEAL_TASK_ALLOC_PIN	SHIRUDO_BPFFS_DIR "/seal_task_alloc_link"
 #define SHIRUDO_SEAL_UNLINK_PIN		SHIRUDO_BPFFS_DIR "/seal_inode_unlink_link"
 #define SHIRUDO_SEAL_RENAME_PIN		SHIRUDO_BPFFS_DIR "/seal_inode_rename_link"
+#define SHIRUDO_SEAL_SETATTR_PIN	SHIRUDO_BPFFS_DIR "/seal_inode_setattr_link"
 #define SHIRUDO_SEAL_SETXATTR_PIN	SHIRUDO_BPFFS_DIR "/seal_inode_setxattr_link"
 #define SHIRUDO_SEAL_RMXATTR_PIN	SHIRUDO_BPFFS_DIR "/seal_inode_removexattr_link"
 #define SHIRUDO_BPFFS_UPATCHES_DIR	SHIRUDO_BPFFS_DIR "/upatches"

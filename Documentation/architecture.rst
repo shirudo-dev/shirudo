@@ -288,19 +288,19 @@ Filesystem seal.  ``bpf/seal.c`` relies on every inode under
 every build.  The label says what is protected, not who may touch it:
 its value is public, and a binary that carries it proves nothing, since
 any file system root mounts can present it.  The ``file_open`` (for
-write), ``inode_unlink``, ``inode_rename``, ``inode_setxattr`` and
-``inode_removexattr`` hooks read the label of the target inode, both
-ends of a rename, and, when there is one, allow only the task that runs
-the executable ``init`` recorded in the frozen identity map, the same
-``(dev, ino)`` test the bpffs guards use.  ``inode_setxattr`` also lets
-only that task set the label itself, so root cannot mark files of its
-choosing.  No ``bpf_d_path()``, no path strings, nothing a bind mount or
-a mount namespace can confuse.  ``bprm_check_security`` and
-``bprm_committed_creds`` mark tasks that exec a labelled binary in
-task-local storage, ``task_alloc`` inherits the mark, and
-``ptrace_access_check`` and ``perf_event_alloc`` deny against marked
-tasks, so a root debugger or profiler cannot attach to a running
-shirudo; a forged label can only mark its forger.
+write), ``inode_unlink``, ``inode_rename``, ``inode_setattr``,
+``inode_setxattr`` and ``inode_removexattr`` hooks read the label of the
+target inode, both ends of a rename, and, when there is one, allow only
+the task that runs the executable ``init`` recorded in the frozen
+identity map, the same ``(dev, ino)`` test the bpffs guards use.
+``inode_setxattr`` also lets only that task set the label itself, so
+root cannot mark files of its choosing.  No ``bpf_d_path()``, no path
+strings, nothing a bind mount or a mount namespace can confuse.
+``bprm_check_security`` and ``bprm_committed_creds`` mark tasks that
+exec a labelled binary in task-local storage, ``task_alloc`` inherits
+the mark, and ``ptrace_access_check`` and ``perf_event_alloc`` deny
+against marked tasks, so a root debugger or profiler cannot attach to a
+running shirudo; a forged label can only mark its forger.
 
 Process hardening.  ``util/harden.c`` runs at startup on the target:
 ``PR_SET_DUMPABLE`` off, ``PR_SET_NO_NEW_PRIVS``, ``PR_SET_PTRACER`` to

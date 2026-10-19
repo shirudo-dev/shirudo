@@ -10,18 +10,18 @@
  * shirudo binary carries the same label. The filesystem hooks read the
  * target's label and, if present, require the calling task to run the
  * executable shirudo init recorded in the identity map (the test bpf2
- * applies to the bpffs) -- so only shirudo may write, unlink, rename, or
- * relabel its own on-disk state. The label only marks a target, and only
- * shirudo may set it; its value is public and a mounted file system can
- * present it, so a binary carrying it proves nothing about the caller.
- * The exec hooks cache whether the successfully executed file carries a
- * Shirudo label in task storage for later access-control decisions. An
- * unlabelled filesystem target is not ours and is allowed through
- * untouched; a label that cannot be read, unless the caller may not read
- * the file, is taken to be there. No bpf_d_path(), no path strings: the
- * label rides the inode, immune to bind-mount / namespace / TOCTOU
- * games. Reads are not gated; only write-mode opens and the mutating
- * inode ops are.
+ * applies to the bpffs) -- so only shirudo may modify, unlink, rename,
+ * or relabel its own on-disk state. The label only marks a target, and
+ * only shirudo may set it; its value is public and a mounted file system
+ * can present it, so a binary carrying it proves nothing about the
+ * caller. The exec hooks cache whether the successfully executed file
+ * carries a Shirudo label in task storage for later access-control
+ * decisions. An unlabelled filesystem target is not ours and is allowed
+ * through untouched; a label that cannot be read, unless the caller may
+ * not read the file, is taken to be there. No bpf_d_path(), no path
+ * strings: the label rides the inode, immune to bind-mount / namespace /
+ * TOCTOU games. Reads are not gated; only write-mode opens and the
+ * mutating inode ops are.
  *
  * The filesystem and exec xattr hooks are sleepable (lsm.s/) because
  * reading an xattr can sleep. The xattr-reading kfuncs write into a
@@ -305,6 +305,14 @@ int BPF_PROG(shirudo_seal_inode_rename, struct inode *old_dir,
 	if (!target || seal_is_exe(target))
 		return 0;
 	return seal_dentry(new_dentry);
+}
+
+/* Truncate, chmod, chown and utimes all come through here. */
+SEC("lsm.s/inode_setattr")
+int BPF_PROG(shirudo_seal_inode_setattr, struct mnt_idmap *idmap,
+	     struct dentry *dentry, struct iattr *attr)
+{
+	return seal_dentry(dentry);
 }
 
 SEC("lsm.s/inode_setxattr")

@@ -656,6 +656,7 @@ static int attach_seal(struct bpf_object **obj_out, struct bpf_link **links,
 		{ "shirudo_seal_file_open",        SHIRUDO_SEAL_FILE_OPEN_PIN },
 		{ "shirudo_seal_inode_unlink",     SHIRUDO_SEAL_UNLINK_PIN },
 		{ "shirudo_seal_inode_rename",     SHIRUDO_SEAL_RENAME_PIN },
+		{ "shirudo_seal_inode_setattr",    SHIRUDO_SEAL_SETATTR_PIN },
 		{ "shirudo_seal_inode_setxattr",   SHIRUDO_SEAL_SETXATTR_PIN },
 		{ "shirudo_seal_inode_removexattr", SHIRUDO_SEAL_RMXATTR_PIN },
 	};
@@ -774,7 +775,7 @@ static int init_lsm(bool attach_filesystem_seal)
 	struct bpf_link *link_unlink = NULL;
 	struct bpf_link *link_setx = NULL, *link_rmx = NULL, *link_pload = NULL;
 	struct bpf_link *link_keyperm = NULL;
-	struct bpf_link *seal_links[8] = {};
+	struct bpf_link *seal_links[9] = {};
 	struct bpf_program *p_keyperm;
 	struct anchor_keys keys = {};
 	key_serial_t keyring;

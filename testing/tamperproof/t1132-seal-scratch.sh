@@ -33,7 +33,7 @@ sys.stdout.buffer.write(os.getxattr(sys.argv[1], "security.bpf.shirudo"))
 
 # Write the label into an image offline, as a mounted file system presents
 # it without any setxattr the seal could refuse.
-SEALED="sealed1 sealed2 sealed3 sealed4 sealed5"
+SEALED="sealed1 sealed2 sealed3 sealed4 sealed5 sealed6 sealed7"
 echo scratch >"$WORK/scratch"
 {
 	echo "write $SH sh"
@@ -109,6 +109,14 @@ test_expect_success 'root cannot rename a file over a labelled file' '
 	! python3 -c "import os, sys; os.rename(sys.argv[1], sys.argv[2])" \
 	    "$MNT/replacement" "$MNT/sealed5" 2>/dev/null &&
 	[ "$(cat "$MNT/sealed5")" = scratch ]
+'
+
+test_expect_success 'root cannot truncate, chmod or chown a labelled file' '
+	! python3 -c "import os, sys; os.truncate(sys.argv[1], 0)" \
+	    "$MNT/sealed6" 2>/dev/null &&
+	[ "$(cat "$MNT/sealed6")" = scratch ] &&
+	! chmod 0200 "$MNT/sealed7" 2>/dev/null &&
+	! chown 1:1 "$MNT/sealed7" 2>/dev/null
 '
 
 test_done

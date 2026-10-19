@@ -43,6 +43,7 @@ checks that Shirudo can still export the pre-existing Python exec record.
 | TP-21 | Concurrent or repeated serializer invocation changes/loses records | Not covered | None | Add after TP-14 policy fix; exercise repeated and concurrent export attempts and verify record integrity. |
 | TP-22 | Root puts the public seal label on a file, or runs a binary a mounted file system labels, and then writes, renames, unlinks or relabels a labelled file | Covered | `t1132-seal-scratch.sh` | Only Shirudo may set the label, and the seal admits the executable `init` recorded, not one that carries the label. A failure is a bypass of the seal. |
 | TP-23 | Root renames an unlabelled file over a labelled file and so replaces it | Covered | `t1132-seal-scratch.sh` | The seal checks the destination of a rename as well as its source; only the recorded executable may be replaced, as a package upgrade does. |
+| TP-24 | Root truncates, chmods or chowns a labelled file without opening it | Covered | `t1132-seal-scratch.sh` | `truncate(2)` changes the contents without a write open, and `chmod` can make a labelled file unreadable to a caller that may still write it; the seal guards attribute changes like writes. |
 
 ## Review notes
 

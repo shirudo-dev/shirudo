@@ -144,11 +144,12 @@ T2  Detaching or replacing enforcement
 T3  Tampering with shirudo's files and process
     Every inode under ``/var/lib/shirudo`` carries the
     ``security.bpf.shirudo`` label; the seal program allows write open,
-    unlink, rename and xattr changes only to the process that runs the
-    executable ``init`` recorded, by device and inode and never by path,
-    and only that process may set the label. The label marks what is
-    protected and is public; it is not what identifies the caller, as a
-    file system root mounts can present it on any binary.
+    attribute changes such as truncate, unlink, rename and xattr changes
+    only to the process that runs the executable ``init`` recorded, by
+    device and inode and never by path, and only that process may set
+    the label. The label marks what is protected and is public; it is
+    not what identifies the caller, as a file system root mounts can
+    present it on any binary.
     Marked shirudo tasks cannot be ptraced or perf-sampled, and the
     process drops dumpability, forbids new privileges and locks
     sensitive buffers. The bpf keyring is sealed with
