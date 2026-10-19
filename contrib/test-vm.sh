@@ -35,6 +35,7 @@ fi
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=contrib/test-vm-arch.sh
 . "${REPO_ROOT}/contrib/test-vm-arch.sh"
+QEMU_BIN="$TEST_VM_ARCH_QEMU"
 VM_ROOT_INPUT="${TEST_VM_WORK_DIR:-${REPO_ROOT}/build/test-vm}"
 if [[ "$VM_ROOT_INPUT" == /* ]]; then
 	VM_ROOT="$VM_ROOT_INPUT"
@@ -51,7 +52,7 @@ else
 fi
 VMS_DIR="${VM_ROOT}/vms"
 LOGS_DIR="${VM_ROOT}/logs"
-DEFAULT_KERNEL="${REPO_ROOT}/artifacts/bpf-next-kernel-debs/bzImage"
+DEFAULT_KERNEL="${REPO_ROOT}/artifacts/bpf-next-kernel-debs/${TEST_VM_ARCH_KIMAGE}"
 DEFAULT_ROOTFS_URL="https://cloud-images.ubuntu.com/releases/server/26.04/release/ubuntu-26.04-server-cloudimg-${TEST_VM_ARCH_DEB}.img"
 DEFAULT_ROOTFS_SUMS_URL="https://cloud-images.ubuntu.com/releases/server/26.04/release/SHA256SUMS"
 ROOTFS_NAME="ubuntu-26.04-server-cloudimg-${TEST_VM_ARCH_DEB}.img"
@@ -115,7 +116,7 @@ HOST_DEPENDENCIES=(
 	"curl:curl"
 	"sha256sum:coreutils"
 	"awk:mawk"
-	"qemu-system-x86_64:qemu-system-x86"
+	"${QEMU_BIN}:${TEST_VM_ARCH_QEMU_DEB}"
 	"qemu-img:qemu-utils"
 	"swtpm:swtpm"
 	"cloud-localds:cloud-image-utils"
@@ -477,7 +478,7 @@ stop_pid_file()
 	expected=swtpm
 	if [[ "$(basename "$pidfile")" == qemu.pid ]]; then
 		state_dir="$(dirname "$state_dir")"
-		expected=qemu-system-x86_64
+		expected="$QEMU_BIN"
 	fi
 	if kill -0 "$pid" 2>/dev/null; then
 		cmdline="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
@@ -555,7 +556,7 @@ require_running_vm()
 		die "VM '$VM_NAME' is not running; start it with 'make -C testing vm VM_NAME=$VM_NAME'"
 	fi
 	cmdline="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
-	[[ "$cmdline" == *qemu-system-x86_64* &&
+	[[ "$cmdline" == *"$QEMU_BIN"* &&
 	   "$cmdline" == *"$RUN_DIR"* ]] ||
 		die "VM '$VM_NAME' has a stale or unrelated QEMU PID file"
 }
@@ -878,12 +879,19 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-# The release string the kernel image carries in its setup header.
+# The release string from the kernel image's setup header or, for an image
+# without one such as arm64's, from the artifact's module tree.
 kernel_release_of()
 {
+	local -a modules
 	local v
 
 	v="$(file -b "$1" 2>/dev/null | sed -n 's/.*version \([^ ]*\).*/\1/p')"
+	if [[ -z "$v" && -n "$KERNEL_ARTIFACT_DIR" ]]; then
+		modules=("$KERNEL_ARTIFACT_DIR"/lib/modules/*/)
+		[[ ${#modules[@]} -eq 1 && -d "${modules[0]}" ]] &&
+			v="$(basename "${modules[0]}")"
+	fi
 	[[ -n "$v" ]] || return 1
 	printf '%s\n' "$v"
 }
@@ -963,7 +971,7 @@ resolve_kernel()
 		valid_sha256 "$KERNEL_SHA256" ||
 			die "TEST_VM_KERNEL_URL requires a 64-character TEST_VM_KERNEL_SHA256"
 		expected="${KERNEL_SHA256,,}"
-		cache_kernel="${CACHE_DIR}/kernels/${expected}/bzImage"
+		cache_kernel="${CACHE_DIR}/kernels/${expected}/${TEST_VM_ARCH_KIMAGE}"
 		mkdir -p "$(dirname "$cache_kernel")"
 		if [[ -s "$cache_kernel" ]]; then
 			actual="$(sha256sum "$cache_kernel" | awk '{print $1}')"
@@ -996,7 +1004,7 @@ resolve_kernel()
 		die "kernel image not found: $DEFAULT_KERNEL; run 'make -C testing bpf-next' first"
 	if [[ -s "${DEFAULT_KERNEL}.sha256sum" ]]; then
 		(cd "$(dirname "$DEFAULT_KERNEL")" &&
-			sha256sum -c bzImage.sha256sum >/dev/null)
+			sha256sum -c "${DEFAULT_KERNEL##*/}.sha256sum" >/dev/null)
 	else
 		die "kernel checksum not found: ${DEFAULT_KERNEL}.sha256sum; run 'make -C testing bpf-next'"
 	fi
@@ -1176,7 +1184,8 @@ allocate_ssh_access
 KERNEL="$(resolve_kernel)"
 [[ "$VM_INITRD" == 0 ]] || build_initrd
 
-[[ "$(uname -m)" == "x86_64" ]] || die "test-vm currently supports x86_64 hosts only"
+[[ "$TEST_VM_ARCH_SUPPORTED" == 1 ]] ||
+	die "test-vm supports x86_64 and aarch64 hosts only, not $TEST_VM_ARCH"
 [[ -r /dev/kvm && -w /dev/kvm ]] || die "/dev/kvm is required and must be accessible"
 
 RUNTIME_KEY="$(<"$TEST_VM_HOST_BUNDLE/runtime-image-key")"
@@ -1266,22 +1275,22 @@ write_files:
       set -uo pipefail
       mkdir -p /mnt/shirudo-src /mnt/shirudo-bundle /mnt/shirudo-out /mnt/shirudo-kernel /mnt/shirudo-package-cert /mnt/shirudo-bpm-tree
       if ! mount -t 9p -o trans=virtio,version=9p2000.L,msize=104857600 shirudo-out /mnt/shirudo-out; then
-        echo "test-vm: could not mount result share" >/dev/ttyS0
+        echo "test-vm: could not mount result share" >/dev/console
         poweroff -f
         exit 1
       fi
       if ! mount -t 9p -o trans=virtio,version=9p2000.L,msize=104857600,ro shirudo-bundle /mnt/shirudo-bundle; then
-        echo "test-vm: could not mount host bundle share" >/dev/ttyS0
+        echo "test-vm: could not mount host bundle share" >/dev/console
         poweroff -f
         exit 1
       fi
-      exec > >(tee -a /dev/ttyS0 /mnt/shirudo-out/guest.log) 2>&1
+      exec > >(tee -a /dev/console /mnt/shirudo-out/guest.log) 2>&1
       rc=0
 EOF
 if [[ -n "$PACKAGE_CERT" ]]; then
 cat >>"$USER_DATA" <<'EOF'
       if ! mount -t 9p -o trans=virtio,version=9p2000.L,msize=104857600,ro shirudo-package-cert /mnt/shirudo-package-cert; then
-        echo "test-vm: could not mount package certificate share" >/dev/ttyS0
+        echo "test-vm: could not mount package certificate share" >/dev/console
         poweroff -f
         exit 1
       fi
@@ -1293,7 +1302,7 @@ fi
 if [[ -n "$KERNEL_ARTIFACT_DIR" ]]; then
 	cat >>"$USER_DATA" <<'EOF'
       if ! mount -t 9p -o trans=virtio,version=9p2000.L,msize=104857600,ro shirudo-kernel /mnt/shirudo-kernel; then
-        echo "test-vm: could not mount kernel artifact share" >/dev/ttyS0
+        echo "test-vm: could not mount kernel artifact share" >/dev/console
         poweroff -f
         exit 1
       fi
@@ -1403,16 +1412,37 @@ log "booting $(basename "$KERNEL") with ${CPUS} CPUs and ${MEMORY} memory"
 KERNEL_LSM_ARGS="lsm=bpf bpf.keyring_unsealed=1"
 KERNEL_NET_DEVICE="virtio-net-pci,netdev=net0"
 
+# The virt machine has no if=virtio mapping, so its disks are explicit PCI
+# devices, declared so that the root disk is vda.
+case "$TEST_VM_ARCH" in
+x86_64)
+	MACHINE_ARGS=(-cpu host -machine q35)
+	DISK_ARGS=(
+		-drive "file=${OVERLAY},if=virtio,format=qcow2"
+		-drive "file=${SEED},if=virtio,format=raw,readonly=on"
+	)
+	TPM_DEVICE="tpm-tis,tpmdev=tpm0"
+	;;
+aarch64)
+	MACHINE_ARGS=(-cpu host -machine "virt,gic-version=host")
+	DISK_ARGS=(
+		-drive "file=${OVERLAY},if=none,id=rootdisk,format=qcow2"
+		-device "virtio-blk-pci,drive=rootdisk"
+		-drive "file=${SEED},if=none,id=seeddisk,format=raw,readonly=on"
+		-device "virtio-blk-pci,drive=seeddisk"
+	)
+	TPM_DEVICE="tpm-tis-device,tpmdev=tpm0"
+	;;
+esac
+
 QEMU_ARGS=(
 	-enable-kvm \
-	-cpu host \
-	-machine q35 \
+	"${MACHINE_ARGS[@]}" \
 	-smp "$CPUS" \
 	-m "$MEMORY" \
-	-drive "file=${OVERLAY},if=virtio,format=qcow2" \
-	-drive "file=${SEED},if=virtio,format=raw,readonly=on" \
+	"${DISK_ARGS[@]}" \
 	-kernel "$KERNEL" \
-	-append "root=/dev/vda1 rootwait rw console=ttyS0,115200n8 loglevel=7 net.ifnames=0 ${KERNEL_LSM_ARGS}" \
+	-append "root=/dev/vda1 rootwait rw console=${TEST_VM_ARCH_CONSOLE},115200n8 loglevel=7 net.ifnames=0 ${KERNEL_LSM_ARGS}" \
 	-netdev "user,id=net0,hostfwd=tcp:127.0.0.1:${SSH_PORT}-:22" \
 	-device "$KERNEL_NET_DEVICE" \
 	-virtfs "local,id=shirudo-src,path=${REPO_ROOT},mount_tag=shirudo-src,security_model=none,readonly=on" \
@@ -1420,7 +1450,7 @@ QEMU_ARGS=(
 	-virtfs "local,id=shirudo-out,path=${RUN_DIR}/result,mount_tag=shirudo-out,security_model=none" \
 	-chardev "socket,id=chrtpm,path=${SWTPM_SOCKET}" \
 	-tpmdev emulator,id=tpm0,chardev=chrtpm \
-	-device tpm-tis,tpmdev=tpm0 \
+	-device "$TPM_DEVICE" \
 	-chardev "socket,id=console,path=${RUN_DIR}/console.sock,server=on,wait=off,logfile=${RUN_DIR}/console.log,logappend=on" \
 	-serial chardev:console \
 	-display none \
@@ -1500,7 +1530,7 @@ host_memory_pid()
 
 	[[ -n "$QEMU_PID" ]] || return 0
 	cmdline="$(tr '\0' ' ' <"/proc/$QEMU_PID/cmdline" 2>/dev/null || true)"
-	if [[ "$cmdline" == *qemu-system-x86_64* ]]; then
+	if [[ "$cmdline" == *"$QEMU_BIN"* ]]; then
 		printf '%s\n' "$QEMU_PID"
 		return 0
 	fi
@@ -1508,7 +1538,7 @@ host_memory_pid()
 		while read -r child_pid; do
 			[[ "$child_pid" =~ ^[1-9][0-9]*$ ]] || continue
 			cmdline="$(tr '\0' ' ' <"/proc/$child_pid/cmdline" 2>/dev/null || true)"
-			if [[ "$cmdline" == *qemu-system-x86_64* ]]; then
+			if [[ "$cmdline" == *"$QEMU_BIN"* ]]; then
 				printf '%s\n' "$child_pid"
 				return 0
 			fi
@@ -1561,11 +1591,11 @@ if [[ "$VM_MODE" == interactive ]]; then
 		QEMU_UNIT_FILE="$RUN_DIR/qemu.unit"
 		QEMU_UNIT="shirudo-vm-$VM_NAME-qemu.service"
 		start_user_unit "$QEMU_UNIT" "$RUN_DIR/qemu.log" \
-			qemu-system-x86_64 "${QEMU_ARGS[@]}"
+			"$QEMU_BIN" "${QEMU_ARGS[@]}"
 		printf '%s\n' "$QEMU_UNIT" >"$QEMU_UNIT_FILE"
 		QEMU_PID="$(user_unit_pid "$QEMU_UNIT")" || die "could not determine QEMU systemd PID"
 	else
-		nohup qemu-system-x86_64 "${QEMU_ARGS[@]}" \
+		nohup "$QEMU_BIN" "${QEMU_ARGS[@]}" \
 			>"$RUN_DIR/qemu.log" 2>&1 < /dev/null &
 		QEMU_PID=$!
 	fi
@@ -1583,7 +1613,7 @@ if [[ "$VM_MODE" == interactive ]]; then
 else
 	set +e
 	timeout --signal=TERM --kill-after=30 "$VM_TIMEOUT" \
-		qemu-system-x86_64 "${QEMU_ARGS[@]}" \
+		"$QEMU_BIN" "${QEMU_ARGS[@]}" \
 		>"$RUN_DIR/qemu.log" 2>&1 &
 	QEMU_PID=$!
 	wait_for_ssh_listener

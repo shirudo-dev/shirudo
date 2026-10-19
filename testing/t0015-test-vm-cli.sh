@@ -54,6 +54,46 @@ test_expect_success 'test-vm prints an install command for missing dependencies'
 		"$WORK/missing-dependency.out"
 '
 
+test_expect_success 'test-vm requires the QEMU emulator of the host architecture' '
+	mkdir "$WORK/arm-bin" &&
+	ln -s /bin/bash "$WORK/arm-bin/bash" &&
+	ln -s /usr/bin/dirname "$WORK/arm-bin/dirname" &&
+	for command_name in curl sha256sum awk qemu-system-x86_64 qemu-img \
+		swtpm timeout tee
+	do
+		ln -s /bin/true "$WORK/arm-bin/$command_name" || return 1
+	done &&
+	printf kernel >"$WORK/Image" &&
+	! PATH="$WORK/arm-bin" TEST_VM_ARCH=aarch64 \
+		TEST_VM_WORK_DIR="$WORK/missing-arm-qemu" \
+		TEST_VM_KERNEL="$WORK/Image" "$RUNNER" \
+		>"$WORK/missing-arm-qemu.out" 2>&1 &&
+	grep -q "missing host commands: qemu-system-aarch64" \
+		"$WORK/missing-arm-qemu.out" &&
+	grep -q "qemu-system-arm" "$WORK/missing-arm-qemu.out"
+'
+
+test_expect_success 'test-vm boots arm64 on the virt machine with PCI disks' '
+	grep -q "virt,gic-version=host" "$RUNNER" &&
+	grep -q "virtio-blk-pci,drive=rootdisk" "$RUNNER" &&
+	grep -q "tpm-tis-device,tpmdev=tpm0" "$RUNNER" &&
+	! grep -q "ttyS0" "$RUNNER"
+'
+
+test_expect_success 'test-vm reads the release of an arm64 image from its module tree' '
+	sed -n "/^kernel_release_of()/,/^}/p" "$RUNNER" >"$WORK/release.sh" &&
+	mkdir -p "$WORK/art/lib/modules/7.9.9-test" &&
+	printf image >"$WORK/art/Image" &&
+	release() {
+		KERNEL_ARTIFACT_DIR=$1 bash -c \
+			". \"$WORK/release.sh\"; kernel_release_of \"$WORK/art/Image\""
+	} &&
+	test "$(release "$WORK/art")" = 7.9.9-test &&
+	! release "" >/dev/null 2>&1 &&
+	mkdir "$WORK/art/lib/modules/7.9.9-other" &&
+	! release "$WORK/art" >/dev/null 2>&1
+'
+
 test_expect_success 'test-vm selects the root partition without an initramfs' '
 	grep -q "root=/dev/vda1 rootwait rw" "$RUNNER" &&
 	! grep -q "root=LABEL=cloudimg-rootfs" "$RUNNER"
@@ -280,7 +320,7 @@ test_expect_success 'named VM console and SSH access helpers are wired up' '
 	grep -q "socket,id=console" ../contrib/test-vm.sh &&
 	grep -q "logfile=.*console.log" ../contrib/test-vm.sh &&
 	grep -q "TEST_VM_SSH_PUBLIC_KEY" ../contrib/test-vm.sh &&
-	grep -q "serial-getty@ttyS0.service" ../contrib/test-vm-guest.sh &&
+	grep -q "serial-getty@\${TEST_VM_ARCH_CONSOLE}.service" ../contrib/test-vm-guest.sh &&
 	grep -q "TEST_VM_SSH_PUBLIC_KEY" ../contrib/test-vm-guest.sh
 '
 

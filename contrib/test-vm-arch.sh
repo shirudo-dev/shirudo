@@ -18,11 +18,17 @@ aarch64|arm64) TEST_VM_ARCH=aarch64 ;;
 esac
 
 if [ "$TEST_VM_ARCH" = aarch64 ]; then
+	TEST_VM_ARCH_QEMU=qemu-system-aarch64
+	TEST_VM_ARCH_QEMU_DEB=qemu-system-arm
+	TEST_VM_ARCH_CONSOLE=ttyAMA0
 	TEST_VM_ARCH_KIMAGE=Image
 	TEST_VM_ARCH_KIMAGE_SRC=arch/arm64/boot/Image
 	TEST_VM_ARCH_DEB=arm64
 	TEST_VM_ARCH_MIRROR=https://ports.ubuntu.com/ubuntu-ports
 else
+	TEST_VM_ARCH_QEMU=qemu-system-x86_64
+	TEST_VM_ARCH_QEMU_DEB=qemu-system-x86
+	TEST_VM_ARCH_CONSOLE=ttyS0
 	TEST_VM_ARCH_KIMAGE=bzImage
 	TEST_VM_ARCH_KIMAGE_SRC=arch/x86/boot/bzImage
 	TEST_VM_ARCH_DEB=amd64

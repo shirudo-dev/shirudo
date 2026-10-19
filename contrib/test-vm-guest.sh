@@ -12,6 +12,8 @@ export HOME=/root
 export LOGNAME=root
 export USER=root
 LOWER=/mnt/shirudo-src
+# shellcheck source=contrib/test-vm-arch.sh
+. "$LOWER/contrib/test-vm-arch.sh"
 BUNDLE=/mnt/shirudo-bundle
 UPPER=/var/tmp/shirudo-upper
 OVERLAY_WORK=/var/tmp/shirudo-overlay-work
@@ -263,7 +265,7 @@ PasswordAuthentication no
 EOF
 passwd -d root >/dev/null
 systemctl enable --now ssh
-systemctl enable --now serial-getty@ttyS0.service
+systemctl enable --now "serial-getty@${TEST_VM_ARCH_CONSOLE}.service"
 
 mkdir -p "$UPPER" "$OVERLAY_WORK" "$WORKSPACE"
 if mount -t overlay overlay \
