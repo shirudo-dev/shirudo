@@ -10,8 +10,8 @@
 
 /*
  * The label value: SHA-256 of the xattr name, 64 hex characters, the
- * same for every build. bpf/seal.c takes any 64-byte value as marking a
- * protected inode; the identity map says who may touch it.
+ * same for every build. bpf/seal.c takes the label, whatever its value,
+ * as marking a protected inode; the identity map says who may touch it.
  */
 #define SHIRUDO_SEAL_LABEL \
 	"94442b45cfcdc59aabc2a91364ed2ae129418e05a5c1985231b9c032e673f469"

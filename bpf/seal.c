@@ -17,9 +17,11 @@
  * The exec hooks cache whether the successfully executed file carries a
  * Shirudo label in task storage for later access-control decisions. An
  * unlabelled filesystem target is not ours and is allowed through
- * untouched. No bpf_d_path(), no path strings: the label rides the
- * inode, immune to bind-mount / namespace / TOCTOU games. Reads are not
- * gated; only write-mode opens and the mutating inode ops are.
+ * untouched; a label that cannot be read, unless the caller may not read
+ * the file, is taken to be there. No bpf_d_path(), no path strings: the
+ * label rides the inode, immune to bind-mount / namespace / TOCTOU
+ * games. Reads are not gated; only write-mode opens and the mutating
+ * inode ops are.
  *
  * The filesystem and exec xattr hooks are sleepable (lsm.s/) because
  * reading an xattr can sleep. The xattr-reading kfuncs write into a
@@ -36,8 +38,17 @@
 #include <bpf/bpf_core_read.h>
 #include "shirudo_identity.h"
 
+#ifndef EPERM
+#define EPERM		1
+#endif
 #ifndef EACCES
 #define EACCES		13
+#endif
+#ifndef ENODATA
+#define ENODATA		61
+#endif
+#ifndef EOPNOTSUPP
+#define EOPNOTSUPP	95
 #endif
 #ifndef FMODE_WRITE
 #define FMODE_WRITE	0x2
@@ -81,16 +92,25 @@ static __always_inline int seal_caller(void)
 }
 
 /*
- * With the length of the target's label already read (tlen), decide the
- * verdict. tlen != LABEL_LEN means the target is not one of shirudo's
- * labelled inodes -- allow. Otherwise the calling task must be shirudo.
- * 0 = allow, -EACCES = deny.
+ * Decide on the result of reading the target's label (tlen). No label
+ * (-ENODATA) or no security xattrs on the file system (-EOPNOTSUPP) is
+ * not shirudo's inode. Neither is one the caller may not read (-EACCES,
+ * -EPERM): the kfunc checks read permission for the caller, so failing
+ * those closed would refuse every write-only open and every unlink of an
+ * unreadable file. A label of any size, or any other error, requires the
+ * caller to be shirudo. 0 = allow, -EACCES = deny.
  */
 static __always_inline int seal_verdict(int tlen)
 {
-	if (tlen != LABEL_LEN)
-		return 0;		/* not labelled (absent / wrong size) */
-	return seal_caller();
+	switch (tlen) {
+	case -ENODATA:
+	case -EOPNOTSUPP:
+	case -EACCES:
+	case -EPERM:
+		return 0;
+	default:
+		return seal_caller();
+	}
 }
 
 /* Whether an xattr name is the label itself, not a longer name under it. */
@@ -231,7 +251,7 @@ int BPF_PROG(shirudo_seal_file_open, struct file *file)
 	task = bpf_get_current_task_btf();
 	s = seal_scratch_get(task);
 	if (!s)
-		return 0;		/* no scratch: fail open (see header) */
+		return seal_caller();	/* cannot read the label */
 	bpf_dynptr_from_mem(s->target, LABEL_LEN, 0, &tdp);
 	return seal_verdict(bpf_get_file_xattr(file, SHIRUDO_XATTR, &tdp));
 }
@@ -243,7 +263,7 @@ static __always_inline int seal_dentry(struct dentry *dentry)
 	struct bpf_dynptr tdp;
 
 	if (!s)
-		return 0;
+		return seal_caller();
 	bpf_dynptr_from_mem(s->target, LABEL_LEN, 0, &tdp);
 	return seal_verdict(bpf_get_dentry_xattr(dentry, SHIRUDO_XATTR, &tdp));
 }
