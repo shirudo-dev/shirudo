@@ -104,7 +104,7 @@ self_exec = [r for r in tables["exec"]
              if (r["executable"]["dev"], r["executable"]["ino"]) == helper_id
              and (r.get("caller", {}).get("dev"),
                   r.get("caller", {}).get("ino")) == helper_id]
-assert sum(int(r["exec_count"]) for r in self_exec) >= 5, self_exec
+assert sum(int(r["exec_count"]) for r in self_exec) == 5, self_exec
 assert all(not r["caller_inferred"] and "caller" in r
            for r in self_exec), self_exec
 assert any(r["uid"] == 0 and r["euid"] == 0 and
@@ -120,23 +120,35 @@ for method in ("execveat-empty", "fexecve"):
                if r["path"].endswith(f"/true-{method}") and
                (r.get("caller", {}).get("dev"),
                 r.get("caller", {}).get("ino")) == helper_id]
-    assert fd_exec, (method, tables["exec"])
+    assert len(fd_exec) == 1 and int(fd_exec[0]["exec_count"]) == 1, fd_exec
+dirfd_exec = [r for r in tables["exec"]
+              if r["path"].endswith("/true-execveat-dirfd") and
+              (r.get("caller", {}).get("dev"),
+               r.get("caller", {}).get("ino")) == helper_id]
+assert len(dirfd_exec) == 1 and int(dirfd_exec[0]["exec_count"]) == 1, dirfd_exec
 drop_euid_exec = [r for r in tables["exec"]
                   if r["path"].endswith("/true-drop-euid") and
                   (r.get("caller", {}).get("dev"),
                    r.get("caller", {}).get("ino")) == helper_id]
-assert any(r["uid"] == 65534 and r["euid"] == 65534 and
-           int(r["cap_effective"]) == 0 for r in drop_euid_exec), drop_euid_exec
-script = [r for r in tables["exec"]
-          if r["path"].endswith("/exec-script") and
-          (r.get("caller", {}).get("dev"),
-           r.get("caller", {}).get("ino")) == helper_id]
-assert script and not any(r["interpreter"] for r in script), script
-script_id = (script[0]["executable"]["dev"], script[0]["executable"]["ino"])
-assert any(r["interpreter"] and
-           (r.get("caller", {}).get("dev"), r.get("caller", {}).get("ino")) ==
-           script_id and r["pid"] == script[0]["pid"]
-           for r in tables["exec"]), tables["exec"]
+assert len(drop_euid_exec) == 1, drop_euid_exec
+assert (drop_euid_exec[0]["uid"] == 65534 and
+        drop_euid_exec[0]["euid"] == 65534 and
+        int(drop_euid_exec[0]["cap_effective"]) == 0), drop_euid_exec
+for name in ("exec-script", "exec-script-fd"):
+    scripts = [r for r in tables["exec"]
+               if r["path"].endswith("/" + name) and
+               (r.get("caller", {}).get("dev"),
+                r.get("caller", {}).get("ino")) == helper_id]
+    assert len(scripts) == 1 and not scripts[0]["interpreter"], scripts
+    assert int(scripts[0]["exec_count"]) == 1, scripts
+    script_id = (scripts[0]["executable"]["dev"],
+                 scripts[0]["executable"]["ino"])
+    interpreters = [r for r in tables["exec"]
+                    if r["interpreter"] and
+                    (r.get("caller", {}).get("dev"),
+                     r.get("caller", {}).get("ino")) == script_id and
+                    r["pid"] == scripts[0]["pid"]]
+    assert len(interpreters) == 1, (scripts, interpreters)
 for name in ("net", "dns"):
     assert any((r["executable"]["dev"], r["executable"]["ino"]) in exec_ids
                for r in tables[name]), (name, tables[name])

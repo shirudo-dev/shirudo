@@ -177,14 +177,15 @@ static int drop_euid_exec_path(const char *path)
 	return wait_child(pid);
 }
 
-static int make_script(const char *directory, char *path, size_t path_size)
+static int make_script(const char *directory, const char *name, char *path,
+		       size_t path_size)
 {
 	static const char script[] = "#!/bin/sh\nexit 0\n";
 	ssize_t written;
 	int length;
 	int fd;
 
-	length = snprintf(path, path_size, "%s/exec-script", directory);
+	length = snprintf(path, path_size, "%s/%s", directory, name);
 	if (length < 0 || (size_t)length >= path_size)
 		return -1;
 	fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0700);
@@ -216,6 +217,7 @@ static int thread_exec_path(const char *path)
 
 int main(int argc, char **argv)
 {
+	char script_fd[4096];
 	char script[4096];
 	const char *self = argv[0];
 
@@ -231,7 +233,10 @@ int main(int argc, char **argv)
 		return dirfd_exec_path(argv[2], argv[3]) ? 1 : 0;
 	if (argc == 3 && !strcmp(argv[1], "--drop-euid"))
 		return drop_euid_exec_path(argv[2]) ? 1 : 0;
-	if (argc != 2 || make_script(argv[1], script, sizeof(script))) {
+	if (argc != 2 || make_script(argv[1], "exec-script", script,
+				     sizeof(script)) ||
+	    make_script(argv[1], "exec-script-fd", script_fd,
+			sizeof(script_fd))) {
 		fprintf(stderr, "could not create shebang test executable\n");
 		return 1;
 	}
@@ -255,7 +260,7 @@ int main(int argc, char **argv)
 		fprintf(stderr, "fork() -> shebang execve() case failed\n");
 		return 1;
 	}
-	if (fd_exec_path(script, 1)) {
+	if (fd_exec_path(script_fd, 1)) {
 		fprintf(stderr, "fexecve() -> shebang case failed\n");
 		return 1;
 	}
