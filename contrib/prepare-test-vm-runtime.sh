@@ -56,6 +56,17 @@ GUESTFS_RUNTIME_DIR="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}/shirudo-guestfs-run}"
 mkdir -p "$GUESTFS_CACHE_DIR"
 mkdir -p "$GUESTFS_TMP_DIR"
 mkdir -p "$GUESTFS_RUNTIME_DIR"
+
+# libguestfs defaults to its libvirt backend and to the emulator it was
+# built with, usually /usr/libexec/qemu-kvm, and a host with only
+# qemu-system-<arch> has neither. Run the appliance directly with the
+# emulator the VM uses, unless the caller chose otherwise.
+export LIBGUESTFS_BACKEND="${LIBGUESTFS_BACKEND:-direct}"
+if [[ -z "${LIBGUESTFS_HV:-}" ]]; then
+	LIBGUESTFS_HV="$(command -v "${TEST_VM_QEMU:-$TEST_VM_ARCH_QEMU}" || true)"
+	[[ -z "$LIBGUESTFS_HV" ]] || export LIBGUESTFS_HV
+fi
+
 TMP_IMAGE="$CACHE_DIR/.${RUNTIME_KEY}.tmp.$$"
 MARKER="${TMP_IMAGE}.marker"
 cleanup() { rm -f -- "$TMP_IMAGE" "$MARKER"; }

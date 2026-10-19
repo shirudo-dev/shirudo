@@ -188,6 +188,37 @@ test_expect_success 'the bundle and runtime scripts print hints for the host pac
 		"$WORK/runtime-dnf.out"
 '
 
+test_expect_success 'the runtime image is built with the direct libguestfs backend and the VM emulator' '
+	mkdir -p "$WORK/gf-bin" &&
+	printf "%s\n" "#!/bin/sh" "exit 0" >"$WORK/gf-bin/emulator" &&
+	printf "%s\n" "#!/bin/sh" \
+		"echo \"\$LIBGUESTFS_BACKEND \${LIBGUESTFS_HV-unset}\" >\"\$GF_OUT\"" \
+		>"$WORK/gf-bin/virt-customize" &&
+	printf "%s\n" "#!/bin/sh" \
+		"[ \"\$1\" = create ] || exit 0" \
+		"for a; do last=\$a; done; : >\"\$last\"" >"$WORK/gf-bin/qemu-img" &&
+	chmod +x "$WORK/gf-bin/emulator" "$WORK/gf-bin/virt-customize" \
+		"$WORK/gf-bin/qemu-img" &&
+	printf rootfs >"$WORK/gf-rootfs" &&
+	guestfs_env() {
+		rm -rf "$WORK/gf-cache" &&
+		env "$@" PATH="$WORK/gf-bin:$PATH" GF_OUT="$WORK/gf-out" \
+			TMPDIR="$WORK" LIBGUESTFS_CACHEDIR="$WORK/gf-cache" \
+			../contrib/prepare-test-vm-runtime.sh \
+			--rootfs "$WORK/gf-rootfs" --cache-dir "$WORK/gf-cache/img" \
+			--package-file ../contrib/test-vm-runtime-packages \
+			--runtime-key gf --key-output "$WORK/gf-cache/key" \
+			>/dev/null 2>&1 &&
+		cat "$WORK/gf-out"
+	} &&
+	test "$(guestfs_env TEST_VM_QEMU="$WORK/gf-bin/emulator")" = \
+		"direct $WORK/gf-bin/emulator" &&
+	test "$(guestfs_env TEST_VM_QEMU="$WORK/gf-bin/emulator" \
+		LIBGUESTFS_BACKEND=libvirt LIBGUESTFS_HV=/chosen/qemu)" = \
+		"libvirt /chosen/qemu" &&
+	test "$(guestfs_env TEST_VM_QEMU="$WORK/gf-bin/none")" = "direct unset"
+'
+
 test_expect_success 'the kernel package format follows the host package manager' '
 	printf "print:\n\t@echo \$(PACKAGE_FORMAT)\n" >"$WORK/print.mk" &&
 	format() {
