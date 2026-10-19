@@ -308,6 +308,12 @@ def serve(request_path, response_path, expected_path):
                         write_expected(expected_path, expected_identity())
                     elif command == "generate":
                         generate(expected_path)
+                    elif command == "module-request":
+                        module_request_event()
+                        with open(expected_path, encoding="utf-8") as source:
+                            expected = json.load(source)
+                        expected["module_request"] = True
+                        write_expected(expected_path, expected)
                     else:
                         raise ValueError(f"unknown event command: {command}")
                 except Exception as error:
@@ -328,7 +334,6 @@ def generate(expected_path):
     children = userns_event()
     mountpoint = mount_event(workdir)
     module_path = module_load_events(workdir)
-    module_request_event()
     bpf_event()
     bpf_readonly_event()
     mmap_exec_event()
@@ -338,7 +343,8 @@ def generate(expected_path):
                    "ptrace_child": ptrace_child,
                    "userns_children": children,
                    "mountpoint": mountpoint,
-                   "module_path": module_path}, output)
+                   "module_path": module_path,
+                   "module_request": False}, output)
 
 
 def records_from(path):
@@ -427,6 +433,8 @@ def check_positive(expected_path, records_path):
     kinds = {"setuid_root", "ptrace_attach", "mount", "kernel_read_file",
              "kernel_load_data", "module_request", "userns_create", "bpf",
              "mmap_exec", "mprotect_exec"}
+    if not expected["module_request"]:
+        kinds.remove("module_request")
     identity = expected["identity"]
     selected = [record for record in records
                 if record["kind"] in kinds and
@@ -488,11 +496,12 @@ def check_positive(expected_path, records_path):
     assert kernel_load[0]["subtype"] == 2, kernel_load
     assert int(kernel_load[0]["count"]) >= 2, kernel_load
 
-    module_request = kind("module_request")[0]
-    assert module_request["name"] == "net-pf-16-proto-31", module_request
-    assert module_request["subtype"] == 0 and \
-        int(module_request["aux"]) == 0, module_request
-    assert module_request["pid"] == expected["pid"], module_request
+    if expected["module_request"]:
+        module_request = kind("module_request")[0]
+        assert module_request["name"] == "net-pf-16-proto-31", module_request
+        assert module_request["subtype"] == 0 and \
+            int(module_request["aux"]) == 0, module_request
+        assert module_request["pid"] == expected["pid"], module_request
 
     userns = kind("userns_create")[0]
     assert int(userns["count"]) == 2, userns

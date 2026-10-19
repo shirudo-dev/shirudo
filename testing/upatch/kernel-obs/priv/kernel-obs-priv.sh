@@ -49,8 +49,6 @@ trap cleanup EXIT HUP INT TERM
 [ -s "$UNLOAD" ] || test_skip_all "missing kernel-obs unload fixture"
 [ -s "$BPF_FILTER_LOAD" ] || test_skip_all "missing BPF filter fixture"
 [ -s "$BPF_FILTER_UNLOAD" ] || test_skip_all "missing BPF filter unload fixture"
-[ -w "$MODPROBE_FILE" ] || test_skip_all "kernel.modprobe is not writable"
-
 mkfifo "$WORK/events.in" "$WORK/events.out"
 SHIRUDO_TEST_WORK_DIR="$WORK/events" \
 	python3 upatch/kernel-obs/priv/priv_events.py serve \
@@ -67,6 +65,18 @@ run_event()
 		printf '%s\n' "$result" >&2
 		return 1
 	fi
+}
+
+run_module_request()
+{
+	[ -w "$MODPROBE_FILE" ] || return 0
+	cat "$MODPROBE_FILE" >"$MODPROBE_BACKUP" || return 1
+	printf '%s\n' /bin/false >"$MODPROBE_FILE" || return 1
+	run_event module-request
+	result=$?
+	cat "$MODPROBE_BACKUP" >"$MODPROBE_FILE" || return 1
+	rm -f "$MODPROBE_BACKUP"
+	return "$result"
 }
 
 load_observability()
@@ -109,11 +119,8 @@ test_expect_success 'mprotect does not duplicate an existing executable mapping'
 '
 
 test_expect_success 'privilege events produce attributed priv records' '
-	cat "$MODPROBE_FILE" >"$MODPROBE_BACKUP" &&
-	printf '%s\n' /bin/false >"$MODPROBE_FILE" &&
 	run_event generate &&
-	cat "$MODPROBE_BACKUP" >"$MODPROBE_FILE" &&
-	rm -f "$MODPROBE_BACKUP" &&
+	run_module_request &&
 	"$SHIRUDO_BIN" upatch load "$BPF_FILTER_LOAD" --no-precheck \
 		--report=- >"$WORK/bpf-filter-load.log" 2>&1 &&
 	"$SHIRUDO_BIN" upatch unload "$BPF_FILTER_UNLOAD" --no-precheck \
