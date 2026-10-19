@@ -119,6 +119,7 @@ TEST_VM_BUNDLE_INPUTS := $(sort \
 	$(ROOT)/vendor/libbpf/Makefile $(ROOT)/vendor/libbpf/COMMIT \
 	$(ROOT)/Documentation/Makefile $(ROOT)/upatches/kernel-obs/Makefile \
 	$(ROOT)/contrib/build-test-vm-bundle.sh $(ROOT)/contrib/test-vm-guest.sh \
+	$(ROOT)/contrib/test-vm-arch.sh \
 	$(ROOT)/contrib/prepare-test-vm-runtime.sh $(ROOT)/contrib/test-vm-runtime-packages \
 	$(TEST_VM_BUNDLE_SOURCES) $(TEST_VM_BUNDLE_ARTIFACTS) \
 	$(if $(strip $(TEST_VM_PACKAGE_CERT)),$(TEST_VM_PACKAGE_CERT)))

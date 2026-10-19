@@ -8,16 +8,18 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=contrib/test-vm-arch.sh
+. "${REPO_ROOT}/contrib/test-vm-arch.sh"
 BUNDLE_DIR="${TEST_VM_HOST_BUNDLE:-${REPO_ROOT}/build/test-vm/host-bundle}"
 WORK_DIR="${TEST_VM_WORK_DIR:-${REPO_ROOT}/build/test-vm}"
 RUNTIME_CACHE_DIR="${TEST_VM_RUNTIME_CACHE_DIR:-${WORK_DIR}/cache/runtime}"
 LIBGUESTFS_KERNEL_CACHE="${WORK_DIR}/cache/libguestfs/ubuntu"
 UBUNTU_CODENAME="${TEST_VM_UBUNTU_CODENAME:-resolute}"
 PACKAGE_FILE="$REPO_ROOT/contrib/test-vm-runtime-packages"
-DEFAULT_ROOTFS_URL="https://cloud-images.ubuntu.com/releases/server/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
+DEFAULT_ROOTFS_URL="https://cloud-images.ubuntu.com/releases/server/26.04/release/ubuntu-26.04-server-cloudimg-${TEST_VM_ARCH_DEB}.img"
 ROOTFS_URL="${TEST_VM_ROOTFS_URL:-$DEFAULT_ROOTFS_URL}"
 ROOTFS_SHA256="${TEST_VM_ROOTFS_SHA256:-}"
-ROOTFS_NAME="ubuntu-26.04-server-cloudimg-amd64.img"
+ROOTFS_NAME="ubuntu-26.04-server-cloudimg-${TEST_VM_ARCH_DEB}.img"
 ROOTFS_CACHE="${WORK_DIR}/cache/rootfs/${ROOTFS_NAME}"
 LOCK_FILE="${BUNDLE_DIR}.lock"
 STAMP_FILE="${TEST_VM_BUNDLE_STAMP:-${BUNDLE_DIR}/.stamp}"
@@ -87,10 +89,10 @@ prepare_ubuntu_libguestfs_kernel()
 	if [[ ! -s "$metadata" || "$(awk -F '\t' '{print NF; exit}' "$metadata")" != 5 ]]; then
 		curl -fsSL --retry 3 \
 			--output "${index}.tmp" \
-			"https://archive.ubuntu.com/ubuntu/dists/${UBUNTU_CODENAME}-updates/main/binary-amd64/Packages.gz" \
+			"${TEST_VM_ARCH_MIRROR}/dists/${UBUNTU_CODENAME}-updates/main/binary-${TEST_VM_ARCH_DEB}/Packages.gz" \
 			|| die "could not download Ubuntu $UBUNTU_CODENAME kernel package index"
 		mv -- "${index}.tmp" "$index"
-		kernel_info="$(awk -v RS='' -v FS='\n' '
+		kernel_info="$(awk -v want_arch="$TEST_VM_ARCH_DEB" -v RS='' -v FS='\n' '
 			{
 				package=arch=version=filename=""
 				for (i = 1; i <= NF; i++) {
@@ -100,15 +102,16 @@ prepare_ubuntu_libguestfs_kernel()
 					if ($i ~ /^Filename: /) filename=substr($i, 11)
 				}
 				if (package ~ /^linux-image-[0-9].*-generic$/ &&
-				    arch == "amd64" && version != "" && filename != "")
+				    arch == want_arch && version != "" && filename != "")
 					print version "\t" package "\t" filename
 			}
 		' <(gzip -dc "$index") | sort -V | tail -1)"
 		[[ -n "$kernel_info" ]] ||
-			die "Ubuntu $UBUNTU_CODENAME has no amd64 generic kernel package"
+			die "Ubuntu $UBUNTU_CODENAME has no $TEST_VM_ARCH_DEB generic kernel package"
 		IFS=$'\t' read -r version package filename <<<"$kernel_info"
 		kernel_version="${package#linux-image-}"
-		module_info="$(awk -v want="linux-modules-$kernel_version" -v RS='' -v FS='\n' '
+		module_info="$(awk -v want="linux-modules-$kernel_version" \
+			-v want_arch="$TEST_VM_ARCH_DEB" -v RS='' -v FS='\n' '
 			{
 				package=arch=version=filename=""
 				for (i = 1; i <= NF; i++) {
@@ -117,7 +120,7 @@ prepare_ubuntu_libguestfs_kernel()
 					if ($i ~ /^Version: /) version=substr($i, 10)
 					if ($i ~ /^Filename: /) filename=substr($i, 11)
 				}
-				if (package == want && arch == "amd64" && version != "" && filename != "")
+				if (package == want && arch == want_arch && version != "" && filename != "")
 					print package "\t" filename
 			}
 		' <(gzip -dc "$index") | sort -V | tail -1)"
@@ -136,14 +139,14 @@ prepare_ubuntu_libguestfs_kernel()
 	deb="$cache_dir/$package.deb"
 	if [[ ! -s "$deb" ]]; then
 		curl -fsSL --retry 3 --output "${deb}.tmp" \
-			"https://archive.ubuntu.com/ubuntu/$filename" ||
+			"${TEST_VM_ARCH_MIRROR}/$filename" ||
 			die "could not download Ubuntu kernel package $package"
 		mv -- "${deb}.tmp" "$deb"
 	fi
 	local module_deb="$cache_dir/$module_package.deb"
 	if [[ ! -s "$module_deb" ]]; then
 		curl -fsSL --retry 3 --output "${module_deb}.tmp" \
-			"https://archive.ubuntu.com/ubuntu/$module_filename" ||
+			"${TEST_VM_ARCH_MIRROR}/$module_filename" ||
 			die "could not download Ubuntu kernel modules package $module_package"
 		mv -- "${module_deb}.tmp" "$module_deb"
 	fi
@@ -347,7 +350,7 @@ build_tree_test_registry()
 		"$TMP_DIR/fixtures/shirudo-test-tree-skip.upatch" \
 		"$TMP_DIR/fixtures/shirudo-test-tree-match.unload.upatch" \
 		"$payloads" "$tree_match_payload" "$tree_skip_payload" \
-		"$tree_match_unload_payload" <<'PY'
+		"$tree_match_unload_payload" "$TEST_VM_ARCH" <<'PY'
 import hashlib
 import json
 import pathlib
@@ -355,7 +358,7 @@ import sys
 
 registry, match_path, skip_path, match_unload_path, payloads = \
     map(pathlib.Path, sys.argv[1:6])
-match_payload, skip_payload, match_unload_payload = sys.argv[6:9]
+match_payload, skip_payload, match_unload_payload, node_arch = sys.argv[6:10]
 
 
 def digest(body):
@@ -419,8 +422,8 @@ match_unload_artifact = artifact("shirudo/tree-match-unload",
                                  "shirudo-test-tree-match.unload.upatch",
                                  match_unload_payload)
 
-this_node = {"architecture": ["x86_64"], "labels": {"env": ["tree-test"]}}
-other_node = {"architecture": ["x86_64"],
+this_node = {"architecture": [node_arch], "labels": {"env": ["tree-test"]}}
+other_node = {"architecture": [node_arch],
               "labels": {"env": ["not-this-node"]}}
 operations = [
     operation(1, "shirudo-test-tree-match", {}, match_artifact),

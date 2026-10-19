@@ -70,6 +70,23 @@ test_expect_success 'test-vm guest uses prebuilt target fixtures' '
 	! grep -q "libluajit-5.1-dev" ../contrib/test-vm-guest.sh
 '
 
+test_expect_success 'the Ubuntu image and packages are those of the host architecture' '
+	(
+		TEST_VM_ARCH=x86_64 &&
+		. ../contrib/test-vm-arch.sh &&
+		test "$TEST_VM_ARCH_DEB" = amd64 &&
+		test "$TEST_VM_ARCH_MIRROR" = https://archive.ubuntu.com/ubuntu
+	) &&
+	(
+		TEST_VM_ARCH=aarch64 &&
+		. ../contrib/test-vm-arch.sh &&
+		test "$TEST_VM_ARCH_DEB" = arm64 &&
+		test "$TEST_VM_ARCH_MIRROR" = https://ports.ubuntu.com/ubuntu-ports
+	) &&
+	! grep -q "amd64" ../contrib/test-vm.sh ../contrib/build-test-vm-bundle.sh &&
+	! grep -q "x86_64\|archive.ubuntu.com" ../contrib/build-test-vm-bundle.sh
+'
+
 test_expect_success 'test-vm imports the host-built payload' '
 	grep -q "TEST_VM_BUNDLE_DIR" ../testing/Makefile &&
 	grep -q "test-vm-bundle" ../testing/Makefile &&
