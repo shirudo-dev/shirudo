@@ -21,6 +21,7 @@ MAP_ANONYMOUS = 0x20
 PTRACE_ATTACH = 16
 PTRACE_DETACH = 17
 PR_SET_NAME = 15
+LSM_SETID_RE = 2
 
 SYSCALLS = {
     "x86_64": {"bpf": 321, "finit_module": 313, "init_module": 175},
@@ -430,10 +431,11 @@ def check_positive(expected_path, records_path):
 
     def kind(name):
         matches = [record for record in selected if record["kind"] == name]
-        assert matches, (name, selected)
+        assert len(matches) == 1, (name, matches)
         return matches
 
     setuid = kind("setuid_root")[0]
+    assert setuid["subtype"] == LSM_SETID_RE, setuid
     assert setuid["euid"] == 65534 and setuid["uid"] == 0, setuid
     assert int(setuid["aux"]) == 0, setuid
     assert setuid["name"] == expected["comm"], setuid
