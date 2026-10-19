@@ -275,13 +275,36 @@ int BPF_PROG(shirudo_seal_inode_unlink, struct inode *dir,
 	return seal_dentry(dentry);
 }
 
-/* Protect the source of a rename -- moving a labelled inode out. */
+/* Whether an inode is the executable recorded at init. */
+static __always_inline bool seal_is_exe(struct inode *inode)
+{
+	struct shirudo_sb_id *id;
+	__u32 zero = 0;
+
+	id = bpf_map_lookup_elem(&shirudo_bpffs_sb, &zero);
+	return id && BPF_CORE_READ(inode, i_sb, s_dev) == id->exe_dev &&
+	       BPF_CORE_READ(inode, i_ino) == id->exe_ino;
+}
+
+/*
+ * Protect both ends of a rename: moving a labelled inode out and
+ * replacing one. The recorded executable may be replaced, as a package
+ * upgrade does; the new binary is not shirudo until init records it.
+ */
 SEC("lsm.s/inode_rename")
 int BPF_PROG(shirudo_seal_inode_rename, struct inode *old_dir,
 	     struct dentry *old_dentry, struct inode *new_dir,
 	     struct dentry *new_dentry)
 {
-	return seal_dentry(old_dentry);
+	struct inode *target = BPF_CORE_READ(new_dentry, d_inode);
+	int err;
+
+	err = seal_dentry(old_dentry);
+	if (err)
+		return err;
+	if (!target || seal_is_exe(target))
+		return 0;
+	return seal_dentry(new_dentry);
 }
 
 SEC("lsm.s/inode_setxattr")
