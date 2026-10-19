@@ -38,6 +38,11 @@ def exec_event():
         subprocess.run(["./upatch/kernel-obs/exec/exec-paths",
                         "--execveat-dirfd", directory,
                         os.path.basename(dirfd_executable)], check=True)
+        dropped_uid_executable = os.path.join(directory, "true-drop-euid")
+        shutil.copyfile("/bin/true", dropped_uid_executable)
+        os.chmod(dropped_uid_executable, 0o755)
+        subprocess.run(["./upatch/kernel-obs/exec/exec-paths",
+                        "--drop-euid", dropped_uid_executable], check=True)
         subprocess.run(["./upatch/kernel-obs/exec/exec-paths", "--replace", executable],
                        check=True)
 

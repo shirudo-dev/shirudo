@@ -159,6 +159,24 @@ static int dirfd_exec_path(const char *directory, const char *path)
 	return wait_child(pid);
 }
 
+static void exec_drop_euid(const char *path)
+{
+	if (setresuid(65534, 0, 65534))
+		_exit(125);
+	exec_payload(path);
+}
+
+static int drop_euid_exec_path(const char *path)
+{
+	pid_t pid = fork();
+
+	if (pid == 0)
+		exec_drop_euid(path);
+	if (pid < 0)
+		return -1;
+	return wait_child(pid);
+}
+
 static int make_script(const char *directory, char *path, size_t path_size)
 {
 	static const char script[] = "#!/bin/sh\nexit 0\n";
@@ -211,6 +229,8 @@ int main(int argc, char **argv)
 		return fd_exec_path(argv[2], 1) ? 1 : 0;
 	if (argc == 4 && !strcmp(argv[1], "--execveat-dirfd"))
 		return dirfd_exec_path(argv[2], argv[3]) ? 1 : 0;
+	if (argc == 3 && !strcmp(argv[1], "--drop-euid"))
+		return drop_euid_exec_path(argv[2]) ? 1 : 0;
 	if (argc != 2 || make_script(argv[1], script, sizeof(script))) {
 		fprintf(stderr, "could not create shebang test executable\n");
 		return 1;

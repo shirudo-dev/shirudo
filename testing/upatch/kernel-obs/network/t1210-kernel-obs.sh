@@ -107,6 +107,8 @@ self_exec = [r for r in tables["exec"]
 assert sum(int(r["exec_count"]) for r in self_exec) >= 5, self_exec
 assert all(not r["caller_inferred"] and "caller" in r
            for r in self_exec), self_exec
+assert any(r["uid"] == 0 and r["euid"] == 0 and
+           int(r["cap_effective"]) > 0 for r in self_exec), self_exec
 replace_exec = [r for r in tables["exec"]
                 if r["path"].endswith("/true") and
                 (r.get("caller", {}).get("dev"),
@@ -119,6 +121,12 @@ for method in ("execveat-empty", "fexecve"):
                (r.get("caller", {}).get("dev"),
                 r.get("caller", {}).get("ino")) == helper_id]
     assert fd_exec, (method, tables["exec"])
+drop_euid_exec = [r for r in tables["exec"]
+                  if r["path"].endswith("/true-drop-euid") and
+                  (r.get("caller", {}).get("dev"),
+                   r.get("caller", {}).get("ino")) == helper_id]
+assert any(r["uid"] == 65534 and r["euid"] == 65534 and
+           int(r["cap_effective"]) == 0 for r in drop_euid_exec), drop_euid_exec
 script = [r for r in tables["exec"]
           if r["path"].endswith("/exec-script") and
           (r.get("caller", {}).get("dev"),
