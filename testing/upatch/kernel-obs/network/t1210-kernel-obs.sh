@@ -91,6 +91,8 @@ exec_ids = {(r["executable"]["dev"], r["executable"]["ino"])
 assert any(r["name"] == "true" and r["path"].endswith("/true")
            for r in tables["exec"]), tables["exec"]
 assert any("caller" in r for r in tables["exec"]), tables["exec"]
+assert any(r["caller_inferred"] and "caller" in r
+           for r in tables["exec"]), tables["exec"]
 helper_records = [r for r in tables["exec"]
                   if r["path"].endswith("/kernel-obs/exec/exec-paths")]
 helper = next(r for r in helper_records
@@ -103,6 +105,8 @@ self_exec = [r for r in tables["exec"]
              and (r.get("caller", {}).get("dev"),
                   r.get("caller", {}).get("ino")) == helper_id]
 assert sum(int(r["exec_count"]) for r in self_exec) >= 5, self_exec
+assert all(not r["caller_inferred"] and "caller" in r
+           for r in self_exec), self_exec
 replace_exec = [r for r in tables["exec"]
                 if r["path"].endswith("/true") and
                 (r.get("caller", {}).get("dev"),

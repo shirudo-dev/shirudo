@@ -288,6 +288,18 @@ def check_negative(path):
                    for record in records), records
 
 
+def check_exec_unknown(path):
+    with open(path, encoding="utf-8") as source:
+        documents = [json.loads(line) for line in source]
+    document = next(doc for doc in documents if doc.get("map") == "exec")
+    records = document["records"]
+    unknown = [record for record in records
+               if record["path"].endswith("/false")]
+    assert unknown, records
+    assert any("caller" not in record and not record["caller_inferred"]
+               for record in unknown), unknown
+
+
 def check_positive(expected_path, records_path):
     with open(expected_path, encoding="utf-8") as source:
         expected = json.load(source)
@@ -365,7 +377,7 @@ def check_positive(expected_path, records_path):
 
 def main():
     if len(sys.argv) < 2:
-        raise SystemExit("usage: priv_events.py negative | generate FILE | check EXPECTED NDJSON | check-negative NDJSON")
+        raise SystemExit("usage: priv_events.py negative | generate FILE | check EXPECTED NDJSON | check-negative NDJSON | check-exec-unknown NDJSON")
     mode = sys.argv[1]
     if mode == "negative":
         nonexec_mapping_events()
@@ -375,6 +387,8 @@ def main():
         check_positive(sys.argv[2], sys.argv[3])
     elif mode == "check-negative" and len(sys.argv) == 3:
         check_negative(sys.argv[2])
+    elif mode == "check-exec-unknown" and len(sys.argv) == 3:
+        check_exec_unknown(sys.argv[2])
     else:
         raise SystemExit("invalid priv_events.py arguments")
 

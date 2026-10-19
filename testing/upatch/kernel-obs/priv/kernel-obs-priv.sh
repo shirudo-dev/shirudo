@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../../.."
 . ./integration-lib.sh
 target_guard
 command -v python3 >/dev/null 2>&1 || test_skip_all "no python3"
@@ -61,7 +61,7 @@ test_expect_success 'non-executable mappings do not produce exec protection reco
 	SHIRUDO_TEST_WORK_DIR="$WORK/events" \
 		python3 upatch/kernel-obs/priv/priv_events.py negative &&
 	export_priv "$WORK/negative.ndjson" &&
-	python3 upatch/kernel-obs/priv/priv_events.py check-negative "$WORK/negative.ndjson"
+		python3 upatch/kernel-obs/priv/priv_events.py check-negative "$WORK/negative.ndjson"
 '
 
 test_expect_success 'privilege events produce attributed priv records' '
@@ -71,6 +71,10 @@ test_expect_success 'privilege events produce attributed priv records' '
 		python3 upatch/kernel-obs/priv/priv_events.py generate "$WORK/expected.json" &&
 	cat "$MODPROBE_BACKUP" >"$MODPROBE_FILE" &&
 	rm -f "$MODPROBE_BACKUP" &&
+	"$SHIRUDO_BIN" upatch map "$NAME" exec \
+		--json="$WORK/exec.ndjson" >/dev/null &&
+	python3 upatch/kernel-obs/priv/priv_events.py \
+		check-exec-unknown "$WORK/exec.ndjson" &&
 	export_priv "$WORK/priv.ndjson" &&
 	python3 upatch/kernel-obs/priv/priv_events.py check \
 		"$WORK/expected.json" "$WORK/priv.ndjson"
