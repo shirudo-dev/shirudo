@@ -78,8 +78,7 @@ test_expect_success 'test-vm prints dnf package names on a Fedora or RHEL host' 
 		TEST_VM_WORK_DIR="$WORK/missing-dependency-dnf" \
 		TEST_VM_KERNEL="$WORK/bzImage" "$RUNNER" \
 		>"$WORK/missing-dependency-dnf.out" 2>&1 &&
-	grep -q "sudo dnf install -y cloud-utils" \
-		"$WORK/missing-dependency-dnf.out" &&
+	grep -q "sudo dnf install -y xorriso" "$WORK/missing-dependency-dnf.out" &&
 	grep -q "openssh-clients" "$WORK/missing-dependency-dnf.out" &&
 	! grep -q "apt-get" "$WORK/missing-dependency-dnf.out" &&
 	! PATH="$WORK/arm-bin" TEST_VM_ARCH=aarch64 TEST_VM_HOST_PKG=dnf \
@@ -109,6 +108,40 @@ test_expect_success 'TEST_VM_QEMU names another emulator' '
 		>"$WORK/qemu-kvm.out" 2>&1 &&
 	! grep -q "missing host commands" "$WORK/qemu-kvm.out" &&
 	grep -q "host VM bundle is missing" "$WORK/qemu-kvm.out"
+'
+
+test_expect_success 'test-vm writes the cloud-init seed with an ISO writer' '
+	sed -n "/^seed_tool()/,/^}/p;/^make_seed()/,/^}/p" "$RUNNER" \
+		>"$WORK/seed.sh" &&
+	for writer in genisoimage xorriso
+	do
+		rm -rf "$WORK/iso-bin" &&
+		mkdir "$WORK/iso-bin" &&
+		printf "%s\n" "#!/bin/sh" "printf \"%s\\n\" \"\$@\" >\"\$SEED\"" \
+			>"$WORK/iso-bin/$writer" &&
+		chmod +x "$WORK/iso-bin/$writer" &&
+		PATH="$WORK/iso-bin" SEED="$WORK/seed-$writer" \
+			USER_DATA=/r/user-data META_DATA=/r/meta-data \
+			NETWORK_CONFIG=/r/network-config /bin/bash -c \
+			". \"$WORK/seed.sh\"; make_seed" &&
+		grep -qx cidata "$WORK/seed-$writer" &&
+		grep -qx /r/user-data "$WORK/seed-$writer" &&
+		grep -qx /r/meta-data "$WORK/seed-$writer" &&
+		grep -qx /r/network-config "$WORK/seed-$writer" || return 1
+	done &&
+	grep -qx -- "-as" "$WORK/seed-xorriso" &&
+	! grep -qx -- "-as" "$WORK/seed-genisoimage"
+'
+
+test_expect_success 'an ISO writer stands in for cloud-localds' '
+	rm "$WORK/kvm-bin/cloud-localds" &&
+	ln -s /bin/true "$WORK/kvm-bin/genisoimage" &&
+	! PATH="$WORK/kvm-bin" TEST_VM_ARCH=x86_64 TEST_VM_QEMU=qemu-kvm \
+		TEST_VM_WORK_DIR="$WORK/iso-seed" \
+		TEST_VM_KERNEL="$WORK/bzImage" "$RUNNER" \
+		>"$WORK/iso-seed.out" 2>&1 &&
+	! grep -q "missing host commands" "$WORK/iso-seed.out" &&
+	grep -q "host VM bundle is missing" "$WORK/iso-seed.out"
 '
 
 test_expect_success 'the host package manager is detected from os-release' '

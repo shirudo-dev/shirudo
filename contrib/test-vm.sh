@@ -121,7 +121,7 @@ HOST_DEPENDENCIES=(
 	"${QEMU_BIN}:${TEST_VM_ARCH_QEMU_DEB}:${TEST_VM_ARCH_QEMU_RPM}"
 	"qemu-img:qemu-utils:qemu-img"
 	"swtpm:swtpm:swtpm"
-	"cloud-localds:cloud-image-utils:cloud-utils"
+	"cloud-localds:cloud-image-utils:xorriso"
 	"timeout:coreutils:coreutils"
 	"flock:util-linux:util-linux"
 	"ssh-keygen:openssh-client:openssh-clients"
@@ -285,6 +285,50 @@ validate_bpm_oci()
 		die "TEST_VM_BPM_OCI_INDEX_CERT is not a readable, non-empty regular file: $BPM_OCI_INDEX_CERT"
 }
 
+# The tool that builds the cloud-init seed: cloud-localds, or an ISO 9660
+# writer where that is not packaged, as on RHEL.
+seed_tool()
+{
+	local tool
+
+	for tool in cloud-localds xorriso genisoimage mkisofs; do
+		if command -v "$tool" >/dev/null 2>&1; then
+			printf '%s\n' "$tool"
+			return 0
+		fi
+	done
+	return 1
+}
+
+# A NoCloud seed is a file system labelled cidata that holds the user-data,
+# meta-data and network-config files.
+make_seed()
+{
+	local -a writer
+	local tool
+
+	tool="$(seed_tool)" || die "no tool to build the cloud-init seed"
+	if [[ "$tool" == cloud-localds ]]; then
+		cloud-localds --network-config="$NETWORK_CONFIG" "$SEED" \
+			"$USER_DATA" "$META_DATA"
+		return
+	fi
+	writer=("$tool")
+	[[ "$tool" != xorriso ]] || writer+=(-as mkisofs)
+	"${writer[@]}" -quiet -volid cidata -joliet -rock -output "$SEED" \
+		"$USER_DATA" "$META_DATA" "$NETWORK_CONFIG" >/dev/null
+}
+
+# cloud-localds stands for any tool that make_seed can use.
+have_command()
+{
+	if [[ "$1" == cloud-localds ]]; then
+		seed_tool >/dev/null
+	else
+		command -v "$1" >/dev/null 2>&1
+	fi
+}
+
 print_dependency_install_command()
 {
 	printf '  %s\n' "$(test_vm_install_cmd "$@")"
@@ -304,7 +348,7 @@ check_host_dependencies()
 	for requirement in "${HOST_DEPENDENCIES[@]}"; do
 		IFS=: read -r command_name deb_package rpm_package <<<"$requirement"
 		package="$(test_vm_pkg "$deb_package" "$rpm_package")"
-		if ! command -v "$command_name" >/dev/null 2>&1; then
+		if ! have_command "$command_name"; then
 			missing_commands+=("$command_name")
 			if [[ -z "${package_seen[$package]+present}" ]]; then
 				missing_packages+=("$package")
@@ -1382,7 +1426,7 @@ runcmd:
   - [ /usr/local/sbin/shirudo-test-vm-bootstrap ]
 EOF
 
-cloud-localds --network-config="$NETWORK_CONFIG" "$SEED" "$USER_DATA" "$META_DATA"
+make_seed
 
 chmod 0700 "$RUN_DIR/tpm"
 if user_systemd_available; then
