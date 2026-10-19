@@ -201,6 +201,18 @@ own serves the same purpose.  A mitigation that loads and passes its
 reproducer on a kernel unlike the fleet's proves nothing about the
 fleet.
 
+The test VM runs under KVM and so has the architecture of its host,
+x86-64 or arm64; the kernel image is ``bzImage`` or ``Image`` to match.
+On a Fedora or RHEL host the scripts print RPM package names for a
+missing tool and build the kernel as an RPM.  Where ``cloud-localds`` is
+not packaged, ``xorriso`` or ``genisoimage`` builds the cloud-init seed
+instead, and ``TEST_VM_QEMU`` names the emulator on a host that has no
+``qemu-system-<arch>`` binary, such as ``/usr/libexec/qemu-kvm``.  The
+runtime image installs its packages through the caller's ``http_proxy``
+or ``TEST_VM_APT_PROXY``; a proxy that only the host's ``/etc/hosts``
+names must be given by address, as in ``http://[2001:db8::1]:8080``,
+since the libguestfs appliance resolves names through DNS alone.
+
 
 3) Cryptography
 ---------------
