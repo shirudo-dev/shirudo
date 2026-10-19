@@ -254,6 +254,8 @@ def generate(expected_path):
     os.makedirs(workdir, exist_ok=True)
     pid = os.getpid()
     identity = executable_identity()
+    with open("/proc/self/comm", encoding="utf-8") as comm_file:
+        comm = comm_file.read().strip()
     setuid_event()
     ptrace_child = ptrace_event()
     children = userns_event()
@@ -264,7 +266,7 @@ def generate(expected_path):
     mmap_exec_event()
     mprotect_exec_event()
     with open(expected_path, "w", encoding="utf-8") as output:
-        json.dump({"pid": pid, "identity": identity,
+        json.dump({"pid": pid, "identity": identity, "comm": comm,
                    "ptrace_child": ptrace_child,
                    "userns_children": children,
                    "mountpoint": mountpoint,
@@ -340,40 +342,56 @@ def check_positive(expected_path, records_path):
 
     setuid = kind("setuid_root")[0]
     assert setuid["euid"] == 65534 and setuid["uid"] == 0, setuid
+    assert int(setuid["aux"]) == 0, setuid
+    assert setuid["name"] == expected["comm"], setuid
     assert setuid["pid"] == expected["pid"], setuid
+    assert int(setuid["count"]) == 1, setuid
 
     ptrace = kind("ptrace_attach")[0]
     assert ptrace["name"] == "priv-child", ptrace
     assert ptrace["subtype"] & 2, ptrace
     assert int(ptrace["aux"]) == expected["ptrace_child"], ptrace
     assert ptrace["pid"] == expected["pid"], ptrace
+    assert int(ptrace["count"]) == 1, ptrace
 
     mount = kind("mount")[0]
     assert mount["name"] == "tmpfs", mount
     assert mount["detail"] == expected["mountpoint"], mount
-    assert mount["subtype"] == int(mount["aux"]), mount
+    assert mount["subtype"] == 0 and int(mount["aux"]) == 0, mount
+    assert mount["pid"] == expected["pid"] and int(mount["count"]) == 1, mount
 
     kernel_read = kind("kernel_read_file")[0]
     assert kernel_read["name"] == "invalid-module.ko", kernel_read
     assert kernel_read["detail"] == expected["module_path"], kernel_read
-    kind("kernel_load_data")
+    assert kernel_read["subtype"] == 2, kernel_read
+    kernel_load = kind("kernel_load_data")
+    assert len(kernel_load) == 1, kernel_load
+    assert kernel_load[0]["subtype"] == 2, kernel_load
+    assert int(kernel_load[0]["count"]) >= 2, kernel_load
 
     module_request = kind("module_request")[0]
     assert module_request["name"] == "net-pf-16-proto-31", module_request
+    assert module_request["subtype"] == 0 and int(module_request["aux"]) == 0, module_request
+    assert module_request["pid"] == expected["pid"], module_request
 
     userns = kind("userns_create")[0]
-    assert int(userns["count"]) >= 2, userns
+    assert int(userns["count"]) == 2, userns
     assert userns["pid"] in expected["userns_children"], userns
+    assert userns["subtype"] == 0 and userns["euid"] == 0, userns
 
     bpf = kind("bpf")[0]
     assert bpf["subtype"] == 0, bpf
     assert bpf["pid"] == expected["pid"], bpf
+    assert int(bpf["aux"]) == 0 and int(bpf["count"]) == 1, bpf
 
     mmap_exec = kind("mmap_exec")[0]
-    assert mmap_exec["subtype"] & PROT_EXEC, mmap_exec
+    assert mmap_exec["subtype"] == PROT_READ | PROT_EXEC, mmap_exec
+    assert mmap_exec["name"] == "true", mmap_exec
+    assert int(mmap_exec["aux"]) == MAP_PRIVATE, mmap_exec
     mprotect_exec = kind("mprotect_exec")[0]
-    assert mprotect_exec["subtype"] & PROT_EXEC, mprotect_exec
-    assert int(mprotect_exec["aux"]) >= PAGE_SIZE, mprotect_exec
+    assert mprotect_exec["subtype"] == PROT_READ | PROT_EXEC, mprotect_exec
+    assert mprotect_exec["name"] == "anonymous", mprotect_exec
+    assert int(mprotect_exec["aux"]) == PAGE_SIZE, mprotect_exec
 
 
 def main():
