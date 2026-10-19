@@ -14,6 +14,10 @@ endif
 export Q V
 
 root-path = $(if $(filter /%,$(1)),$(1),$(ROOT)/$(1))
+# $(call test-vm-arch,NAME): the value contrib/test-vm-arch.sh gives NAME.
+test-vm-arch = $(shell TEST_VM_ARCH='$(TEST_VM_ARCH)'; \
+	. $(ROOT)/contrib/test-vm-arch.sh && printf '%s' "$$$(1)")
+
 .DEFAULT_GOAL := help
 .PHONY: help clean test-helpers test-op test test-installer bundle test-vm-bundle kernel \
 	bpf-next vm vm-console vm-ssh vm-stop vm-clean test-tgt test-tgt-obs \
@@ -64,8 +68,9 @@ else ifneq ($(filter $(VM_KERNEL_VERSION),$(VM_KERNEL_STABLE_VERSIONS)),)
 else
   $(error unsupported VM KERNEL '$(VM_KERNEL)'; choose bpf-next, 7.2, 6.18, 6.12, 6.6, or 6.1)
 endif
-VM_KERNEL_IMAGE := $(VM_KERNEL_ARTIFACT_DIR)/bzImage
-VM_KERNEL_STAMP := $(VM_KERNEL_ARTIFACT_DIR)/bzImage.sha256sum
+VM_KERNEL_IMAGE_NAME := $(call test-vm-arch,TEST_VM_ARCH_KIMAGE)
+VM_KERNEL_IMAGE := $(VM_KERNEL_ARTIFACT_DIR)/$(VM_KERNEL_IMAGE_NAME)
+VM_KERNEL_STAMP := $(VM_KERNEL_ARTIFACT_DIR)/$(VM_KERNEL_IMAGE_NAME).sha256sum
 VM_KERNEL_DEP := $(VM_KERNEL_STAMP)
 
 KERNEL_TAG ?= $(if $(strip $(TAG)),$(TAG),bpf-next)
@@ -88,7 +93,7 @@ else
   KERNEL_TAG_NORMALIZED := v$(KERNEL_TAG_VERSION)
   KERNEL_BUILD_ARTIFACT_DIR := $(ROOT)/artifacts/linux-$(KERNEL_TAG_NORMALIZED)$(KERNEL_COMMIT_SUFFIX)-kernel-debs
 endif
-KERNEL_BUILD_STAMP := $(KERNEL_BUILD_ARTIFACT_DIR)/bzImage.sha256sum
+KERNEL_BUILD_STAMP := $(KERNEL_BUILD_ARTIFACT_DIR)/$(VM_KERNEL_IMAGE_NAME).sha256sum
 
 TEST_VM_BUNDLE_STAMP := $(TEST_VM_BUNDLE_DIR)/.stamp
 TEST_VM_BUNDLE_SOURCES := $(sort $(wildcard \

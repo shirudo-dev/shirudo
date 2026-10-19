@@ -10,6 +10,8 @@ KERNEL_PATCHES="${KERNEL_PATCHES:-}"
 KERNEL_CONFIG="${KERNEL_CONFIG:-}"
 KERNEL_BUILD_JOBS="${KERNEL_BUILD_JOBS:-$(nproc)}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=contrib/test-vm-arch.sh
+. "${REPO_ROOT}/contrib/test-vm-arch.sh"
 KERNEL_SOURCE_DIR_INPUT="${KERNEL_SOURCE_DIR:-}"
 if [[ "$KERNEL_TAG" =~ ^[0-9]+\.[0-9]+([.][0-9]+)?$ ]]; then
   KERNEL_TAG="v${KERNEL_TAG}"
@@ -29,6 +31,11 @@ if [[ -n "$KERNEL_COMMIT" ]]; then
     exit 1
   fi
   KERNEL_COMMIT="${KERNEL_COMMIT,,}"
+fi
+# After the argument checks, so that those report the same on every host.
+if [[ "$TEST_VM_ARCH_SUPPORTED" != 1 ]]; then
+  echo "the test VM kernel is built on x86_64 and aarch64 hosts only, not ${TEST_VM_ARCH}" >&2
+  exit 1
 fi
 KERNEL_ARTIFACT_NAME="bpf-next"
 if [[ "$KERNEL_TAG" != "bpf-next" ]]; then
@@ -69,7 +76,7 @@ else
 fi
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/artifacts/${KERNEL_ARTIFACT_NAME}-kernel-${PACKAGE_SUFFIX}}"
 BUNDLE_PATH="${BUNDLE_PATH:-${OUTPUT_DIR}.tar.gz}"
-VMLINUX_PATH="${OUTPUT_DIR}/bzImage"
+VMLINUX_PATH="${OUTPUT_DIR}/${TEST_VM_ARCH_KIMAGE}"
 VMLINUX_BTF_PATH="${OUTPUT_DIR}/vmlinux.btf"
 
 if [[ "$PACKAGE_FORMAT" == deb ]]; then
@@ -341,12 +348,7 @@ else
   config_fragment="${WORK_DIR}/kernel-slim.config"
   cat > "$config_fragment" <<'EOF'
 CONFIG_64BIT=y
-CONFIG_X86_64=y
-CONFIG_X86=y
 CONFIG_SMP=y
-CONFIG_PARAVIRT=y
-CONFIG_PARAVIRT_CLOCK=y
-CONFIG_KVM_GUEST=y
 CONFIG_BPF=y
 CONFIG_BPF_SYSCALL=y
 CONFIG_BPF_JIT=y
@@ -449,8 +451,6 @@ CONFIG_SQUASHFS_ZSTD=y
 CONFIG_EXT4_FS=y
 CONFIG_EXT4_FS_SECURITY=y
 CONFIG_TMPFS=y
-CONFIG_SERIAL_8250=y
-CONFIG_SERIAL_8250_CONSOLE=y
 CONFIG_TTY=y
 CONFIG_ACPI=y
 CONFIG_PNP=y
@@ -467,6 +467,21 @@ CONFIG_NF_FLOW_TABLE_INET=m
 CONFIG_NF_FLOW_TABLE_PROCFS=y
 CONFIG_PROC_FS=y
 CONFIG_CC_OPTIMIZE_FOR_SIZE=y
+EOF
+  # QEMU's arm64 virt machine needs the generic PCI host bridge for virtio,
+  # PSCI to power off and the PL031 RTC, without which the guest clock
+  # starts in the past and rejects certificates made today. x86 selects
+  # PERF_EVENTS on its own; without it BPF_EVENTS and BPF_LSM drop out.
+  case "$TEST_VM_ARCH" in
+  x86_64)
+    cat >> "$config_fragment" <<'EOF'
+CONFIG_X86_64=y
+CONFIG_X86=y
+CONFIG_PARAVIRT=y
+CONFIG_PARAVIRT_CLOCK=y
+CONFIG_KVM_GUEST=y
+CONFIG_SERIAL_8250=y
+CONFIG_SERIAL_8250_CONSOLE=y
 CONFIG_KERNEL_XZ=y
 CONFIG_KERNEL_GZIP=n
 CONFIG_KERNEL_ZSTD=n
@@ -475,6 +490,23 @@ CONFIG_KERNEL_LZO=n
 CONFIG_KERNEL_LZ4=n
 CONFIG_KERNEL_UNCOMPRESSED=n
 EOF
+    ;;
+  aarch64)
+    cat >> "$config_fragment" <<'EOF'
+CONFIG_ARM64=y
+CONFIG_OF=y
+CONFIG_PERF_EVENTS=y
+CONFIG_ARM_PSCI_FW=y
+CONFIG_PCI_HOST_GENERIC=y
+CONFIG_VIRTIO_MMIO=y
+CONFIG_SERIAL_AMBA_PL011=y
+CONFIG_SERIAL_AMBA_PL011_CONSOLE=y
+CONFIG_RTC_CLASS=y
+CONFIG_RTC_HCTOSYS=y
+CONFIG_RTC_DRV_PL031=y
+EOF
+    ;;
+  esac
   make KCONFIG_ALLCONFIG="$config_fragment" allnoconfig
   config_source="embedded slim kernel config (KCONFIG_ALLCONFIG)"
   config_profile=slim
@@ -552,8 +584,21 @@ require_config CONFIG_EXT4_FS y
 require_config CONFIG_EXT4_FS_SECURITY y
 require_config CONFIG_TMPFS y
 require_config CONFIG_EFI_PARTITION y
-require_config CONFIG_SERIAL_8250 y
-require_config CONFIG_SERIAL_8250_CONSOLE y
+case "$TEST_VM_ARCH" in
+x86_64)
+  require_config CONFIG_SERIAL_8250 y
+  require_config CONFIG_SERIAL_8250_CONSOLE y
+  ;;
+aarch64)
+  require_config CONFIG_ARM64 y
+  require_config CONFIG_ARM_PSCI_FW y
+  require_config CONFIG_PCI_HOST_GENERIC y
+  require_config CONFIG_SERIAL_AMBA_PL011 y
+  require_config CONFIG_SERIAL_AMBA_PL011_CONSOLE y
+  require_config CONFIG_RTC_DRV_PL031 y
+  require_config CONFIG_RTC_HCTOSYS y
+  ;;
+esac
 require_config CONFIG_ACPI y
 require_config CONFIG_PNP y
 require_config CONFIG_PNPACPI y
@@ -571,7 +616,9 @@ require_config CONFIG_NF_FLOW_TABLE_PROCFS y
 require_config CONFIG_PROC_FS y
 if [[ "$config_profile" == slim ]]; then
   require_config CONFIG_CC_OPTIMIZE_FOR_SIZE y
-  require_config CONFIG_KERNEL_XZ y
+  if [[ "$TEST_VM_ARCH" == x86_64 ]]; then
+    require_config CONFIG_KERNEL_XZ y
+  fi
 fi
 
 # Refresh the generated release after the config edits above.  kernelrelease
@@ -628,8 +675,9 @@ else
     ! -name '*debug*' ! -name '*debuginfo*' -exec cp {} "$OUTPUT_DIR/" \;
 fi
 
-# The VM boots bzImage directly, so carry the matching module tree alongside
-# it. This keeps module loading deterministic for a selected kernel commit.
+# The VM boots the kernel image directly, so carry the matching module tree
+# alongside it. This keeps module loading deterministic for a selected
+# kernel commit.
 MODULES_STAGE_DIR="${WORK_DIR}/modules"
 rm -rf "$MODULES_STAGE_DIR"
 mkdir -p "$MODULES_STAGE_DIR"
@@ -658,11 +706,11 @@ else
   depmod -b "$OUTPUT_DIR" "$kernel_release"
 fi
 
-if [[ ! -s "arch/x86/boot/bzImage" ]]; then
-  echo "kernel bzImage was not produced" >&2
+if [[ ! -s "$TEST_VM_ARCH_KIMAGE_SRC" ]]; then
+  echo "kernel ${TEST_VM_ARCH_KIMAGE} was not produced" >&2
   exit 1
 fi
-cp arch/x86/boot/bzImage "$VMLINUX_PATH"
+cp "$TEST_VM_ARCH_KIMAGE_SRC" "$VMLINUX_PATH"
 cp .config "${OUTPUT_DIR}/kernel.config"
 
 # Keep the exact detached BTF used by this kernel build.  It lets Shirudo
@@ -700,7 +748,7 @@ EOF
 
 (
   cd "$OUTPUT_DIR"
-  sha256sum bzImage > bzImage.sha256sum
+  sha256sum "$TEST_VM_ARCH_KIMAGE" > "${TEST_VM_ARCH_KIMAGE}.sha256sum"
   sha256sum vmlinux.btf > vmlinux.btf.sha256sum
   find . -type f ! -name SHA256SUMS -print0 | sort -z |
     xargs -0 sha256sum > SHA256SUMS
@@ -713,6 +761,6 @@ tar -C "$OUTPUT_DIR" -czf "$BUNDLE_PATH" .
   sha256sum "$(basename "$BUNDLE_PATH")" > "$(basename "$BUNDLE_PATH").sha256sum"
 )
 
-echo "Built ${KERNEL_TAG} kernel bzImage: ${VMLINUX_PATH}"
+echo "Built ${KERNEL_TAG} kernel ${TEST_VM_ARCH_KIMAGE}: ${VMLINUX_PATH}"
 echo "Built kernel BTF: ${VMLINUX_BTF_PATH}"
 echo "Built kernel ${PACKAGE_FORMAT} bundle: ${BUNDLE_PATH}"

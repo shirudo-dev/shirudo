@@ -143,10 +143,31 @@ test_expect_success 'make -C testing vm selects supported stable kernel artifact
 	grep -q "make -C testing vm KERNEL=6.18" ../testing/Makefile &&
 	grep -Fq "VM_KERNEL_ARTIFACT_DIR := \$(ROOT)/artifacts/linux-\$(VM_KERNEL_TAG)\$(KERNEL_COMMIT_SUFFIX)-kernel-debs" ../testing/Makefile &&
 	grep -q "TEST_VM_KERNEL=\"\$(abspath \$(VM_KERNEL_IMAGE))\"" ../testing/Makefile &&
-	make -n -C .. -f testing/Makefile vm KERNEL=6.18 TEST_VM_WORK_DIR="$WORK/stable-vm" \
+	make -n -C .. -f testing/Makefile vm KERNEL=6.18 TEST_VM_ARCH=x86_64 \
+		TEST_VM_WORK_DIR="$WORK/stable-vm" \
 		>"$WORK/stable-vm-make.out" 2>&1 &&
 	grep -q "artifacts/linux-v6.18-kernel-debs/bzImage" \
 		"$WORK/stable-vm-make.out"
+'
+
+test_expect_success 'the VM kernel image is named for the host architecture' '
+	for spec in x86_64:bzImage amd64:bzImage aarch64:Image arm64:Image \
+		riscv64:bzImage
+	do
+		arch=${spec%%:*} image=${spec#*:} &&
+		make -n -C .. -f testing/Makefile vm KERNEL=6.18 \
+			TEST_VM_ARCH=$arch TEST_VM_WORK_DIR="$WORK/arch-$arch" \
+			>"$WORK/arch-$arch.out" 2>&1 &&
+		grep -q "artifacts/linux-v6.18-kernel-debs/$image" \
+			"$WORK/arch-$arch.out" || return 1
+	done
+'
+
+test_expect_success 'the VM kernel is not built on an unsupported architecture' '
+	! TEST_VM_ARCH=riscv64 ../contrib/build-kernel-package.sh \
+		>"$WORK/riscv64-kernel.out" 2>&1 &&
+	grep -q "x86_64 and aarch64 hosts only, not riscv64" \
+		"$WORK/riscv64-kernel.out"
 '
 
 test_expect_success 'all kernel and VM builds use the slim profile' '
@@ -159,7 +180,8 @@ test_expect_success 'all kernel and VM builds use the slim profile' '
 	grep -q "CONFIG_CC_OPTIMIZE_FOR_SIZE=y" ../contrib/build-kernel-package.sh &&
 	grep -q "make -C testing vm KERNEL=6.18" ../testing/Makefile &&
 	make -n -C .. -f testing/Makefile vm VM_NAME=slim-cli-vm \
-		TEST_VM_WORK_DIR="$WORK/slim-vm" >"$WORK/slim-vm-make.out" 2>&1 &&
+		TEST_VM_ARCH=x86_64 TEST_VM_WORK_DIR="$WORK/slim-vm" \
+		>"$WORK/slim-vm-make.out" 2>&1 &&
 	grep -q "artifacts/bpf-next-kernel-debs/bzImage" \
 		"$WORK/slim-vm-make.out" &&
 	grep -q "BPF_VMLINUX_BTF=.*artifacts/bpf-next-kernel-debs/vmlinux.btf" \
@@ -192,7 +214,8 @@ test_expect_success 'make -C testing kernel builds a tagged third-party Linux so
 '
 test_expect_success 'make -C testing vm and kernel select an exact stable commit' '
 	make -n -C .. -f testing/Makefile vm KERNEL=6.18 KERNEL_COMMIT=abcdef1234567 \
-		TEST_VM_WORK_DIR="$WORK/commit-vm" >"$WORK/commit-vm-make.out" 2>&1 &&
+		TEST_VM_ARCH=x86_64 TEST_VM_WORK_DIR="$WORK/commit-vm" \
+		>"$WORK/commit-vm-make.out" 2>&1 &&
 	grep -q "artifacts/linux-v6.18-abcdef1234567-kernel-debs/bzImage" \
 		"$WORK/commit-vm-make.out" &&
 	grep -q "KERNEL_COMMIT=" "$WORK/commit-vm-make.out" &&
