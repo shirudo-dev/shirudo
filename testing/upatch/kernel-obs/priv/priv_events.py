@@ -284,7 +284,8 @@ def records_from(path):
 
 def check_negative(path):
     records = records_from(path)
-    assert not any(record["kind"] in ("mprotect_exec", "cred_anomaly")
+    assert not any(record["kind"] in ("mmap_exec", "mprotect_exec",
+                                      "cred_anomaly")
                    for record in records), records
 
 
