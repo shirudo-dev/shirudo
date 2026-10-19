@@ -152,4 +152,38 @@ test_expect_success 'Lua decoder rejects invalid UTF-8 output' '
 	if ./helper/test-upatch-decode utf8 "$WORK/u.upatch"; then false; fi
 '
 
+python3 - "$WORK/u.upatch" "$WORK" <<'PY'
+import pathlib, struct, sys
+src, root = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+original = bytearray(src.read_bytes())
+data_off, data_len = struct.unpack_from("<II", original, 328)
+trailer = data_off + data_len - 16
+decoder_off, decoder_len = struct.unpack_from("<II", original, trailer + 8)
+blob, entry = data_off + decoder_off, data_off + decoder_off + 16
+def write(name, changes):
+    data = bytearray(original)
+    for off, fmt, value in changes:
+        struct.pack_into(fmt, data, off, value)
+    (root / name).write_bytes(data)
+write("bad-decoder-trailer", [(trailer, "<I", 0)])
+write("bad-decoder-offset", [(trailer + 8, "<I", 0xffffffff)])
+write("bad-decoder-count", [(blob + 8, "<I", 0xffffffff)])
+write("bad-decoder-source-range",
+      [(entry + 192, "<I", decoder_len), (entry + 196, "<I", 1)])
+data = bytearray(original)
+data[entry + 96:entry + 160] = b"X" * 64
+(root / "bad-decoder-string").write_bytes(data)
+PY
+cat >"$WORK/check-no-decoder.py" <<'PY'
+import json, sys
+doc = json.load(open(sys.argv[1], encoding="utf-8"))
+assert not doc.get("decoders"), doc
+PY
+test_expect_success 'malformed decoder trailer and entries are treated as absent' '
+	for f in bad-decoder-trailer bad-decoder-offset bad-decoder-count \
+		 bad-decoder-source-range bad-decoder-string; do
+		"$S" upatch info "$WORK/$f" --json >"$WORK/info.json" 2>/dev/null &&
+		python3 "$WORK/check-no-decoder.py" "$WORK/info.json" || exit 1
+	done
+'
 test_done
