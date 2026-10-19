@@ -18,6 +18,7 @@ PROT_WRITE = 2
 PROT_EXEC = 4
 MAP_PRIVATE = 2
 MAP_ANONYMOUS = 0x20
+BPF_MAP_GET_NEXT_ID = 12
 PTRACE_ATTACH = 16
 PTRACE_DETACH = 17
 PR_SET_NAME = 15
@@ -192,6 +193,18 @@ def bpf_event():
         raise OSError(error, os.strerror(error))
 
 
+def bpf_readonly_event():
+    attr = bytearray(72)
+    buf = ctypes.create_string_buffer(bytes(attr))
+    number = syscall_numbers()["bpf"]
+    ctypes.set_errno(0)
+    result = libc.syscall(number, ctypes.c_int(BPF_MAP_GET_NEXT_ID),
+                          ctypes.byref(buf), ctypes.c_uint(len(attr)))
+    if result < 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error))
+
+
 def mmap_exec_event():
     fd = os.open("/bin/true", os.O_RDONLY)
     try:
@@ -313,6 +326,7 @@ def generate(expected_path):
     module_path = module_load_events(workdir)
     module_request_event()
     bpf_event()
+    bpf_readonly_event()
     mmap_exec_event()
     mprotect_exec_event()
     with open(expected_path, "w", encoding="utf-8") as output:
@@ -479,6 +493,16 @@ def check_positive(expected_path, records_path):
     assert bpf["subtype"] == 0, bpf
     assert bpf["pid"] == expected["pid"], bpf
     assert int(bpf["aux"]) == 0 and int(bpf["count"]) == 1, bpf
+    map_creates = [record for record in records
+                   if record["kind"] == "bpf" and record["subtype"] == 0]
+    assert len(map_creates) == 1, map_creates
+    assert (map_creates[0]["executable"]["dev"] == identity["dev"] and
+            map_creates[0]["executable"]["ino"] == identity["ino"]), map_creates
+    assert not any(record["kind"] == "bpf" and
+                   record["subtype"] == BPF_MAP_GET_NEXT_ID and
+                   record["executable"]["dev"] == identity["dev"] and
+                   record["executable"]["ino"] == identity["ino"]
+                   for record in records), records
 
     mmap_exec = kind("mmap_exec")[0]
     assert mmap_exec["subtype"] == (PROT_READ | PROT_EXEC), mmap_exec

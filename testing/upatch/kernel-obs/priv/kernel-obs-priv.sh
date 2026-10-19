@@ -13,6 +13,8 @@ LOAD="$FIXTURES/$NAME.upatch"
 UNLOAD="$FIXTURES/$NAME.unload.upatch"
 ANOMALY_LOAD="$FIXTURES/kernel-obs-cred-anomaly.upatch"
 ANOMALY_UNLOAD="$FIXTURES/kernel-obs-cred-anomaly.unload.upatch"
+BPF_FILTER_LOAD="$FIXTURES/shirudo-test-map-export.upatch"
+BPF_FILTER_UNLOAD="$FIXTURES/shirudo-test-map-export.unload.upatch"
 PIN="/run/shirudo/bpffs/upatches/$NAME/link_0"
 MODPROBE_FILE=/proc/sys/kernel/modprobe
 WORK=$(mktemp -d)
@@ -25,6 +27,11 @@ cleanup()
 	if [ -n "$EVENT_PID" ]; then
 		kill "$EVENT_PID" 2>/dev/null || true
 		wait "$EVENT_PID" 2>/dev/null || true
+	fi
+	if [ -e "/run/shirudo/bpffs/upatches/shirudo-test-map-export/link_0" ] ||
+	   [ -e "/run/shirudo/bpffs/upatches/shirudo-test-map-export/link" ]; then
+		"$SHIRUDO_BIN" upatch unload "$BPF_FILTER_UNLOAD" --no-precheck \
+			>/dev/null 2>&1 || true
 	fi
 	if [ -s "$MODPROBE_BACKUP" ] || [ -e "$MODPROBE_BACKUP" ]; then
 		cat "$MODPROBE_BACKUP" >"$MODPROBE_FILE" || true
@@ -40,6 +47,8 @@ trap cleanup EXIT HUP INT TERM
 
 [ -s "$LOAD" ] || test_skip_all "missing kernel-obs fixture"
 [ -s "$UNLOAD" ] || test_skip_all "missing kernel-obs unload fixture"
+[ -s "$BPF_FILTER_LOAD" ] || test_skip_all "missing BPF filter fixture"
+[ -s "$BPF_FILTER_UNLOAD" ] || test_skip_all "missing BPF filter unload fixture"
 [ -w "$MODPROBE_FILE" ] || test_skip_all "kernel.modprobe is not writable"
 
 mkfifo "$WORK/events.in" "$WORK/events.out"
@@ -105,6 +114,10 @@ test_expect_success 'privilege events produce attributed priv records' '
 	run_event generate &&
 	cat "$MODPROBE_BACKUP" >"$MODPROBE_FILE" &&
 	rm -f "$MODPROBE_BACKUP" &&
+	"$SHIRUDO_BIN" upatch load "$BPF_FILTER_LOAD" --no-precheck \
+		--report=- >"$WORK/bpf-filter-load.log" 2>&1 &&
+	"$SHIRUDO_BIN" upatch unload "$BPF_FILTER_UNLOAD" --no-precheck \
+		>/dev/null &&
 	export_priv "$WORK/priv.ndjson" &&
 	"$SHIRUDO_BIN" upatch map "$NAME" exec \
 		--json="$WORK/exec.ndjson" >/dev/null &&
