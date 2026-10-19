@@ -51,10 +51,14 @@ def syscall_numbers():
     return SYSCALLS[machine]
 
 
-def executable_identity():
-    info = os.stat("/proc/self/exe")
+def file_identity(path):
+    info = os.stat(path)
     return {"dev": (os.major(info.st_dev) << 20) | os.minor(info.st_dev),
             "ino": info.st_ino}
+
+
+def executable_identity():
+    return file_identity("/proc/self/exe")
 
 
 def setuid_event():
@@ -378,14 +382,18 @@ def check_existing_exec(path, expected_path):
     assert int(mmap_exec["count"]) == 1, mmap_exec
 
 
-def check_anomaly(path):
-    records = records_from(path)
+def check_anomaly(expected_path, records_path):
+    with open(expected_path, encoding="utf-8") as source:
+        expected = json.load(source)
+    records = records_from(records_path)
     anomalies = [record for record in records
                  if record["kind"] == "cred_anomaly"]
     assert len(anomalies) == 1, anomalies
     anomaly = anomalies[0]
     assert anomaly["subtype"] == 1 and anomaly["euid"] == 0, anomaly
     assert anomaly["uid"] == 0 and int(anomaly["aux"]) == 0, anomaly
+    assert anomaly["executable"] == expected["identity"], anomaly
+    assert anomaly["pid"] == expected["pid"], anomaly
     assert anomaly["name"], anomaly
     assert int(anomaly["count"]) == 1, anomaly
     assert int(anomaly["pid"]) > 0, anomaly
@@ -394,7 +402,9 @@ def check_anomaly(path):
         int(anomaly["first_seen_unix_nano"]), anomaly
 
 
-def anomaly_event():
+def anomaly_event(expected_path):
+    write_expected(expected_path,
+                   {"pid": os.getpid(), "identity": file_identity("/bin/true")})
     os.execv("/bin/true", ["/bin/true"])
 
 
@@ -519,7 +529,8 @@ def main():
         raise SystemExit("usage: priv_events.py serve IN OUT EXPECTED | "
                          "negative | generate FILE | "
                          "check EXPECTED NDJSON | check-negative NDJSON | "
-                         "check-anomaly NDJSON | check-exec-unknown NDJSON")
+                         "check-anomaly EXPECTED NDJSON | "
+                         "check-exec-unknown NDJSON")
     mode = sys.argv[1]
     if mode == "serve" and len(sys.argv) == 5:
         serve(sys.argv[2], sys.argv[3], sys.argv[4])
@@ -533,10 +544,10 @@ def main():
         check_negative(sys.argv[2], sys.argv[3])
     elif mode == "check-existing-exec" and len(sys.argv) == 4:
         check_existing_exec(sys.argv[2], sys.argv[3])
-    elif mode == "check-anomaly" and len(sys.argv) == 3:
-        check_anomaly(sys.argv[2])
-    elif mode == "anomaly" and len(sys.argv) == 2:
-        anomaly_event()
+    elif mode == "check-anomaly" and len(sys.argv) == 4:
+        check_anomaly(sys.argv[2], sys.argv[3])
+    elif mode == "anomaly" and len(sys.argv) == 3:
+        anomaly_event(sys.argv[2])
     elif mode == "check-exec-unknown" and len(sys.argv) == 3:
         check_exec_unknown(sys.argv[2])
     else:

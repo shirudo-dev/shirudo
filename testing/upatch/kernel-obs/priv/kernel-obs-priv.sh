@@ -133,10 +133,11 @@ test_expect_success 'credential anomalies are recorded once per task' '
 		>/dev/null &&
 	ACTIVE_UNLOAD="$ANOMALY_UNLOAD" &&
 	load_observability "$ANOMALY_LOAD" &&
-	python3 upatch/kernel-obs/priv/priv_events.py anomaly &&
+	python3 upatch/kernel-obs/priv/priv_events.py anomaly \
+		"$WORK/anomaly-expected.json" &&
 	export_priv "$WORK/anomaly.ndjson" &&
 	python3 upatch/kernel-obs/priv/priv_events.py \
-		check-anomaly "$WORK/anomaly.ndjson"
+		check-anomaly "$WORK/anomaly-expected.json" "$WORK/anomaly.ndjson"
 '
 
 test_done
