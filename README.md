@@ -10,9 +10,9 @@
 [![CodeQL](https://github.com/shirudo-dev/shirudo/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/shirudo-dev/shirudo/actions/workflows/codeql.yml)
 [![License](https://img.shields.io/badge/license-BSD--2--Clause-blue.svg)](LICENSE)
 
-shirudo ("shields", JP) is a BPF security platform for the agentic era.
-It ships BPF "live patches", called upatches, to Linux targets without a
-reboot, and it makes sure a target runs only the BPF its operator signed.
+shirudo ("shields", JP) is an eBPF security platform for the agentic era.
+It ships eBPF "live patches", called upatches, to Linux targets without a
+reboot, and it makes sure a target runs only the eBPF programs its operator signed.
 upatches can harden or patch the kernel itself or userspace applications;
 the goal is on-the-fly security visibility, patching and attack-surface
 hardening in the age of LLMs, for production systems whose patch and
@@ -21,11 +21,11 @@ reboot cycles often span multiple days if not weeks.
 For example, the Linux kernel's CVE stream runs at dozens of fixes a day,
 exploitation now regularly precedes the patch, and a fleet reboot cycle
 might takes weeks in the worst case. shirudo exists for the window in
-between: an agent, engineer or hybrid workflow derives a BPF mitigation
+between: an agent, engineer or hybrid workflow derives an eBPF mitigation
 from the fix, the operator signs it, and the fleet pulls it within a short
 time window, measured and revocable. There is deliberately no configuration
 DSL, since agents work better with plain code. Note, shirudo is not limited
-to just mitigations, it serves as a platform and can deploy any BPF programs
+to just mitigations, it serves as a platform and can deploy any eBPF programs
 into the fleet.
 
 ## Getting Started
