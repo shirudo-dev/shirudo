@@ -44,4 +44,88 @@ test_expect_success 'arena serializer upatch carries UPGM serializer metadata' '
 	"$CHECK" "$WORK/arena-tree-serializer.upatch"
 '
 
+cat >"$WORK/no-output.bpf.c" <<'EOF'
+#include "vmlinux.h"
+#include <bpf/bpf_helpers.h>
+#include "shirudo_serializer.h"
+char _license[] SEC("license") = "Dual BSD/GPL";
+struct {
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, __u32);
+	__type(value, __u32);
+} target SEC(".maps");
+SEC("syscall")
+int shirudo_serialize__target(struct shirudo_serialize_ctx *ctx)
+{
+	return 0;
+}
+EOF
+cat >"$WORK/missing-target.bpf.c" <<'EOF'
+#include "vmlinux.h"
+#include <bpf/bpf_helpers.h>
+#include "shirudo_serializer.h"
+char _license[] SEC("license") = "Dual BSD/GPL";
+struct {
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(max_entries, 4);
+	__type(key, __u32);
+	__type(value, struct shirudo_serial_chunk);
+} shirudo_ser SEC(".maps");
+SEC("syscall")
+int shirudo_serialize__absent(struct shirudo_serialize_ctx *ctx)
+{
+	return 0;
+}
+EOF
+cat >"$WORK/reserved-target.bpf.c" <<'EOF'
+#include "vmlinux.h"
+#include <bpf/bpf_helpers.h>
+#include "shirudo_serializer.h"
+char _license[] SEC("license") = "Dual BSD/GPL";
+struct {
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(max_entries, 4);
+	__type(key, __u32);
+	__type(value, struct shirudo_serial_chunk);
+} shirudo_ser SEC(".maps");
+SEC("syscall")
+int shirudo_serialize__shirudo_ser(struct shirudo_serialize_ctx *ctx)
+{
+	return 0;
+}
+EOF
+expect_build_error() {
+	source=$1
+	message=$2
+	if (cd .. && "$B" "$WORK/$source" -o "$WORK/bad.upatch" \
+		--vmlinux vendor/linux/vmlinux.h --name invalid-serializer \
+		--key "$WORK/k.pem" --cert "$WORK/c.der") \
+		>"$WORK/build.log" 2>&1; then return 1; fi
+	grep -Fq "$message" "$WORK/build.log"
+}
+test_expect_success 'builder rejects serializers without output map' '
+	expect_build_error no-output.bpf.c "requires shirudo_ser output map"
+'
+test_expect_success 'builder rejects serializer with missing target map' '
+	expect_build_error missing-target.bpf.c "targets missing map"
+'
+test_expect_success 'builder rejects serializer targeting reserved output map' '
+	expect_build_error reserved-target.bpf.c "cannot target reserved map"
+'
+test_expect_success 'builder rejects duplicate serializer targets' '
+	if ! command -v llvm-objcopy >/dev/null 2>&1; then exit 0; fi
+	(cd .. &&
+		clang -target bpf -O2 -g -I vendor/linux -I vendor/libbpf \
+			-I bpf/lib -c testing/fixtures/arena-tree-serializer.bpf.c \
+			-o "$WORK/arena-tree-serializer.o" &&
+		llvm-objcopy --redefine-sym \
+			shirudo_serialize__tree_error=shirudo_serialize__tree_arena \
+			"$WORK/arena-tree-serializer.o" "$WORK/duplicate-serializer.o" &&
+		if "$B" "$WORK/duplicate-serializer.o" -o "$WORK/duplicate.upatch" \
+			--vmlinux vendor/linux/vmlinux.h --name duplicate-serializer \
+			--key "$WORK/k.pem" --cert "$WORK/c.der" \
+			>"$WORK/duplicate.log" 2>&1; then false; fi) &&
+	grep -Fq "duplicate serializer for map" "$WORK/duplicate.log"
+'
 test_done
