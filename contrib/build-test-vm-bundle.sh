@@ -46,11 +46,12 @@ validate_package_cert()
 		die "TEST_VM_PACKAGE_CERT is not a readable, non-empty regular file: $PACKAGE_CERT"
 }
 
+# require_command COMMAND DEB-PACKAGE [RPM-PACKAGE]
 require_command()
 {
-	local command_name="$1" package_name="$2"
+	local command_name="$1" deb_package="$2" rpm_package="${3:-$2}"
 	command -v "$command_name" >/dev/null 2>&1 ||
-		die "missing host command: $command_name (install with: sudo apt-get install -y $package_name)"
+		die "missing host command: $command_name (install with: $(test_vm_install_cmd "$(test_vm_pkg "$deb_package" "$rpm_package")"))"
 }
 
 check_libguestfs_host()
@@ -82,6 +83,8 @@ prepare_ubuntu_libguestfs_kernel()
 {
 	local cache_dir index metadata package version kernel_version filename deb tmp
 	local module_package module_filename kernel_info module_info module_root
+
+	require_command dpkg-deb dpkg
 	cache_dir="$LIBGUESTFS_KERNEL_CACHE/$UBUNTU_CODENAME"
 	index="$cache_dir/Packages.gz"
 	metadata="$cache_dir/kernel.info"
@@ -187,13 +190,15 @@ prepare_ubuntu_libguestfs_kernel()
 	return 0
 }
 
+# Each entry is command:Debian package:RPM package.
 for dependency in \
-	"flock:util-linux" "curl:curl" "sha256sum:coreutils" "awk:gawk" \
-	"qemu-img:qemu-utils" "virt-customize:libguestfs-tools" \
-	"dpkg-deb:dpkg" "openssl:openssl" \
-	"gzip:gzip" "depmod:kmod"; do
-	IFS=: read -r command_name package_name <<<"$dependency"
-	require_command "$command_name" "$package_name"
+	"flock:util-linux:util-linux" "curl:curl:curl" \
+	"sha256sum:coreutils:coreutils" "awk:gawk:gawk" \
+	"qemu-img:qemu-utils:qemu-img" \
+	"virt-customize:libguestfs-tools:guestfs-tools" \
+	"openssl:openssl:openssl" "gzip:gzip:gzip" "depmod:kmod:kmod"; do
+	IFS=: read -r command_name deb_package rpm_package <<<"$dependency"
+	require_command "$command_name" "$deb_package" "$rpm_package"
 done
 check_libguestfs_host
 
@@ -267,7 +272,7 @@ bundle_is_current()
 }
 
 command -v flock >/dev/null 2>&1 ||
-	die "flock is required; install it with: sudo apt-get install -y util-linux"
+	die "flock is required; install it with: $(test_vm_install_cmd util-linux)"
 
 validate_package_cert
 

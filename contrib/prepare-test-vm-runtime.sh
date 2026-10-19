@@ -6,6 +6,9 @@
 
 set -euo pipefail
 
+# shellcheck source=contrib/test-vm-arch.sh
+. "$(dirname "${BASH_SOURCE[0]}")/test-vm-arch.sh"
+
 ROOTFS=
 CACHE_DIR=
 PACKAGE_FILE=
@@ -35,9 +38,9 @@ done
 	die "runtime disk size must be a positive QEMU size such as 4G or 512M"
 
 command -v qemu-img >/dev/null 2>&1 ||
-	die "qemu-img is required; install it with: sudo apt-get install -y qemu-utils"
+	die "qemu-img is required; install it with: $(test_vm_install_cmd "$(test_vm_pkg qemu-utils qemu-img)")"
 command -v virt-customize >/dev/null 2>&1 ||
-	die "virt-customize is required; install it with: sudo apt-get install -y libguestfs-tools"
+	die "virt-customize is required; install it with: $(test_vm_install_cmd "$(test_vm_pkg libguestfs-tools guestfs-tools)")"
 
 IMAGE="$CACHE_DIR/$RUNTIME_KEY.qcow2"
 if [[ -s "$IMAGE" ]]; then

@@ -44,7 +44,7 @@ test_expect_success 'test-vm prints an install command for missing dependencies'
 		ln -s /bin/true "$WORK/fake-bin/$command_name" || return 1
 	done &&
 	printf kernel >"$WORK/bzImage" &&
-	! PATH="$WORK/fake-bin" \
+	! PATH="$WORK/fake-bin" TEST_VM_ARCH=x86_64 TEST_VM_HOST_PKG=apt \
 		TEST_VM_WORK_DIR="$WORK/missing-dependency" \
 		TEST_VM_KERNEL="$WORK/bzImage" "$RUNNER" \
 		>"$WORK/missing-dependency.out" 2>&1 &&
@@ -64,13 +64,105 @@ test_expect_success 'test-vm requires the QEMU emulator of the host architecture
 		ln -s /bin/true "$WORK/arm-bin/$command_name" || return 1
 	done &&
 	printf kernel >"$WORK/Image" &&
-	! PATH="$WORK/arm-bin" TEST_VM_ARCH=aarch64 \
+	! PATH="$WORK/arm-bin" TEST_VM_ARCH=aarch64 TEST_VM_HOST_PKG=apt \
 		TEST_VM_WORK_DIR="$WORK/missing-arm-qemu" \
 		TEST_VM_KERNEL="$WORK/Image" "$RUNNER" \
 		>"$WORK/missing-arm-qemu.out" 2>&1 &&
 	grep -q "missing host commands: qemu-system-aarch64" \
 		"$WORK/missing-arm-qemu.out" &&
 	grep -q "qemu-system-arm" "$WORK/missing-arm-qemu.out"
+'
+
+test_expect_success 'test-vm prints dnf package names on a Fedora or RHEL host' '
+	! PATH="$WORK/fake-bin" TEST_VM_ARCH=x86_64 TEST_VM_HOST_PKG=dnf \
+		TEST_VM_WORK_DIR="$WORK/missing-dependency-dnf" \
+		TEST_VM_KERNEL="$WORK/bzImage" "$RUNNER" \
+		>"$WORK/missing-dependency-dnf.out" 2>&1 &&
+	grep -q "sudo dnf install -y cloud-utils" \
+		"$WORK/missing-dependency-dnf.out" &&
+	grep -q "openssh-clients" "$WORK/missing-dependency-dnf.out" &&
+	! grep -q "apt-get" "$WORK/missing-dependency-dnf.out" &&
+	! PATH="$WORK/arm-bin" TEST_VM_ARCH=aarch64 TEST_VM_HOST_PKG=dnf \
+		TEST_VM_WORK_DIR="$WORK/missing-arm-qemu-dnf" \
+		TEST_VM_KERNEL="$WORK/Image" "$RUNNER" \
+		>"$WORK/missing-arm-qemu-dnf.out" 2>&1 &&
+	grep -q "qemu-system-aarch64-core" "$WORK/missing-arm-qemu-dnf.out"
+'
+
+test_expect_success 'TEST_VM_QEMU names another emulator' '
+	mkdir "$WORK/kvm-bin" &&
+	ln -s /bin/bash "$WORK/kvm-bin/bash" &&
+	ln -s /usr/bin/dirname "$WORK/kvm-bin/dirname" &&
+	for command_name in curl sha256sum awk qemu-kvm qemu-img swtpm \
+		cloud-localds timeout tee flock ssh-keygen ss
+	do
+		ln -s /bin/true "$WORK/kvm-bin/$command_name" || return 1
+	done &&
+	! PATH="$WORK/kvm-bin" TEST_VM_ARCH=x86_64 \
+		TEST_VM_WORK_DIR="$WORK/no-qemu" \
+		TEST_VM_KERNEL="$WORK/bzImage" "$RUNNER" \
+		>"$WORK/no-qemu.out" 2>&1 &&
+	grep -q "missing host commands: qemu-system-x86_64" "$WORK/no-qemu.out" &&
+	! PATH="$WORK/kvm-bin" TEST_VM_ARCH=x86_64 TEST_VM_QEMU=qemu-kvm \
+		TEST_VM_WORK_DIR="$WORK/qemu-kvm" \
+		TEST_VM_KERNEL="$WORK/bzImage" "$RUNNER" \
+		>"$WORK/qemu-kvm.out" 2>&1 &&
+	! grep -q "missing host commands" "$WORK/qemu-kvm.out" &&
+	grep -q "host VM bundle is missing" "$WORK/qemu-kvm.out"
+'
+
+test_expect_success 'the host package manager is detected from os-release' '
+	sed "s|/etc/os-release|$WORK/os-release|g" ../contrib/test-vm-arch.sh \
+		>"$WORK/arch-os.sh" &&
+	host_pkg() {
+		printf "%s\n" "$@" >"$WORK/os-release" &&
+		(unset TEST_VM_HOST_PKG; . "$WORK/arch-os.sh"; echo "$TEST_VM_HOST_PKG")
+	} &&
+	test "$(host_pkg ID=fedora)" = dnf &&
+	test "$(host_pkg ID=centos "ID_LIKE=\"rhel fedora\"")" = dnf &&
+	test "$(host_pkg ID=rocky "ID_LIKE=\"rhel centos fedora\"")" = dnf &&
+	test "$(host_pkg ID=ubuntu ID_LIKE=debian)" = apt &&
+	test "$(host_pkg ID=debian)" = apt &&
+	(
+		TEST_VM_HOST_PKG=dnf &&
+		. ../contrib/test-vm-arch.sh &&
+		test "$TEST_VM_HOST_PKG_FORMAT" = rpm &&
+		test "$(test_vm_install_cmd a b)" = "sudo dnf install -y a b"
+	)
+'
+
+test_expect_success 'the bundle and runtime scripts print hints for the host package manager' '
+	mkdir "$WORK/bundle-bin" &&
+	ln -s /usr/bin/dirname "$WORK/bundle-bin/dirname" &&
+	ln -s /usr/bin/uname "$WORK/bundle-bin/uname" &&
+	for command_name in flock curl sha256sum awk qemu-img
+	do
+		ln -s /bin/true "$WORK/bundle-bin/$command_name" || return 1
+	done &&
+	! PATH="$WORK/bundle-bin" TEST_VM_HOST_PKG=dnf \
+		TEST_VM_WORK_DIR="$WORK/bundle-dnf" /bin/bash \
+		../contrib/build-test-vm-bundle.sh >"$WORK/bundle-dnf.out" 2>&1 &&
+	grep -q "virt-customize (install with: sudo dnf install -y guestfs-tools)" \
+		"$WORK/bundle-dnf.out" &&
+	printf rootfs >"$WORK/hint-rootfs" &&
+	! PATH="$WORK/bundle-bin" TEST_VM_HOST_PKG=dnf /bin/bash \
+		../contrib/prepare-test-vm-runtime.sh --rootfs "$WORK/hint-rootfs" \
+		--cache-dir "$WORK/hint-cache" \
+		--package-file ../contrib/test-vm-runtime-packages \
+		--runtime-key hint --key-output "$WORK/hint-key" \
+		>"$WORK/runtime-dnf.out" 2>&1 &&
+	grep -q "virt-customize is required; install it with: sudo dnf install -y guestfs-tools" \
+		"$WORK/runtime-dnf.out"
+'
+
+test_expect_success 'the kernel package format follows the host package manager' '
+	printf "print:\n\t@echo \$(PACKAGE_FORMAT)\n" >"$WORK/print.mk" &&
+	format() {
+		make -s -C .. -f testing/Makefile -f "$WORK/print.mk" print "$@"
+	} &&
+	test "$(TEST_VM_HOST_PKG=dnf format)" = rpm &&
+	test "$(TEST_VM_HOST_PKG=apt format)" = deb &&
+	test "$(TEST_VM_HOST_PKG=dnf format PACKAGE_FORMAT=deb)" = deb
 '
 
 test_expect_success 'test-vm boots arm64 on the virt machine with PCI disks' '

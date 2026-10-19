@@ -25,7 +25,7 @@ test-vm-arch = $(shell TEST_VM_ARCH='$(TEST_VM_ARCH)'; \
 
 KERNEL_PATCHES ?= $(if $(wildcard $(ROOT)/kernel/*.patch),$(ROOT)/kernel/,)
 override KERNEL_PATCHES := $(if $(strip $(KERNEL_PATCHES)),$(call root-path,$(KERNEL_PATCHES)),)
-PACKAGE_FORMAT ?= deb
+PACKAGE_FORMAT ?= $(call test-vm-arch,TEST_VM_HOST_PKG_FORMAT)
 
 TEST_VM_WORK_DIR ?= build/test-vm
 override TEST_VM_WORK_DIR := $(call root-path,$(TEST_VM_WORK_DIR))

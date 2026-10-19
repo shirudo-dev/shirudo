@@ -35,7 +35,8 @@ fi
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=contrib/test-vm-arch.sh
 . "${REPO_ROOT}/contrib/test-vm-arch.sh"
-QEMU_BIN="$TEST_VM_ARCH_QEMU"
+# TEST_VM_QEMU names another emulator, such as RHEL's /usr/libexec/qemu-kvm.
+QEMU_BIN="${TEST_VM_QEMU:-$TEST_VM_ARCH_QEMU}"
 VM_ROOT_INPUT="${TEST_VM_WORK_DIR:-${REPO_ROOT}/build/test-vm}"
 if [[ "$VM_ROOT_INPUT" == /* ]]; then
 	VM_ROOT="$VM_ROOT_INPUT"
@@ -112,18 +113,19 @@ HOST_MEMORY_REPORT=""
 FAILURE_LOG_DIR=""
 FINAL_STATUS=1
 LEAVE_RUNNING=0
+# Each entry is command:Debian package:RPM package.
 HOST_DEPENDENCIES=(
-	"curl:curl"
-	"sha256sum:coreutils"
-	"awk:mawk"
-	"${QEMU_BIN}:${TEST_VM_ARCH_QEMU_DEB}"
-	"qemu-img:qemu-utils"
-	"swtpm:swtpm"
-	"cloud-localds:cloud-image-utils"
-	"timeout:coreutils"
-	"flock:util-linux"
-	"ssh-keygen:openssh-client"
-	"ss:iproute2"
+	"curl:curl:curl"
+	"sha256sum:coreutils:coreutils"
+	"awk:mawk:gawk"
+	"${QEMU_BIN}:${TEST_VM_ARCH_QEMU_DEB}:${TEST_VM_ARCH_QEMU_RPM}"
+	"qemu-img:qemu-utils:qemu-img"
+	"swtpm:swtpm:swtpm"
+	"cloud-localds:cloud-image-utils:cloud-utils"
+	"timeout:coreutils:coreutils"
+	"flock:util-linux:util-linux"
+	"ssh-keygen:openssh-client:openssh-clients"
+	"ss:iproute2:iproute"
 )
 
 SSH_PORT_MIN=22000
@@ -285,23 +287,23 @@ validate_bpm_oci()
 
 print_dependency_install_command()
 {
-	printf '  sudo apt-get install -y --no-install-recommends'
-	printf ' %q' "$@"
-	printf '\n'
+	printf '  %s\n' "$(test_vm_install_cmd "$@")"
 }
 
 check_host_dependencies()
 {
 	local command_name
+	local deb_package
 	local package
 	local requirement
+	local rpm_package
 	local -a missing_commands=()
 	local -a missing_packages=()
 	local -A package_seen=()
 
 	for requirement in "${HOST_DEPENDENCIES[@]}"; do
-		command_name="${requirement%%:*}"
-		package="${requirement#*:}"
+		IFS=: read -r command_name deb_package rpm_package <<<"$requirement"
+		package="$(test_vm_pkg "$deb_package" "$rpm_package")"
 		if ! command -v "$command_name" >/dev/null 2>&1; then
 			missing_commands+=("$command_name")
 			if [[ -z "${package_seen[$package]+present}" ]]; then
@@ -1170,7 +1172,7 @@ validate_package_cert
 validate_bpm_tree_config
 validate_bpm_oci
 if [[ "$VM_INITRD" == 1 ]]; then
-	HOST_DEPENDENCIES+=("dracut:dracut-core" "lsinitrd:dracut-core" "file:file")
+	HOST_DEPENDENCIES+=("dracut:dracut-core:dracut" "lsinitrd:dracut-core:dracut" "file:file:file")
 	[[ "$EUID" == 0 ]] || die "TEST_VM_INITRD=1 builds the initrd with dracut, which needs root"
 fi
 check_host_dependencies
