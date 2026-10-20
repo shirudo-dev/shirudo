@@ -53,6 +53,14 @@ int attest_evidence(const __u8 *nonce, size_t nonce_len,
 		    const struct shirudo_attest_challenge *challenge,
 		    char **out, size_t *len, size_t *cap);
 
+struct shirudo_config_update;
+
+int shirudo_attest_evidence_config(const __u8 *nonce, size_t nonce_len,
+				   __u32 pcr_mask,
+				   const struct shirudo_attest_challenge *c,
+				   struct shirudo_config_update *update,
+				   char **out, size_t *len, size_t *cap);
+
 /*
  * Operator side. The credential the target has to recover is handed
  * to the caller and kept nowhere else; ek_ca is a PEM bundle or NULL.
@@ -89,8 +97,12 @@ struct shirudo_attest_expect {
 	bool		have_ek_name;
 	__u8		ek_name[SHIRUDO_TPM_NAME_LEN];
 	bool		require_initrd;	/* the binding must be the initrd's */
-	__u32		bind_expect_mask; /* PCR values at binding time */
+	__u32	bind_expect_mask; /* PCR values at binding time */
 	__u8		bind_values[24][32];
+	bool		have_config_root;
+	__u8		config_root[32];
+	bool		have_config_pcr;
+	__u32	config_pcr;
 };
 
 /*

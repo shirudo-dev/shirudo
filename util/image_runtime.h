@@ -11,6 +11,7 @@
 struct shirudo_config_update;
 struct shirudo_trusted_set;
 
+struct shirudo_config_update *shirudo_image_update_context(void);
 int shirudo_image_bootstrap_load(void);
 const __u8 *shirudo_image_runtime_root(void);
 int shirudo_image_runtime_mount(void);

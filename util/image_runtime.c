@@ -87,6 +87,11 @@ static struct image_context image = {
 static int load_runtime_config(void);
 static int current_config(void);
 
+struct shirudo_config_update *shirudo_image_update_context(void)
+{
+	return image.locked ? &image.update : NULL;
+}
+
 static bool absolute_path(const char *path)
 {
 	return path && path[0] == '/' && !strstr(path, "/../") &&
@@ -948,8 +953,6 @@ int shirudo_image_enter(const char *command, int argc, const char **argv)
 		return -EPROTO;
 	if (!identity.runtime_mode)
 		return 0;
-	if (!strcmp(command, "attest"))
-		return -EOPNOTSUPP;
 	rc = shirudo_image_bootstrap_load();
 	if (rc < 0)
 		return rc;

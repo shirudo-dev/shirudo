@@ -23,6 +23,8 @@
 #include "util/attest.h"
 #include "util/chain.h"
 #include "util/crypto.h"
+#include "util/config_measure.h"
+#include "util/image_runtime.h"
 #include "util/help.h"
 #include "util/hex.h"
 #include "util/io.h"
@@ -59,6 +61,8 @@ static const struct shirudo_help_item verify_options[] = {
 	{ "--expect=<name>=<hex>", "an installed upatch by name and payload digest" },
 	{ "--tree-root=<hex>",     "the upatch tree projection root at boot" },
 	{ "--expect-chain=<hex>",  "the register value after the expected events" },
+	{ "--expect-config-root=<hex>", "approved config image hash" },
+	{ "--expect-config-pcr=<n>", "reserved config PCR number" },
 	{ "--expect-pcr=<n>=<hex>", "a PCR value the quote must carry (repeatable)" },
 	{ "--allow-runtime-events", "accept loads, unloads and revocations after boot" },
 	{ "--strict-anchor",       "require the anchoring PCR to hold only the anchor" },
@@ -508,6 +512,21 @@ static int cmd_attest_verify(int argc, const char **argv)
 			if (parse_hex32("--tree-root", a + 12, tree_root))
 				goto out;
 			have_tree_root = true;
+		} else if (!strncmp(a, "--expect-config-root=", 21)) {
+			if (x.have_config_root ||
+			    parse_hex32("--expect-config-root", a + 21,
+					x.config_root))
+				goto out;
+			x.have_config_root = true;
+		} else if (!strncmp(a, "--expect-config-pcr=", 20)) {
+			__u64 pcr;
+
+			if (parse_u64(a + 20, strlen(a + 20), 15, &pcr) ||
+			    x.have_config_pcr ||
+			    shirudo_config_measure_pcr_valid(pcr))
+				goto out;
+			x.config_pcr = pcr;
+			x.have_config_pcr = true;
 		} else if (!strncmp(a, "--expect-chain=", 15)) {
 			if (parse_hex32("--expect-chain", a + 15, x.chain))
 				goto out;
@@ -559,6 +578,11 @@ static int cmd_attest_verify(int argc, const char **argv)
 			pr_err("attest verify: unknown option '%s'", a);
 			goto out;
 		}
+	}
+	if (x.have_config_root && !x.have_config_pcr) {
+		pr_err("attest verify: --expect-config-root requires "
+		       "--expect-config-pcr");
+		goto out;
 	}
 	if (!evidence_path || !have_nonce) {
 		pr_err("attest verify: --evidence and --nonce are required");
@@ -700,6 +724,7 @@ out:
 
 static int cmd_attest_evidence(int argc, const char **argv)
 {
+	const struct shirudo_attest_challenge *request;
 	struct shirudo_attest_challenge challenge = {};
 	__u8 nonce[SHIRUDO_ATTEST_NONCE_MAX];
 	__u32 mask = SHIRUDO_ATTEST_PCR_DEFAULT;
@@ -745,9 +770,10 @@ static int cmd_attest_evidence(int argc, const char **argv)
 		return 2;
 	}
 
-	rc = attest_evidence(nonce, nonce_len, mask,
-			     challenge_path ? &challenge : NULL, &doc,
-			     &len, &cap);
+	request = challenge_path ? &challenge : NULL;
+	rc = shirudo_attest_evidence_config(nonce, nonce_len, mask, request,
+					    shirudo_image_update_context(),
+					    &doc, &len, &cap);
 	if (rc == -ENXIO) {
 		pr_err("attest: no TPM answered (tpm_error)");
 		return 1;

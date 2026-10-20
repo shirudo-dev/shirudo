@@ -23,6 +23,7 @@
 #include "attest.h"
 #include "chain.h"
 #include "crypto.h"
+#include "config_attest.h"
 #include "eventlog.h"
 #include "hex.h"
 #include "io.h"
@@ -141,14 +142,18 @@ static bool quote_covers(const struct shirudo_tpm_attestation *quote,
 	return ct_eq(digest, a.pcr_digest, 32);
 }
 
-int attest_evidence(const __u8 *nonce, size_t nonce_len,
-		    __u32 pcr_mask,
-		    const struct shirudo_attest_challenge *challenge,
-		    char **out, size_t *len, size_t *cap)
+int shirudo_attest_evidence_config(const __u8 *nonce, size_t nonce_len,
+				   __u32 pcr_mask,
+				   const struct shirudo_attest_challenge *c,
+				   struct shirudo_config_update *update,
+				   char **out, size_t *len, size_t *cap)
 {
+	const struct shirudo_attest_challenge *challenge = c;
 	struct shirudo_tpm_key ak = { .handle = 0 }, ek = { .handle = 0 };
 	struct shirudo_tpm_key ak_copy = {}, ek_copy = {};
 	struct shirudo_tpm_attestation quote = {}, certify = {};
+	struct shirudo_config_evidence config = {};
+	struct shirudo_tpm_attest quoted;
 	struct tpm_nv_info nv;
 	struct shirudo_tpm *tpm = NULL;
 	struct shirudo_json_emit e;
@@ -170,9 +175,16 @@ int attest_evidence(const __u8 *nonce, size_t nonce_len,
 	    (pcr_mask & ~0x00FFFFFFu))
 		return -EINVAL;
 
-	rc = tpm_open(&tpm);
+	rc = shirudo_config_evidence_collect(update, &config);
 	if (rc)
-		return -ENXIO;
+		return rc;
+	if (config.present)
+		pcr_mask |= 1u << config.pcr;
+	rc = tpm_open(&tpm);
+	if (rc) {
+		rc = -ENXIO;
+		goto out;
+	}
 	rc = tpm_nv_info(tpm, SHIRUDO_NV_INDEX, &nv);
 	if (rc)
 		goto out;
@@ -204,6 +216,16 @@ int attest_evidence(const __u8 *nonce, size_t nonce_len,
 	if (attempt == QUOTE_ATTEMPTS) {
 		pr_err("attest: PCRs kept changing while quoting");
 		rc = -EAGAIN;
+		goto out;
+	}
+	if (config.present &&
+	    (tpm_attest_parse(quote.attest, quote.attest_len,
+				      &quoted) ||
+	     quoted.reset_count != config.reset_count ||
+	     quoted.restart_count != config.restart_count ||
+	     memcmp(values[config.pcr],
+		    config.value, 32))) {
+		rc = -EUCLEAN;
 		goto out;
 	}
 	rc = tpm_nv_certify(tpm, &ak, SHIRUDO_NV_INDEX, nonce,
@@ -267,7 +289,8 @@ int attest_evidence(const __u8 *nonce, size_t nonce_len,
 
 	read_file_base64(FIRMWARE_LOG_PATH, &fw, &fw_cap);
 	read_file_base64(SYSTEMD_LOG_PATH, &sd, &sd_cap);
-	need = 64 * 1024 + fw_cap + sd_cap + ek_b64_cap;
+	need = 64 * 1024 + fw_cap + sd_cap + ek_b64_cap +
+	       config.n_events * 160;
 	if (stat(eventlog_path(), &st) == 0 && st.st_size > 0)
 		need += 2 * (size_t)st.st_size;
 	if (need > SHIRUDO_JSON_MAX_BYTES)
@@ -328,6 +351,9 @@ int attest_evidence(const __u8 *nonce, size_t nonce_len,
 	json_arr_open(&e, "eventlog");
 	eventlog_boot_lines(emit_line, &e);
 	json_arr_close(&e);
+	rc = shirudo_config_evidence_emit(&e, &config);
+	if (rc)
+		goto out;
 	if (cred_len) {
 		json_obj_open_key(&e, "credential");
 		emit_hex(&e, "value", cred, cred_len);
@@ -363,6 +389,7 @@ out:
 		tpm_key_flush(tpm, &ak);
 		tpm_close(tpm);
 	}
+	shirudo_config_evidence_clear(&config);
 	xfree(ek_cert, ek_cert ? EK_CERT_MAX : 0);
 	xfree(ek_b64, ek_b64_cap);
 	xfree(fw, fw_cap);
@@ -379,6 +406,17 @@ out:
 	}
 	return rc;
 }
+
+int attest_evidence(const __u8 *nonce, size_t nonce_len,
+		    __u32 pcr_mask,
+			    const struct shirudo_attest_challenge *challenge,
+			    char **out, size_t *len, size_t *cap)
+{
+	return shirudo_attest_evidence_config(nonce, nonce_len, pcr_mask,
+					      challenge, NULL, out, len, cap);
+}
+
+/* ---- verification ---------------------------------------------------- */
 
 struct record {
 	char	type[16];
@@ -650,6 +688,7 @@ int attest_verify(const char *evidence, size_t len,
 		  char *report, size_t report_cap)
 {
 	struct reporter rep = { .buf = report, .cap = report_cap };
+	struct shirudo_config_evidence config = {};
 	struct shirudo_tpm_attest quote = {}, certify = {};
 	struct shirudo_tpm_ecc_public ak_pub;
 	__u8 ak_public[SHIRUDO_TPM_PUBLIC_MAX];
@@ -813,6 +852,10 @@ int attest_verify(const char *evidence, size_t len,
 		have_cred = cred_sub[0].seen;
 	}
 
+	rc = shirudo_config_evidence_parse(evidence, len, &config);
+	if (rc)
+		goto out;
+
 	/* Freshness: the document must answer this request. */
 	if (hex_bytes(p->nonce_hex, nonce, sizeof(nonce), &nonce_len)) {
 		rc = -EINVAL;
@@ -972,6 +1015,28 @@ int attest_verify(const char *evidence, size_t len,
 		    quote.firmware_version == certify.firmware_version,
 		    "quote and certification are of one TPM reset");
 
+	if (config.present || expect->have_config_root ||
+	    expect->have_config_pcr) {
+		const __u8 *root = expect->have_config_root ?
+				      expect->config_root : NULL;
+		const char *reason;
+		int pcr;
+
+		pcr = expect->have_config_pcr ? (int)expect->config_pcr : -1;
+		rc = shirudo_config_evidence_verify(&config, quote.pcr_mask,
+						    quote.reset_count,
+						    quote.restart_count,
+						    p->pcrs, root, pcr,
+						    &reason);
+		say(&rep, !rc, "config: %s", reason);
+		if (config.present && !expect->have_config_root)
+			note(&rep, "config root has no operator approval; use "
+			     "--expect-config-root with --expect-config-pcr");
+		if (config.present)
+			note(&rep, "config records a selection; "
+			     "direct TPM writer protection is deferred");
+	}
+
 	/*
 	 * The binding: the certified index must have the public area a
 	 * register bound to the recorded PCR values has, which is what
@@ -1099,6 +1164,7 @@ int attest_verify(const char *evidence, size_t len,
 	}
 	rc = rep.failed ? -EKEYREJECTED : 0;
 out:
+	shirudo_config_evidence_clear(&config);
 	xfree(p->recs, RECORDS_MAX * sizeof(*p->recs));
 	xfree(p, sizeof(*p));
 	return rc;

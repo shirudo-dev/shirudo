@@ -201,6 +201,7 @@ UTIL_SRCS := \
     util/dm_verity.c \
     util/config_update.c \
     util/config_measure.c \
+    util/config_attest.c \
     util/bpm_source_config.c \
     util/eventlog.c \
     util/json.c \
@@ -625,7 +626,7 @@ testing/helper/test-conditions: testing/helper/test-conditions.c util/conditions
 # util/config.o resolves config_load(), called by tpm.o.
 # The register code pulls in the eventlog, which pulls in the seal
 # label writer and the JSON codec.
-REGISTER_OBJS := util/config_update.o util/config_measure.o util/config_image.o \
+REGISTER_OBJS := util/config_attest.o util/config_update.o util/config_measure.o util/config_image.o \
                  util/chain.o util/tpm.o util/tpm_wire.o util/eventlog.o \
                  util/timefmt.o \
                  util/hex.o util/crypto_openssl.o util/json.o util/string.o \
