@@ -793,10 +793,12 @@ testing/helper/test-image-keys: testing/helper/test-image-keys.c \
 	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(REGISTER_LIBS)
 
 testing/helper/test-image-config: testing/helper/test-image-config.c \
-		util/config.o util/image_config.o util/io.o util/log.o util/malloc.o util/hex.o \
+		util/image_bootstrap.o util/hex.o util/config_measure.o \
+		util/crypto_openssl.o util/config.o util/image_config.o \
+		util/io.o util/log.o util/malloc.o \
 		util/string.o
 	@printf '  CC      $@\n'
-	$(Q)$(CC) $(CFLAGS) -o $@ $^
+	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(LIBCRYPTO_LIBS) $(LIBSSL_LIBS)
 
 testing/helper/test-image-cli: testing/helper/test-image-cli.c builtin-bpm.c \
 		$(filter-out $(call obj,builtin-bpm.o),$(BUILTIN_OBJS)) \

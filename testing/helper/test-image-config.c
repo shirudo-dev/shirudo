@@ -9,6 +9,27 @@
 
 #include "util/config.h"
 #include "util/image_config.h"
+#include "util/image_bootstrap.h"
+#include "util/hex.h"
+
+static int read_bootstrap(int argc, char **argv)
+{
+	struct shirudo_image_bootstrap boot = {};
+	char root[65];
+	int rc;
+
+	rc = shirudo_image_bootstrap_read(argv[2], &boot, true);
+	if (!rc && argc == 4)
+		rc = shirudo_image_bootstrap_read(argv[3], &boot, false);
+	if (!rc) {
+		hex_encode(boot.runtime_root, 32, root);
+		printf("runtime=%s\nroot=%s\nconfig=%s\ncertificate=%s\npcr=%u\n",
+		       boot.runtime, root, boot.config, boot.certificate,
+		       boot.pcr);
+	}
+	printf("rc=%d\n", rc);
+	return rc ? 1 : 0;
+}
 
 int main(int argc, char **argv)
 {
@@ -18,6 +39,8 @@ int main(int argc, char **argv)
 
 	if (argc < 3 || argc > 4)
 		return 2;
+	if (!strcmp(argv[1], "bootstrap"))
+		return read_bootstrap(argc, argv);
 	fd = open(argv[2], O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
 	if (fd < 0)
 		return 1;
