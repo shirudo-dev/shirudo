@@ -5,8 +5,11 @@
 /shirudo-build
 /shirudo.tar.gz
 /shirudo-static.tar.gz
-/shirudo-target.deb
-/shirudo-operator.deb
+/shirudo-target_*.deb
+/shirudo-operator_*.deb
+/shirudo-target-*.rpm
+/shirudo-operator-*.rpm
+/*.spdx.json
 /tools/shirudo-build/shirudo-build
 *.o
 *.d
