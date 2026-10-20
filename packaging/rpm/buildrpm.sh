@@ -86,7 +86,7 @@ dirs=$(cd "$stage" && find . -mindepth 1 -type d -path '*/shirudo*' | sed 's#^\.
 	printf 'Conflicts: %s\n' "$other"
 	if [ "$role" = operator ]; then
 		# Operator-only compilers and the standard image format/verify tool.
-		printf 'Requires: clang, llvm, cryptsetup\n'
+		printf 'Requires: bash, coreutils, clang, llvm, cryptsetup\n'
 	fi
 	printf '\n%%description\n'
 	if [ "$role" = target ]; then

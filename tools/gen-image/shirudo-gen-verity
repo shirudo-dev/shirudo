@@ -1,0 +1,151 @@
+#!/bin/bash
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+
+set -euo pipefail
+here=$(cd "${BASH_SOURCE[0]%/*}" && pwd)
+. "$here/common.sh"
+
+usage()
+{
+	cat <<'EOF'
+usage: shirudo image build <filesystem.img> -o <prefix>
+       [--kind config|runtime] [--keys-dir <dir>]
+       [--key <private.pem>] [--cert <cert.der>] [--salt <64-hex>]
+
+Use veritysetup to build the hash tree, then sign its root with shirudo-build.
+Writes <prefix>.img, <prefix>.verity, <prefix>.roothash and <prefix>.p7s.
+Existing output files are never replaced.
+EOF
+}
+
+parse_args()
+{
+	while [ $# -gt 0 ]; do
+		case "$1" in
+		-o|--output) output=${2:?}; shift 2 ;;
+		--keys-dir) keys_dir=${2:?}; shift 2 ;;
+		--key) key=${2:?}; shift 2 ;;
+		--cert) cert=${2:?}; shift 2 ;;
+		--salt) salt=${2:?}; shift 2 ;;
+		--kind) kind=${2:?}; shift 2 ;;
+		--builder) builder=${2:?}; shift 2 ;;
+		-h|--help) usage; exit 0 ;;
+		-*) usage >&2; die "unknown option: $1" ;;
+		*) [ -z "$input" ] || die 'only one filesystem image is allowed'
+			input=$1; shift ;;
+		esac
+	done
+}
+
+check_inputs()
+{
+	local suffix
+
+	require_command veritysetup 'install veritysetup (cryptsetup-bin or cryptsetup)'
+	require_command "$builder" 'shirudo-build not found; use --builder'
+	[ -n "$input" ] && [ -f "$input" ] && [ ! -L "$input" ] ||
+		die 'input must be a regular filesystem image, not a symbolic link'
+	[ -n "$output" ] || die '--output is required'
+	case "$kind" in config|runtime) ;; *) die '--kind must be config or runtime' ;; esac
+	if [ -n "$salt" ] && [[ ! $salt =~ ^[0-9a-fA-F]{64}$ ]]; then
+		die '--salt needs exactly 64 hex characters'
+	fi
+	for suffix in .img .verity .roothash .p7s; do
+		require_new_output "$output$suffix"
+	done
+	key=${key:-$keys_dir/signing_key.pem}
+	cert=${cert:-$keys_dir/cert.der}
+	check_filesystem_size "$input"
+}
+
+check_filesystem_size()
+{
+	local size
+
+	size=$(stat -c %s -- "$1")
+	[ "$size" -gt 0 ] && [ "$size" -le 1099511627776 ] &&
+		[ "$((size % 4096))" -eq 0 ] ||
+		die 'input must be nonempty, 4096-byte aligned and at most 1 TiB'
+}
+
+cleanup()
+{
+	local file
+
+	if [ "$complete" = no ]; then
+		for file in "${published[@]}"; do
+			if [ "$file" -ef "$work/image${file#"$output"}" ]; then
+				rm -f -- "$file"
+			fi
+		done
+	fi
+	rm -rf -- "$work"
+}
+
+format_and_sign()
+{
+	local root
+	local salt_option=()
+
+	cp -P --reflink=auto --sparse=always -- "$input" "$work/image.img"
+	[ -f "$work/image.img" ] && [ ! -L "$work/image.img" ] ||
+		die 'input changed while copying'
+	check_filesystem_size "$work/image.img"
+	[ -z "$salt" ] || salt_option=(--salt="$salt")
+	veritysetup format --format=1 --hash=sha256 \
+		--data-block-size=4096 --hash-block-size=4096 --hash-offset=0 \
+		"${salt_option[@]}" --root-hash-file="$work/image.roothash" \
+		"$work/image.img" "$work/image.verity" >/dev/null
+	root=$(<"$work/image.roothash")
+	[[ $root =~ ^[0-9a-f]{64}$ ]] || die 'veritysetup returned an invalid root hash'
+	printf '%s' "$root" >"$work/image.roothash"
+	"$builder" image sign-root "$work/image.roothash" -o "$work/image.p7s" \
+		--key "$key" --cert "$cert"
+	"$builder" image verify "$work/image" --cert "$cert" >"$work/verified-root"
+}
+
+publish_image()
+{
+	local suffix mode
+
+	mode=$(printf '%04o' "$((0644 & ~$(umask)))")
+	for suffix in .img .verity .roothash .p7s; do
+		chmod "$mode" "$work/image$suffix"
+	done
+	sync -- "$work/image.img" "$work/image.verity" \
+		"$work/image.roothash" "$work/image.p7s"
+	for suffix in .img .verity .roothash .p7s; do
+		ln -T -- "$work/image$suffix" "$output$suffix"
+		published+=("$output$suffix")
+	done
+	complete=yes
+	cat "$work/verified-root"
+}
+
+main()
+{
+	local parent
+
+	parse_args "$@"
+	check_inputs
+	parent=${output%/*}
+	[ "$parent" != "$output" ] || parent=.
+	work=$(mktemp -d -- "$parent/.shirudo-image.XXXXXX")
+	trap cleanup EXIT
+	trap 'exit 1' HUP INT TERM
+	format_and_sign
+	publish_image
+}
+
+input=
+output=
+key=
+cert=
+salt=
+kind=config
+keys_dir=${SHIRUDO_KEYS_DIR:-/var/lib/shirudo/keys}
+builder=${SHIRUDO_BUILD:-shirudo-build}
+complete=no
+published=()
+main "$@"

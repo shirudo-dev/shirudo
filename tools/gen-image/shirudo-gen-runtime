@@ -3,6 +3,8 @@
 # Copyright (c) 2026 Authors of shirudo
 
 set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+. "$here/common.sh"
 
 usage()
 {
@@ -19,10 +21,137 @@ The input binary must be trusted: ldd invokes its dynamic loader on the operator
 EOF
 }
 
-die()
+parse_args()
 {
-	printf 'shirudo-gen-runtime: %s\n' "$*" >&2
-	exit 1
+	while [ $# -gt 0 ]; do
+		case "$1" in
+		--binary) binary=${2:?}; shift 2 ;;
+		--bootstrap-conf) conf=${2:?}; shift 2 ;;
+		--cert) cert=${2:?}; shift 2 ;;
+		--config-cert) config_cert=${2:?}; shift 2 ;;
+		--output) output=${2:?}; shift 2 ;;
+		--keys-dir) keys_dir=${2:?}; shift 2 ;;
+		--size) size=${2:?}; shift 2 ;;
+		--builder) builder=${2:?}; shift 2 ;;
+		--unit-output) unit_output=${2:?}; shift 2 ;;
+		--extra-binary) extra_binaries+=("${2:?}"); shift 2 ;;
+		-h|--help) usage; exit 0 ;;
+		*) usage >&2; die "unknown option: $1" ;;
+		esac
+	done
+}
+
+elf_interpreter()
+{
+	LC_ALL=C readelf -l "$1" |
+		sed -n 's/.*Requesting program interpreter: \([^]]*\)].*/\1/p'
+}
+
+check_inputs()
+{
+	local file
+
+	for file in "$binary" "$conf" "$cert" "$config_cert"; do
+		[ -n "$file" ] && [ -f "$file" ] ||
+			die 'binary, bootstrap config and both public certificates are required'
+	done
+	check_image_options "$output" "$keys_dir" "$size"
+	require_command readelf 'install binutils (readelf)'
+	require_command ldd 'ldd is required on the operator'
+	interpreter=$(elf_interpreter "$binary")
+	[ -n "$interpreter" ] && [ "${interpreter:0:1}" = / ] ||
+		die 'expected a dynamically linked target ELF with an absolute interpreter'
+	[ -f "$interpreter" ] || die "interpreter not found: $interpreter"
+}
+
+stage_files()
+{
+	mkdir -p "$work/root/usr/bin" "$work/root/etc/shirudo" "$work/root/keys"
+	install -m 0755 "$binary" "$work/root/usr/bin/shirudo"
+	install -m 0644 "$conf" "$work/root/etc/shirudo/shirudo.conf"
+	install -m 0644 "$cert" "$work/root/keys/cert.der"
+	install -m 0644 "$config_cert" "$work/root/etc/shirudo/config-cert.der"
+	LC_ALL=C ldd "$binary" >"$work/ldd" || die 'could not resolve target libraries'
+	printf '%s\n' "$interpreter" >"$work/interpreters"
+}
+
+stage_extra_binaries()
+{
+	local extra name extra_interpreter
+
+	for extra in "${extra_binaries[@]}"; do
+		[ -f "$extra" ] && [ -x "$extra" ] || die "extra binary not executable: $extra"
+		name=$(basename "$extra")
+		[ ! -e "$work/root/usr/bin/$name" ] || die "duplicate executable name: $name"
+		install -m 0755 "$extra" "$work/root/usr/bin/$name"
+		LC_ALL=C readelf -h "$extra" >/dev/null || die "extra binary is not ELF: $extra"
+		extra_interpreter=$(elf_interpreter "$extra")
+		if [ -n "$extra_interpreter" ]; then
+			printf '%s\n' "$extra_interpreter" >>"$work/interpreters"
+		fi
+		if LC_ALL=C readelf -d "$extra" | grep '(NEEDED)' >/dev/null; then
+			LC_ALL=C ldd "$extra" >>"$work/ldd" || die "could not resolve libraries: $extra"
+		fi
+	done
+}
+
+stage_libraries()
+{
+	local lib directory
+
+	! grep -q 'not found' "$work/ldd" || die 'target libraries are missing'
+	cp "$work/interpreters" "$work/libraries"
+	awk '/^[[:space:]]*\// { print $1 } /=> \// { print $3 }' \
+		"$work/ldd" >>"$work/libraries"
+	sort -u "$work/libraries" -o "$work/libraries"
+	while IFS= read -r lib; do
+		[ -f "$lib" ] && [ "${lib:0:1}" = / ] || die "bad library path: $lib"
+		mkdir -p "$work/root$(dirname "$lib")"
+		cp -L "$lib" "$work/root$lib"
+		directory="/run/shirudo/runtime$(dirname "$lib")"
+		case ":$library_path:" in *":$directory:"*) ;;
+		*) library_path=${library_path:+$library_path:}$directory ;; esac
+	done <"$work/libraries"
+}
+
+build_runtime_image()
+{
+	"$here/shirudo-gen-image" --source "$work/root" --output "$output" \
+		--keys-dir "$keys_dir" --kind runtime --size "$size" --builder "$builder"
+	printf 'Runtime invocation (after the authenticated image is mounted):\n' >&2
+	printf '%q --inhibit-cache --library-path %q %q init\n' \
+		"/run/shirudo/runtime$interpreter" "$library_path" \
+		/run/shirudo/runtime/usr/bin/shirudo >&2
+}
+
+write_service()
+{
+	local interpreter_escaped library_path_escaped
+
+	[ -n "$unit_output" ] || return 0
+	require_new_output "$unit_output" 'unit output'
+	case "$interpreter$library_path" in *[[:space:]\\\"%]*) die 'runtime paths cannot be encoded in a systemd ExecStart' ;; esac
+	interpreter_escaped=$(escape_sed_replacement "$interpreter")
+	library_path_escaped=$(escape_sed_replacement "$library_path")
+	(
+		set -o noclobber
+		sed -e "s|@interpreter@|$interpreter_escaped|g" \
+			-e "s|@library_path@|$library_path_escaped|g" \
+			"$here/runtime-service.conf.in" >"$unit_output"
+	)
+}
+
+main()
+{
+	parse_args "$@"
+	check_inputs
+	work=$(mktemp -d)
+	trap 'rm -rf "$work"' EXIT
+	stage_files
+	stage_extra_binaries
+	stage_libraries
+	build_runtime_image
+	write_service
 }
 
 binary=
@@ -34,91 +163,6 @@ keys_dir=
 size=128
 builder=${SHIRUDO_BUILD:-shirudo-build}
 unit_output=
-extra_binaries=()
-while [ $# -gt 0 ]; do
-	case "$1" in
-	--binary) binary=${2:?}; shift 2 ;;
-	--bootstrap-conf) conf=${2:?}; shift 2 ;;
-	--cert) cert=${2:?}; shift 2 ;;
-	--config-cert) config_cert=${2:?}; shift 2 ;;
-	--output) output=${2:?}; shift 2 ;;
-	--keys-dir) keys_dir=${2:?}; shift 2 ;;
-	--size) size=${2:?}; shift 2 ;;
-	--builder) builder=${2:?}; shift 2 ;;
-	--unit-output) unit_output=${2:?}; shift 2 ;;
-	--extra-binary) extra_binaries+=("${2:?}"); shift 2 ;;
-	-h|--help) usage; exit 0 ;;
-	*) usage >&2; die "unknown option: $1" ;;
-	esac
-done
-for file in "$binary" "$conf" "$cert" "$config_cert"; do
-	[ -n "$file" ] && [ -f "$file" ] || die 'binary, bootstrap config and both public certificates are required'
-done
-[ -n "$output" ] && [ -n "$keys_dir" ] || die '--output and --keys-dir are required'
-command -v readelf >/dev/null || die 'install binutils (readelf)'
-command -v ldd >/dev/null || die 'ldd is required on the operator'
-interpreter=$(LC_ALL=C readelf -l "$binary" |
-	sed -n 's/.*Requesting program interpreter: \([^]]*\)].*/\1/p')
-[ -n "$interpreter" ] && [ "${interpreter:0:1}" = / ] ||
-	die 'expected a dynamically linked target ELF with an absolute interpreter'
-[ -f "$interpreter" ] || die "interpreter not found: $interpreter"
-
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/root/usr/bin" "$work/root/etc/shirudo" "$work/root/keys"
-install -m 0755 "$binary" "$work/root/usr/bin/shirudo"
-install -m 0644 "$conf" "$work/root/etc/shirudo/shirudo.conf"
-install -m 0644 "$cert" "$work/root/keys/cert.der"
-install -m 0644 "$config_cert" "$work/root/etc/shirudo/config-cert.der"
-LC_ALL=C ldd "$binary" >"$work/ldd" || die 'could not resolve target libraries'
-printf '%s\n' "$interpreter" >"$work/interpreters"
-for extra in "${extra_binaries[@]}"; do
-	[ -f "$extra" ] && [ -x "$extra" ] || die "extra binary not executable: $extra"
-	name=$(basename "$extra")
-	[ ! -e "$work/root/usr/bin/$name" ] || die "duplicate executable name: $name"
-	install -m 0755 "$extra" "$work/root/usr/bin/$name"
-	LC_ALL=C readelf -h "$extra" >/dev/null || die "extra binary is not ELF: $extra"
-	extra_interpreter=$(LC_ALL=C readelf -l "$extra" |
-		sed -n 's/.*Requesting program interpreter: \([^]]*\)\].*/\1/p')
-	if [ -n "$extra_interpreter" ]; then
-		printf '%s\n' "$extra_interpreter" >>"$work/interpreters"
-	fi
-	if LC_ALL=C readelf -d "$extra" | grep '(NEEDED)' >/dev/null; then
-		LC_ALL=C ldd "$extra" >>"$work/ldd" || die "could not resolve libraries: $extra"
-	fi
-done
-! grep -q 'not found' "$work/ldd" || die 'target libraries are missing'
-cp "$work/interpreters" "$work/libraries"
-awk '/^[[:space:]]*\// { print $1 } /=> \// { print $3 }' \
-	"$work/ldd" >>"$work/libraries"
-sort -u "$work/libraries" -o "$work/libraries"
 library_path=
-while IFS= read -r lib; do
-	[ -f "$lib" ] && [ "${lib:0:1}" = / ] || die "bad library path: $lib"
-	mkdir -p "$work/root$(dirname "$lib")"
-	cp -L "$lib" "$work/root$lib"
-	directory="/run/shirudo/runtime$(dirname "$lib")"
-	case ":$library_path:" in *":$directory:"*) ;;
-	*) library_path=${library_path:+$library_path:}$directory ;; esac
-done <"$work/libraries"
-
-here=$(cd "$(dirname "$0")" && pwd)
-"$here/shirudo-gen-image" --source "$work/root" --output "$output" \
-	--keys-dir "$keys_dir" --kind runtime --size "$size" --builder "$builder"
-printf 'Runtime invocation (after the authenticated image is mounted):\n' >&2
-printf '%q --inhibit-cache --library-path %q %q init\n' \
-	"/run/shirudo/runtime$interpreter" "$library_path" \
-	/run/shirudo/runtime/usr/bin/shirudo >&2
-
-if [ -n "$unit_output" ]; then
-	[ ! -e "$unit_output" ] && [ ! -L "$unit_output" ] || die "unit output already exists: $unit_output"
-	case "$interpreter$library_path" in *[[:space:]\\\"%]*) die 'runtime paths cannot be encoded in a systemd ExecStart' ;; esac
-	(
-		set -o noclobber
-		interpreter_escaped=$(printf '%s' "$interpreter" | sed 's/[\&|]/\\&/g')
-		library_path_escaped=$(printf '%s' "$library_path" | sed 's/[\&|]/\\&/g')
-		sed -e "s|@interpreter@|$interpreter_escaped|g" \
-			-e "s|@library_path@|$library_path_escaped|g" \
-			"$here/runtime-service.conf.in" >"$unit_output"
-	)
-fi
+extra_binaries=()
+main "$@"

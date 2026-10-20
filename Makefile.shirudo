@@ -522,6 +522,12 @@ install-operator: install shirudo-build $(VMLINUX_H) $(BPF_LIBBPF_HEADERS) $(BPF
 	$(Q)install -d $(DESTDIR)$(libexecdir)/shirudo
 	$(Q)install -m 0755 tools/shirudo-build/shirudo-build \
 	    $(DESTDIR)$(libexecdir)/shirudo/shirudo-build
+	$(Q)install -d $(DESTDIR)$(libexecdir)/shirudo/gen-image
+	$(Q)install -m 0755 tools/gen-image/shirudo-gen-* \
+	    $(DESTDIR)$(libexecdir)/shirudo/gen-image/
+	$(Q)install -m 0644 tools/gen-image/common.sh \
+	    tools/gen-image/runtime-service.conf.in \
+	    $(DESTDIR)$(libexecdir)/shirudo/gen-image/
 	@printf '  INSTALL $(DESTDIR)$(sharedir)/shirudo/vmlinux.h\n'
 	$(Q)install -d $(DESTDIR)$(sharedir)/shirudo
 	$(Q)install -m 0644 $(VMLINUX_H) \
