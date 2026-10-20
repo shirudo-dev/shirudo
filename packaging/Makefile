@@ -33,7 +33,6 @@ dracutmodulesdir ?= /usr/lib/dracut/modules.d
 INSTALLER_TARBALL    ?= shirudo.tar.gz
 INSTALLER_STAGE      ?= build/shirudo-installer
 INSTALLER_ROOT       := $(INSTALLER_STAGE)/root
-INSTALLER_PRIVATE_LIBDIR ?= $(libdir)/shirudo
 
 INSTALL_PATHS := prefix=$(prefix) exec_prefix=$(exec_prefix) \
                  bindir=$(bindir) libexecdir=$(libexecdir) \
@@ -52,7 +51,7 @@ STATIC_IMAGE_ROOT    := $(STATIC_IMAGE_STAGE)/root
 # rebuild with this prefix.
 PKG_PREFIX      ?= /usr
 PKG_RAW_VERSION ?= $(shell cd $(ROOT) && ($(SHIRUDO_GIT_DESCRIBE) 2>/dev/null || cat $(ROOT)/VERSION))
-# Which roles to package. The target package is static apart from glibc
+# Which roles to package. The target package is fully static
 # and portable across distributions; the operator package links the
 # build host's shared libraries and belongs on the distribution it is
 # built on, so PKG_ROLES=operator builds just that one there.
@@ -105,15 +104,11 @@ PKG_PATHS := prefix=$(PKG_PREFIX) exec_prefix=$(PKG_PREFIX) \
              systemdunitdir=/usr/lib/systemd/system
 
 # Build two target-installer tarballs (kernel-style `bin*-pkg`). Both target
-# binaries statically link OpenSSL and OpenSSL-backed libcurl. The static image
-# additionally bundles the remaining dynamic libraries into lib/shirudo/ via
-# an $ORIGIN-relative rpath for embedded / legacy / minimal targets.
+# binaries are fully static PIE, including their C and compiler runtimes.
 # Each tarball contains a staged install-target tree under root/ plus an
-# install.sh wrapper. The two flavors need different target binary builds (the
-# bundled one carries an rpath), so the recipe rebuilds the target artifact
-# between them.
-bintar-pkg: config $(ROOT)/packaging/tar/install.sh $(ROOT)/packaging/tar/bundle-libs.sh
-	@printf '  STAGE   $(INSTALLER_STAGE_PATH)  (system libs)\n'
+# install.sh wrapper. Keep both archive names for existing consumers.
+bintar-pkg: config $(ROOT)/packaging/tar/install.sh
+	@printf '  STAGE   $(INSTALLER_STAGE_PATH)  (static PIE)\n'
 	$(Q)rm -rf $(INSTALLER_STAGE_PATH) $(INSTALLER_TARBALL_PATH)
 	$(Q)rm -f $(ROOT)/shirudo $(ROOT)/shirudo-target
 	$(Q)install -d $(INSTALLER_STAGE_PATH) $(dir $(INSTALLER_TARBALL_PATH))
@@ -122,7 +117,6 @@ bintar-pkg: config $(ROOT)/packaging/tar/install.sh $(ROOT)/packaging/tar/bundle
 	+$(Q)$(MAKE) -C $(ROOT) -f Makefile.shirudo PROFILE=target CONFIG_MK=config-target.mk \
 	    $(INSTALL_PATHS) \
 	    LDFLAGS='$(LDFLAGS)' \
-	    SHIRUDO_BUNDLE_RPATH=0 \
 	    DESTDIR=$(INSTALLER_ROOT_PATH) \
 	    install-target
 	$(Q)install -m 0755 $(ROOT)/packaging/tar/install.sh $(INSTALLER_STAGE_PATH)/install.sh
@@ -130,21 +124,10 @@ bintar-pkg: config $(ROOT)/packaging/tar/install.sh $(ROOT)/packaging/tar/bundle
 	@printf '  TAR     $(INSTALLER_TARBALL_PATH)\n'
 	$(Q)tar -C $(dir $(INSTALLER_STAGE_PATH)) -czf $(INSTALLER_TARBALL_PATH) \
 	    $(notdir $(INSTALLER_STAGE_PATH))
-	@printf '  STAGE   $(STATIC_IMAGE_STAGE_PATH)  (bundled libs)\n'
+	@printf '  STAGE   $(STATIC_IMAGE_STAGE_PATH)  (static PIE)\n'
 	$(Q)rm -rf $(STATIC_IMAGE_STAGE_PATH) $(STATIC_IMAGE_TARBALL_PATH)
-	$(Q)rm -f $(ROOT)/shirudo $(ROOT)/shirudo-target
 	$(Q)install -d $(STATIC_IMAGE_STAGE_PATH) $(dir $(STATIC_IMAGE_TARBALL_PATH))
-	+$(Q)$(MAKE) -C $(ROOT) target-deps
-	+$(Q)$(MAKE) -C $(ROOT) target-config
-	+$(Q)$(MAKE) -C $(ROOT) -f Makefile.shirudo PROFILE=target CONFIG_MK=config-target.mk \
-	    $(INSTALL_PATHS) \
-	    LDFLAGS='$(LDFLAGS)' \
-	    SHIRUDO_BUNDLE_RPATH=1 \
-	    DESTDIR=$(STATIC_IMAGE_ROOT_PATH) \
-	    install-target
-	$(Q)$(ROOT)/packaging/tar/bundle-libs.sh \
-	    "$(abspath $(STATIC_IMAGE_ROOT_PATH)$(bindir)/shirudo)" \
-	    "$(abspath $(STATIC_IMAGE_ROOT_PATH)$(INSTALLER_PRIVATE_LIBDIR))"
+	$(Q)cp -a $(INSTALLER_ROOT_PATH) $(STATIC_IMAGE_ROOT_PATH)
 	$(Q)install -m 0755 $(ROOT)/packaging/tar/install.sh \
 	    $(STATIC_IMAGE_STAGE_PATH)/install.sh
 	$(Q)install -m 0644 $(ROOT)/LICENSE $(ROOT)/README.md $(ROOT)/VERSION $(STATIC_IMAGE_STAGE_PATH)/

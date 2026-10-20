@@ -12,6 +12,38 @@ if ! command -v readelf >/dev/null 2>&1 || [ ! -x "$TARGET" ]; then
 	test_skip_all 'target static profile has not been built'
 fi
 
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+
+test_expect_success 'target is static PIE without an interpreter or shared dependencies' '
+	sh ../.github/scripts/check-static-target.sh "$TARGET" &&
+	"$TARGET" version >"$WORK/version"
+'
+
+test_expect_success 'the static ELF checker rejects the dynamic operator' '
+	! sh ../.github/scripts/check-static-target.sh "$OPERATOR"
+'
+
+test_expect_success 'the static ELF checker rejects non-PIE and search paths' '
+	printf "int main(void) { return 0; }\n" |
+		${CC:-cc} -x c - -static -o "$WORK/nonpie" &&
+	! sh ../.github/scripts/check-static-target.sh "$WORK/nonpie" &&
+	printf "int main(void) { return 0; }\n" |
+		${CC:-cc} -x c - -static-pie -Wl,-rpath,/untrusted \
+		-o "$WORK/rpath" &&
+	! sh ../.github/scripts/check-static-target.sh "$WORK/rpath"
+'
+
+test_expect_success 'preload constructors run in the operator but not the target' '
+	${CC:-cc} -shared -fPIC helper/test-preload.c -o "$WORK/preload.so" &&
+	env LD_PRELOAD="$WORK/preload.so" SHIRUDO_PRELOAD_MARKER="$WORK/operator" \
+		"$OPERATOR" version >"$WORK/operator-version" &&
+	test -f "$WORK/operator" &&
+	env LD_PRELOAD="$WORK/preload.so" SHIRUDO_PRELOAD_MARKER="$WORK/target" \
+		"$TARGET" version >"$WORK/target-version" &&
+	test ! -e "$WORK/target"
+'
+
 test_expect_success 'target binary has no shared TLS closure' '
 	test -x "$TARGET" &&
 	! readelf -d "$TARGET" | grep -Eq "lib(curl|ssl|crypto|mbedtls|mbedx509|mbedcrypto|gnutls)\\.so"

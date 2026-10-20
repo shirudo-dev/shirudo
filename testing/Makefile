@@ -122,6 +122,7 @@ TEST_VM_BUNDLE_SOURCES := $(sort $(wildcard \
 TEST_VM_BUNDLE_ARTIFACTS := $(VM_KERNEL_STAMP)
 TEST_VM_BUNDLE_INPUTS := $(sort \
 	$(ROOT)/Makefile $(ROOT)/Makefile.config $(ROOT)/Makefile.shirudo $(ROOT)/Makefile.version $(ROOT)/config.mk \
+	$(ROOT)/Makefile.target-deps \
 	$(ROOT)/testing/Makefile $(ROOT)/packaging/Makefile \
 	$(ROOT)/vendor/libbpf/Makefile $(ROOT)/vendor/libbpf/COMMIT \
 	$(ROOT)/Documentation/Makefile $(ROOT)/upatches/kernel-obs/Makefile \

@@ -6,8 +6,8 @@
 # materials next to each package, listing what it carries that a package
 # manager cannot see: the target binary links OpenSSL, libcurl, TPM2-TSS
 # and the distribution's libelf, zlib, zstd and LuaJIT archives
-# statically, the static tarball bundles shared libraries, and both roles
-# link the vendored libbpf.
+# statically, including the C and compiler runtimes, and both roles link
+# the vendored libbpf.
 #
 #   .github/scripts/gen-sbom.sh <package>...
 #
@@ -17,6 +17,7 @@
 # static libdir has to be one of the source-built dependencies or belong
 # to a distribution package, or the script fails rather than leave it
 # out. The shirudo version is SHIRUDO_CI_VERSION, else git describe.
+# CC must match the compiler used to link the target runtime.
 
 set -eu
 
@@ -99,6 +100,7 @@ deb_license() {
 	zlib)		echo Zlib ;;
 	libzstd)	echo 'BSD-3-Clause OR GPL-2.0-only' ;;
 	luajit*)	echo MIT ;;
+	glibc)		echo LGPL-2.1-or-later ;;
 	gcc-*)		echo 'GPL-3.0-or-later WITH GCC-exception-3.1' ;;
 	*)		echo NOASSERTION ;;
 	esac
@@ -171,16 +173,14 @@ target_components() {
 			;;
 		esac
 	done
-}
-
-# The shared libraries the static tarball carries in lib/shirudo/.
-bundled_components() {
-	tar -tzf "$1" | grep '/lib/shirudo/[^/][^/]*$' >"$work/bundled" || true
-	while IFS= read -r entry; do
-		rm -rf "$work/x" && mkdir "$work/x"
-		tar -xzf "$1" -C "$work/x" "$entry"
-		deb_component "$work/x/$entry" "$TARGET_SYSTEM_LIBDIR/${entry##*/}"
-	done <"$work/bundled"
+	for runtime_name in libc.a libm.a libgcc.a libgcc_eh.a rcrt1.o; do
+		runtime_path=$(${CC:-cc} -print-file-name="$runtime_name") ||
+			die "cannot locate $runtime_name with ${CC:-cc}"
+		[ -f "$runtime_path" ] ||
+			die "compiler runtime missing: $runtime_name"
+		runtime_path=$(readlink -f "$runtime_path")
+		deb_component "$runtime_path" "$runtime_path"
+	done
 }
 
 libbpf_component >"$work/common"
@@ -213,11 +213,6 @@ for pkg; do
 			target_components >"$work/target"
 		fi
 		cat "$work/target" >>"$work/components"
-		case $pkg in
-		*.tar.gz)
-			bundled_components "$pkg" >>"$work/components"
-			;;
-		esac
 	fi
 
 	base=${pkg##*/}

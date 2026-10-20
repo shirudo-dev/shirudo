@@ -18,8 +18,8 @@ CONFIG_MK ?= config.mk
 
 # Both profiles run on OpenSSL: libcrypto for SHA-256, certificates and
 # CMS, libssl behind libcurl for TLS. The operator links the system
-# shared libraries; the target links the static OpenSSL and libcurl
-# staged by make target-deps.
+# shared libraries; the target links static dependencies staged by
+# make target-deps and the compiler's static C and compiler runtimes.
 CRYPTO_SRC := util/crypto_openssl.c
 TLS_SRC := util/tls_openssl.c
 ifeq ($(PROFILE),target)
@@ -99,6 +99,7 @@ HARDEN_CFLAGS += -fstack-clash-protection -fzero-call-used-regs=used \
                  -mbranch-protection=standard
 endif
 HARDEN_LDFLAGS := -pie -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack
+HARDEN_STATIC_PIE_LDFLAGS := $(filter-out -pie,$(HARDEN_LDFLAGS))
 
 CFLAGS_BASE := -O2 $(DEBUG_CFLAGS) -std=gnu11 $(WARNINGS) $(HARDEN_CFLAGS) \
                -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
@@ -142,6 +143,10 @@ DYNAMIC_LIBS := \
 
 CFLAGS += $(LUAJIT_CFLAGS) -DSHIRUDO_HAVE_LUAJIT
 DYNAMIC_LIBS += $(LUAJIT_LIBS)
+
+ifeq ($(PROFILE),target)
+CFLAGS += -fPIE
+endif
 
 ifeq ($(SHIRUDO_BUNDLE_RPATH),1)
 RPATH_LDFLAGS := -Wl,--disable-new-dtags -Wl,-rpath,'$$ORIGIN/../lib/shirudo'
@@ -330,7 +335,7 @@ FORCE_VMLINUX_BTF:
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-build/target/%.o: %.c
+build/target/%.o: %.c Makefile.shirudo $(CONFIG_MK)
 	@printf '  CC      $@\n'
 	$(Q)mkdir -p $(dir $@)
 	$(Q)$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
@@ -384,14 +389,17 @@ shirudo: $(MAIN_OBJ) $(BUILTIN_OBJS) $(UTIL_OBJS) $(VERSION_OBJ) $(LIBBPF_A)
 	    $(MAIN_OBJ) $(BUILTIN_OBJS) $(UTIL_OBJS) $(VERSION_OBJ) \
 	    $(STATIC_LIBS) $(DYNAMIC_LIBS)
 
-shirudo-target: $(MAIN_OBJ) $(BUILTIN_OBJS) $(UTIL_OBJS) $(VERSION_OBJ) $(LIBBPF_A)
-	@printf '  LD      $@ (static OpenSSL)\n'
-	$(Q)$(LD) $(CFLAGS) $(TARGET_TLS_CFLAGS) $(HARDEN_LDFLAGS) $(LDFLAGS) \
-	    $(RPATH_LDFLAGS) -o $@ \
+shirudo-target: $(MAIN_OBJ) $(BUILTIN_OBJS) $(UTIL_OBJS) $(VERSION_OBJ) $(LIBBPF_A) \
+                Makefile.shirudo $(CONFIG_MK) .github/scripts/check-static-target.sh
+	@printf '  LD      $@ (static PIE)\n'
+	$(Q)$(LD) $(CFLAGS) $(TARGET_TLS_CFLAGS) \
+	    $(HARDEN_STATIC_PIE_LDFLAGS) $(LDFLAGS) \
+	    -static-pie -static-libgcc -o $@ \
 	    $(MAIN_OBJ) $(BUILTIN_OBJS) $(UTIL_OBJS) $(VERSION_OBJ) \
 	    $(STATIC_LIBS) $(TARGET_TLS_STATIC_LINK_LIBS) \
-	    $(TARGET_STATIC_RUNTIME_LINK_LIBS) \
-	    -Wl,-Bdynamic $(TARGET_TLS_DYNAMIC_LINK_LIBS)
+	    $(TARGET_STATIC_RUNTIME_LINK_LIBS)
+	$(Q)sh .github/scripts/check-static-target.sh $@ || \
+	    { rm -f $@; exit 1; }
 
 # util/loader.o has a make-level dep on every embedded bpf object.
 util/loader.o: $(BPF_OBJS)
@@ -474,7 +482,7 @@ install-target: shirudo-target install-common systemd/shirudo.service \
 		systemd/shirudo-bpm-repo-update.timer \
 		systemd/shirudo-bpm-tree-sync.service \
 		systemd/shirudo-bpm-tree-sync.timer
-	@printf '  INSTALL $(DESTDIR)$(bindir)/shirudo (static OpenSSL)\n'
+	@printf '  INSTALL $(DESTDIR)$(bindir)/shirudo (static PIE)\n'
 	$(Q)install -d $(DESTDIR)$(bindir)
 	$(Q)install -m 0755 shirudo-target $(DESTDIR)$(bindir)/shirudo
 	@printf '  INSTALL $(DESTDIR)$(bindir)/shirudo-gen-initrd\n'

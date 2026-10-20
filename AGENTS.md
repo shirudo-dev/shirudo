@@ -312,7 +312,7 @@ one usually still compiles and passes tests.
 ## Building, testing, packaging
 
 - `make` builds the operator binary; `make shirudo-build` the helper;
-  `make target` the static-OpenSSL target profile (`make target-deps`
+  `make target` the fully static PIE target profile (`make target-deps`
   builds OpenSSL, libcurl and tpm2-tss from source first).
 - A compiler warning fails every build the Makefiles drive, the BPF
   objects, vendored libbpf, test helpers and fuzz targets included;
@@ -351,7 +351,7 @@ one usually still compiles and passes tests.
 - Shell that a workflow runs lives in `.github/scripts/`, not inline in
   the workflow file.
 - `make -C packaging bindeb-pkg`, `make -C packaging binrpm-pkg` and `make -C packaging bintar-pkg` build the
-  distribution packages. The target package is static apart from glibc
+  distribution packages. The target package is fully static PIE
   and portable; the operator package links the host's shared libraries
   and is built on the distribution it is for (`PKG_ROLES=operator`),
   against a bpf-next `vmlinux.h` (`BPF_VMLINUX_H=`). Package targets

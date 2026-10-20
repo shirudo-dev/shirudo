@@ -193,17 +193,16 @@ jobs:
             # Fedora job below builds against this bpf-next one, not its host's.
             cp vendor/linux/vmlinux.h /tmp/shirudo-packages/vmlinux.h
 
-            # Both installers relocate under DESTDIR; the static image also
-            # carries its remaining shared libraries next to the binary.
+            # Both installers relocate under DESTDIR and carry static PIE.
             for tarball in shirudo.tar.gz shirudo-static.tar.gz; do
               rm -rf /tmp/bintar && mkdir -p /tmp/bintar/archive /tmp/bintar/root
               tar -C /tmp/bintar/archive -xzf "\$tarball" --strip-components=1
               DESTDIR=/tmp/bintar/root /tmp/bintar/archive/install.sh
               test -x /tmp/bintar/root/usr/local/bin/shirudo
+              sh .github/scripts/check-static-target.sh /tmp/bintar/root/usr/local/bin/shirudo
               test -f /tmp/bintar/root/usr/lib/systemd/system/shirudo.service
               /tmp/bintar/root/usr/local/bin/shirudo version
             done
-            test -d /tmp/bintar/root/usr/local/lib/shirudo
 
             make -C packaging bindeb-pkg \
               DEB_RAW_VERSION="\$SHIRUDO_CI_VERSION" \
@@ -214,12 +213,9 @@ jobs:
               SHIRUDO_TARGET_STATIC_LIBDIR=/tmp/shirudo-target-deps/lib
             cp shirudo-*.deb /tmp/shirudo-packages/
 
-            # These libraries must be present in the target executable rather
-            # than in its DT_NEEDED list.
-            ! readelf -d shirudo-target | grep -Eq \
-              'lib(rtmp|psl|z|tss2-esys|tss2-tctildr|elf|luajit-5\.1)\.so'
+            sh .github/scripts/check-static-target.sh shirudo-target
 
-            # The target rpm is static apart from glibc and portable, so it is
+            # The target rpm is fully static and portable, so it is
             # built here; the operator rpm links the distribution's shared
             # libraries and is built natively in the Fedora job below.
             make -C packaging binrpm-pkg PKG_ROLES=target \

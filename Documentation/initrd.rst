@@ -84,8 +84,9 @@ installed binary.
 3) What the initrd needs
 ------------------------
 
-* The target binary at its installed path.  It is static apart from
-  the C library.
+* The target binary at its installed path.  It is fully static PIE,
+  including the C library, and needs no ELF interpreter or shared
+  libraries to start.
 * ``/etc/shirudo/keys/cert.der``, a copy of ``/var/lib/shirudo/keys/cert.der``,
   and ``/etc/shirudo/keys/trusted/`` with the further certificates and
   their vouches.  These copies are measured with the initrd, so a

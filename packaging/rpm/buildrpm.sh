@@ -73,6 +73,9 @@ dirs=$(cd "$stage" && find . -mindepth 1 -type d -path '*/shirudo*' | sed 's#^\.
 	# RPMs are the whole output, like the two debs.
 	printf '%%global debug_package %%{nil}\n'
 	printf '%%global _build_id_links none\n'
+	if [ "$role" = target ]; then
+		printf '%s\n' '%global __requires_exclude ^rtld[(]GNU_HASH[)]$'
+	fi
 	printf 'Name: %s\n' "$pkg"
 	printf 'Version: %s\n' "$version"
 	printf 'Release: %s\n' "$release"

@@ -156,4 +156,14 @@ test_expect_success 'PKG_ROLES=operator leaves the target package and its static
 	! grep -q "builddeb.sh operator" "$WORK/plan-deb"
 '
 
+test_expect_success 'static PIE target packages do not require a shared runtime or loader' '
+	cc -static-pie -static-libgcc -o "$WORK/static-stub" "$WORK/stub.c" &&
+	install -m 0755 "$WORK/static-stub" "$WORK/target/usr/bin/shirudo" &&
+	../packaging/rpm/buildrpm.sh target "$WORK/target" 1.2.3 1 "$ARCH" \
+		"Test <test@example.invalid>" "$WORK/static.rpm" \
+		>"$WORK/static.out" 2>&1 &&
+	rpm -qp --requires "$WORK/static.rpm" >"$WORK/static.requires" 2>/dev/null &&
+	! grep -Eq "^lib.*\\.so|^rtld\\(" "$WORK/static.requires"
+'
+
 test_done

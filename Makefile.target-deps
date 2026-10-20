@@ -142,7 +142,7 @@ $(CURL_STAMP): $(OPENSSL_STAMP)
 	@$(MAKE) -C "$(CURL_SOURCE)" DESTDIR= install
 	@touch "$@"
 
-$(TSS_STAMP): $(OPENSSL_STAMP)
+$(TSS_STAMP): Makefile.target-deps $(OPENSSL_STAMP)
 	@mkdir -p "$(TARGET_SOURCE_DIR)" "$(TARGET_STATIC_LIBDIR)"
 	@if test ! -d "$(TSS_SOURCE)"; then \
 		git clone --depth 1 --branch "$(TSS_VERSION)" \

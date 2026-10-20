@@ -289,7 +289,7 @@ the private key under ``/var/lib/shirudo/keys/``.
   state-changing command.
 * The target binary from ``make target`` links OpenSSL, libcurl,
   tpm2-tss with its device TCTI, libbpf, libelf, zlib, zstd and
-  LuaJIT statically and needs only the C library at runtime, so it
+  LuaJIT, glibc, libm and the compiler runtime statically as a PIE, so it
   runs on a distribution whose own OpenSSL predates ML-DSA and reaches
   the TPM from an initrd that holds no tpm2-tss shared objects.
 * A TPM 2.0 exposed as ``/dev/tpmrm0`` (discrete, firmware or cloud
@@ -315,10 +315,36 @@ an OpenSSL-backed libcurl and tpm2-tss from source and stages them as
 static archives.  The build host then needs static ``libelf``,
 ``zlib``, ``zstd`` and ``libluajit-5.1`` archives;
 ``SHIRUDO_TARGET_STATIC_LIBDIR`` names their directory when it is not
-the system one.  The operator package, by contrast, links the host's
+the system one.  The configured C compiler must also provide matching
+static glibc, libm, startup objects and compiler runtime archives with
+static PIE support (``libc6-dev`` on Debian-family hosts,
+``glibc-static`` on Fedora).  These come from that compiler's sysroot,
+not ``SHIRUDO_TARGET_STATIC_LIBDIR``.  Missing or incompatible archives
+fail configuration; the target never falls back to shared libraries.
+The operator package, by contrast, links the host's
 shared libraries and must be built on the distribution it is installed
 on.
 
+The target ELF has no interpreter, shared-library dependencies or
+library search paths.  Its static PIE startup relocates it without
+``ld-linux``, retaining address randomisation, and ignores
+``LD_PRELOAD``.  This describes the ELF linkage, not a prohibition on
+runtime module loading: glibc's NSS and explicit ``dlopen`` paths may
+still load shared objects.  The build's glibc linker warnings for those
+interfaces must not be mistaken for an ELF dependency.
+
+Both installer tarball names remain available and carry the same target
+executable, without bundled shared libraries.  The package SBOMs include
+the embedded glibc and compiler runtime versions as well as the other
+static dependencies.  glibc retains its LGPL licence and notices; the
+GCC runtime retains its runtime exception.  The project's source licence
+does not replace those dependency licences.  To rebuild or relink the
+target, use the source revision and dependency versions recorded with
+the release, supply the replacement runtime through ``CC`` and its
+sysroot, and run ``make target``.  Retain that source, the build rules
+and the dependency sources/notices with the distribution's relinking
+materials.  Rebuild the initrd and reboot after replacing the target
+binary, as described in `operations <operations.rst>`__.
 7) Documentation and tests
 --------------------------
 
