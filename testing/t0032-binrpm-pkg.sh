@@ -88,7 +88,8 @@ test_expect_success 'target package lists the binary, every unit and the complet
 test_expect_success 'library requirements come from the ELF dependency generator' '
 	rpm -qp --requires "$WORK/target.rpm" >"$WORK/target.requires" 2>/dev/null &&
 	grep -q "^libc.so.6" "$WORK/target.requires" &&
-	! grep -q "clang" "$WORK/target.requires"
+	! grep -q "clang" "$WORK/target.requires" &&
+	! grep -q "^cryptsetup" "$WORK/target.requires"
 '
 
 test_expect_success 'target scriptlets enable units on install and remove them safely' '
@@ -107,7 +108,7 @@ test_expect_success 'target scriptlets enable units on install and remove them s
 	! grep -qE "^[[:space:]]*systemctl (start|restart)" "$WORK/target.scripts"
 '
 
-test_expect_success 'buildrpm.sh builds the operator package with the compiler requirement' '
+test_expect_success 'buildrpm.sh gives the operator its compiler and verity tool requirements' '
 	../packaging/rpm/buildrpm.sh operator "$WORK/operator" 1.2.3 1 "$ARCH" \
 		"Test <test@example.invalid>" "$WORK/operator.rpm" >/dev/null 2>&1 &&
 	rpm -qp --qf "%{NAME} %{VERSION} %{RELEASE}\n" "$WORK/operator.rpm" |
@@ -115,6 +116,7 @@ test_expect_success 'buildrpm.sh builds the operator package with the compiler r
 	rpm -qp --conflicts "$WORK/operator.rpm" | grep -qx "shirudo-target" &&
 	rpm -qp --requires "$WORK/operator.rpm" | grep -qx clang &&
 	rpm -qp --requires "$WORK/operator.rpm" | grep -qx llvm &&
+	rpm -qp --requires "$WORK/operator.rpm" | grep -qx cryptsetup &&
 	rpm -qpl "$WORK/operator.rpm" >"$WORK/operator.files" &&
 	grep -qx /usr/libexec/shirudo "$WORK/operator.files" &&
 	grep -qx /usr/libexec/shirudo/shirudo-build "$WORK/operator.files" &&
@@ -123,6 +125,23 @@ test_expect_success 'buildrpm.sh builds the operator package with the compiler r
 	! grep -q "systemd" "$WORK/operator.files" &&
 	test -z "$(rpm -qp --scripts "$WORK/operator.rpm")"
 '
+
+if command -v dpkg-deb >/dev/null 2>&1; then
+	test_expect_success 'Debian packages require veritysetup only for the operator' '
+		arch=$(dpkg --print-architecture) &&
+		../packaging/deb/builddeb.sh target "$WORK/target" 1.2.3 "$arch" \
+			"Test <test@example.invalid>" "$WORK/target.deb" >/dev/null &&
+		../packaging/deb/builddeb.sh operator "$WORK/operator" 1.2.3 "$arch" \
+			"Test <test@example.invalid>" "$WORK/operator.deb" >/dev/null &&
+		dpkg-deb -f "$WORK/target.deb" Depends >"$WORK/target.deb.requires" &&
+		dpkg-deb -f "$WORK/operator.deb" Depends >"$WORK/operator.deb.requires" &&
+		! grep -q cryptsetup "$WORK/target.deb.requires" &&
+		grep -Eq "(^|, )cryptsetup-bin(,|$)" "$WORK/operator.deb.requires"
+	'
+else
+	TAP_COUNT=$((TAP_COUNT + 1))
+	printf 'ok %d - Debian operator verity dependency # SKIP no dpkg-deb\n' "$TAP_COUNT"
+fi
 
 test_expect_success 'buildrpm.sh rejects a dash in version or release and an unknown role' '
 	! ../packaging/rpm/buildrpm.sh target "$WORK/target" 1.2-3 1 "$ARCH" m "$WORK/bad.rpm" >/dev/null 2>&1 &&

@@ -538,6 +538,7 @@ TPMSIM_HELPER := $(if $(TPMSIM_LIBS),testing/helper/tpmsim-cmd,)
 TEST_HELPERS := testing/helper/test-json-parser \
                 testing/helper/test-string \
                 testing/helper/test-conditions \
+                testing/helper/test-config-image \
                 testing/helper/test-chain \
                 testing/helper/test-tpm-wire \
                 testing/helper/test-register \
@@ -704,6 +705,12 @@ testing/upatch/kernel-obs/exec/exec-paths: testing/upatch/kernel-obs/exec/exec_p
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -pthread -o $@ $^
 
+testing/helper/test-config-image: testing/helper/test-config-image.c \
+		util/config_image.o util/crypto_openssl.o util/malloc.o \
+		util/io.o util/hex.o util/log.o \
+		util/string.o
+	@printf '  CC      $@\n'
+	$(Q)$(CC) $(CFLAGS) -o $@ $^ -lcrypto -lssl
 
 
 
