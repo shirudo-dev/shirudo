@@ -285,7 +285,7 @@ DEPS     := $(DEP_OBJS:.o=.d)
 # ----- top-level goals --------------------------------------------
 
 .PHONY: all install install-common install-target install-operator clean distclean check test \
-		test-helpers \
+		test-helpers verity-test-helpers \
         bpf libbpf
 
 all: shirudo
@@ -536,8 +536,22 @@ TPMSIM_CFLAGS := $(shell pkg-config --cflags libtpms 2>/dev/null)
 TPMSIM_LIBS := $(shell pkg-config --libs libtpms 2>/dev/null)
 TPMSIM_HELPER := $(if $(TPMSIM_LIBS),testing/helper/tpmsim-cmd,)
 
+# Target fixtures must run without the host ELF interpreter or sanitizer.
+VERITY_TEST_HELPERS := build/verity-tests/shirudo-policy-probe
+
+build/verity-tests/shirudo-policy-probe: \
+		testing/tamperproof/t1140-verity-helper.c util/identity.h
+	@printf '  CC      $@\n'
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CC) -O2 $(DEBUG_CFLAGS) -std=gnu11 $(WARNINGS) \
+	    -Iinclude -D_GNU_SOURCE -static -o $@ $<
+
+
+verity-test-helpers: $(VERITY_TEST_HELPERS)
+
 # Compiled test helpers (also usable as fuzz entry points).
-TEST_HELPERS := testing/helper/test-json-parser \
+TEST_HELPERS := $(VERITY_TEST_HELPERS) \
+                testing/helper/test-json-parser \
                 testing/helper/test-string \
                 testing/helper/test-conditions \
                 testing/helper/test-config-image \
