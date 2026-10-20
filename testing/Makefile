@@ -30,7 +30,6 @@ PACKAGE_FORMAT ?= $(call test-vm-arch,TEST_VM_HOST_PKG_FORMAT)
 TEST_VM_WORK_DIR ?= build/test-vm
 override TEST_VM_WORK_DIR := $(call root-path,$(TEST_VM_WORK_DIR))
 TEST_VM_BUNDLE_DIR ?= $(TEST_VM_WORK_DIR)/host-bundle-$(VM_KERNEL_TAG)$(KERNEL_COMMIT_SUFFIX)
-override TEST_VM_BUNDLE_DIR := $(call root-path,$(TEST_VM_BUNDLE_DIR))
 TEST_VM_RUNTIME_CACHE_DIR ?= $(TEST_VM_WORK_DIR)/cache/runtime
 override TEST_VM_RUNTIME_CACHE_DIR := $(call root-path,$(TEST_VM_RUNTIME_CACHE_DIR))
 TEST_VM_MAP_EXPORT_CA ?=
@@ -75,6 +74,7 @@ endif
 else
   $(error unsupported VM KERNEL '$(VM_KERNEL)'; choose bpf-next or a release such as $(VM_KERNEL_MIN))
 endif
+override TEST_VM_BUNDLE_DIR := $(call root-path,$(TEST_VM_BUNDLE_DIR))
 VM_KERNEL_IMAGE_NAME := $(call test-vm-arch,TEST_VM_ARCH_KIMAGE)
 VM_KERNEL_IMAGE := $(VM_KERNEL_ARTIFACT_DIR)/$(VM_KERNEL_IMAGE_NAME)
 VM_KERNEL_STAMP := $(VM_KERNEL_ARTIFACT_DIR)/$(VM_KERNEL_IMAGE_NAME).sha256sum
@@ -118,8 +118,8 @@ TEST_VM_BUNDLE_SOURCES := $(sort $(wildcard \
 	$(ROOT)/upatches/kernel-obs/*.c $(ROOT)/upatches/kernel-obs/*.h $(ROOT)/upatches/kernel-obs/*.list \
 		$(ROOT)/upatches/kernel-obs/*.py $(ROOT)/upatches/kernel-obs/Beefile \
 	$(ROOT)/upatches/kernel-obs/decoders/*))
-TEST_VM_BUNDLE_ARTIFACTS := $(sort $(wildcard \
-	$(VM_KERNEL_ARTIFACT_DIR) $(VM_KERNEL_ARTIFACT_DIR)/*))
+# The kernel build replaces versioned package files; depend on its stable stamp.
+TEST_VM_BUNDLE_ARTIFACTS := $(VM_KERNEL_STAMP)
 TEST_VM_BUNDLE_INPUTS := $(sort \
 	$(ROOT)/Makefile $(ROOT)/Makefile.config $(ROOT)/Makefile.shirudo $(ROOT)/Makefile.version $(ROOT)/config.mk \
 	$(ROOT)/testing/Makefile $(ROOT)/packaging/Makefile \
