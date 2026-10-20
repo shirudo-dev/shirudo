@@ -170,8 +170,9 @@ one usually still compiles and passes tests.
 - **No target subprocesses, no daemons.** Target operations in the core
   `shirudo` binary use linked libraries and kernel APIs. Operator commands
   dispatch to the separate `shirudo-build` helper. That helper signs
-  in-process, executes `clang` for BPF compilation and executes the standard
-  `veritysetup` tool for image formatting and offline verification. Those
+  in-process, executes `clang` for BPF compilation and delegates image
+  generation to Bash scripts using standard `veritysetup`. Offline verification
+  authenticates the root in the helper before invoking `veritysetup verify`. Those
   external tools are operator-only dependencies. Target image preflight
   checks the standard verity superblock and root. The kernel verifies config
   signatures through its dm-verity trust path; runtime acceptance requires

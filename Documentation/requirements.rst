@@ -318,6 +318,7 @@ since the libguestfs appliance resolves names through DNS alone.
   committed), so neither a submodule nor bpftool is needed.  ``make
   bpf-deps`` refreshes the vendored copy from a kernel tree on
   demand.
+* Bash and GNU coreutils for operator image generation.
 * ``veritysetup`` for image formatting and offline verification, provided
   by ``cryptsetup-bin`` on Debian/Ubuntu or ``cryptsetup`` on Fedora/RHEL.
   Directory-to-image generators additionally require ``mkfs.ext4`` from

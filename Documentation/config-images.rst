@@ -122,7 +122,8 @@ separate object and payload protections.
 3) Build and verify images
 --------------------------
 
-Run image generation on the operator. It requires ``mkfs.ext4`` from
+Run image generation on the operator. The Bash scripts require GNU coreutils,
+``mkfs.ext4`` from
 ``e2fsprogs``, the standard ``veritysetup`` executable (``cryptsetup-bin``
 on Debian/Ubuntu, ``cryptsetup`` on Fedora/RHEL) and the operator-only
 build helper::
@@ -154,12 +155,17 @@ Generate the runtime image with its library closure and public assets::
 Use a trusted native input binary: the operator's library inspection runs
 its ELF interpreter. Never put private keys in either image.
 
-The helper runs standard ``veritysetup format`` with format version 1,
+The Bash builder runs standard ``veritysetup format`` with format version 1,
 SHA-256, 4096-byte data and hash blocks and a 32-byte salt. The standard
 superblock starts at offset zero and the hash tree starts at block one.
-It signs the root's exact ASCII representation. ``--kind config|runtime``
+The C helper signs the root's exact ASCII representation. ``--kind config|runtime``
 is a packaging hint, not a signed format field or an authority decision.
 Shirudo has no custom hash-tree builder.
+The scripts share argument and output checks in ``common.sh`` and keep the
+systemd service template in a separate file. ``make install-operator`` installs
+them under ``libexec/shirudo/gen-image/``. Generation happens in a temporary
+directory beside the requested output. The builder verifies the image before
+publishing any files and refuses to replace existing output files.
 
 
 Verify a staged bundle offline on the operator without activating it::

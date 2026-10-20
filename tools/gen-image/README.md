@@ -1,14 +1,25 @@
 # Building Shirudo images
 
-`shirudo-gen-image` runs on the operator. It uses `mkfs.ext4` from
-`e2fsprogs`, then calls the operator-only `shirudo-build` helper to construct
-and sign the dm-verity tree. The helper invokes `veritysetup format` from
-`cryptsetup-bin` (Debian/Ubuntu) or `cryptsetup` (Fedora/RHEL), and the
-generator verifies the result with `veritysetup verify`. Targets use kernel
-APIs and do not need these programs. Offline `shirudo image verify` also
-requires the operator helper and `veritysetup`; it checks the signed
-root signature and exact file sizes before verifying the retained data and
-hash files.
+The operator scripts use Bash and standard Linux tools:
+
+* `shirudo-gen-image` builds an ext4 filesystem from a source directory.
+* `shirudo-gen-runtime` collects the trusted binary, libraries and public assets,
+  then calls `shirudo-gen-image`.
+* `shirudo-gen-verity` copies a prepared filesystem image, runs `veritysetup
+  format`, asks `shirudo-build` to sign the root, and verifies the result before
+  publishing the four output files. `shirudo image build` uses this script too.
+* `common.sh` holds shared argument and output checks.
+
+Install `mkfs.ext4` from `e2fsprogs` and `veritysetup` from `cryptsetup-bin`
+(Debian/Ubuntu) or `cryptsetup` (Fedora/RHEL). The scripts use GNU coreutils.
+`make install-operator` installs the scripts beside the operator helper under
+`libexec/shirudo/gen-image/`.
+
+Signing stays in the operator-only C helper and reuses Shirudo's ML-DSA-87 CMS
+implementation. Offline `shirudo image verify` checks the signed root and exact
+file sizes, then runs `veritysetup verify` on the retained data and hash files.
+Target operations keep the C metadata reader and use kernel APIs. They need
+none of these external tools.
 
 The source directory becomes the image root. A config source contains
 `etc/shirudo/` and additional `keys/trusted/` and `keys/revoked/` directories;
@@ -68,7 +79,7 @@ BPF certificate is `keys/cert.der` inside the image. Runtime images have no
 shell or debugger unless the operator explicitly supplies one.
 
 The generated service content is kept in `runtime-service.conf.in` beside
-the scripts. Keep that template with the scripts when copying this directory.
+the scripts. Keep that template and `common.sh` with the scripts when copying this directory.
 The generator substitutes only the interpreter and library paths.
 
 Pass `--unit-output runtime-service.conf` to generate a systemd drop-in for
