@@ -194,6 +194,7 @@ UTIL_SRCS := \
     util/kernel_release.c \
     util/config.c \
     util/config_image.c \
+    util/dm_verity.c \
     util/bpm_source_config.c \
     util/eventlog.c \
     util/json.c \

@@ -6,6 +6,7 @@
  */
 
 #include <errno.h>
+#include <limits.h>
 #include <fcntl.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -329,7 +330,66 @@ key_serial_t keyring_bpf_add_cert(const __u8 *cert,
 int keyring_bpf_seal(void)
 {
 	/* No restriction type: the keyring rejects every further link. */
-	if (sys_keyctl(KEYCTL_RESTRICT_KEYRING, KEY_SPEC_BPF_KEYRING, 0, 0, 0) < 0)
+	if (sys_keyctl(KEYCTL_RESTRICT_KEYRING, KEY_SPEC_BPF_KEYRING,
+		       0, 0, 0) < 0)
+		return -errno;
+	return 0;
+}
+
+/* The kernel ring is unpossessed; discover it only during trusted boot. */
+key_serial_t shirudo_keyring_dm_verity_serial(void)
+{
+	static const char expected[] = "keyring;0;0;082f0000;.dm-verity";
+	char line[1024], flags[8], expiry[32], type[32], name[64];
+	__u32 serial, usage, permissions, uid, gid;
+	key_serial_t found = -ENOKEY;
+	char description[128];
+	FILE *file;
+	int rc;
+
+	file = fopen("/proc/keys", "re");
+	if (!file)
+		return -errno;
+	while (fgets(line, sizeof(line), file)) {
+		if (sscanf(line, "%x %7s %u %31s %x %u %u %31s %63s",
+			   &serial, flags, &usage, expiry, &permissions,
+			   &uid, &gid, type, name) != 9)
+			continue;
+		if (!serial || serial > INT_MAX || uid || gid ||
+		    permissions != 0x082f0000 || strchr(flags, 'Q') ||
+		    strcmp(type, "keyring") || strcmp(name, ".dm-verity:"))
+			continue;
+		rc = describe_key(serial, description, sizeof(description));
+		if (rc || strcmp(description, expected))
+			continue;
+		if (found >= 0) {
+			found = -EEXIST;
+			break;
+		}
+		found = serial;
+	}
+	if (ferror(file))
+		found = -EIO;
+	fclose(file);
+	return found;
+}
+
+key_serial_t shirudo_keyring_dm_verity_add_cert(const __u8 *cert,
+						size_t cert_len)
+{
+	key_serial_t ring = shirudo_keyring_dm_verity_serial();
+
+	return ring < 0 ? ring : keyring_add_cert(ring, cert, cert_len);
+}
+
+int shirudo_keyring_dm_verity_seal(void)
+{
+	key_serial_t ring = shirudo_keyring_dm_verity_serial();
+
+	if (ring < 0)
+		return ring;
+	/* No restriction type: reject every subsequent addition. */
+	if (sys_keyctl(KEYCTL_RESTRICT_KEYRING, ring, 0, 0, 0) < 0)
 		return -errno;
 	return 0;
 }
