@@ -17,8 +17,13 @@ FIXTURES=$SHIRUDO_TEST_FIXTURES_DIR
 [ -s "$ARCHIVE" ] || test_skip_all "no archived basic upatch"
 before=$(sha256sum "$CERT" | cut -d' ' -f1)
 archive_before=$(sha256sum "$ARCHIVE" | cut -d' ' -f1)
-WORK=$(mktemp -d)
-replacement=/var/lib/shirudo/upatches/.t1101-replacement.$$
+WORK=$(mktemp -d /root/.t1101.XXXXXX) ||
+	test_skip_all "cannot make a scratch directory"
+[ "$(stat -c %d "$WORK")" = "$(stat -c %d "$ARCHIVE")" ] || {
+	rm -rf "$WORK"
+	test_skip_all "no unlabelled scratch directory on the archive filesystem"
+}
+replacement="$WORK/replacement"
 trap 'rm -f "$replacement"; rm -rf "$WORK"' EXIT
 
 test_expect_success 'seal denies a non-shirudo write to a labelled file' '

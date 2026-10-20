@@ -5,44 +5,52 @@
 # t1133 -- labelling at creation (bpf/seal.c inode_init_security): an
 # inode created under a labelled directory the seal has seen is born
 # with the label, whoever creates it, and is sealed from that instant.
-# The probes are made under /var/lib/shirudo/locks, which nothing
-# enumerates, and stay there: a sealed inode cannot be removed by the
-# test. Non-destructive otherwise.
+# Per-run probes live directly under /var/lib/shirudo and stay there:
+# sealed inodes cannot be removed by the test. Non-destructive otherwise.
 
 cd "$(dirname "$0")/.."
 . ./integration-lib.sh
 target_guard
 
 LABEL=94442b45cfcdc59aabc2a91364ed2ae129418e05a5c1985231b9c032e673f469
-LOCKS=/var/lib/shirudo/locks
+LOCKS=/var/lib/shirudo/locks.t1133.$(cat /proc/sys/kernel/random/uuid)
 [ -e /run/shirudo/bpffs/seal_inode_init_security_link ] ||
 	test_skip_all "the seal does not label at creation on this target"
 
 label_of() {
 	python3 -c '
-import os, sys
+import errno, os, sys
 try:
     print(os.getxattr(sys.argv[1], "security.bpf.shirudo",
                       follow_symlinks=False).decode())
-except OSError:
-    print("none")' "$1"
+except OSError as e:
+    print("unsupported" if e.errno == errno.EOPNOTSUPP else "none")' "$1"
 }
 
-test_expect_success 'the run directory carries the label' '
-	[ "$(label_of /run/shirudo)" = "$LABEL" ]
-'
+RUN_LABEL=$(label_of /run/shirudo)
+if [ "$RUN_LABEL" = unsupported ]; then
+	echo "# SKIP /run does not support security xattrs"
+else
+	test_expect_success 'the run directory carries the label' '
+		[ "$(label_of /run/shirudo)" = "$LABEL" ]
+	'
+fi
 
-# Opening the directory is what marks it; the walk at init did, and so
-# does this, in case the inode was evicted since. The create succeeds
-# and the write open that follows it in the same call is what the seal
-# refuses, so the shell's status is not looked at.
+# Opening the directory records its label for inode_init_security.
+# The write open is expected to fail after inode creation; test it in
+# a child shell so set -e does not skip the xattr assertion.
 test_expect_success 'a file root creates under a sealed directory is born labelled' '
 	ls /var/lib/shirudo >/dev/null &&
 	mkdir -p "$LOCKS" &&
 	ls "$LOCKS" >/dev/null &&
-	{ : > "$LOCKS/t1133.probe"; } 2>/dev/null;
-	[ -e "$LOCKS/t1133.probe" ] &&
-	[ "$(label_of "$LOCKS/t1133.probe")" = "$LABEL" ]
+	if ( : > "$LOCKS/t1133.probe" ) 2>/dev/null; then
+		:
+	fi
+	label=$(label_of "$LOCKS/t1133.probe")
+	[ -e "$LOCKS/t1133.probe" ] && [ "$label" = "$LABEL" ] || {
+		echo "probe label: $label; directory label: $(label_of "$LOCKS")" >&2
+		false
+	}
 '
 
 test_expect_success 'and is sealed from that instant: no write, unlink or rename' '
@@ -71,7 +79,7 @@ test_expect_success 'an O_TMPFILE under the tree cannot be opened for writing' '
 '
 
 test_expect_success 'a file created outside the tree stays unlabelled' '
-	f=$(mktemp) &&
+	f=$(mktemp /root/t1133.XXXXXX) &&
 	[ "$(label_of "$f")" = none ] &&
 	rm -f "$f"
 '

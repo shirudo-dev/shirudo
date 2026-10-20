@@ -28,7 +28,9 @@ try:
     os.close(fd)
 except OSError:
     pass' "$W/fifo" 2>/dev/null
-	[ -n "$PID" ] && wait "$PID" 2>/dev/null
+	if [ -n "$PID" ]; then
+		wait "$PID" 2>/dev/null || :
+	fi
 	rm -rf "$W"
 }
 trap cleanup EXIT
