@@ -552,13 +552,32 @@ build/verity-tests/shirudo-policy-probe: \
 	    -Iinclude -D_GNU_SOURCE -static -o $@ $<
 
 
-verity-test-helpers: $(VERITY_TEST_HELPERS)
+ifeq ($(PROFILE),target)
+VERITY_TEST_LIBS := $(TARGET_TLS_STATIC_LINK_LIBS) \
+		    $(TARGET_STATIC_RUNTIME_LINK_LIBS) \
+		    -Wl,-Bdynamic $(TARGET_TLS_DYNAMIC_LINK_LIBS)
+else
+VERITY_TEST_LIBS := $(DYNAMIC_LIBS)
+endif
+
+build/verity-tests/shirudo-image-fault: testing/helper/image-fault.c \
+		testing/helper/image-fault.h \
+		$(MAIN_OBJ) $(BUILTIN_OBJS) $(UTIL_OBJS) $(VERSION_OBJ) $(LIBBPF_A)
+	@printf '  CC      $@\n'
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) $(RPATH_LDFLAGS) -o $@ \
+		$(filter-out %.h,$^) \
+		-Wl,--wrap=main,--wrap=Esys_PCR_Extend \
+		$(STATIC_LIBS) $(VERITY_TEST_LIBS)
+
+verity-test-helpers: $(VERITY_TEST_HELPERS) build/verity-tests/shirudo-image-fault
 
 # Compiled test helpers (also usable as fuzz entry points).
 TEST_HELPERS := $(VERITY_TEST_HELPERS) \
                 testing/helper/test-image-cli \
                 testing/helper/test-image-config \
                 testing/helper/test-config-image \
+                testing/helper/test-config-update \
                 testing/helper/test-image-keys \
                 testing/helper/test-json-parser \
                 testing/helper/test-string \
@@ -742,6 +761,11 @@ testing/helper/test-config-image: testing/helper/test-config-image.c \
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^ -lcrypto -lssl
 
+testing/helper/test-config-update: testing/helper/test-config-update.c \
+		util/config_update.o util/config_measure.o util/config_image.o \
+		$(REGISTER_OBJS)
+	@printf '  CC      $@\n'
+	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(REGISTER_LIBS)
 
 
 testing/helper/test-image-keys: testing/helper/test-image-keys.c \

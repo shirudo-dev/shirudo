@@ -56,4 +56,16 @@ test_expect_success 'kernel rejects a modified root or detached root signature' 
 	python3 tamperproof/t1154-verity-config.py corrupt-signature "$work"
 '
 
+test_expect_success 'live CONFIG A to B extends PCR once and replaces config' '
+	python3 tamperproof/t1154-verity-config.py update "$work"
+'
+
+test_expect_success 'malformed signed revocation leaves PCR, active mapping and journal unchanged' '
+	python3 tamperproof/t1154-verity-config.py malformed "$work"
+'
+
+test_expect_success 'requesting current CONFIG B is a measured-state no-op' '
+	python3 tamperproof/t1154-verity-config.py repeat "$work"
+'
+
 test_done

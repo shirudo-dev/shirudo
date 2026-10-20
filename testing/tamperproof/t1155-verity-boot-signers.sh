@@ -42,4 +42,12 @@ test_expect_success 'boot enrolls the vouched signer and measures its signed CON
 	python3 tamperproof/t1155-verity-boot-signers.py initial "$work"
 '
 
+test_expect_success 'a signed CONFIG needing a new live signer refuses before changes' '
+	python3 tamperproof/t1155-verity-boot-signers.py new-signer "$work"
+'
+
+test_expect_success 'the current CONFIG with two boot-enrolled signers is a no-op' '
+	python3 tamperproof/t1155-verity-boot-signers.py repeat "$work"
+'
+
 test_done

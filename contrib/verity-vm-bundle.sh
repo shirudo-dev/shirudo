@@ -25,6 +25,7 @@ EOF
 	--config-cert "$keys/cert.der" --output "$bundle/verity/runtime" \
 	--keys-dir "$keys" --builder "$source_dir/tools/shirudo-build/shirudo-build" \
 	--extra-binary "$source_dir/build/verity-tests/shirudo-policy-probe" \
+	--extra-binary "$source_dir/build/verity-tests/shirudo-image-fault" \
 	--unit-output "$bundle/verity/runtime-service.conf" \
 	>"$bundle/verity/runtime.root"
 printf 'runtime.image = /var/lib/shirudo/images/runtime\nruntime.root_hash = %s\n' \

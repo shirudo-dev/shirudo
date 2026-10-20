@@ -45,6 +45,12 @@ for t in \
 	t1108-tpm-chain.sh \
 	t1111-upatch-get.sh \
 	t1114-uprobe-multi.sh \
+	t1118-bpm-tree.sh \
+	t1119-bpm-tree-sequential.sh \
+	t1120-bpm-tree-delete.sh \
+	otel/t1115-map-export-all.sh \
+	otel/t1116-otel-backend.sh \
+	otel/t1117-otel-serialized-metric.sh \
 	tamperproof/t1110-lsm-deny.sh \
 	tamperproof/t1112-prog-load-keyring-gate.sh \
 	tamperproof/t1113-mount-lockdown.sh \
@@ -59,7 +65,10 @@ for t in \
 	tamperproof/t1150-verity-devices.sh \
 	tamperproof/t1151-verity-process.sh \
 	tamperproof/t1153-verity-hidden.sh \
-	tamperproof/t1157-verity-cli.sh
+	tamperproof/t1154-verity-config.sh \
+	tamperproof/t1157-verity-cli.sh \
+	tamperproof/t1156-verity-revocation.sh \
+	tamperproof/t1158-verity-interruption.sh
 do
 	log="$SHIRUDO_TEST_RESULTS/$(basename "$t").log"
 	rc=0

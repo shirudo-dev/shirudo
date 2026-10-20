@@ -46,6 +46,7 @@
 /testing/helper/*
 /testing/upatch/kernel-obs/exec/exec-paths
 !/testing/helper/*.c
+!/testing/helper/*.h
 !/testing/helper/otel-mock.py
 !/testing/helper/otel-s3-mock.py
 !/testing/helper/test-bpm-key.py

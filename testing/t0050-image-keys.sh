@@ -128,4 +128,29 @@ test_expect_success 'malformed additional certificates fail before mutation' '
 	invalid bad-trusted
 '
 
+test_expect_success 'a live config with a new signer fails before PCR measurement or activation' '
+	fresh new-live && vouch new-live b "$fp_b" a &&
+	mkdir -m 700 "$W/new-journal" &&
+	! "$H" "$W/a/cert.der" "$W/new-live" "$W/new-journal" \
+		"$W/a/cert.der" >"$W/result" &&
+	grep -q "extends=0 activations=0" "$W/result" &&
+	grep -q "rc=-126 mutations=0" "$W/result"
+'
+
+test_expect_success 'a live config using boot-enrolled signers measures and activates' '
+	mkdir -m 700 "$W/existing-journal" &&
+	"$H" "$W/a/cert.der" "$W/new-live" "$W/existing-journal" \
+		"$W/a/cert.der" "$W/b/cert.der" >"$W/result" &&
+	grep -q "extends=1 activations=1" "$W/result" &&
+	grep -q "rc=0 mutations=0" "$W/result"
+'
+
+test_expect_success 'an interrupted enrolled-key config refuses same-boot completion' '
+	mkdir -m 700 "$W/pending-journal" &&
+	! SHIRUDO_TEST_IMAGE_INTERRUPT=1 "$H" "$W/a/cert.der" "$W/new-live" \
+		"$W/pending-journal" "$W/a/cert.der" "$W/b/cert.der" >"$W/result" &&
+	grep -q "extends=1 activations=1" "$W/result" &&
+	grep -q "rc=-5 mutations=0" "$W/result"
+'
+
 test_done
