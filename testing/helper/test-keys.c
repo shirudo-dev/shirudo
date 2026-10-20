@@ -7,6 +7,7 @@
  * signer. Subcommand on argv[1]; prints what a shell test asserts on.
  */
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +33,8 @@ int main(int argc, char **argv)
 	int rc;
 
 	if (argc < 3) {
-		fprintf(stderr, "usage: %s load|digest <keys-dir> [primary]"
+		fprintf(stderr, "usage: %s load|digest|reject <keys-dir>"
+			" [primary]"
 			" | signer <upatch> <cert.der>\n", argv[0]);
 		return 2;
 	}
@@ -57,6 +59,8 @@ int main(int argc, char **argv)
 	}
 	rc = shirudo_keys_load(argv[2], NULL,
 			       argc < 4 || strcmp(argv[3], "primary"), &set);
+	if (!strcmp(argv[1], "reject"))
+		return rc == -EINVAL ? 0 : 1;
 	if (rc) {
 		printf("rc=%d\n", rc);
 		return 1;

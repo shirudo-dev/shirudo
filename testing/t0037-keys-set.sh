@@ -62,4 +62,15 @@ test_expect_success 'a revoked certificate is left out of the set' '
 	! grep -q "$fp_c" "$W/set2"
 '
 
+test_expect_success 'malformed trusted certificates are rejected before or after valid candidates' '
+	mkdir -p "$W/malformed/trusted" &&
+	cp "$W/a/cert.der" "$W/malformed/cert.der" &&
+	cp "$W/b/cert.der" "$W/malformed/trusted/middle.der" &&
+	printf "invalid DER" >"$W/malformed/trusted/first.der" &&
+	./$H reject "$W/malformed" &&
+	mv "$W/malformed/trusted/first.der" "$W/malformed/trusted/last.der" &&
+	mv "$W/malformed/trusted/middle.der" "$W/malformed/trusted/first.der" &&
+	./$H reject "$W/malformed"
+'
+
 test_done
