@@ -3,17 +3,20 @@
 # Copyright (c) 2026 Authors of shirudo
 #
 # .github/scripts/vm-toolchain.sh -- prepare the LVH guest a workflow builds
-# in: check that its kernel takes signed BPF, install the build
-# dependencies and build an OpenSSL 3.5 toolchain, since the
-# distribution's predates ML-DSA. The environment the build then needs
-# is written to build/vm-toolchain.env for the caller to source.
+# in, or the runner itself: check that the kernel the BPF objects are
+# built for takes signed BPF, install the build dependencies and build an
+# OpenSSL 3.5 toolchain, since the distribution's predates ML-DSA. The
+# environment the build then needs is written to build/vm-toolchain.env
+# for the caller to source.
 #
 #   .github/scripts/vm-toolchain.sh [<apt package>...]
 #
 # Packages beyond the build dependencies, a sanitizer runtime for
-# instance, go on the command line. Runs as root in the guest, from any
-# directory; git is not available until it has been installed, so the
-# checkout is found from the script's own path.
+# instance, go on the command line. The kernel is the running one unless
+# BPF_VMLINUX_BTF names the BTF of another, as on a runner that builds for
+# the test VM. Runs as root, from any directory; git is not available
+# until it has been installed, so the checkout is found from the script's
+# own path.
 
 set -eu
 
@@ -23,8 +26,9 @@ OPENSSL_PREFIX=/tmp/shirudo-openssl
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 
-grep -aq 'signature_size' /sys/kernel/btf/vmlinux || {
-	echo 'kernel BTF lacks bpf_attr.signature_size; needs a signed-BPF capable bpf-next kernel' >&2
+btf=${BPF_VMLINUX_BTF:-/sys/kernel/btf/vmlinux}
+grep -aq 'signature_size' "$btf" || {
+	echo "$btf lacks bpf_attr.signature_size; needs a signed-BPF capable bpf-next kernel" >&2
 	exit 1
 }
 
