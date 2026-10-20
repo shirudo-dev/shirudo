@@ -193,6 +193,8 @@ UTIL_SRCS := \
     util/kernel_build_id.c \
     util/kernel_release.c \
     util/config.c \
+    util/image_bootstrap.c \
+    util/image_cache.c \
     util/image_config.c \
     util/image_runtime.c \
     util/image_guards.c \

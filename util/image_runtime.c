@@ -32,6 +32,8 @@
 #include "dm_verity.h"
 #include "hex.h"
 #include "identity.h"
+#include "image_bootstrap.h"
+#include "image_cache.h"
 #include "image_config.h"
 #include "image_guards.h"
 #include "image_runtime.h"
@@ -47,16 +49,6 @@
 #include "shirudo_mode.h"
 #include "tpm.h"
 
-struct image_bootstrap {
-	char runtime[PATH_MAX];
-	char config[PATH_MAX];
-	char certificate[PATH_MAX];
-	__u8 runtime_root[32];
-	__u32 pcr;
-	bool have_root;
-	bool have_pcr;
-};
-
 struct image_context {
 	struct shirudo_config_update_target boot_target;
 	struct shirudo_dm_verity boot_runtime;
@@ -64,7 +56,7 @@ struct image_context {
 	struct shirudo_config_image_open candidate;
 	struct shirudo_dm_verity candidate_device;
 	struct shirudo_config bootstrap_config;
-	struct image_bootstrap bootstrap;
+	struct shirudo_image_bootstrap bootstrap;
 	struct shirudo_tpm *tpm;
 	int candidate_fd;
 	int certificate_fd;
@@ -90,102 +82,6 @@ static int current_config(void);
 struct shirudo_config_update *shirudo_image_update_context(void)
 {
 	return image.locked ? &image.update : NULL;
-}
-
-static bool absolute_path(const char *path)
-{
-	return path && path[0] == '/' && !strstr(path, "/../") &&
-	       !strstr(path, "/./") && !strstr(path, "//") &&
-	       strcmp(path, "/") &&
-	       (strlen(path) < 3 || strcmp(path + strlen(path) - 3, "/.."));
-}
-
-static char *trim(char *text)
-{
-	char *end;
-
-	while (*text == ' ' || *text == '\t')
-		text++;
-	end = text + strlen(text);
-	while (end > text && (end[-1] == '\n' || end[-1] == '\r' ||
-			      end[-1] == ' ' || end[-1] == '\t'))
-		*--end = 0;
-	return text;
-}
-
-static int load_bootstrap(const char *path, bool initial)
-{
-	struct image_bootstrap *boot = &image.bootstrap;
-	char line[PATH_MAX + 128];
-	FILE *file;
-	int rc = 0;
-
-	file = fopen(path, "re");
-	if (!file)
-		return -errno;
-	while (fgets(line, sizeof(line), file)) {
-		char *key, *value;
-
-		if (!strchr(line, '\n') && !feof(file)) {
-			rc = -E2BIG;
-			break;
-		}
-		key = trim(line);
-		if (!*key || *key == '#')
-			continue;
-		value = strchr(key, '=');
-		if (!value) {
-			rc = -EINVAL;
-			break;
-		}
-		*value++ = 0;
-		key = trim(key);
-		value = trim(value);
-		if (!strcmp(key, "runtime.root_hash")) {
-			if (!initial || boot->have_root ||
-			    hex_decode(value, boot->runtime_root, 32)) {
-				rc = -EINVAL;
-				break;
-			}
-			boot->have_root = true;
-		} else if (!strcmp(key, "runtime.image") && initial) {
-			if (!absolute_path(value) || boot->runtime[0])
-				rc = -EINVAL;
-			else
-				strscpy(boot->runtime, value, sizeof(boot->runtime));
-		} else if (!strcmp(key, "config.image")) {
-			if (!absolute_path(value))
-				rc = -EINVAL;
-			else
-				strscpy(boot->config, value, sizeof(boot->config));
-		} else if (!strcmp(key, "config.verification_key")) {
-			if (strncmp(value, SHIRUDO_RUNTIME_DIR "/",
-				    sizeof(SHIRUDO_RUNTIME_DIR)) ||
-			    !absolute_path(value))
-				rc = -EPERM;
-			else
-				strscpy(boot->certificate, value, sizeof(boot->certificate));
-		} else if (!strcmp(key, "config.pcr")) {
-			__u64 pcr;
-
-			if (parse_u64(value, strlen(value), 23, &pcr) ||
-			    shirudo_config_measure_pcr_valid(pcr)) {
-				rc = -EINVAL;
-			} else {
-				boot->pcr = pcr;
-				boot->have_pcr = true;
-			}
-		} else if (!strncmp(key, "config.", 7) ||
-			   !strncmp(key, "runtime.", 8)) {
-			rc = -EINVAL;
-		}
-		if (rc)
-			break;
-	}
-	if (ferror(file) && !rc)
-		rc = -EIO;
-	fclose(file);
-	return rc;
 }
 
 static int reject_overrides(void)
@@ -232,7 +128,8 @@ int shirudo_image_bootstrap_load(void)
 		image.bootstrap.have_root = true;
 		rc = load_runtime_config();
 	} else {
-		rc = load_bootstrap(SHIRUDO_CONF_PATH, true);
+		rc = shirudo_image_bootstrap_read(SHIRUDO_CONF_PATH,
+						  &image.bootstrap, true);
 		if (rc == -ENOENT)
 			return 0;
 		if (!rc && !image.bootstrap.runtime[0] &&
@@ -380,7 +277,9 @@ static int load_runtime_config(void)
 			rc = -EPERM;
 		snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
 		if (!rc)
-			rc = load_bootstrap(path, false);
+			rc = shirudo_image_bootstrap_read(path,
+							  &image.bootstrap,
+							  false);
 		if (!rc)
 			rc = config_load_path(&image.bootstrap_config,
 					      path);
@@ -603,7 +502,7 @@ static int prepare(void *ctx, const struct shirudo_config_update_target *target)
 		collect_mappings();
 	if (strncmp(target->prefix, SHIRUDO_IMAGE_CACHE_DIR "/",
 		    sizeof(SHIRUDO_IMAGE_CACHE_DIR)) ||
-	    !absolute_path(target->prefix))
+	    !shirudo_image_path_valid(target->prefix))
 		return -EPERM;
 	rc = shirudo_config_image_open(target->prefix, &current->candidate);
 	if (rc)
@@ -1039,220 +938,6 @@ void shirudo_image_leave(void)
 	explicit_bzero(&image.bootstrap_config, sizeof(image.bootstrap_config));
 }
 
-struct image_download {
-	int fd;
-	__u64 limit;
-	__u64 written;
-};
-
-static size_t download_write(char *data, size_t size, size_t count, void *ctx)
-{
-	struct image_download *download = ctx;
-	size_t bytes;
-
-	if (size && count > SIZE_MAX / size)
-		return 0;
-	bytes = size * count;
-	if (bytes > download->limit - download->written ||
-	    write_complete(download->fd, data, bytes))
-		return 0;
-	download->written += bytes;
-	return bytes;
-}
-
-static int copy_file(const char *source, const char *destination, __u64 max)
-{
-	struct image_download download;
-	CURL *curl = NULL;
-	char buffer[65536];
-	CURLcode result;
-	struct stat st;
-	ssize_t n;
-	int input = -1, output, rc = 0;
-
-	output = open(destination,
-		      O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW,
-		      0600);
-	if (output < 0)
-		return -errno;
-	rc = seal_fd(NULL, output);
-	download = (struct image_download){ .fd = output, .limit = max };
-	if (rc)
-		goto out;
-	if (!strncmp(source, "https://", 8)) {
-		curl = curl_easy_init();
-		if (!curl) {
-			rc = -ENOMEM;
-			goto out;
-		}
-		rc = tls_curl_policy(curl, NULL);
-		if (rc)
-			goto out;
-		curl_easy_setopt(curl, CURLOPT_URL, source);
-		curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
-		curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
-		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-		curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
-		curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-		curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L);
-		curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
-		curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L);
-		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, download_write);
-		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &download);
-		result = curl_easy_perform(curl);
-		if (result != CURLE_OK)
-			rc = -EIO;
-	} else {
-		input = open(source, O_RDONLY | O_CLOEXEC | O_NOFOLLOW |
-			     O_NONBLOCK);
-		if (input < 0) {
-			rc = -errno;
-			goto out;
-		}
-		if (fstat(input, &st)) {
-			rc = -errno;
-			goto out;
-		}
-		if (!S_ISREG(st.st_mode) || st.st_size < 0 ||
-		    (__u64)st.st_size > max) {
-			rc = -EINVAL;
-			goto out;
-		}
-		while ((n = read(input, buffer, sizeof(buffer))) != 0) {
-			if (n < 0) {
-				if (errno == EINTR)
-					continue;
-				rc = -errno;
-				break;
-			}
-			if (download_write(buffer, 1, n, &download) !=
-			    (size_t)n) {
-				rc = -EFBIG;
-				break;
-			}
-		}
-	}
-	if (!rc && fsync(output))
-		rc = -errno;
-out:
-	if (curl)
-		curl_easy_cleanup(curl);
-	if (input >= 0)
-		close(input);
-	close(output);
-	return rc;
-}
-
-/* Verify downloads before publishing their root-hash-named cache files. */
-static int verify_incoming(const struct shirudo_config_image_open *opened,
-			   const char *staging)
-{
-	struct shirudo_dm_verity device = {
-		.data_loop_fd = -1,
-		.hash_loop_fd = -1,
-	};
-	int rc, cleanup;
-	char name[128];
-
-	snprintf(name, sizeof(name), "shirudo-verify-%s",
-		 strrchr(staging, '/') + 1);
-	rc = shirudo_dm_verity_create(opened, name, &device);
-	if (rc)
-		return rc;
-	rc = shirudo_dm_verity_verify(&device, opened);
-	cleanup = shirudo_dm_verity_remove(&device, true);
-	if (cleanup)
-		pr_warn("image: cannot remove incoming mapping: %s",
-			strerror(-cleanup));
-	shirudo_dm_verity_close(&device);
-	return rc ? rc : cleanup;
-}
-
-static int cache_image(const char *source,
-		       struct shirudo_config_update_target *target)
-{
-	static const char *const extensions[] = {
-		".roothash",
-		".p7s",
-		".img",
-		".verity",
-	};
-	struct shirudo_config_image_open opened;
-	char staging[] = SHIRUDO_IMAGE_CACHE_DIR "/incoming-XXXXXX";
-	char incoming[PATH_MAX], from[PATH_MAX], to[PATH_MAX];
-	char hex[65];
-	int dir = -1, rc;
-	size_t i;
-
-	rc = mkdir_owned(SHIRUDO_IMAGE_CACHE_DIR);
-	if (rc)
-		return rc;
-	if (!mkdtemp(staging))
-		return -errno;
-	rc = seal_label(staging);
-	if (rc)
-		goto out;
-	snprintf(incoming, sizeof(incoming), "%s/image", staging);
-	for (i = 0; i < ARRAY_SIZE(extensions); i++) {
-		__u64 max = i == 0 ? 65 :
-			       i == 1 ? SHIRUDO_CONFIG_IMAGE_SIG_MAX :
-					SHIRUDO_CONFIG_IMAGE_MAX_BYTES;
-
-		if (snprintf(from, sizeof(from), "%s%s", source,
-			     extensions[i]) >= (int)sizeof(from) ||
-		    snprintf(to, sizeof(to), "%s%s", incoming, extensions[i]) >=
-			    (int)sizeof(to)) {
-			rc = -ENAMETOOLONG;
-			goto out;
-		}
-		rc = copy_file(from, to, max);
-		if (rc)
-			goto out;
-	}
-	rc = shirudo_config_image_open(incoming, &opened);
-	if (rc)
-		goto out;
-	rc = verify_incoming(&opened, staging);
-	if (!rc) {
-		memcpy(target->root_hash, opened.image.root_hash, 32);
-		hex_encode(target->root_hash, 32, hex);
-		snprintf(target->prefix, sizeof(target->prefix), "%s/%s",
-			 SHIRUDO_IMAGE_CACHE_DIR, hex);
-	}
-	shirudo_config_image_close(&opened);
-	if (rc)
-		goto out;
-	for (i = 0; i < ARRAY_SIZE(extensions); i++) {
-		snprintf(from, sizeof(from), "%s%s", incoming, extensions[i]);
-		snprintf(to, sizeof(to), "%s%s", target->prefix, extensions[i]);
-		if (link(from, to) && errno != EEXIST) {
-			rc = -errno;
-			goto out;
-		}
-	}
-	dir = open(SHIRUDO_IMAGE_CACHE_DIR,
-		   O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
-	if (dir < 0 || fsync(dir)) {
-		rc = -errno;
-		goto out;
-	}
-	rc = shirudo_config_image_open(target->prefix, &opened);
-	if (!rc) {
-		if (memcmp(opened.image.root_hash, target->root_hash, 32))
-			rc = -EKEYREJECTED;
-		shirudo_config_image_close(&opened);
-	}
-out:
-	if (dir >= 0)
-		close(dir);
-	for (i = 0; i < ARRAY_SIZE(extensions); i++) {
-		snprintf(to, sizeof(to), "%s/image%s", staging, extensions[i]);
-		unlink(to);
-	}
-	rmdir(staging);
-	return rc;
-}
-
 int shirudo_image_update(const char *prefix)
 {
 	struct shirudo_config_update_target target = {};
@@ -1262,7 +947,9 @@ int shirudo_image_update(const char *prefix)
 		return -ENODEV;
 	rc = current_config();
 	if (!rc)
-		rc = cache_image(prefix, &target);
+		rc = mkdir_owned(SHIRUDO_IMAGE_CACHE_DIR);
+	if (!rc)
+		rc = shirudo_image_cache_fetch(prefix, &target);
 	if (!rc)
 		rc = shirudo_config_update_begin(&image.update, &target,
 						 image.bootstrap.pcr);
