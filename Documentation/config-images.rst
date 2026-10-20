@@ -197,7 +197,9 @@ initrd first verifies the runtime and selected config to determine the
 boot-enrolled signer set. Image boot requires
 ``dm_verity.keyring_unsealed=1``: the trusted initrd enrolls the config
 verification certificate in the dedicated ``.dm-verity`` keyring and seals
-it before handing control to the host. Built-in kernel trust remains part
+it before handing control to the host. Enrollment and sealing address the
+kernel ring through ``KEY_SPEC_DM_VERITY_KEYRING``; there is no search of
+``/proc/keys`` or fallback to a user-created keyring. Built-in kernel trust remains part
 of config-root verification. The initrd also enrolls and seals the BPF
 keyring, attaches the guards, mounts
 the runtime under guard protection and completes measured config activation.
@@ -354,6 +356,36 @@ config evidence. This remains subject to the direct-writer limitation.
 6) Enforcement and tests
 ------------------------
 
+The binary embeds a separate BPF object pair for each mode. Initialization
+loads only the selected pair; ordinary installations do not load image
+metadata hooks, DM ioctl restrictions or executable-mapping restrictions.
+
+.. list-table:: BPF objects selected at initialization
+   :header-rows: 1
+   :widths: 20 35 45
+
+   * - Mode
+     - Objects
+     - Caller authority
+   * - Ordinary
+     - ``bpf/bpf2.c`` and ``bpf/seal.c``
+     - The executable device/inode recorded at init, or its initrd copy.
+   * - dm-verity
+     - ``bpf/bpf2_verity.c`` and ``bpf/seal_verity.c``
+     - A task mark committed after successful exec from the runtime image.
+
+``bpf/admission.h`` supplies the shared BPF command, signature, keyring and
+bpffs checks. ``bpf/seal.h`` supplies writable-state xattr checks, label
+inheritance, and ptrace/perf checks. The selected policy header determines
+caller authority. Both modes share the same checks without testing the mode
+inside each running BPF program.
+
+The seal label marks a protected target. It never grants the caller write
+access. Ordinary mode labels its executable and state; image mode uses
+dm-verity for executable/config files and labels writable state only.
+Ordinary-mode exec marks protect labelled processes from observation but do
+not authorize BPF operations or file writes.
+
 Image mode marks tasks after successful exec from the approved runtime
 device, inherits the mark on fork and re-evaluates it on every successful
 exec. Exec outside the runtime clears authority. Failed exec preserves
@@ -391,7 +423,7 @@ unmount of a parent mount above the runtime and config images. Legacy ``mount(MS
 the separate `mount-move investigation <https://github.com/shirudo-dev/shirudo/issues/12>`__ records
 the VM result and the same source-check gap in the baseline bpffs policy.
 A changed pathname does not change device-bound executable authority.
-No kernel patches are included.
+No additional LSM hooks are required.
 
 Process-memory protection remains necessary: dm-verity protects backing
 files, not writable mappings, ptrace or process-memory writes. Trusted
@@ -410,8 +442,10 @@ and shared mappings. The `threat model <threat-model.rst>`__ describes these
 current limits; the separate `directory-entry investigation
 <https://github.com/shirudo-dev/shirudo/issues/13>`__ records the earlier baseline.
 
-The dm-verity implementation uses APIs present at bpf-next commit
-``0867b7bfa9de65674c6e599fa21b762b71011b14`` and adds no kernel patches.
+The enforcement hooks are present at bpf-next commit
+``0867b7bfa9de65674c6e599fa21b762b71011b14``. Direct access to the kernel
+``.dm-verity`` keyring additionally requires upstream commit
+``1041fca2ee8a`` (``keys: add KEY_SPEC_DM_VERITY_KEYRING``).
 Shirudo also requires the signed-BPF kernel interfaces listed in
 `requirements <requirements.rst>`__.
 

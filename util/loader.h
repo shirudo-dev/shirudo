@@ -8,7 +8,15 @@
 #ifndef SHIRUDO_LOADER_H
 #define SHIRUDO_LOADER_H
 
+#include <stdbool.h>
 #include <stddef.h>
+
+/* Symbols provided by the embedded object assembly in loader.c. */
+extern const char shirudo_bpf2_o[], shirudo_bpf2_o_end[];
+extern const char shirudo_seal_o[], shirudo_seal_o_end[];
+extern const char shirudo_bpf2_verity_o[], shirudo_bpf2_verity_o_end[];
+extern const char shirudo_seal_verity_o[], shirudo_seal_verity_o_end[];
+extern const char shirudo_unload_bpf_o[], shirudo_unload_bpf_o_end[];
 
 struct shirudo_embedded_bpf {
 	const char	*name;
@@ -16,8 +24,8 @@ struct shirudo_embedded_bpf {
 	size_t		size;
 };
 
-const struct shirudo_embedded_bpf *bpf2_blob(void);
-const struct shirudo_embedded_bpf *seal_blob(void);
+const struct shirudo_embedded_bpf *bpf2_blob(bool image_mode);
+const struct shirudo_embedded_bpf *seal_blob(bool image_mode);
 const struct shirudo_embedded_bpf *unload_blob(void);
 
 #endif /* SHIRUDO_LOADER_H */

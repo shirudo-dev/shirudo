@@ -45,6 +45,10 @@ shirudo_seal_guards[SHIRUDO_SEAL_HOOK_COUNT] = {
 	  SHIRUDO_SEAL_PTRACE_PIN },
 	{ "shirudo_seal_perf_event_alloc",
 	  SHIRUDO_SEAL_PERF_PIN },
+};
+
+const struct shirudo_image_guard
+shirudo_image_seal_guards[SHIRUDO_IMAGE_SEAL_HOOK_COUNT] = {
 	{ "shirudo_seal_mmap_file",
 	  SHIRUDO_BPFFS_DIR "/seal_mmap_link" },
 	{ "shirudo_seal_file_mprotect",
@@ -61,17 +65,21 @@ shirudo_mount_guards[SHIRUDO_MOUNT_HOOK_COUNT] = {
 
 const struct shirudo_image_guard
 shirudo_observer_guards[SHIRUDO_OBSERVER_HOOK_COUNT] = {
-	{ "shirudo_lsm_file_ioctl", SHIRUDO_BPFFS_DIR "/file_ioctl_link" },
 	{ "shirudo_lsm_task_prctl", SHIRUDO_TASK_PRCTL_LINK_PIN },
 	{ "shirudo_lsm_bprm_check_security", SHIRUDO_BPRM_CHECK_LINK_PIN },
-	{ "shirudo_lsm_bdev_setintegrity",
-	  SHIRUDO_BPFFS_DIR "/bdev_integrity_link" },
-	{ "shirudo_lsm_bdev_free_security",
-	  SHIRUDO_BPFFS_DIR "/bdev_free_link" },
 	{ "shirudo_lsm_inode_rmdir",
 	  SHIRUDO_BPFFS_DIR "/inode_rmdir_link" },
 	{ "shirudo_lsm_inode_rename",
 	  SHIRUDO_INODE_RENAME_LINK_PIN },
+};
+
+const struct shirudo_image_guard
+shirudo_image_observer_guards[SHIRUDO_IMAGE_OBSERVER_HOOK_COUNT] = {
+	{ "shirudo_lsm_file_ioctl", SHIRUDO_BPFFS_DIR "/file_ioctl_link" },
+	{ "shirudo_lsm_bdev_setintegrity",
+	  SHIRUDO_BPFFS_DIR "/bdev_integrity_link" },
+	{ "shirudo_lsm_bdev_free_security",
+	  SHIRUDO_BPFFS_DIR "/bdev_free_link" },
 };
 
 const struct shirudo_image_guard
@@ -310,6 +318,14 @@ int shirudo_image_guards_ready(void)
 		{
 			.guards = shirudo_seal_guards,
 			.count = ARRAY_SIZE(shirudo_seal_guards),
+		},
+		{
+			.guards = shirudo_image_seal_guards,
+			.count = ARRAY_SIZE(shirudo_image_seal_guards),
+		},
+		{
+			.guards = shirudo_image_observer_guards,
+			.count = ARRAY_SIZE(shirudo_image_observer_guards),
 		},
 	};
 	__u32 map_ids[SHIRUDO_GUARD_MAP_COUNT] = {};

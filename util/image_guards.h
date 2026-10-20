@@ -8,9 +8,11 @@
 
 #include <stdint.h>
 
-#define SHIRUDO_SEAL_HOOK_COUNT 16
+#define SHIRUDO_SEAL_HOOK_COUNT 14
+#define SHIRUDO_IMAGE_SEAL_HOOK_COUNT 2
 #define SHIRUDO_MOUNT_HOOK_COUNT 4
-#define SHIRUDO_OBSERVER_HOOK_COUNT 7
+#define SHIRUDO_OBSERVER_HOOK_COUNT 4
+#define SHIRUDO_IMAGE_OBSERVER_HOOK_COUNT 3
 
 struct shirudo_image_guard {
 	const char *prog;
@@ -48,6 +50,10 @@ struct shirudo_guard_map {
 
 extern const struct shirudo_image_guard
 	shirudo_seal_guards[SHIRUDO_SEAL_HOOK_COUNT];
+extern const struct shirudo_image_guard
+	shirudo_image_seal_guards[SHIRUDO_IMAGE_SEAL_HOOK_COUNT];
+extern const struct shirudo_image_guard
+	shirudo_image_observer_guards[SHIRUDO_IMAGE_OBSERVER_HOOK_COUNT];
 extern const struct shirudo_image_guard
 	shirudo_mount_guards[SHIRUDO_MOUNT_HOOK_COUNT];
 extern const struct shirudo_image_guard

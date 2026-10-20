@@ -254,7 +254,9 @@ BPF_LIB_HEADERS    := bpf/lib/shirudo_misc.h \
 # .incbin into util/loader.o. bpf/lib/ is include-only.
 BPF_SRCS := \
     bpf/bpf2.c \
+    bpf/bpf2_verity.c \
     bpf/seal.c \
+    bpf/seal_verity.c \
     bpf/unload.c
 
 # shirudo-build is operator-only and links util/sign.c (CMS signer)
@@ -356,7 +358,8 @@ build/target/%.o: %.c Makefile.shirudo $(CONFIG_MK)
 # BPF objects pull vmlinux.h from vendor/linux, <bpf/...> helper headers
 # and UAPI kernel headers from vendor/libbpf, and shirudo's own BPF
 # library headers from bpf/lib.
-bpf/%.bpf.o: bpf/%.c $(VMLINUX_H) $(BPF_LIBBPF_HEADERS)
+bpf/%.bpf.o: bpf/%.c $(VMLINUX_H) $(BPF_LIBBPF_HEADERS) \
+              $(wildcard bpf/*.h bpf/lib/*.h)
 	@printf '  CLANG   $@\n'
 	$(Q)$(CLANG_BPF) -Ibpf/lib -I$(dir $(VMLINUX_H)) -I$(LIBBPF_VENDOR) \
 	    -I$(BPF_UAPI_INCLUDE) \

@@ -213,14 +213,20 @@ below. The opt-in dm-verity mode uses an authenticated executable image
 and committed task authority instead; its differences follow at the end of
 this section and in `config-images <config-images.rst>`__.
 
-Two BPF objects are embedded in the binary: ``bpf/bpf2.c`` guards the
-``bpf()`` syscall and the private bpffs; ``bpf/seal.c`` guards shirudo's
-files and processes. ``shirudo init`` opens these embedded objects and loads
-them with ``bpf_object__load()`` before attaching the BPF admission gates.
-They are bootstrap objects, not signed upatch-loader artifacts. In the
+The binary embeds a pair of BPF objects for each mode. Ordinary mode uses
+``bpf/bpf2.c`` for BPF admission and bpffs protection, and ``bpf/seal.c`` for
+file labels and process protection. Image mode uses ``bpf/bpf2_verity.c``
+and ``bpf/seal_verity.c`` instead. Its objects add verified-device tracking,
+DM ioctl restrictions, runtime exec authority and executable-mapping checks.
+``shirudo init`` opens and loads only the selected pair. The common admission
+and seal programs live in ``bpf/admission.h`` and ``bpf/seal.h``; each mode
+supplies its own caller check through its policy header. Writable state keeps
+the same xattr protection in both modes.
+
+These are bootstrap objects, not signed upatch-loader artifacts. In the
 production boot flow their provenance comes from the authenticated initrd.
 The map-access, ``bpf_prog_load`` and ``bpf`` gates attach last, after the
-bootstrap objects have loaded and their identity maps are frozen. Subsequent
+selected objects have loaded and their identity maps are frozen. Subsequent
 upatch code must enter through the signature-gated loader path.
 Both objects contain BPF LSM programs.  Their verdicts compose with
 SELinux, AppArmor, SMACK and Yama to the most restrictive result, and

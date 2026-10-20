@@ -363,17 +363,23 @@ static void check_embedded_loader(struct shirudo_preflight_result *r)
 {
 	struct shirudo_preflight_check *c =
 		next_slot(r, SHIRUDO_PRE_EMBEDDED_LOADER, "embedded_loader");
-	const struct shirudo_embedded_bpf *bpf2 = bpf2_blob();
-	const struct shirudo_embedded_bpf *seal = seal_blob();
+	const struct shirudo_embedded_bpf *bpf2 = bpf2_blob(false);
+	const struct shirudo_embedded_bpf *seal = seal_blob(false);
 	size_t bpf2_sz = bpf2 ? bpf2->size : 0;
 	size_t seal_sz = seal ? seal->size : 0;
 
-	if (bpf2_sz > 0 && seal_sz > 0)
-		pass(c);
-	else
+	if (!bpf2_sz || !seal_sz) {
 		fail(r, c,
 		     "embedded BPF objects missing (bpf2=%zu seal=%zu)",
 		     bpf2_sz, seal_sz);
+		return;
+	}
+	bpf2 = bpf2_blob(true);
+	seal = seal_blob(true);
+	if (bpf2 && bpf2->size && seal && seal->size)
+		pass(c);
+	else
+		fail(r, c, "embedded image-mode BPF objects missing");
 }
 
 static void check_tpm(struct shirudo_preflight_result *r)

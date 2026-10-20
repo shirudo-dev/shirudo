@@ -600,7 +600,8 @@ out:
  * the running binary is the initrd's copy, which is gone after the
  * switch to the root file system; the identity that lasts is the
  * root's binary at the same path, and the initrd's copy is recorded
- * beside it only for the rest of this init.
+ * beside it only for the rest of this init. Image mode records no executable
+ * inode: its successful-exec mark is bound to the authenticated runtime root.
  */
 static int identity_executables(struct shirudo_identity *id)
 {
@@ -682,7 +683,7 @@ static int attach_guard(struct bpf_program *program,
 	return attach_pin(program, shirudo_gate_guards[guard].pin, link);
 }
 
-/* Both objects share authority, device state and refusal counters. */
+/* The chosen object pair shares identity, task marks and refusal counters. */
 static int share_policy_maps(struct bpf_object *source,
 			     struct bpf_object *destination)
 {
@@ -691,6 +692,8 @@ static int share_policy_maps(struct bpf_object *source,
 	int rc;
 
 	for (i = 0; i < ARRAY_SIZE(shirudo_guard_maps); i++) {
+		if (!image_mode && i == SHIRUDO_GUARD_DEVICES)
+			continue;
 		from = bpf_object__find_map_by_name(source,
 						    shirudo_guard_maps[i].name);
 		to = bpf_object__find_map_by_name(destination,
@@ -704,12 +707,37 @@ static int share_policy_maps(struct bpf_object *source,
 	return 0;
 }
 
-static int attach_seal(struct bpf_object *policy, struct bpf_object **obj_out,
-		       struct bpf_link **links)
+/* Attach in order. The caller owns each pinned link, including on failure. */
+static int attach_guard_group(struct bpf_object *obj,
+			      const struct shirudo_image_guard *guards,
+			      size_t count, struct bpf_link **links)
 {
-	const struct shirudo_embedded_bpf *blob = seal_blob();
+	struct bpf_program *program;
+	size_t i;
+	int rc;
+
+	for (i = 0; i < count; i++) {
+		program = bpf_object__find_program_by_name(obj, guards[i].prog);
+		if (!program) {
+			pr_err("program %s missing", guards[i].prog);
+			return -ENOENT;
+		}
+		rc = attach_pin(program, guards[i].pin, &links[i]);
+		if (rc) {
+			pr_err("attach %s: %s", guards[i].prog, strerror(-rc));
+			return rc;
+		}
+	}
+	return 0;
+}
+
+/* Both mode objects retain the same writable-state xattr protection. */
+static int attach_seal(struct bpf_object *policy, struct bpf_object **obj_out,
+		       struct bpf_link **links, struct bpf_link **image_links)
+{
+	const struct shirudo_embedded_bpf *blob = seal_blob(image_mode);
 	struct bpf_object *obj;
-	int err, i;
+	int err;
 
 	*obj_out = NULL;
 	if (!blob || !blob->data || !blob->size) {
@@ -736,24 +764,12 @@ static int attach_seal(struct bpf_object *policy, struct bpf_object **obj_out,
 		bpf_object__close(obj);
 		return err;
 	}
-	for (i = 0; i < (int)ARRAY_SIZE(shirudo_seal_guards); i++) {
-		const struct shirudo_image_guard *hook =
-			&shirudo_seal_guards[i];
-		struct bpf_program *p =
-			bpf_object__find_program_by_name(obj, hook->prog);
-
-		if (!p) {
-			pr_err("seal: program %s missing", hook->prog);
-			err = -ENOENT;
-			break;
-		}
-		err = attach_pin(p, hook->pin, &links[i]);
-		if (err) {
-			pr_err("seal: attach %s: %s", hook->prog,
-			       strerror(-err));
-			break;
-		}
-	}
+	err = attach_guard_group(obj, shirudo_seal_guards,
+				 ARRAY_SIZE(shirudo_seal_guards), links);
+	if (!err && image_mode)
+		err = attach_guard_group(obj, shirudo_image_seal_guards,
+					 ARRAY_SIZE(shirudo_image_seal_guards),
+					 image_links);
 	if (err) {
 		bpf_object__close(obj);
 		return err;
@@ -786,13 +802,54 @@ static void collect_asymmetric(key_serial_t serial, const char *type,
 	k->serials[k->n++] = (__s32)serial;
 }
 
+/* Seed bootstrap before hooks attach, then forbid userspace map writes. */
+static int freeze_task_maps(struct bpf_object *obj)
+{
+	struct shirudo_task_authority authority = {
+		.trusted = SHIRUDO_TASK_BOOTSTRAP,
+	};
+	struct bpf_map *map;
+	int fd, pidfd, rc = 0;
+	__u32 i;
+
+	pidfd = syscall(SYS_pidfd_open, getpid(), 0);
+	if (pidfd < 0)
+		return -errno;
+	for (i = SHIRUDO_GUARD_TASKS; i < SHIRUDO_GUARD_MAP_COUNT; i++) {
+		const struct shirudo_guard_map *expected =
+			&shirudo_guard_maps[i];
+
+		if (!image_mode && i == SHIRUDO_GUARD_DEVICES)
+			continue;
+		map = bpf_object__find_map_by_name(obj, expected->name);
+		if (!map) {
+			rc = -ENOENT;
+			break;
+		}
+		fd = bpf_map__fd(map);
+		if (i == SHIRUDO_GUARD_TASKS &&
+		    bpf_map_update_elem(fd, &pidfd, &authority, BPF_ANY)) {
+			rc = -errno;
+			break;
+		}
+		if (bpf_map_freeze(fd) || bpf_obj_pin(fd, expected->pin)) {
+			rc = -errno;
+			break;
+		}
+	}
+	close(pidfd);
+	return rc;
+}
+
 static int init_lsm(bool attach_filesystem_seal)
 {
+	struct bpf_link *image_links[SHIRUDO_IMAGE_OBSERVER_HOOK_COUNT] = {};
+	struct bpf_link *image_seal[SHIRUDO_IMAGE_SEAL_HOOK_COUNT] = {};
 	struct bpf_link *link_setx = NULL, *link_rmx = NULL, *link_pload = NULL;
 	struct bpf_link *identity_links[ARRAY_SIZE(shirudo_observer_guards)] = {};
 	struct bpf_link *mount_links[ARRAY_SIZE(shirudo_mount_guards)] = {};
 	struct bpf_program *p_bpf, *p_bpf_map, *p_unlink, *p_setx, *p_rmx;
-	const struct shirudo_embedded_bpf *blob = bpf2_blob();
+	const struct shirudo_embedded_bpf *blob = bpf2_blob(image_mode);
 	struct bpf_link *seal_links[SHIRUDO_SEAL_HOOK_COUNT] = {};
 	struct bpf_link *link_bpf = NULL, *link_bpf_map = NULL;
 	struct bpf_object *obj = NULL, *seal_obj = NULL;
@@ -857,7 +914,11 @@ static int init_lsm(bool attach_filesystem_seal)
 		id.run_dev = kernel_dev_t(st.st_dev);
 	}
 
-	/* So inode guards can tell `upatch unload` from an attacker's rm. */
+	/*
+	 * Ordinary mode records executable device/inode identities. Image mode
+	 * instead records the authenticated runtime root for exec task marks.
+	 * Both distinguish authorized `upatch unload` from an attacker's `rm`.
+	 */
 	err = identity_executables(&id);
 	if (err)
 		goto out;
@@ -922,42 +983,9 @@ static int init_lsm(bool attach_filesystem_seal)
 		pr_err("freeze sb-identity map: %s", strerror(errno));
 		goto out;
 	}
-	{
-		const struct shirudo_guard_map *maps =
-			&shirudo_guard_maps[SHIRUDO_GUARD_TASKS];
-		struct shirudo_task_authority authority = {
-			.trusted = SHIRUDO_TASK_BOOTSTRAP,
-		};
-		struct bpf_map *map;
-		int fd, pidfd;
-
-		pidfd = syscall(SYS_pidfd_open, getpid(), 0);
-		if (pidfd < 0) {
-			err = -errno;
-			goto out;
-		}
-		for (i = 0; i < SHIRUDO_GUARD_MAP_COUNT - 1; i++) {
-			map = bpf_object__find_map_by_name(obj, maps[i].name);
-			if (!map) {
-				err = -ENOENT;
-				break;
-			}
-			fd = bpf_map__fd(map);
-			if (!i && bpf_map_update_elem(fd, &pidfd, &authority,
-						      BPF_ANY)) {
-				err = -errno;
-				break;
-			}
-			if (bpf_map_freeze(fd) ||
-			    bpf_obj_pin(fd, maps[i].pin)) {
-				err = -errno;
-				break;
-			}
-		}
-		close(pidfd);
-		if (err)
-			goto out;
-	}
+	err = freeze_task_maps(obj);
+	if (err)
+		goto out;
 	/*
 	 * Pinned so that every later command reads the anchor init froze
 	 * from the kernel rather than from a file: the serial a load names
@@ -970,27 +998,16 @@ static int init_lsm(bool attach_filesystem_seal)
 		goto out;
 	}
 
-	/* Install the identity guards before enabling the bpf() gates. */
-	for (i = 0; i < (int)ARRAY_SIZE(shirudo_observer_guards); i++) {
-		const struct shirudo_image_guard *hook =
-			&shirudo_observer_guards[i];
-		struct bpf_program *p;
-
-		p = bpf_object__find_program_by_name(obj, hook->prog);
-
-		if (!p) {
-			pr_err("program %s missing in bpf2 object",
-			       hook->prog);
-			err = -ENOENT;
-			goto out;
-		}
-		err = attach_pin(p, hook->pin, &identity_links[i]);
-		if (err) {
-			pr_err("attach %s: %s", hook->prog,
-			       strerror(-err));
-			goto out;
-		}
-	}
+	/* The executable-identity guard precedes every BPF admission gate. */
+	err = attach_guard_group(obj, shirudo_observer_guards,
+				 ARRAY_SIZE(shirudo_observer_guards),
+				 identity_links);
+	if (!err && image_mode)
+		err = attach_guard_group(obj, shirudo_image_observer_guards,
+					 SHIRUDO_IMAGE_OBSERVER_HOOK_COUNT,
+					 image_links);
+	if (err)
+		goto out;
 
 	p_unlink = guard_program(obj, SHIRUDO_GUARD_UNLINK);
 	p_setx = guard_program(obj, SHIRUDO_GUARD_SETXATTR);
@@ -1040,29 +1057,13 @@ static int init_lsm(bool attach_filesystem_seal)
 	 * With the other bpffs guards, so the mount is immutable before
 	 * enforcement goes live.
 	 */
-	for (i = 0; i < (int)ARRAY_SIZE(shirudo_mount_guards); i++) {
-		const struct shirudo_image_guard *hook =
-			&shirudo_mount_guards[i];
-		struct bpf_program *p;
-
-		p = bpf_object__find_program_by_name(obj, hook->prog);
-
-		if (!p) {
-			pr_err("program %s missing in bpf2 object",
-			       hook->prog);
-			err = -ENOENT;
-			goto out;
-		}
-		err = attach_pin(p, hook->pin, &mount_links[i]);
-		if (err) {
-			pr_err("attach %s: %s", hook->prog,
-			       strerror(-err));
-			goto out;
-		}
-	}
+	err = attach_guard_group(obj, shirudo_mount_guards,
+				 ARRAY_SIZE(shirudo_mount_guards), mount_links);
+	if (err)
+		goto out;
 
 	if (attach_filesystem_seal) {
-		err = attach_seal(obj, &seal_obj, seal_links);
+		err = attach_seal(obj, &seal_obj, seal_links, image_seal);
 		if (err)
 			goto out;
 	}
@@ -1085,12 +1086,23 @@ static int init_lsm(bool attach_filesystem_seal)
 		goto out;
 	}
 
-	pr_info("bpf2%s attached: lsm/bpf gate live%s",
+	pr_info("%s%s attached: lsm/bpf gate live%s",
+		blob->name,
 		attach_filesystem_seal ? " + seal" : "",
 		attach_filesystem_seal ? ", bpffs and /var/lib/shirudo sealed" :
 		", filesystem seal unavailable on this kernel");
 	err = 0;
 out:
+	for (i = 0; i < (int)ARRAY_SIZE(image_seal); i++) {
+		if (err && image_seal[i])
+			bpf_link__unpin(image_seal[i]);
+		bpf_link__destroy(image_seal[i]);
+	}
+	for (i = 0; i < (int)ARRAY_SIZE(image_links); i++) {
+		if (err && image_links[i])
+			bpf_link__unpin(image_links[i]);
+		bpf_link__destroy(image_links[i]);
+	}
 	for (i = 0; i < (int)ARRAY_SIZE(identity_links); i++) {
 		if (err && identity_links[i])
 			bpf_link__unpin(identity_links[i]);
