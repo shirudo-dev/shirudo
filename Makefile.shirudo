@@ -576,6 +576,7 @@ verity-test-helpers: $(VERITY_TEST_HELPERS) build/verity-tests/shirudo-image-fau
 # Compiled test helpers (also usable as fuzz entry points).
 TEST_HELPERS := $(VERITY_TEST_HELPERS) \
                 testing/helper/test-image-cli \
+                testing/helper/test-image-cleanup \
                 testing/helper/test-image-config \
                 testing/helper/test-config-image \
                 testing/helper/test-config-update \
@@ -792,6 +793,16 @@ testing/helper/test-image-cli: testing/helper/test-image-cli.c builtin-bpm.c \
 	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) $(RPATH_LDFLAGS) -o $@ \
 		$(filter-out builtin-bpm.c,$^) \
 		-Wl,--wrap=bpm_tree_fetch_publication \
+		$(STATIC_LIBS) $(DYNAMIC_LIBS)
+
+testing/helper/test-image-cleanup: testing/helper/test-image-cleanup.c \
+		testing/helper/image-cleanup.h util/image_runtime.c $(BUILTIN_OBJS) \
+		$(filter-out $(call obj,util/image_runtime.o),$(UTIL_OBJS)) \
+		$(VERSION_OBJ) $(LIBBPF_A)
+	@printf '  CC      $@\n'
+	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) $(RPATH_LDFLAGS) -o $@ \
+		$(filter-out %.h util/image_runtime.c,$^) \
+		-Wl,--wrap=shirudo_dm_verity_remove,--wrap=usleep \
 		$(STATIC_LIBS) $(DYNAMIC_LIBS)
 
 test-helpers: $(TEST_HELPERS)
