@@ -1,0 +1,37 @@
+From 599df73bd6bdf7559ce84f5a12283187a7a03313 Mon Sep 17 00:00:00 2001
+From: Daniel Borkmann <daniel@iogearbox.net>
+Date: Tue, 20 Oct 2026 09:46:47 +0000
+Subject: [PATCH] kbuild: drop a .0 sublevel and the -rc suffix from the kernel
+ release
+
+shirudo nodes name their kernel <major>.<minor>-<localversion>, for
+example 7.3-shirudo-20261020.  A .0 sublevel carries no information,
+and the -rc suffix of a development base such as bpf-next would rename
+the packages and the module directory with every rc the base moves to,
+while the build is already identified by the commit hash in the version
+string and in BUILD-INFO.
+
+A non-zero sublevel of a stable release stays (7.3.5-shirudo-...).
+LINUX_VERSION_CODE does not change: it is computed from VERSION,
+PATCHLEVEL and SUBLEVEL directly, not from KERNELVERSION.
+
+libbpf's get_kernel_version() parses the release with "%u.%u.%u" and
+returns 0 for a release of two components, so a BPF object that uses
+the LINUX_KERNEL_VERSION kconfig extern fails to load on these kernels.
+---
+ Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile b/Makefile
+index b3053dd3c1059..7b945a6d85abb 100644
+--- a/Makefile
++++ b/Makefile
+@@ -380,7 +380,7 @@ include $(srctree)/scripts/Kbuild.include
+ 
+ # Read KERNELRELEASE from include/config/kernel.release (if it exists)
+ KERNELRELEASE = $(call read-file, $(objtree)/include/config/kernel.release)
+-KERNELVERSION = $(VERSION)$(if $(PATCHLEVEL),.$(PATCHLEVEL)$(if $(SUBLEVEL),.$(SUBLEVEL)))$(EXTRAVERSION)
++KERNELVERSION = $(VERSION)$(if $(PATCHLEVEL),.$(PATCHLEVEL)$(if $(filter-out 0,$(SUBLEVEL)),.$(SUBLEVEL)))
+ export VERSION PATCHLEVEL SUBLEVEL KERNELRELEASE KERNELVERSION
+ 
+ include $(srctree)/scripts/subarch.include
