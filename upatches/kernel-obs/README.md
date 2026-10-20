@@ -50,6 +50,7 @@ sudo shirudo upatch list
 | --- | --- | --- |
 | `exec` | executable, calling image, cgroup, euid | name, resolved path, uid, effective capabilities, pid, exec count; scripts yield one record for the script and a flagged one for the interpreter |
 | `net` | executable, cgroup, protocol, role, peer address and port | connects or datagrams sent, packets and bytes in each direction, pid; accepted and listener-side peers aggregate by address, without the ephemeral port |
+| `socket` | creator and current caller, family, type, protocol and operation | socket creation attempts for every family, plus bind/connect/listen/accept/send/receive/option/shutdown activity for IP, packet, XDP, UNIX, NETLINK and VSOCK sockets |
 | `listen` | executable, cgroup, protocol, local address and port | TCP listens and UDP binds to a fixed port, with backlog |
 | `watch` | executable, cgroup, protocol, destination | attempts and packets towards addresses in `watch.list` |
 | `dns` | executable, cgroup, answered address | up to four names that resolved to the address, with counts |
@@ -57,10 +58,11 @@ sudo shirudo upatch list
 | `file` | executable, cgroup, euid, open mode, path | opens matching `file-watch.list`, with the filesystem magic |
 | `watch_stat` | per-CPU counters | metric: socket-level checks against the watch list and matches |
 
-Every record carries the executable as `{dev, ino}` of the file, the
-cgroup id, and `first_seen_unix_nano` and `last_seen_unix_nano`. A task
-that started before the upatch loaded is attributed from its mapped
-executable and flagged `caller_inferred` on its next exec.
+Records include first- and last-seen timestamps and available task
+identity. Executable identity is `{dev, ino}` with a cgroup id. Socket
+records keep separate `owner` and `actor` identities with known and
+inferred flags. Other tables flag a task that started before the upatch
+loaded as `caller_inferred` when its mapped executable is first observed.
 
 The `mmap_exec` privilege records report mapping requests that include
 `PROT_EXEC`; `mprotect_exec` records transitions that newly grant it.
@@ -68,6 +70,17 @@ Their subtype is the requested protection bits; `mmap_exec` stores
 mapping flags in `aux`, while `mprotect_exec` stores the VMA length.
 `name` is the backing file name or `anonymous`. These hooks observe
 requests, not whether the mapping succeeds or code runs.
+
+Socket records describe attempts at the LSM hook; byte counts are
+requested send or receive lengths, not confirmed transfers. Socket type
+flags such as `SOCK_CLOEXEC` and `SOCK_NONBLOCK` are stripped before the
+creation hook, so records retain the base type. Families without detailed
+operation hooks still get creation, family, type and protocol records.
+Sockets already open when the upatch loads are not enumerated; their owner
+is marked inferred when an operation is first observed. Kernel-space
+creations are not recorded. UNIX paths, message payloads and VSOCK peer
+identifiers are not recorded. AF_PACKET and AF_XDP ring records cover setup
+and wakeup calls, not individual frames.
 
 Packet counts come from the cgroup hooks on the root cgroup and cover
 every socket on the host, including sockets created before the load,

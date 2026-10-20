@@ -33,6 +33,7 @@ char _license[] SEC("license") = "Dual BSD/GPL";
 
 OBS_VIEW(exec);
 OBS_VIEW(net);
+OBS_VIEW(socket);
 OBS_VIEW(listen);
 OBS_VIEW(watch);
 OBS_VIEW(dns);
@@ -56,6 +57,8 @@ OBS_VIEW(file);
 OBS_DECODER(exec_decoder, "exec", "decoders/exec.lua",
 	    SHIRUDO_UPATCH_DECODER_EXPORT_LOG);
 OBS_DECODER(net_decoder, "net", "decoders/net.lua",
+	    SHIRUDO_UPATCH_DECODER_EXPORT_LOG);
+OBS_DECODER(socket_decoder, "socket", "decoders/socket.lua",
 	    SHIRUDO_UPATCH_DECODER_EXPORT_LOG);
 OBS_DECODER(listen_decoder, "listen", "decoders/listen.lua",
 	    SHIRUDO_UPATCH_DECODER_EXPORT_LOG);
@@ -113,6 +116,8 @@ int shirudo_test__kernel_obs(void *ctx)
 		rc = exec_init(now);
 	if (!rc)
 		rc = net_init(now);
+	if (!rc)
+		rc = socket_init(now);
 	if (!rc)
 		rc = listen_init(now);
 	if (!rc)

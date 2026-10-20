@@ -16,7 +16,7 @@
 #include "skel_internal.h"
 
 #define MAX_USED_MAPS	64
-#define MAX_USED_PROGS	32
+#define MAX_USED_PROGS	64
 #define MAX_KFUNC_DESCS 256
 #define MAX_FD_ARRAY_SZ (MAX_USED_MAPS + MAX_KFUNC_DESCS)
 

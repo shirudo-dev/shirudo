@@ -69,6 +69,10 @@ source = "decoders/net.lua"
 target = "decoders/net.lua"
 
 [[files]]
+source = "decoders/socket.lua"
+target = "decoders/socket.lua"
+
+[[files]]
 source = "decoders/listen.lua"
 target = "decoders/listen.lua"
 

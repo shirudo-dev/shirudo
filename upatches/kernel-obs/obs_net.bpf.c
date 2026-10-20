@@ -17,6 +17,23 @@ enum obs_listen_kind {
 	OBS_LISTEN_BIND = 2,
 };
 
+enum obs_socket_operation {
+	OBS_SOCKET_CREATE = 1,
+	OBS_SOCKET_BIND,
+	OBS_SOCKET_CONNECT,
+	OBS_SOCKET_LISTEN,
+	OBS_SOCKET_ACCEPT,
+	OBS_SOCKET_SENDMSG,
+	OBS_SOCKET_RECVMSG,
+	OBS_SOCKET_SETSOCKOPT,
+	OBS_SOCKET_SHUTDOWN,
+	OBS_SOCKET_SOCKETPAIR,
+};
+
+#define OBS_SOCKET_F_OWNER_KNOWN	(1u << 0)
+#define OBS_SOCKET_F_OWNER_INFERRED	(1u << 1)
+#define OBS_SOCKET_F_ACTOR_KNOWN	(1u << 2)
+
 struct net_key {
 	struct obs_ident ident;
 	__u8 family;
@@ -56,6 +73,30 @@ struct watch_val {
 	__u64 bytes;
 	__u32 pid;
 	__u32 _pad;
+};
+
+struct socket_key {
+	struct obs_ident owner;
+	struct obs_ident actor;
+	__u32 owner_pid;
+	__u32 actor_pid;
+	__u16 family;
+	__u16 type;
+	__u16 operation;
+	__u16 _pad0;
+	__u32 protocol;
+	__u32 level;
+	__u32 option;
+	__u32 flags;
+	__u32 _pad1;
+	__u32 _pad2;
+};
+
+struct socket_val {
+	__u64 count;
+	__u64 first_ns;
+	__u64 last_ns;
+	__u64 bytes_requested;
 };
 
 struct obs_watch_node {
@@ -178,6 +219,50 @@ static int watch_emit_record(struct shirudo_serial_chunk *chunk, __u32 off,
 	*(__u64 *)&chunk->data[off + 88] = e->val.bytes;
 	*(__u32 *)&chunk->data[off + 96] = e->val.pid;
 	*(__u32 *)&chunk->data[off + 100] = 0;
+	return 0;
+}
+
+#define OBS_T		socket
+#define OBS_T_MAP	socket
+#define OBS_T_KEY	struct socket_key
+#define OBS_T_VAL	struct socket_val
+#define OBS_T_CAPACITY	1024
+#define OBS_T_BUCKETS	512
+#define OBS_T_STEPS	8
+#define OBS_T_MAGIC	0x4b434f53u	/* "SOCK" little-endian */
+#define OBS_T_RECORD	128
+#define OBS_T_EMIT	socket_emit_record
+#include "obs_table.h"
+
+static int socket_emit_record(struct shirudo_serial_chunk *chunk, __u32 off,
+			      const struct socket_entry __arena *e)
+{
+	const struct socket_key __arena *key = &e->key;
+
+	*(__u32 *)&chunk->data[off + 8] = key->owner.exe.dev;
+	*(__u32 *)&chunk->data[off + 12] = 0;
+	*(__u64 *)&chunk->data[off + 16] = key->owner.exe.ino;
+	*(__u64 *)&chunk->data[off + 24] = key->owner.cgroup;
+	*(__u32 *)&chunk->data[off + 32] = key->actor.exe.dev;
+	*(__u32 *)&chunk->data[off + 36] = 0;
+	*(__u64 *)&chunk->data[off + 40] = key->actor.exe.ino;
+	*(__u64 *)&chunk->data[off + 48] = key->actor.cgroup;
+	*(__u32 *)&chunk->data[off + 56] = key->owner_pid;
+	*(__u32 *)&chunk->data[off + 60] = key->actor_pid;
+	*(__u16 *)&chunk->data[off + 64] = key->family;
+	*(__u16 *)&chunk->data[off + 66] = key->type;
+	*(__u16 *)&chunk->data[off + 68] = key->operation;
+	*(__u16 *)&chunk->data[off + 70] = 0;
+	*(__u32 *)&chunk->data[off + 72] = key->protocol;
+	*(__u32 *)&chunk->data[off + 76] = key->level;
+	*(__u32 *)&chunk->data[off + 80] = key->option;
+	*(__u32 *)&chunk->data[off + 84] = key->flags;
+	*(__u32 *)&chunk->data[off + 88] = 0;
+	*(__u32 *)&chunk->data[off + 92] = 0;
+	*(__u64 *)&chunk->data[off + 96] = e->val.count;
+	*(__u64 *)&chunk->data[off + 104] = e->val.first_ns;
+	*(__u64 *)&chunk->data[off + 112] = e->val.last_ns;
+	*(__u64 *)&chunk->data[off + 120] = e->val.bytes_requested;
 	return 0;
 }
 
@@ -332,20 +417,23 @@ obs_sock_meta_set(struct sock *sk, __u32 role, __u64 now)
 {
 	struct obs_sock_meta *meta;
 	struct obs_ident ident;
+	bool known;
 
 	meta = bpf_sk_storage_get(&obs_i_sock, sk, 0,
 				  BPF_SK_STORAGE_GET_F_CREATE);
 	if (!meta)
 		return 0;
-	obs_ident_checked(&ident, now);
+	known = obs_ident_checked(&ident, now);
 	meta->exe = ident.exe;
 	meta->cgroup = ident.cgroup;
+	meta->owner_pid = obs_tgid();
 	meta->role = role;
+	meta->flags = known ? 0 : OBS_SOCK_META_OWNER_UNKNOWN;
 	meta->_pad = 0;
 	return meta;
 }
 
-/* The socket's owner, or the current task for sockets created before load. */
+/* A socket first seen after load has no observed creator. */
 static __always_inline struct obs_sock_meta *
 obs_sock_meta_get(struct sock *sk, __u64 now)
 {
@@ -354,7 +442,73 @@ obs_sock_meta_get(struct sock *sk, __u64 now)
 	meta = bpf_sk_storage_get(&obs_i_sock, sk, 0, 0);
 	if (meta)
 		return meta;
-	return obs_sock_meta_set(sk, OBS_ROLE_NONE, now);
+	meta = obs_sock_meta_set(sk, OBS_ROLE_NONE, now);
+	if (meta)
+		meta->flags |= OBS_SOCK_META_OWNER_INFERRED;
+	return meta;
+}
+
+static __always_inline bool obs_socket_detail_family(__u16 family)
+{
+	return family == AF_UNIX || family == AF_INET ||
+	       family == AF_INET6 || family == AF_NETLINK ||
+	       family == AF_PACKET || family == AF_VSOCK ||
+	       family == AF_XDP;
+}
+
+static __always_inline void
+obs_socket_record(struct socket *sock, __u16 family, __u16 type,
+		  __u32 protocol, __u16 operation, __s32 size,
+		  __s32 level, __s32 option, __u64 now)
+{
+	struct socket_entry __arena *entry;
+	struct obs_sock_meta *meta;
+	struct socket_key key = {};
+	struct obs_ident actor = {};
+	struct sock *sk;
+	__u32 flags = 0;
+	int status;
+
+	if (!sock)
+		return;
+	sk = sock->sk;
+	if (!sk)
+		return;
+	if (operation != OBS_SOCKET_CREATE &&
+	    !obs_socket_detail_family(family))
+		return;
+	meta = obs_sock_meta_get(sk, now);
+	if (meta) {
+		if (!(meta->flags & (OBS_SOCK_META_OWNER_INFERRED |
+				     OBS_SOCK_META_OWNER_UNKNOWN))) {
+			key.owner.exe = meta->exe;
+			key.owner.cgroup = meta->cgroup;
+			key.owner_pid = meta->owner_pid;
+			flags |= OBS_SOCKET_F_OWNER_KNOWN;
+		} else if (meta->flags & OBS_SOCK_META_OWNER_INFERRED) {
+			flags |= OBS_SOCKET_F_OWNER_INFERRED;
+		}
+	}
+	if (obs_ident_checked(&actor, now))
+		flags |= OBS_SOCKET_F_ACTOR_KNOWN;
+	key.actor = actor;
+	key.actor_pid = obs_tgid();
+	key.family = family;
+	key.type = type & SOCK_TYPE_MASK;
+	key.operation = operation;
+	key.protocol = protocol;
+	key.level = level < 0 ? 0 : (__u32)level;
+	key.option = option < 0 ? 0 : (__u32)option;
+	key.flags = flags;
+	entry = socket_touch(&key, &status);
+	if (!entry)
+		return;
+	if (status == OBS_TOUCH_CREATED)
+		entry->val.first_ns = now;
+	__sync_fetch_and_add(&entry->val.count, 1);
+	if (size > 0)
+		__sync_fetch_and_add(&entry->val.bytes_requested, (__u32)size);
+	entry->val.last_ns = now;
 }
 
 static __always_inline bool obs_peer_from_sockaddr(struct sockaddr *addr,
@@ -450,16 +604,17 @@ SEC("lsm/socket_post_create")
 int BPF_PROG(obs_socket_create, struct socket *sock, int family, int type,
 	     int protocol, int kern)
 {
+	__u64 now = obs_now();
 	struct sock *sk;
 
-	(void)type;
-	(void)protocol;
-	if (kern || !obs_inet_family((__u16)family) || !sock)
+	if (kern || !sock)
 		return 0;
 	sk = sock->sk;
 	if (!sk)
 		return 0;
-	obs_sock_meta_set(sk, OBS_ROLE_NONE, obs_now());
+	obs_sock_meta_set(sk, OBS_ROLE_NONE, now);
+	obs_socket_record(sock, (__u16)family, (__u16)type, (__u32)protocol,
+			  OBS_SOCKET_CREATE, 0, 0, 0, now);
 	return 0;
 }
 
@@ -471,10 +626,11 @@ int BPF_PROG(obs_sock_graft, struct sock *sk, struct socket *parent)
 	__u64 now = obs_now();
 
 	(void)parent;
-	if (!sk || !obs_inet_family(BPF_CORE_READ(sk, __sk_common.skc_family)))
+	if (!sk)
 		return 0;
 	meta = obs_sock_meta_set(sk, OBS_ROLE_ACCEPTOR, now);
-	if (!meta || !obs_peer_from_sock(sk, &key))
+	if (!meta || !obs_inet_family(BPF_CORE_READ(sk, __sk_common.skc_family)) ||
+	    !obs_peer_from_sock(sk, &key))
 		return 0;
 	key.ident.exe = meta->exe;
 	key.ident.cgroup = meta->cgroup;
@@ -498,7 +654,12 @@ int BPF_PROG(obs_socket_connect, struct socket *sock, struct sockaddr *address,
 	if (!sock)
 		return 0;
 	sk = sock->sk;
-	if (!sk || !obs_inet_family(BPF_CORE_READ(sk, __sk_common.skc_family)))
+	if (!sk)
+		return 0;
+	obs_socket_record(sock, BPF_CORE_READ(sk, __sk_common.skc_family),
+			  sock->type, BPF_CORE_READ(sk, sk_protocol),
+			  OBS_SOCKET_CONNECT, 0, 0, 0, now);
+	if (!obs_inet_family(BPF_CORE_READ(sk, __sk_common.skc_family)))
 		return 0;
 	type = sock->type & SOCK_TYPE_MASK;
 	if (type != SOCK_STREAM && type != SOCK_SEQPACKET)
@@ -530,10 +691,16 @@ int BPF_PROG(obs_socket_sendmsg, struct socket *sock, struct msghdr *msg,
 	__u16 type;
 	int addrlen;
 
-	if (size <= 0 || !sock || !msg)
+	if (!sock || !msg)
 		return 0;
 	sk = sock->sk;
-	if (!sk || !obs_inet_family(BPF_CORE_READ(sk, __sk_common.skc_family)))
+	if (!sk)
+		return 0;
+	obs_socket_record(sock, BPF_CORE_READ(sk, __sk_common.skc_family),
+			  sock->type, BPF_CORE_READ(sk, sk_protocol),
+			  OBS_SOCKET_SENDMSG, size, 0, 0, now);
+	if (size <= 0 ||
+	    !obs_inet_family(BPF_CORE_READ(sk, __sk_common.skc_family)))
 		return 0;
 	type = sock->type & SOCK_TYPE_MASK;
 	if (type != SOCK_DGRAM && type != SOCK_RAW)
@@ -569,7 +736,12 @@ int BPF_PROG(obs_socket_listen, struct socket *sock, int backlog)
 	if (!sock)
 		return 0;
 	sk = sock->sk;
-	if (!sk || !obs_inet_family(BPF_CORE_READ(sk, __sk_common.skc_family)))
+	if (!sk)
+		return 0;
+	obs_socket_record(sock, BPF_CORE_READ(sk, __sk_common.skc_family),
+			  sock->type, BPF_CORE_READ(sk, sk_protocol),
+			  OBS_SOCKET_LISTEN, 0, 0, 0, now);
+	if (!obs_inet_family(BPF_CORE_READ(sk, __sk_common.skc_family)))
 		return 0;
 	if (!obs_local_from_sock(sk, &key))
 		return 0;
@@ -598,7 +770,12 @@ int BPF_PROG(obs_socket_bind, struct socket *sock, struct sockaddr *address,
 	if (!sock)
 		return 0;
 	sk = sock->sk;
-	if (!sk || !obs_inet_family(BPF_CORE_READ(sk, __sk_common.skc_family)))
+	if (!sk)
+		return 0;
+	obs_socket_record(sock, BPF_CORE_READ(sk, __sk_common.skc_family),
+			  sock->type, BPF_CORE_READ(sk, sk_protocol),
+			  OBS_SOCKET_BIND, 0, 0, 0, now);
+	if (!obs_inet_family(BPF_CORE_READ(sk, __sk_common.skc_family)))
 		return 0;
 	type = sock->type & SOCK_TYPE_MASK;
 	if (type != SOCK_DGRAM)
@@ -613,6 +790,99 @@ int BPF_PROG(obs_socket_bind, struct socket *sock, struct sockaddr *address,
 	key.proto = BPF_CORE_READ(sk, sk_protocol);
 	key.role = OBS_LISTEN_BIND;
 	obs_listen_count(&key, 0, now);
+	return 0;
+}
+
+SEC("lsm/socket_accept")
+int BPF_PROG(obs_socket_accept, struct socket *sock, struct socket *newsock)
+{
+	__u64 now = obs_now();
+	struct sock *sk;
+
+	(void)newsock;
+	if (!sock)
+		return 0;
+	sk = sock->sk;
+	if (!sk)
+		return 0;
+	obs_socket_record(sock, BPF_CORE_READ(sk, __sk_common.skc_family),
+			  sock->type, BPF_CORE_READ(sk, sk_protocol),
+			  OBS_SOCKET_ACCEPT, 0, 0, 0, now);
+	return 0;
+}
+
+SEC("lsm/socket_recvmsg")
+int BPF_PROG(obs_socket_recvmsg, struct socket *sock, struct msghdr *msg,
+	     int size, int flags)
+{
+	__u64 now = obs_now();
+	struct sock *sk;
+
+	(void)msg;
+	(void)flags;
+	if (!sock)
+		return 0;
+	sk = sock->sk;
+	if (!sk)
+		return 0;
+	obs_socket_record(sock, BPF_CORE_READ(sk, __sk_common.skc_family),
+			  sock->type, BPF_CORE_READ(sk, sk_protocol),
+			  OBS_SOCKET_RECVMSG, size, 0, 0, now);
+	return 0;
+}
+
+SEC("lsm/socket_setsockopt")
+int BPF_PROG(obs_socket_setsockopt, struct socket *sock, int level,
+	     int optname)
+{
+	__u64 now = obs_now();
+	struct sock *sk;
+
+	if (!sock)
+		return 0;
+	sk = sock->sk;
+	if (!sk)
+		return 0;
+	obs_socket_record(sock, BPF_CORE_READ(sk, __sk_common.skc_family),
+			  sock->type, BPF_CORE_READ(sk, sk_protocol),
+			  OBS_SOCKET_SETSOCKOPT, 0, level, optname, now);
+	return 0;
+}
+
+SEC("lsm/socket_shutdown")
+int BPF_PROG(obs_socket_shutdown, struct socket *sock, int how)
+{
+	__u64 now = obs_now();
+	struct sock *sk;
+
+	(void)how;
+	if (!sock)
+		return 0;
+	sk = sock->sk;
+	if (!sk)
+		return 0;
+	obs_socket_record(sock, BPF_CORE_READ(sk, __sk_common.skc_family),
+			  sock->type, BPF_CORE_READ(sk, sk_protocol),
+			  OBS_SOCKET_SHUTDOWN, 0, 0, 0, now);
+	return 0;
+}
+
+SEC("lsm/socket_socketpair")
+int BPF_PROG(obs_socket_socketpair, struct socket *socka,
+	     struct socket *sockb)
+{
+	__u64 now = obs_now();
+	struct sock *sk;
+
+	(void)sockb;
+	if (!socka)
+		return 0;
+	sk = socka->sk;
+	if (!sk)
+		return 0;
+	obs_socket_record(socka, BPF_CORE_READ(sk, __sk_common.skc_family),
+			  socka->type, BPF_CORE_READ(sk, sk_protocol),
+			  OBS_SOCKET_SOCKETPAIR, 0, 0, 0, now);
 	return 0;
 }
 

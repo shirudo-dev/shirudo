@@ -20,8 +20,13 @@
 #define EINVAL		22
 #define ENOSPC		28
 
+#define AF_UNIX		1
 #define AF_INET		2
 #define AF_INET6	10
+#define AF_NETLINK	16
+#define AF_PACKET	17
+#define AF_VSOCK	40
+#define AF_XDP		44
 #define SOCK_TYPE_MASK	0xf
 #define ETH_P_IP	0x0800
 #define ETH_P_IPV6	0x86DD
@@ -109,10 +114,15 @@ enum obs_role {
 	OBS_ROLE_LISTENER = 3,
 };
 
+#define OBS_SOCK_META_OWNER_INFERRED	(1u << 0)
+#define OBS_SOCK_META_OWNER_UNKNOWN	(1u << 1)
+
 struct obs_sock_meta {
 	struct obs_exe exe;
 	__u64 cgroup;
+	__u32 owner_pid;
 	__u32 role;
+	__u32 flags;
 	__u32 _pad;
 };
 
