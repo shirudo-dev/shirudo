@@ -10,6 +10,7 @@ fail=0
 : "${SHIRUDO_TEST_SUITE_FAILURES_FILE:=}"
 for test_script in \
 	upatch/kernel-obs/network/t1210-kernel-obs.sh \
+	upatch/kernel-obs/network/kernel-obs-net.sh \
 	upatch/kernel-obs/priv/kernel-obs-priv.sh \
 	upatch/kernel-obs/dns/t1211-kernel-obs-dns-matrix.sh
 do
