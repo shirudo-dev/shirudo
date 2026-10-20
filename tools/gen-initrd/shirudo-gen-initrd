@@ -19,12 +19,13 @@ Regenerate the initrd of a kernel with shirudo inside, through dracut.
   --kver <release>       kernel release (default: the running kernel)
   --output <file>        initrd to write (default: dracut's for the release)
   --check [<file>]       only check an initrd, do not build one
-  --print-cmdline        print the kernel parameter the initrd needs
+  --print-cmdline        print the kernel parameters the initrd needs
   --cert <file>          primary certificate to embed (default: the installed one)
   --trusted-dir <dir>    further trusted certificates (default: trusted/ beside it)
   --binary <file>        shirudo binary to embed (default: the installed one)
   --binary-path <path>   where that binary lives on the root file system
   --unit <file>          shirudo-initrd.service to embed (default: installed)
+  --bootstrap-conf <file> authenticated bootstrap shirudo.conf to embed
   --kmoddir <dir>        kernel modules to take from <dir>/<release>
   --no-kernel            embed no kernel modules (all-built-in kernels)
   --module-dir <dir>     dracut module to install from (default: this
@@ -60,6 +61,7 @@ trusted_dir=
 binary=
 binary_path=
 unit=
+bootstrap_conf=
 kmoddir=
 no_kernel=0
 module_dir=
@@ -81,6 +83,7 @@ while [ $# -gt 0 ]; do
 	--binary) binary=${2:?}; shift 2 ;;
 	--binary-path) binary_path=${2:?}; shift 2 ;;
 	--unit) unit=${2:?}; shift 2 ;;
+	--bootstrap-conf) bootstrap_conf=${2:?}; shift 2 ;;
 	--kmoddir) kmoddir=${2:?}; shift 2 ;;
 	--no-kernel) no_kernel=1; shift ;;
 	--module-dir) module_dir=${2:?}; shift 2 ;;
@@ -89,6 +92,12 @@ while [ $# -gt 0 ]; do
 	*) usage >&2; die "unknown option: $1" ;;
 	esac
 done
+
+bootstrap_settings=${bootstrap_conf:-/etc/shirudo/shirudo.conf}
+if [ -r "$bootstrap_settings" ] &&
+   grep -Eq '^[[:space:]]*runtime\.(image|root_hash)[[:space:]]*=' "$bootstrap_settings"; then
+	CMDLINE_PARAM+=" dm_verity.keyring_unsealed=1"
+fi
 
 if [ "$print_cmdline" = 1 ]; then
 	printf '%s\n' "$CMDLINE_PARAM"
@@ -181,6 +190,7 @@ fi
 [ -z "$cert" ] || [ -s "$cert" ] || die "no certificate at $cert"
 [ -z "$trusted_dir" ] || [ -d "$trusted_dir" ] || die "no directory at $trusted_dir"
 [ -z "$binary" ] || [ -x "$binary" ] || die "no executable at $binary"
+[ -z "$bootstrap_conf" ] || [ -s "$bootstrap_conf" ] || die "no bootstrap config at $bootstrap_conf"
 if [ -n "$binary" ] && [ -z "$binary_path" ]; then
 	die "--binary needs --binary-path, the path of that binary on the root file system"
 fi
@@ -192,7 +202,7 @@ trap 'rm -rf "$tmp"' EXIT
 # dracut.conf(5) file of their own, which also shuts out the host's
 # drop-ins so that a test initrd depends on nothing but what was asked.
 conf_args=()
-if [ -n "$cert$trusted_dir$binary$unit" ]; then
+if [ -n "$cert$trusted_dir$binary$unit$bootstrap_conf" ]; then
 	{
 		printf 'add_dracutmodules+=" shirudo "\n'
 		[ -z "$cert" ] || printf 'shirudo_cert=%q\n' "$cert"
@@ -200,6 +210,7 @@ if [ -n "$cert$trusted_dir$binary$unit" ]; then
 		[ -z "$binary" ] || printf 'shirudo_binary=%q\n' "$binary"
 		[ -z "$binary_path" ] || printf 'shirudo_binary_path=%q\n' "$binary_path"
 		[ -z "$unit" ] || printf 'shirudo_unit=%q\n' "$unit"
+		[ -z "$bootstrap_conf" ] || printf 'shirudo_conf=%q\n' "$bootstrap_conf"
 	} >"$tmp/shirudo.conf"
 	conf_args=(--conf "$tmp/shirudo.conf" --confdir "$tmp")
 fi
@@ -218,6 +229,8 @@ say "running dracut for $kver"
 dracut "${args[@]}"
 check_initrd "$out"
 
-if ! grep -q -w -- "$CMDLINE_PARAM" /proc/cmdline 2>/dev/null; then
-	say "the kernel command line must carry $CMDLINE_PARAM for the initrd to enrol the certificate; this boot does not"
-fi
+for parameter in $CMDLINE_PARAM; do
+	if ! grep -q -w -- "$parameter" /proc/cmdline 2>/dev/null; then
+		say "the kernel command line must carry $parameter for initrd key enrollment; this boot does not"
+	fi
+done

@@ -37,6 +37,7 @@ static void usage(void)
 
 int cmd_config(int argc, const char **argv)
 {
+	bool image_mode = shirudo_image_config_active();
 	struct shirudo_config cfg;
 	bool file_present;
 	int rc;
@@ -60,7 +61,10 @@ int cmd_config(int argc, const char **argv)
 		return 1;
 	}
 
-	if (file_present)
+	if (image_mode)
+		printf("# shirudo config (authenticated config image; "
+		       "TPM settings from runtime image)\n\n");
+	else if (file_present)
 		printf("# shirudo config (effective, loaded from %s)\n\n",
 		       SHIRUDO_CONF_PATH);
 	else
@@ -78,12 +82,14 @@ int cmd_config(int argc, const char **argv)
 	       "# binary auth value. May also be supplied via the\n"
 	       "# SHIRUDO_TPM_OWNER_AUTH env var; that override wins.\n");
 	if (cfg.tpm_owner_auth_len > 0) {
-		const char *env = getenv("SHIRUDO_TPM_OWNER_AUTH");
+		const char *env = image_mode ? NULL :
+			getenv("SHIRUDO_TPM_OWNER_AUTH");
 
 		printf("# tpm.owner_auth = (set, %zu bytes; redacted%s)\n\n",
 		       cfg.tpm_owner_auth_len,
-		       env ? "; from $SHIRUDO_TPM_OWNER_AUTH"
-			   : "; from " SHIRUDO_CONF_PATH);
+		       image_mode ? "; from runtime image" :
+		       env ? "; from $SHIRUDO_TPM_OWNER_AUTH" :
+		       "; from " SHIRUDO_CONF_PATH);
 	} else {
 		printf("# tpm.owner_auth = (unset)\n\n");
 	}
@@ -97,11 +103,12 @@ int cmd_config(int argc, const char **argv)
 	       "# when this is set. The SHIRUDO_TPM_TCTI env var overrides\n"
 	       "# this in turn.\n");
 	if (cfg.tpm_tcti[0]) {
-		const char *env = getenv("SHIRUDO_TPM_TCTI");
+		const char *env = image_mode ? NULL :
+			getenv("SHIRUDO_TPM_TCTI");
 
 		printf("tpm.tcti = %s  # from %s\n\n", cfg.tpm_tcti,
-		       env && *env ? "$SHIRUDO_TPM_TCTI"
-				   : SHIRUDO_CONF_PATH);
+		       image_mode ? "runtime image" :
+		       env && *env ? "$SHIRUDO_TPM_TCTI" : SHIRUDO_CONF_PATH);
 	} else {
 		printf("# tpm.tcti = (unset -- using device:/dev/tpmrm0)\n\n");
 	}

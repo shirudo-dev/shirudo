@@ -137,13 +137,19 @@ void chain_tree_event(__s64 seq, const __u8 operation_digest[32],
 	shirudo_sha256(buf, taglen + 40, event);
 }
 
-void chain_fold(__u8 chain[32], const __u8 event[32])
+int shirudo_chain_fold_checked(__u8 chain[32], const __u8 event[32])
 {
 	__u8 cat[64];
 
 	memcpy(cat, chain, 32);
 	memcpy(cat + 32, event, 32);
-	shirudo_sha256(cat, sizeof(cat), chain);
+	return sha256_buffer(cat, sizeof(cat), chain);
+}
+
+void chain_fold(__u8 chain[32], const __u8 event[32])
+{
+	if (shirudo_chain_fold_checked(chain, event))
+		memset(chain, 0, 32);
 }
 
 void chain_anchor(const __u8 name[SHIRUDO_TPM_NAME_LEN],

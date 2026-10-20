@@ -20,6 +20,7 @@
 #include "hex.h"
 #include "io.h"
 #include "json.h"
+#include "image_config.h"
 #include "log.h"
 #include "paths.h"
 
@@ -221,6 +222,9 @@ int config_load_path(struct shirudo_config *cfg, const char *path)
 					cfg->map_export_log_record_max_bytes = (__u32)v;
 				else
 					cfg->map_export_otlp_max_bytes = (__u32)v;
+			} else if (!strncmp(key, "config.", 7) ||
+				   !strncmp(key, "runtime.", 8)) {
+				continue;
 			} else {
 				if (strncmp(key, "map_export.", 11) == 0)
 					map_export_bad(cfg, key, val, "unknown key");
@@ -256,6 +260,8 @@ int config_load(struct shirudo_config *cfg)
 	const char *env;
 	int rc;
 
+	if (shirudo_image_config_get(cfg))
+		return 0;
 	rc = config_load_path(cfg, SHIRUDO_CONF_PATH);
 	if (rc && rc != -ENOENT)
 		return rc;

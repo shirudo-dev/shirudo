@@ -46,6 +46,7 @@
 #include "util/log.h"
 #include "util/malloc.h"
 #include "util/paths.h"
+#include "util/initrd.h"
 #include "util/kmodules.h"
 #include "util/kmsg.h"
 #include "util/format.h"
@@ -149,7 +150,7 @@ static void gather_assets(struct asset_view *a)
 	struct stat st;
 
 	*a = (struct asset_view){};
-	a->cert = access(SHIRUDO_CERT_PATH, F_OK) == 0;
+	a->cert = access(shirudo_cert_path(), F_OK) == 0;
 	a->signing_key = access(SHIRUDO_SIGNING_KEY_PATH, F_OK) == 0;
 	if (stat(eventlog_path(), &st) == 0) {
 		a->eventlog = true;
@@ -660,7 +661,7 @@ int cmd_status(int argc, const char **argv)
 	mode = !lsm_attached ? "inactive" :
 	       !strcmp(keyring_mode, "bpf") ? "production" : "staging";
 	is_operator = access(SHIRUDO_SIGNING_KEY_PATH, F_OK) == 0;
-	cert_present = access(SHIRUDO_CERT_PATH, F_OK) == 0;
+	cert_present = access(shirudo_cert_path(), F_OK) == 0;
 	is_target = cert_present || lsm_attached || keyring_present;
 
 	n_ups = scandir(SHIRUDO_BPFFS_UPATCHES_DIR, &ups, notdot, alphasort);

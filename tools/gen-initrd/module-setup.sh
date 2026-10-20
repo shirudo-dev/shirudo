@@ -65,6 +65,11 @@ depends() {
 
 installkernel() {
 	hostonly='' instmods tpm tpm_tis_core tpm_tis tpm_crb
+	local conf=${shirudo_conf:-$dracutsysrootdir/etc/shirudo/shirudo.conf}
+
+	if [[ -r $conf ]] && grep -Eq '^[[:space:]]*runtime[.]image[[:space:]]*=' "$conf"; then
+		hostonly='' instmods dm_mod dm_verity loop ext4
+	fi
 }
 
 install() {

@@ -13,6 +13,7 @@
 
 #include "builtin.h"
 #include "util/harden.h"
+#include "util/image_runtime.h"
 #include "util/help.h"
 #include "util/log.h"
 #include "util/macros.h"
@@ -43,7 +44,7 @@ static const struct cmd commands[] = {
 	{ "build",	cmd_build,	GROUP_OPERATOR,	"compile + sign a .upatch" },
 
 	{ "image", cmd_image, GROUP_LOCAL,
-	  "build and verify dm-verity images" },
+	  "build, verify and activate dm-verity config images" },
 	{ "init",	cmd_init,	GROUP_TARGET,
 	  "bootstrap shirudo enforcement on this target" },
 	{ "upatch",	cmd_upatch,	GROUP_TARGET,
@@ -107,6 +108,7 @@ int main(int argc, const char **argv)
 	const char *names[ARRAY_SIZE(commands)];
 	size_t matches[ARRAY_SIZE(commands)];
 	size_t i, n_match;
+	int rc;
 
 	harden_stdio();
 	log_init();
@@ -168,5 +170,14 @@ int main(int argc, const char **argv)
 		return 1;
 	}
 
-	return c->fn(argc - 1, argv + 1);
+	rc = shirudo_image_enter(c->name, argc - 1, argv + 1);
+
+	if (rc) {
+		fprintf(stderr, "shirudo: image state: %s\n", strerror(-rc));
+		shirudo_image_leave();
+		return 1;
+	}
+	rc = c->fn(argc - 1, argv + 1);
+	shirudo_image_leave();
+	return rc;
 }

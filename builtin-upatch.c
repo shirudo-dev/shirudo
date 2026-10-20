@@ -47,6 +47,7 @@
 #include "util/macros.h"
 #include "util/identity.h"
 #include "util/keyring.h"
+#include "util/tpm.h"
 #include "util/log.h"
 #include "util/hex.h"
 #include "util/malloc.h"
@@ -1990,12 +1991,13 @@ static int version_gate(const char *expect_version_id, bool no_version_check,
 	return 0;
 }
 
-static int append_upatch_event(const char *type, const char *name,
+/* Eventlog entry ("upatch_load" / "upatch_unload") mirroring an extend. */
+static int format_upatch_event(const char *type, const char *name,
 			       const __u8 payload[32],
-			       const __u8 event[32], const char *reason)
+			       const __u8 event[32], const char *reason,
+			       char *buf, size_t size)
 {
-	char buf[4096];
-	struct shirudo_json_emit e = { .buf = buf, .cap = sizeof(buf) };
+	struct shirudo_json_emit e = { .buf = buf, .cap = size };
 	char ts[32], boot_id[64], nv_index[16], payload_hex[65], digest_hex[65];
 
 	eventlog_timestamp(ts, sizeof(ts));
@@ -2025,7 +2027,19 @@ static int append_upatch_event(const char *type, const char *name,
 		       strerror(-e.err));
 		return e.err;
 	}
-	return eventlog_append(buf);
+	return 0;
+}
+
+static int append_upatch_event(const char *type, const char *name,
+			       const __u8 payload[32],
+			       const __u8 event[32], const char *reason)
+{
+	char buf[4096];
+	int rc;
+
+	rc = format_upatch_event(type, name, payload, event, reason,
+				 buf, sizeof(buf));
+	return rc ? rc : eventlog_append(buf);
 }
 
 /*

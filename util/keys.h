@@ -55,12 +55,23 @@ struct shirudo_trusted_set {
 int keys_load(const char *keys_dir, const char *revoked_dir,
 	      bool with_trusted, struct shirudo_trusted_set *set);
 
+int shirudo_keys_load_split(const char *primary, const char *keys_dir,
+			    const char *revoked_dir, bool with_trusted,
+			    struct shirudo_trusted_set *set);
+
+/* Validate historical vouches before excluding revoked BPF signing keys. */
+int shirudo_keys_load_image(const char *primary, const char *keys_dir,
+			    const char *revoked_dir, bool with_trusted,
+			    struct shirudo_trusted_set *set);
+
 /* A whole file of at most SHIRUDO_KEYS_DER_MAX bytes, xmalloc'd. */
 int keys_read_der(const char *path, __u8 **out,
 		  size_t *out_sz);
 
 int keys_digest_der(const __u8 *der, size_t der_sz,
 		    __u8 sha256[32], __u8 fingerprint[32]);
+int keys_digest_file(const char *path, __u8 sha256[32],
+		     __u8 fingerprint[32]);
 
 /*
  * The digest the init event covers: the one certificate's digest, or

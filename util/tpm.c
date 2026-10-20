@@ -17,6 +17,7 @@
 #include <shirudo/string.h>
 
 #include "config.h"
+#include "image_config.h"
 #include "log.h"
 #include "malloc.h"
 #include "paths.h"
@@ -42,7 +43,8 @@ int tpm_tcti(char *buf, size_t size)
 	const char *tcti;
 	ssize_t n;
 
-	tcti = getenv("SHIRUDO_TPM_TCTI");
+	tcti = shirudo_image_config_active() ? NULL :
+		getenv("SHIRUDO_TPM_TCTI");
 	if ((!tcti || !*tcti) && config_load(&cfg) == 0 &&
 	    cfg.tpm_tcti[0])
 		tcti = cfg.tpm_tcti;
@@ -190,6 +192,26 @@ int tpm_pcr_extend(struct shirudo_tpm *t, __u32 pcr,
 		pr_err("tpm: PCR_Extend(%u): rc=0x%08x", pcr, (__u32)rc);
 		return -EIO;
 	}
+	return 0;
+}
+
+int shirudo_tpm_boot_identity(struct shirudo_tpm *t, __u32 *reset,
+			      __u32 *restart)
+{
+	TPMS_TIME_INFO *info = NULL;
+	TSS2_RC rc;
+
+	if (!t || !reset || !restart)
+		return -EINVAL;
+	rc = Esys_ReadClock(t->esys, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+			    &info);
+	if (rc != TSS2_RC_SUCCESS) {
+		pr_err("tpm: ReadClock: rc=0x%08x", (__u32)rc);
+		return -EIO;
+	}
+	*reset = info->clockInfo.resetCount;
+	*restart = info->clockInfo.restartCount;
+	Esys_Free(info);
 	return 0;
 }
 

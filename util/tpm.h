@@ -37,6 +37,8 @@ int tpm_pcr_extend(struct shirudo_tpm *t, __u32 pcr,
  * of the period a clear-on-reset index lives through.
  */
 int tpm_reset_count(struct shirudo_tpm *t, __u32 *out);
+int shirudo_tpm_boot_identity(struct shirudo_tpm *t, __u32 *reset,
+			      __u32 *restart);
 
 struct tpm_nv_info {
 	bool		defined;

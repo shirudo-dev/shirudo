@@ -30,14 +30,16 @@
 
 const char *eventlog_path(void)
 {
-	const char *env = getenv("SHIRUDO_EVENTLOG_PATH");
+	const char *env = shirudo_image_config_active() ? NULL :
+		getenv("SHIRUDO_EVENTLOG_PATH");
 
 	return env && *env ? env : SHIRUDO_EVENTLOG_PATH;
 }
 
 const char *eventlog_pending_path(void)
 {
-	const char *env = getenv("SHIRUDO_EVENTLOG_PENDING_PATH");
+	const char *env = shirudo_image_config_active() ? NULL :
+		getenv("SHIRUDO_EVENTLOG_PENDING_PATH");
 
 	return env && *env ? env : SHIRUDO_EVENTLOG_PENDING_PATH;
 }

@@ -193,9 +193,14 @@ UTIL_SRCS := \
     util/kernel_build_id.c \
     util/kernel_release.c \
     util/config.c \
+    util/image_config.c \
+    util/image_runtime.c \
     util/image_guards.c \
+    util/image_keys.c \
     util/config_image.c \
     util/dm_verity.c \
+    util/config_update.c \
+    util/config_measure.c \
     util/bpm_source_config.c \
     util/eventlog.c \
     util/json.c \
@@ -418,7 +423,7 @@ build/target/util/loader.o: $(BPF_OBJS)
 tools/shirudo-build/shirudo-build: $(BUILD_OBJS) util/sign.o util/config_image.o \
                                    util/log.o util/json.o util/loader.o \
                                    util/io.o util/malloc.o util/paths.o util/config.o \
-                                   util/upatch.o util/timefmt.o \
+                                   util/image_config.o util/upatch.o util/timefmt.o \
                                    util/elf_target.o util/hex.o util/keys.o \
                                    util/seal.o util/harden.o util/string.o \
                                    util/crypto_openssl.o util/tls_openssl.o \
@@ -597,10 +602,12 @@ testing/helper/test-conditions: testing/helper/test-conditions.c util/conditions
 # util/config.o resolves config_load(), called by tpm.o.
 # The register code pulls in the eventlog, which pulls in the seal
 # label writer and the JSON codec.
-REGISTER_OBJS := util/config_image.o util/chain.o util/tpm.o util/tpm_wire.o util/eventlog.o \
+REGISTER_OBJS := util/config_update.o util/config_measure.o util/config_image.o \
+                 util/chain.o util/tpm.o util/tpm_wire.o util/eventlog.o \
                  util/timefmt.o \
                  util/hex.o util/crypto_openssl.o util/json.o util/string.o \
-                 util/io.o util/seal.o util/config.o util/log.o util/malloc.o \
+                 util/io.o util/seal.o util/config.o util/image_config.o \
+                 util/log.o util/malloc.o \
                  util/initrd.o $(VERSION_OBJ)
 REGISTER_LIBS := $(LIBCRYPTO_LIBS) $(LIBSSL_LIBS) $(TSS2_LIBS)
 
@@ -610,7 +617,8 @@ testing/helper/test-keys: testing/helper/test-keys.c util/keys.o \
 	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(REGISTER_LIBS)
 
 testing/helper/test-seal: testing/helper/test-seal.c util/seal.o util/io.o \
-                          util/log.o util/string.o util/malloc.o
+                          util/log.o util/string.o util/malloc.o \
+                          util/config.o util/image_config.o util/hex.o
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^
 
@@ -638,7 +646,7 @@ testing/helper/tpmsim-cmd: testing/helper/tpmsim-cmd.c
 	$(Q)$(CC) $(CFLAGS_BASE) -Iinclude $(TPMSIM_CFLAGS) -o $@ $< $(TPMSIM_LIBS) -lcrypto
 
 testing/helper/test-config: testing/helper/test-config.c util/config.o util/io.o util/log.o util/hex.o \
-                            util/string.o util/malloc.o
+                            util/image_config.o util/string.o util/malloc.o
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^
 
@@ -682,6 +690,7 @@ testing/helper/test-kernel-abi: testing/helper/test-kernel-abi.c util/kernel_abi
 testing/helper/test-otel-map: testing/helper/test-otel-map.c util/upatch_maps.o \
                         util/upatch_maps_otel.o util/crypto_openssl.o \
                         util/tls_openssl.o util/serializer.o util/seal.o \
+                        util/config.o util/image_config.o \
                         util/upatch_decode.o util/upatch_resolve.o \
                         util/upatch.o util/json.o util/string.o util/log.o \
                         util/io.o util/malloc.o $(LIBBPF_A) util/hex.o util/timefmt.o
@@ -701,6 +710,7 @@ testing/helper/test-upatch-serializer-pages: testing/helper/test-upatch-serializ
                                        util/upatch_maps.o util/upatch_resolve.o \
                                        util/serializer.o util/seal.o \
                                        util/json.o util/string.o \
+                                       util/config.o util/image_config.o \
                                        util/malloc.o util/io.o \
                                        util/log.o util/hex.o util/timefmt.o
 	@printf '  CC      $@\n'

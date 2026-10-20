@@ -63,6 +63,7 @@ const struct shirudo_image_guard
 shirudo_observer_guards[SHIRUDO_OBSERVER_HOOK_COUNT] = {
 	{ "shirudo_lsm_file_ioctl", SHIRUDO_BPFFS_DIR "/file_ioctl_link" },
 	{ "shirudo_lsm_task_prctl", SHIRUDO_TASK_PRCTL_LINK_PIN },
+	{ "shirudo_lsm_bprm_check_security", SHIRUDO_BPRM_CHECK_LINK_PIN },
 	{ "shirudo_lsm_bdev_setintegrity",
 	  SHIRUDO_BPFFS_DIR "/bdev_integrity_link" },
 	{ "shirudo_lsm_bdev_free_security",

@@ -42,6 +42,7 @@
 #include "util/help.h"
 #include "util/hex.h"
 #include "util/io.h"
+#include "util/initrd.h"
 #include "util/json.h"
 #include "util/log.h"
 #include "util/malloc.h"
@@ -299,6 +300,18 @@ static int load_source(const char *name, struct bpm_source *s)
 	fclose(fp);
 	if (!s->endpoint[0] || !s->key_file[0])
 		return -EINVAL;
+	if (shirudo_image_config_active()) {
+		const char *relative = s->key_file;
+		char resolved[BPM_MAX_KEY];
+
+		if (!strncmp(relative, "/etc/shirudo/bpm/keys/", 22))
+			relative++;
+		rc = shirudo_image_path_relative(resolved, sizeof(resolved),
+						 relative);
+		if (rc)
+			return rc;
+		bpm_copy_string(s->key_file, sizeof(s->key_file), resolved);
+	}
 	return 0;
 }
 
@@ -1211,6 +1224,13 @@ static int cmd_bpm_config(int argc, const char **argv)
 		closedir(d);
 		return 0;
 	}
+	if (shirudo_image_config_active() &&
+	    (!strcmp(argv[2], "add") || !strcmp(argv[2], "remove") ||
+	     !strcmp(argv[2], "rm"))) {
+		pr_err("image mode: change repository definitions and keys in "
+		       "a signed config image, then run `shirudo image update`");
+		return 1;
+	}
 	if ((!strcmp(argv[2], "remove") || !strcmp(argv[2], "rm")) && argc == 4) {
 		char p[PATH_MAX], key[PATH_MAX];
 		struct bpm_source s;
@@ -1323,7 +1343,7 @@ static int tree_fetch_publication(const struct bpm_tree_config *cfg,
 	if (rc)
 		return rc;
 	return bpm_tree_fetch_publication(&c, repository, cfg->reference,
-					  SHIRUDO_CERT_PATH, pub,
+					  shirudo_cert_path(), pub,
 					  manifest_digest, digest_sz);
 }
 
@@ -2190,6 +2210,11 @@ static int cmd_bpm_key(int argc, const char **argv)
 	    (strcmp(sub, "list") && argc != 3)) {
 		print_help(&bpm_key_help);
 		return 2;
+	}
+	if (!strcmp(sub, "add") && shirudo_image_config_active()) {
+		pr_err("image mode: add vouched BPF signers to the signed "
+		       "config selected for boot and reboot to enroll them");
+		return 1;
 	}
 	if (!strcmp(sub, "list")) {
 		rc = list_keys();

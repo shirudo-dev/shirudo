@@ -15,7 +15,9 @@
 # file system's shirudo.service re-runs init and adopts it.
 #
 # dracut's shirudo module installs and enables this unit; it is never
-# started in the root file system.
+# started in the root file system. Image mode requires writable state
+# under /sysroot/var/lib/shirudo for durable config recovery; legacy mode
+# reads it through a read-only bind.
 
 [Unit]
 Description=shirudo: bring up the BPF LSM and bind the register from the initrd

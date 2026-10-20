@@ -390,8 +390,11 @@ int tree_selector_matches(const struct shirudo_tree_selector *s)
 		}
 	}
 	if (s->n_labels) {
-		rc = read_config_file("/etc/shirudo/node.labels", labels, &nl,
-				      ARRAY_SIZE(labels), false);
+		const char *nodes =
+			shirudo_image_path(SHIRUDO_IMAGE_NODE_LABELS);
+
+		rc = read_config_file(nodes ?: "/etc/shirudo/node.labels",
+				      labels, &nl, ARRAY_SIZE(labels), false);
 		if (rc == -ENOENT)
 			return 0;
 		if (rc)

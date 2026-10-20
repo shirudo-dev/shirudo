@@ -6,6 +6,8 @@
 #include <string.h>
 
 #include "builtin.h"
+#include "util/image_config.h"
+#include "util/image_runtime.h"
 #include "util/log.h"
 #include "util/malloc.h"
 
@@ -13,7 +15,8 @@ static void image_help(void)
 {
 	fprintf(stderr,
 		"usage: shirudo image build [image builder options]\n"
-		"       shirudo image verify <prefix> --cert <certificate>\n");
+		"       shirudo image verify <prefix> --cert <certificate>\n"
+		"       shirudo image status\n");
 }
 
 int cmd_image(int argc, const char **argv)
@@ -21,7 +24,7 @@ int cmd_image(int argc, const char **argv)
 	int rc;
 
 	if (argc == 2 && !strcmp(argv[1], "--list-cmds")) {
-		puts("build verify");
+		puts("build verify status");
 		return 0;
 	}
 	if (argc < 2 || !strcmp(argv[1], "--help") || !strcmp(argv[1], "-h")) {
@@ -45,6 +48,15 @@ int cmd_image(int argc, const char **argv)
 		xfree(helper, bytes);
 		return rc;
 	}
-	image_help();
-	return 2;
+	if (!strcmp(argv[1], "status") && argc == 2) {
+		rc = shirudo_image_status();
+	} else {
+		image_help();
+		return 2;
+	}
+	if (rc == -EINPROGRESS)
+		pr_err("image: activation is pending; further changes are blocked");
+	else if (rc)
+		pr_err("image %s: %s", argv[1], strerror(-rc));
+	return rc ? 1 : 0;
 }

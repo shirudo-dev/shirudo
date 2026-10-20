@@ -19,6 +19,7 @@
 
 #include <shirudo/string.h>
 
+#include "image_config.h"
 #include "io.h"
 #include "log.h"
 #include "paths.h"
@@ -40,10 +41,13 @@ int seal_label(const char *path)
  * and never walks two trees at once.
  */
 static dev_t seal_root_dev;
+static int seal_walk_error;
 
 static int seal_label_cb(const char *path, const struct stat *sb,
 			 int typeflag, struct FTW *ftwbuf)
 {
+	int rc;
+
 	(void)typeflag;
 	(void)ftwbuf;
 	/*
@@ -54,9 +58,19 @@ static int seal_label_cb(const char *path, const struct stat *sb,
 	 */
 	if (sb->st_dev != seal_root_dev)
 		return 0;
-	if (seal_label(path) != 0)
-		pr_warn("seal: label %s: %s", path, strerror(errno));
-	return 0;	/* best-effort: keep walking */
+	if (shirudo_image_config_active() &&
+	    !S_ISREG(sb->st_mode) && !S_ISDIR(sb->st_mode))
+		rc = -EINVAL;
+	else
+		rc = seal_label(path);
+	if (rc) {
+		pr_warn("seal: label %s: %s", path, strerror(-rc));
+		if (shirudo_image_config_active()) {
+			seal_walk_error = rc;
+			return 1;
+		}
+	}
+	return 0;
 }
 
 int seal_label_tree(void)
@@ -65,8 +79,9 @@ int seal_label_tree(void)
 	struct stat st;
 	ssize_t n;
 
-	/* Label the binary too: the seal protects it and marks its tasks. */
-	n = readlink("/proc/self/exe", self, sizeof(self) - 1);
+	/* The ordinary-mode label protects the binary and marks its tasks. */
+	n = shirudo_image_config_active() ? -1 :
+		readlink("/proc/self/exe", self, sizeof(self) - 1);
 	if (n > 0) {
 		self[n] = '\0';
 		if (seal_label(self) != 0)
@@ -76,8 +91,9 @@ int seal_label_tree(void)
 	if (stat(SHIRUDO_VAR_LIB, &st) != 0)
 		return -errno;
 	seal_root_dev = st.st_dev;
+	seal_walk_error = 0;
 	if (nftw(SHIRUDO_VAR_LIB, seal_label_cb, 16, FTW_PHYS | FTW_MOUNT) != 0)
-		return -errno;
+		return seal_walk_error ? seal_walk_error : -errno;
 	return 0;
 }
 

@@ -64,6 +64,7 @@ void chain_upatch_event(const char *tag, const char *name,
 			const __u8 payload[32], __u8 event[32]);
 void chain_tree_event(__s64 seq, const __u8 operation_digest[32],
 		      __u8 event[32]);
+int shirudo_chain_fold_checked(__u8 chain[32], const __u8 event[32]);
 void chain_fold(__u8 chain[32], const __u8 event[32]);
 
 /* The PCR record anchoring a register name: nvpcr-init:shirudo:0x..:<name>. */

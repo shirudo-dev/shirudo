@@ -36,6 +36,7 @@
 #include "util/hex.h"
 #include "util/identity.h"
 #include "util/io.h"
+#include "util/image_keys.h"
 #include "util/json.h"
 #include "util/keyring.h"
 #include "util/keys.h"
@@ -577,6 +578,11 @@ static int keys_add(int argc, const char **argv)
 		print_help(&keys_add_help);
 		return 2;
 	}
+	if (shirudo_image_config_active()) {
+		pr_err("image mode: add vouched BPF signers to the signed "
+		       "config selected for boot and reboot to enroll them");
+		return 1;
+	}
 	keys_dir = keys_dir_resolve(keys_dir_arg);
 	if (strsprintf(revoked, sizeof(revoked), "%s/revoked", keys_dir) < 0) {
 		pr_err("keys add: keys directory path too long");
@@ -818,6 +824,30 @@ static int purge_signed_by(const __u8 *der, size_t der_sz,
 	return rc ? rc : purged;
 }
 
+int shirudo_keys_revoke_image(const __u8 *der, size_t size, bool boot)
+{
+	key_serial_t ring, key;
+	size_t unloaded;
+	int rc;
+
+	if (!boot)
+		return -EOPNOTSUPP;
+	ring = keyring_bpf_serial();
+	if (ring < 0)
+		return ring;
+	key = keyring_find_cert(ring, der, size);
+	if (key != -ENOKEY && key < 0)
+		return key;
+	if (key >= 0) {
+		rc = keyring_unlink_key(ring, key);
+		if (rc)
+			return rc;
+	}
+	rc = purge_signed_by(der, size, &unloaded);
+	return rc < 0 ? rc : 0;
+}
+
+/* Replace the primary with a member: its file becomes cert.der. */
 static int promote(const struct shirudo_trusted_cert *c)
 {
 	char vouch[PATH_MAX];
@@ -972,6 +1002,11 @@ static int keys_revoke(int argc, const char **argv)
 			    hex_decode(promote_arg, promote_fp, 32))) {
 		pr_err("keys revoke: --promote takes a fingerprint");
 		return 2;
+	}
+	if (shirudo_image_config_active()) {
+		pr_err("image mode: put revocation records in a signed config "
+		       "image, then run `shirudo image update`");
+		return 1;
 	}
 	hex_encode(fp, 32, fp_hex);
 
@@ -1202,7 +1237,8 @@ static int keys_show(int argc, const char **argv)
 		}
 	}
 
-	keys_dir = keys_dir_resolve(keys_dir_arg);
+	keys_dir = shirudo_image_config_active() ? SHIRUDO_RUNTIME_DIR "/keys" :
+		keys_dir_resolve(keys_dir_arg);
 
 	rc = key_paths(keys_dir, pkey_path, sizeof(pkey_path),
 		       cert_path, sizeof(cert_path));

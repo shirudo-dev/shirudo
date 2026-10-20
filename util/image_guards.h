@@ -10,7 +10,7 @@
 
 #define SHIRUDO_SEAL_HOOK_COUNT 16
 #define SHIRUDO_MOUNT_HOOK_COUNT 4
-#define SHIRUDO_OBSERVER_HOOK_COUNT 6
+#define SHIRUDO_OBSERVER_HOOK_COUNT 7
 
 struct shirudo_image_guard {
 	const char *prog;
