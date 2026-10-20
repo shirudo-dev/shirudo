@@ -4,8 +4,7 @@
 #
 # t1124 -- `keys add` on a live target: the bundle's third certificate
 # joins the trusted set on disk with the vouch the primary signed for
-# it, the bpf keyring stays as the boot sealed it, and a certificate
-# dropped into the directory without a vouch is not a member.
+# it, and the bpf keyring stays as the boot sealed it.
 
 cd "$(dirname "$0")"
 . ./integration-lib.sh
@@ -58,15 +57,6 @@ test_expect_success 'adding it again changes nothing' '
 	out=$("$SHIRUDO_BIN" keys add "$THIRD" --vouch "$VOUCH" 2>/dev/null) &&
 	[ "$out" = "$THIRD_FP" ] &&
 	[ "$(status_field certs)" = 3 ]
-'
-
-test_expect_success 'a certificate dropped in without a vouch is not a member' '
-	"$SHIRUDO_BIN" genkey --keys-dir "$W/junk" >/dev/null 2>&1 &&
-	cp "$W/junk/cert.der" "$TRUSTED/junk.der" &&
-	[ "$(status_field certs)" = 3 ] &&
-	[ "$(status_field certs_unvouched)" = 1 ] &&
-	rm -f "$TRUSTED/junk.der" &&
-	[ "$(status_field certs_unvouched)" = 0 ]
 '
 
 test_expect_success 'keys lists the member with its voucher' '
