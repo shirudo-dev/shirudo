@@ -34,6 +34,18 @@ test_expect_success 'current CONFIG and PCR evidence verify' '
 	python3 tamperproof/t1154-verity-config.py initial "$work"
 '
 
+test_expect_success 'trusted caller without a root nomination gets no CONFIG classification' '
+	python3 tamperproof/t1154-verity-config.py root-missing "$work"
+'
+
+test_expect_success 'trusted caller with a wrong root nomination gets no CONFIG classification' '
+	python3 tamperproof/t1154-verity-config.py root-wrong "$work"
+'
+
+test_expect_success 'exact root nomination classifies CONFIG once and is cleared' '
+	python3 tamperproof/t1154-verity-config.py root-match "$work"
+'
+
 if [ -f "$SHIRUDO_TEST_KEY_FIXTURES/builtin.der" ]; then
 	test_expect_success 'kernel built-in certificate accepts a signed config root' '
 		python3 tamperproof/t1154-verity-config.py builtin "$work"

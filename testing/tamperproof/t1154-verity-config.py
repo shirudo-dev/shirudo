@@ -43,6 +43,23 @@ def run(label, *arguments, success=True):
     return result.stdout
 
 
+def fault_command():
+    runtime = RUNTIME
+    directories = []
+    for directory, _, files in os.walk(runtime, followlinks=False):
+        if any(name.endswith(".so") or ".so." in name for name in files):
+            directories.append(directory)
+    library_path = ":".join(sorted(directories))
+    for name in ("lib64/ld-linux-x86-64.so.2", "lib/ld-linux-aarch64.so.1",
+                 "lib/ld-linux-riscv64-lp64d.so.1"):
+        interpreter = runtime / name
+        if interpreter.is_file():
+            return [str(interpreter), "--inhibit-cache", "--library-path",
+                    library_path, str(runtime / "usr/bin/shirudo-image-fault")]
+    raise AssertionError("runtime ELF interpreter missing")
+
+
+
 def root(name):
     data = (IMAGES / (name + ".roothash")).read_bytes()
     require(len(data) == 64 and all(c in b"0123456789abcdef" for c in data),
@@ -192,6 +209,18 @@ def main():
         (RESULTS / "anchor.json").unlink(missing_ok=True)
         require(root("config-a") != root("config-b"), "A/B fixtures are identical")
         snapshot("initial")
+    elif mode in ("root-missing", "root-wrong", "root-match"):
+        before = snapshot(mode + "-before")
+        result = subprocess.run(fault_command() + ["config-root", mode[5:],
+                                                  str(IMAGES / "config-a")],
+                                capture_output=True, text=True, timeout=120)
+        (RESULTS / (mode + ".stdout")).write_text(result.stdout)
+        (RESULTS / (mode + ".stderr")).write_text(result.stderr)
+        require(result.returncode == 0,
+                f"root fixture failed: {result.returncode}: {result.stderr}")
+        after = snapshot(mode + "-after")
+        differences = [key for key in before if before[key] != after[key]]
+        require(not differences, f"{mode} changed state: {differences}")
     elif mode == "builtin":
         before = snapshot("builtin-before")
         public = Path(os.environ["SHIRUDO_TEST_KEY_FIXTURES"])

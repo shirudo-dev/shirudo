@@ -580,6 +580,7 @@ build/verity-tests/shirudo-image-fault: testing/helper/image-fault.c \
 	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) $(RPATH_LDFLAGS) -o $@ \
 		$(filter-out %.h,$^) \
 		-Wl,--wrap=main,--wrap=Esys_PCR_Extend \
+		-Wl,--wrap=shirudo_config_root_begin,--wrap=shirudo_config_root_end \
 		$(STATIC_LIBS) $(VERITY_TEST_LIBS)
 
 verity-test-helpers: $(VERITY_TEST_HELPERS) build/verity-tests/shirudo-image-fault

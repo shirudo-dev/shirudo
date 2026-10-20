@@ -5,7 +5,6 @@
 import hashlib
 import importlib.util
 import json
-import os
 from pathlib import Path
 import re
 import struct
@@ -17,22 +16,6 @@ spec = importlib.util.spec_from_file_location(
 config = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(config)
 RESULTS = config.RESULTS
-
-
-def fault_command():
-    runtime = config.RUNTIME
-    directories = []
-    for directory, _, files in os.walk(runtime, followlinks=False):
-        if any(name.endswith(".so") or ".so." in name for name in files):
-            directories.append(directory)
-    library_path = ":".join(sorted(directories))
-    for name in ("lib64/ld-linux-x86-64.so.2", "lib/ld-linux-aarch64.so.1",
-                 "lib/ld-linux-riscv64-lp64d.so.1"):
-        interpreter = runtime / name
-        if interpreter.is_file():
-            return [str(interpreter), "--inhibit-cache", "--library-path",
-                    library_path, str(runtime / "usr/bin/shirudo-image-fault")]
-    raise AssertionError("runtime ELF interpreter missing")
 
 
 def pcr(label):
@@ -57,7 +40,7 @@ def main():
     digest = hashlib.sha256(b"shirudo-config-root-v1\0" + struct.pack(">I", 2) +
                             bytes.fromhex(config.root(target))).digest()
     expected = hashlib.sha256(bytes.fromhex(before["pcr"]) + digest).hexdigest()
-    result = subprocess.run(fault_command() + ["image", "update",
+    result = subprocess.run(config.fault_command() + ["image", "update",
                                               str(config.IMAGES / target)],
                             capture_output=True, text=True, timeout=120)
     (RESULTS / "crash.stdout").write_text(result.stdout)

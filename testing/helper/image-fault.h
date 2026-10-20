@@ -4,7 +4,18 @@
 #ifndef SHIRUDO_TEST_IMAGE_FAULT_H
 #define SHIRUDO_TEST_IMAGE_FAULT_H
 
+#include <shirudo/misc.h>
+
 #include <tss2/tss2_esys.h>
+
+#include "util/image_guards.h"
+
+int __real_shirudo_config_root_begin(const __u8 root[32],
+				     struct shirudo_config_root_guard *guard);
+int __wrap_shirudo_config_root_begin(const __u8 root[32],
+				     struct shirudo_config_root_guard *guard);
+int __real_shirudo_config_root_end(struct shirudo_config_root_guard *guard);
+int __wrap_shirudo_config_root_end(struct shirudo_config_root_guard *guard);
 
 int __real_main(int argc, const char **argv);
 int __wrap_main(int argc, const char **argv);
