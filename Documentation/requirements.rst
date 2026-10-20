@@ -121,14 +121,16 @@ The opt-in dm-verity mode additionally requires ``CONFIG_BLK_DEV_DM``,
 and config mappings use verity format 1, SHA-256, 4096-byte blocks and a
 standard verity superblock. ``CONFIG_DM_VERITY_VERIFY_ROOTHASH_SIG`` is
 required for the config root signature. The kernel must provide the
-``.dm-verity`` keyring enrollment and sealing API. Image boot uses
+``.dm-verity`` keyring enrollment and sealing API, including
+``KEY_SPEC_DM_VERITY_KEYRING``. The special keyring ID was added by upstream
+commit ``1041fca2ee8a`` (``keys: add KEY_SPEC_DM_VERITY_KEYRING``). Apply that
+commit if the selected kernel does not yet contain it. Image boot uses
 ``dm_verity.keyring_unsealed=1`` so the trusted initrd can enroll its config
 certificate and seal that keyring. Built-in trusted certificates remain
 part of the kernel's dm-verity trust path. The runtime must match the exact
 UKI-authenticated root; config-signing trust does not authorize executables.
 
-Image mode uses existing upstream kernel APIs and carries no kernel
-patches. Existing hooks do not establish every desired protection against
+Image enforcement uses existing upstream LSM hooks. Existing hooks do not establish every desired protection against
 hostile device-mapper controls or mount-tree changes; see the limitations in
 `config-images <config-images.rst>`__. BPF signing keys are enrolled at boot
 before reject-all keyring sealing. Ordinary installations do not enable
@@ -399,7 +401,8 @@ binary, as described in `operations <operations.rst>`__.
 -------------------------------
 
 Use the upstream development-tree ABI and options described above. Image
-mode uses existing LSM hooks and adds no kernel patches. The
+mode uses existing LSM hooks. A kernel predating
+``KEY_SPEC_DM_VERITY_KEYRING`` needs the upstream keyring-ID commit above. The
 `config-images <config-images.rst>`__ guide describes the two policy modes,
 test commands and remaining protection gaps. Run both complete policy-mode
 suites when validating a deployment.

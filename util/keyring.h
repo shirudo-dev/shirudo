@@ -85,7 +85,12 @@ key_serial_t keyring_bpf_add_cert(const __u8 *cert,
 /* Seal it for the rest of the boot: no key can be linked afterwards. */
 int keyring_bpf_seal(void);
 
-/* Trusted initrd only: discover the kernel-created .dm-verity keyring. */
+/* The kernel-owned config trust anchor, populated only by trusted initrd. */
+#ifndef KEY_SPEC_DM_VERITY_KEYRING
+#define KEY_SPEC_DM_VERITY_KEYRING	(-10)
+#endif
+
+/* Resolve the special ID; never fall back to a same-named user keyring. */
 key_serial_t shirudo_keyring_dm_verity_serial(void);
 key_serial_t shirudo_keyring_dm_verity_add_cert(const __u8 *cert,
 						size_t cert_len);
