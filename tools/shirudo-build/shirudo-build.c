@@ -21,6 +21,7 @@
 #include "harden.h"
 #include "log.h"
 #include "hex.h"
+#include "image.h"
 #include "malloc.h"
 #include "package.h"
 #include "paths.h"
@@ -48,6 +49,7 @@ static void usage(FILE *fp)
 		"                [--keys-dir <dir>]\n"
 		"                [--key <signing_key.pem>] [--cert <cert.der>]\n"
 		"\n"
+		"  shirudo-build image build <filesystem.img> -o <prefix> ...\n"
 		"  shirudo-build bpm <build|push|tree append> ...\n"
 		"  shirudo-build keys vouch <cert.der> [-o <file>] ...\n"
 		"\n"
@@ -208,6 +210,8 @@ int main(int argc, char **argv)
 	log_init();
 	harden_self();
 
+	if (argc >= 2 && strcmp(argv[1], "image") == 0)
+		return shirudo_build_image(argc - 1, argv + 1);
 	if (argc >= 2 && strcmp(argv[1], "bpm") == 0)
 		return shirudo_build_bpm(argc - 1, argv + 1);
 	if (argc >= 3 && strcmp(argv[1], "keys") == 0 &&

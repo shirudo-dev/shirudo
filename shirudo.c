@@ -42,6 +42,8 @@ static const struct cmd commands[] = {
 	{ "genkey",	cmd_genkey,	GROUP_OPERATOR,	"generate the signing key + cert" },
 	{ "build",	cmd_build,	GROUP_OPERATOR,	"compile + sign a .upatch" },
 
+	{ "image", cmd_image, GROUP_LOCAL,
+	  "build and verify dm-verity images" },
 	{ "init",	cmd_init,	GROUP_TARGET,
 	  "bootstrap shirudo enforcement on this target" },
 	{ "upatch",	cmd_upatch,	GROUP_TARGET,

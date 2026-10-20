@@ -193,6 +193,7 @@ UTIL_SRCS := \
     util/kernel_build_id.c \
     util/kernel_release.c \
     util/config.c \
+    util/config_image.c \
     util/bpm_source_config.c \
     util/eventlog.c \
     util/json.c \
@@ -223,6 +224,7 @@ BUILTIN_SRCS := \
     builtin-status.c \
     builtin-keys.c \
     builtin-config.c \
+    builtin-image.c \
     builtin-upatch.c \
     builtin-bpm.c \
     builtin-attest.c \
@@ -257,7 +259,8 @@ BUILD_SRCS := \
     tools/shirudo-build/vmlinux.c \
     tools/shirudo-build/bpm-build.c \
     tools/shirudo-build/bpm-publish.c \
-    tools/shirudo-build/vouch.c
+    tools/shirudo-build/vouch.c \
+    tools/shirudo-build/image.c
 
 # ----- derived names ----------------------------------------------
 
@@ -410,9 +413,9 @@ build/target/util/loader.o: $(BPF_OBJS)
 # --unload directive emission path), and the OCI client for the
 # operator-only `bpm build|push|tree append`. Not linked into the core
 # shirudo binary.
-tools/shirudo-build/shirudo-build: $(BUILD_OBJS) util/sign.o \
+tools/shirudo-build/shirudo-build: $(BUILD_OBJS) util/sign.o util/config_image.o \
                                    util/log.o util/json.o util/loader.o \
-                                   util/io.o util/malloc.o util/paths.o \
+                                   util/io.o util/malloc.o util/paths.o util/config.o \
                                    util/upatch.o util/timefmt.o \
                                    util/elf_target.o util/hex.o util/keys.o \
                                    util/seal.o util/harden.o util/string.o \
@@ -577,7 +580,7 @@ testing/helper/test-conditions: testing/helper/test-conditions.c util/conditions
 # util/config.o resolves config_load(), called by tpm.o.
 # The register code pulls in the eventlog, which pulls in the seal
 # label writer and the JSON codec.
-REGISTER_OBJS := util/chain.o util/tpm.o util/tpm_wire.o util/eventlog.o \
+REGISTER_OBJS := util/config_image.o util/chain.o util/tpm.o util/tpm_wire.o util/eventlog.o \
                  util/timefmt.o \
                  util/hex.o util/crypto_openssl.o util/json.o util/string.o \
                  util/io.o util/seal.o util/config.o util/log.o util/malloc.o \
@@ -700,6 +703,11 @@ testing/helper/test-exec-churn: testing/helper/test-exec-churn.c util/io.o util/
 testing/upatch/kernel-obs/exec/exec-paths: testing/upatch/kernel-obs/exec/exec_paths.c
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -pthread -o $@ $^
+
+
+
+
+
 
 test-helpers: $(TEST_HELPERS)
 

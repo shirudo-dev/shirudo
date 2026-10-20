@@ -53,6 +53,8 @@ jobs:
               build-essential \
               ca-certificates \
               clang \
+              cryptsetup-bin \
+              e2fsprogs \
               libclang-rt-21-dev \
               llvm \
               curl \

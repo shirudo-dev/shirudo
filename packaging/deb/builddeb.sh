@@ -59,8 +59,8 @@ esac
 
 depends=$("$here/depends.sh" $bins || true)
 if [ "$role" = operator ]; then
-	# shirudo-build execs clang to compile .bpf.c upatches into objects.
-	depends="${depends:+$depends, }clang, llvm"
+	# Operator-only compilers and the standard image format/verify tool.
+	depends="${depends:+$depends, }clang, llvm, cryptsetup-bin"
 fi
 
 # Installed-Size is in KiB, computed before DEBIAN/ exists.

@@ -2,9 +2,8 @@
 /*
  * Copyright (c) 2026 Authors of shirudo
  *
- * execv of clang -target bpf for .bpf.c -> .bpf.o. This is the only
- * subprocess in shirudo, by design. The clang path is hardcoded at
- * build time; PATH is never consulted.
+ * Operator-side execv of clang -target bpf for .bpf.c -> .bpf.o.
+ * The clang path is hardcoded at build time; PATH is never consulted.
  */
 
 #include <errno.h>

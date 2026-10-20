@@ -264,6 +264,21 @@ int cert_key_algorithm(const struct shirudo_cert *cert,
 	return 0;
 }
 
+static CMS_ContentInfo *read_cms(const __u8 *signature, size_t len)
+{
+	const __u8 *next = signature;
+	CMS_ContentInfo *cms;
+
+	if (!signature || !len || len > INT_MAX)
+		return NULL;
+	cms = d2i_CMS_ContentInfo(NULL, &next, (long)len);
+	if (cms && next != signature + len) {
+		CMS_ContentInfo_free(cms);
+		cms = NULL;
+	}
+	return cms;
+}
+
 /*
  * The algorithm comes from the SignerInfo, so an ML-DSA signature,
  * with signedAttrs and SHA-512 or bare on OpenSSL 4, and an RSA one
@@ -273,27 +288,26 @@ int verify_detached(const __u8 *payload, size_t payload_len,
 		    const __u8 *signature, size_t signature_len,
 		    const struct shirudo_cert *cert)
 {
-	BIO *sig = NULL, *data = NULL, *out = NULL;
-	CMS_ContentInfo *cms = NULL;
 	STACK_OF(X509) *signers = NULL;
+	BIO *data = NULL, *out = NULL;
+	CMS_ContentInfo *cms = NULL;
 	X509_STORE *store = NULL;
 	int rc = -EINVAL;
 
 	if (!payload || !signature || !cert || !cert->impl ||
 	    payload_len > INT_MAX || signature_len > INT_MAX)
 		return -EINVAL;
-	sig = BIO_new_mem_buf(signature, (int)signature_len);
 	data = BIO_new_mem_buf(payload, (int)payload_len);
 	out = BIO_new(BIO_s_null());
 	store = X509_STORE_new();
-	if (!sig || !data || !out || !store ||
+	if (!data || !out || !store ||
 	    X509_STORE_add_cert(store, cert->impl) != 1 ||
 	    X509_STORE_set_flags(store, X509_V_FLAG_NO_CHECK_TIME) != 1)
 		goto done;
 	signers = sk_X509_new_null();
 	if (!signers || !sk_X509_push(signers, cert->impl))
 		goto done;
-	cms = d2i_CMS_bio(sig, NULL);
+	cms = read_cms(signature, signature_len);
 	if (cms && CMS_verify(cms, signers, store, data, out,
 			      CMS_BINARY | CMS_DETACHED) == 1)
 		rc = 0;
@@ -305,7 +319,6 @@ done:
 	X509_STORE_free(store);
 	BIO_free(out);
 	BIO_free(data);
-	BIO_free(sig);
 	return rc;
 }
 
@@ -314,15 +327,11 @@ int cms_signed_by(const __u8 *signature, size_t signature_len,
 {
 	STACK_OF(CMS_SignerInfo) *sis;
 	CMS_ContentInfo *cms = NULL;
-	BIO *sig = NULL;
 	int i, rc = -EINVAL;
 
 	if (!signature || !cert || !cert->impl || signature_len > INT_MAX)
 		return -EINVAL;
-	sig = BIO_new_mem_buf(signature, (int)signature_len);
-	if (!sig)
-		goto done;
-	cms = d2i_CMS_bio(sig, NULL);
+	cms = read_cms(signature, signature_len);
 	if (!cms)
 		goto done;
 	sis = CMS_get0_SignerInfos(cms);
@@ -338,7 +347,6 @@ done:
 	if (rc < 0)
 		ERR_clear_error();
 	CMS_ContentInfo_free(cms);
-	BIO_free(sig);
 	return rc;
 }
 

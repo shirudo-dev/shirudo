@@ -31,6 +31,20 @@ _shirudo()
 	cmd="${COMP_WORDS[1]}"
 	sub="${COMP_WORDS[2]}"
 	case "$cmd" in
+	image)
+		if (( cword == 2 )); then
+			local subs
+			subs=$("$bin" image --list-cmds 2>/dev/null)
+			COMPREPLY=( $(compgen -W "$subs" -- "$cur") )
+		elif [[ $cur == -* && $sub == build ]]; then
+			COMPREPLY=( $(compgen -W "-o --kind --keys-dir --key \
+				--cert --salt" -- "$cur") )
+		elif [[ $cur == -* && $sub == verify ]]; then
+			COMPREPLY=( $(compgen -W "--cert" -- "$cur") )
+		else
+			COMPREPLY=( $(compgen -f -- "$cur") )
+		fi
+		;;
 	upatch)
 		if (( cword == 2 )); then
 			local subs
@@ -127,7 +141,8 @@ _shirudo()
 			COMPREPLY=( $(compgen -W "--evidence= --nonce= --ak-name= \
 				--cert= --upatch= --expect= --tree-root= \
 				--expect-chain= --expect-pcr= --expect-credential= \
-				--allow-runtime-events --strict-anchor" -- "$cur") )
+				--allow-runtime-events --strict-anchor \
+				--expect-config-root= --expect-config-pcr=" -- "$cur") )
 		elif [[ $sub == predict ]]; then
 			COMPREPLY=( $(compgen -W "--cert= --upatch= --expect= \
 				--tree-root= --event=" -- "$cur") )

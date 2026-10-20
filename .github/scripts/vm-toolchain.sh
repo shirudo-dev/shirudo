@@ -37,6 +37,8 @@ apt-get install -y --no-install-recommends \
 	build-essential \
 	ca-certificates \
 	clang \
+	cryptsetup-bin \
+	e2fsprogs \
 	llvm \
 	curl \
 	git \

@@ -59,6 +59,8 @@ jobs:
               build-essential \
               ca-certificates \
               clang \
+              cryptsetup-bin \
+              e2fsprogs \
               llvm \
               python3 \
               pkg-config \
@@ -296,7 +298,7 @@ jobs:
       - name: Install the build dependencies
         run: |
           dnf -q install -y gcc make pkgconf-pkg-config git python3 rpm-build \
-            clang llvm openssl openssl-devel libcurl-devel tpm2-tss-devel \
+            clang llvm cryptsetup openssl openssl-devel libcurl-devel tpm2-tss-devel \
             elfutils-libelf-devel zlib-ng-compat-devel luajit-devel jq
 
       - name: Check out repository

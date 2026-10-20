@@ -85,8 +85,8 @@ dirs=$(cd "$stage" && find . -mindepth 1 -type d -path '*/shirudo*' | sed 's#^\.
 	printf 'Packager: %s\n' "$maint"
 	printf 'Conflicts: %s\n' "$other"
 	if [ "$role" = operator ]; then
-		# shirudo-build execs clang to compile .bpf.c upatches.
-		printf 'Requires: clang, llvm\n'
+		# Operator-only compilers and the standard image format/verify tool.
+		printf 'Requires: clang, llvm, cryptsetup\n'
 	fi
 	printf '\n%%description\n'
 	if [ "$role" = target ]; then
