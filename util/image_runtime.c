@@ -562,6 +562,21 @@ static void close_candidate(void)
 	shirudo_config_image_close(&image.candidate);
 }
 
+static int remove_candidate(struct shirudo_dm_verity *device)
+{
+	__u32 attempt;
+	int rc;
+
+	for (attempt = 0; attempt < 100; attempt++) {
+		rc = shirudo_dm_verity_remove(device, false);
+		if (rc != -EBUSY)
+			return rc;
+		if (attempt < 99)
+			usleep(10000);
+	}
+	return rc;
+}
+
 static int candidate_keys(int fd)
 {
 	int rc;
@@ -610,40 +625,45 @@ static int prepare(void *ctx, const struct shirudo_config_update_target *target)
 		rc = device_observed(current->candidate_device.device,
 				     current->candidate.image.root_hash,
 				     SHIRUDO_DEVICE_CONFIG);
-	if (rc) {
-		if (created) {
-			cleanup = shirudo_dm_verity_remove(device, false);
-			if (cleanup)
-				pr_warn("image: cannot remove candidate mapping: %s",
-					strerror(-cleanup));
-		}
-		return rc;
-	}
+	if (rc)
+		goto out;
 	if (!stat(SHIRUDO_CONFIG_IMAGE_DIR, &st) &&
 	    st.st_dev == current->candidate_device.device) {
 		current->candidate_fd = open(SHIRUDO_CONFIG_IMAGE_DIR,
 					     O_PATH | O_DIRECTORY | O_CLOEXEC);
 	} else {
 		if (umount2(mountpoint, MNT_DETACH) &&
-		    errno != EINVAL && errno != ENOENT)
-			return -errno;
+		    errno != EINVAL && errno != ENOENT) {
+			rc = -errno;
+			goto out;
+		}
 		rc = mkdir_owned(mountpoint);
 		if (!rc)
 			rc = shirudo_dm_verity_mount(device,
 						     mountpoint,
 						     false);
 		if (rc)
-			return rc;
+			goto out;
 		current->candidate_fd = open(mountpoint,
 					     O_PATH | O_DIRECTORY | O_CLOEXEC);
 	}
-	if (current->candidate_fd < 0)
-		return -errno;
+	if (current->candidate_fd < 0) {
+		rc = -errno;
+		goto out;
+	}
 	rc = mount_flags(current->candidate_fd, false);
 	if (!rc)
 		rc = shirudo_image_config_validate(current->candidate_fd);
 	if (!rc && !current->preparing_boot)
 		rc = candidate_keys(current->candidate_fd);
+out:
+	if (rc && created) {
+		close_candidate();
+		cleanup = remove_candidate(device);
+		if (cleanup && cleanup != -ENXIO && cleanup != -ENODEV)
+			pr_warn("image: cannot remove rejected mapping %s: %s",
+				device->name, strerror(-cleanup));
+	}
 	return rc;
 }
 
