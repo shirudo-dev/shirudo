@@ -523,7 +523,7 @@ REGISTER_OBJS := util/chain.o util/tpm.o util/tpm_wire.o util/eventlog.o \
                  util/hex.o util/crypto_openssl.o util/json.o util/io.o \
                  util/seal.o util/config.o util/log.o util/malloc.o \
                  util/initrd.o $(VERSION_OBJ)
-REGISTER_LIBS := -lcrypto -lssl -ltss2-esys -ltss2-tctildr
+REGISTER_LIBS := $(LIBCRYPTO_LIBS) $(LIBSSL_LIBS) $(TSS2_LIBS)
 
 testing/helper/test-keys: testing/helper/test-keys.c util/keys.o \
                           util/upatch.o $(REGISTER_OBJS)
