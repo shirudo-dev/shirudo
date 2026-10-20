@@ -48,6 +48,43 @@ into the fleet.
 
 The full index is in [Documentation/index.rst](Documentation/index.rst).
 
+## Releases
+
+There is no official shirudo release yet. `main` is the development
+branch and no stable branches are maintained at this point.
+
+Until the first release, every push to `main` builds the packages in the
+[Build packages](https://github.com/shirudo-dev/shirudo/actions/workflows/deb.yml)
+workflow, where they are available as run artifacts.
+
+Once releases start, each release tag publishes its packages on
+[GitHub Releases](https://github.com/shirudo-dev/shirudo/releases)
+and the actively maintained releases are listed here.
+
+For upgrades of shirudo and the kernel on a target, consult
+[Operations](Documentation/operations.rst).
+
+### Packages
+
+| Package | Role | Contents |
+|---|---|---|
+| `shirudo-target` (deb, rpm) | target | static apart from glibc |
+| `shirudo-operator` (deb, rpm) | operator | links the host's shared libraries |
+| `shirudo.tar.gz` | target | installer tarball, static apart from glibc |
+| `shirudo-static.tar.gz` | target | installer tarball, with the remaining shared libraries bundled for minimal and embedded targets |
+
+### Architectures
+
+shirudo supports x86-64, arm64 and riscv64. Operator and target may be
+on different architectures; the `.upatch` format is little-endian and
+the signature is architecture-neutral.
+
+### Software Bill of Materials
+
+Every package comes with a Software Bill of Materials (SBOM) in
+[SPDX](https://spdx.dev/), named after the package with `.spdx.json`
+appended and published next to it.
+
 ## License
 
 shirudo is licensed under the [BSD-2-Clause License](LICENSE). BPF
