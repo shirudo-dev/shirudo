@@ -146,6 +146,7 @@ jobs:
               --libdir=/tmp/shirudo-target-deps/lib \
               --enable-static \
               --disable-shared \
+              --enable-nodl \
               --disable-fapi \
               --disable-policy \
               --disable-tcti-cmd \
