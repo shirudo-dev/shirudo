@@ -33,9 +33,11 @@
 
 char _license[] SEC("license") = "Dual BSD/GPL";
 
-#include "shirudo_identity.h"
+#include "policy.h"
+#include "../include/shirudo_mode.h"
 #include "shirudo_tamper.h"
 
+/* The mode selects executable identity or committed task authority. */
 static __always_inline int shirudo_self_or_deny(enum shirudo_tamper_point point)
 {
 	struct shirudo_sb_id *id;
@@ -49,10 +51,12 @@ static __always_inline int shirudo_self_or_deny(enum shirudo_tamper_point point)
 
 SEC("lsm/bpf")
 int BPF_PROG(shirudo_lsm_bpf, int cmd, union bpf_attr *attr,
-	     unsigned int size, bool kernel)
+	     unsigned int size, bool kernel, int ret)
 {
 	enum shirudo_tamper_point point;
 
+	if (ret)
+		return ret;
 	if (kernel)
 		return 0;
 
@@ -103,16 +107,30 @@ int BPF_PROG(shirudo_lsm_bpf, int cmd, union bpf_attr *attr,
 }
 
 SEC("lsm/bpf_map")
-int BPF_PROG(shirudo_lsm_bpf_map, struct bpf_map *map, fmode_t fmode)
+int BPF_PROG(shirudo_lsm_bpf_map, struct bpf_map *map, fmode_t fmode,
+	     int ret)
 {
-	if (!(fmode & FMODE_WRITE))
+	struct shirudo_sb_id *id = shirudo_policy();
+	char name[16] = {};
+	bool private;
+
+	if (ret)
+		return ret;
+	bpf_probe_read_kernel_str(name, sizeof(name), map->name);
+	private = !__builtin_memcmp(name, "shirudo_devices", 16);
+	if (fmode & FMODE_WRITE)
+		return shirudo_self_or_deny(SHIRUDO_TAMPER_MAP_FD);
+	if (!private)
 		return 0;
-	return shirudo_self_or_deny(SHIRUDO_TAMPER_MAP_FD);
+	if (!id || !shirudo_task_is_self(id))
+		return -EACCES;
+	return 0;
 }
 
 SEC("lsm/bpf_prog_load")
 int BPF_PROG(shirudo_lsm_bpf_prog_load, struct bpf_prog *prog,
-	     union bpf_attr *attr, struct bpf_token *token, bool kernel)
+	     union bpf_attr *attr, struct bpf_token *token,
+	     bool kernel, int ret)
 {
 	struct shirudo_sb_id *id;
 	__u32 zero = 0, verdict, ktype;
@@ -124,6 +142,8 @@ int BPF_PROG(shirudo_lsm_bpf_prog_load, struct bpf_prog *prog,
 	 * allowed (the loader itself passed this gate when it was loaded
 	 * from userspace).
 	 */
+	if (ret)
+		return ret;
 	if (kernel)
 		return 0;
 
@@ -160,7 +180,16 @@ int BPF_PROG(shirudo_lsm_task_prctl, int option, unsigned long arg2,
 	struct shirudo_sb_id *id;
 	__u32 zero = 0;
 
-	if ((ret && ret != -ENOSYS) || option != PR_SET_MM ||
+	if (ret && ret != -ENOSYS)
+		return ret;
+	if (option == SHIRUDO_PR_GET_MODE) {
+		id = bpf_map_lookup_elem(&shirudo_bpffs_sb, &zero);
+		if (!id)
+			return -EACCES;
+		return id->runtime_mode ? -SHIRUDO_PR_MODE_IMAGE_ERR :
+		       -SHIRUDO_PR_MODE_LEGACY_ERR;
+	}
+	if (option != PR_SET_MM ||
 	    (arg2 != PR_SET_MM_EXE_FILE && arg2 != PR_SET_MM_MAP))
 		return ret ? ret : -ENOSYS;
 	id = bpf_map_lookup_elem(&shirudo_bpffs_sb, &zero);
@@ -198,10 +227,14 @@ static __always_inline int shirudo_bpffs_guard(__u32 target_dev,
 	id = bpf_map_lookup_elem(&shirudo_bpffs_sb, &zero);
 	if (!id || id->sb_dev == 0)
 		return 0;
-	if (target_dev != id->sb_dev)
-		return 0; /* not shirudo's bpffs -- not ours to guard */
-	return shirudo_task_is_self(id) ? 0 :
-	       shirudo_tamper_deny(point, -EPERM);
+	if (target_dev != id->sb_dev &&
+	    (!id->runtime_mode || !id->run_dev || target_dev != id->run_dev))
+		return 0;
+	if (shirudo_task_is_self(id))
+		return 0;
+	if (target_dev == id->sb_dev && point != SHIRUDO_TAMPER_MAX)
+		return shirudo_tamper_deny(point, -EPERM);
+	return -EPERM;
 }
 
 /*
@@ -217,7 +250,7 @@ static __always_inline int shirudo_bpffs_guard(__u32 target_dev,
  */
 SEC("lsm/key_permission")
 int BPF_PROG(shirudo_lsm_key_permission, key_ref_t key_ref,
-	     const struct cred *cred, enum key_need_perm need)
+	     const struct cred *cred, enum key_need_perm need, int ret)
 {
 	struct shirudo_sb_id *id;
 	__u32 zero = 0, i;
@@ -225,6 +258,8 @@ int BPF_PROG(shirudo_lsm_key_permission, key_ref_t key_ref,
 	bool possessed;
 	__s32 serial;
 
+	if (ret)
+		return ret;
 	switch (need) {
 	case KEY_NEED_WRITE:
 	case KEY_NEED_SEARCH:
@@ -262,25 +297,35 @@ int BPF_PROG(shirudo_lsm_key_permission, key_ref_t key_ref,
  */
 SEC("lsm/inode_unlink")
 int BPF_PROG(shirudo_lsm_inode_unlink, struct inode *dir,
-	     struct dentry *dentry)
+	     struct dentry *dentry, int ret)
 {
+	if (ret)
+		return ret;
 	return shirudo_bpffs_guard(BPF_CORE_READ(dir, i_sb, s_dev),
 				   SHIRUDO_TAMPER_PIN_UNLINK);
 }
 
-/*
- * Rename is the other way a pin can go: the VFS asks only this hook of
- * it, and simple_rename() unlinks the victim without inode_unlink, so
- * renaming any pin over a link's pin would drop that link's only
- * reference. Both directories share the superblock, a rename never
- * crossing one, so the source directory names it for both ends.
- */
+SEC("lsm/inode_rmdir")
+int BPF_PROG(shirudo_lsm_inode_rmdir, struct inode *dir,
+	     struct dentry *dentry, int ret)
+{
+	if (ret)
+		return ret;
+	return shirudo_bpffs_guard(BPF_CORE_READ(dir, i_sb, s_dev),
+				   SHIRUDO_TAMPER_MAX);
+}
+
 SEC("lsm/inode_rename")
 int BPF_PROG(shirudo_lsm_inode_rename, struct inode *old_dir,
 	     struct dentry *old_dentry, struct inode *new_dir,
-	     struct dentry *new_dentry)
+	     struct dentry *new_dentry, int ret)
 {
-	return shirudo_bpffs_guard(BPF_CORE_READ(old_dir, i_sb, s_dev),
+	if (ret)
+		return ret;
+	ret = shirudo_bpffs_guard(BPF_CORE_READ(old_dir, i_sb, s_dev),
+				  SHIRUDO_TAMPER_PIN_RENAME);
+	return ret ? ret :
+	       shirudo_bpffs_guard(BPF_CORE_READ(new_dir, i_sb, s_dev),
 				   SHIRUDO_TAMPER_PIN_RENAME);
 }
 
@@ -292,8 +337,10 @@ int BPF_PROG(shirudo_lsm_inode_rename, struct inode *old_dir,
 SEC("lsm/inode_setxattr")
 int BPF_PROG(shirudo_lsm_inode_setxattr, struct mnt_idmap *idmap,
 	     struct dentry *dentry, const char *name, const void *value,
-	     __u64 size, int flags)
+	     __u64 size, int flags, int ret)
 {
+	if (ret)
+		return ret;
 	return shirudo_bpffs_guard(BPF_CORE_READ(dentry, d_inode, i_sb, s_dev),
 				   SHIRUDO_TAMPER_PIN_XATTR);
 }
@@ -301,8 +348,10 @@ int BPF_PROG(shirudo_lsm_inode_setxattr, struct mnt_idmap *idmap,
 /* Symmetric to setxattr: deny removing a pin's xattrs from non-shirudo. */
 SEC("lsm/inode_removexattr")
 int BPF_PROG(shirudo_lsm_inode_removexattr, struct mnt_idmap *idmap,
-	     struct dentry *dentry, const char *name)
+	     struct dentry *dentry, const char *name, int ret)
 {
+	if (ret)
+		return ret;
 	return shirudo_bpffs_guard(BPF_CORE_READ(dentry, d_inode, i_sb, s_dev),
 				   SHIRUDO_TAMPER_PIN_XATTR);
 }
@@ -325,8 +374,11 @@ int BPF_PROG(shirudo_lsm_inode_removexattr, struct mnt_idmap *idmap,
  * hooks are self-protecting: their own pins live in the bpffs they keep
  * mounted.
  *
- * A lazy unmount of a parent such as /run can still detach this bpffs
- * without calling sb_umount for it.
+ * A lazy unmount (MNT_DETACH) of a mount above the bpffs, /run or the
+ * root, takes the subtree down with it and fires sb_umount for the
+ * ancestor alone. The original mount must stay; namespace copies may
+ * go when none of the removed mounts can propagate the unmount out.
+ * switch-root moves /run and retains the original mount's unique ID.
  */
 static __always_inline __u32 shirudo_bpffs_dev(void)
 {
@@ -348,44 +400,216 @@ shirudo_deny_bpffs_mount(__u32 sb_dev, enum shirudo_tamper_point point)
 	return shirudo_tamper_deny(point, -EPERM);
 }
 
-SEC("lsm/sb_umount")
-int BPF_PROG(shirudo_lsm_sb_umount, struct vfsmount *mnt, int flags)
+static __always_inline int shirudo_parent_mount(struct super_block *sb,
+						bool trusted_target)
 {
-	return shirudo_deny_bpffs_mount(BPF_CORE_READ(mnt, mnt_sb, s_dev),
-					SHIRUDO_TAMPER_BPFFS_UMOUNT);
+	struct shirudo_sb_id *id = shirudo_policy();
+
+	if (!sb || !id || !id->runtime_mode || !id->run_dev ||
+	    BPF_CORE_READ(sb, s_dev) != id->run_dev)
+		return 0;
+	return trusted_target && shirudo_task_is_self(id) ? 0 : -EPERM;
+}
+
+static __always_inline int shirudo_image_mount(struct super_block *sb,
+					       bool replace)
+{
+	struct shirudo_sb_id *id = shirudo_policy();
+	struct shirudo_device *device;
+	struct block_device *bdev;
+
+	if (!sb || !id || !id->runtime_mode)
+		return 0;
+	bdev = BPF_CORE_READ(sb, s_bdev);
+	if (!bdev)
+		return 0;
+	device = shirudo_bdev_device(bdev);
+	if (!device)
+		return 0;
+	if (replace && device->kind == SHIRUDO_DEVICE_CONFIG &&
+	    shirudo_task_is_self(id))
+		return 0;
+	return -EPERM;
+}
+
+SEC("lsm/sb_umount")
+int BPF_PROG(shirudo_lsm_sb_umount, struct vfsmount *mnt, int flags,
+	     int ret)
+{
+	struct super_block *sb = BPF_CORE_READ(mnt, mnt_sb);
+	__u32 dev;
+
+	if (ret)
+		return ret;
+	ret = shirudo_parent_mount(sb, false);
+	if (ret)
+		return ret;
+	if (BPF_CORE_READ_INTO(&dev, sb, s_dev))
+		return shirudo_tamper_deny(SHIRUDO_TAMPER_BPFFS_UMOUNT,
+					   -EPERM);
+	ret = shirudo_deny_bpffs_mount(dev, SHIRUDO_TAMPER_BPFFS_UMOUNT);
+	return ret ? ret : shirudo_image_mount(sb, true);
 }
 
 SEC("lsm/move_mount")
 int BPF_PROG(shirudo_lsm_move_mount, const struct path *from_path,
-	     const struct path *to_path)
+	     const struct path *to_path, int ret)
 {
-	__u32 from = BPF_CORE_READ(from_path, mnt, mnt_sb, s_dev);
-	__u32 to = BPF_CORE_READ(to_path, mnt, mnt_sb, s_dev);
+	struct super_block *from = BPF_CORE_READ(from_path, mnt, mnt_sb);
+	struct super_block *to = BPF_CORE_READ(to_path, mnt, mnt_sb);
 
-	if (shirudo_deny_bpffs_mount(from, SHIRUDO_TAMPER_BPFFS_MOUNT))
+	if (ret)
+		return ret;
+	if (shirudo_parent_mount(from, false) ||
+	    shirudo_parent_mount(to, true))
 		return -EPERM;
-	return shirudo_deny_bpffs_mount(to, SHIRUDO_TAMPER_BPFFS_MOUNT);
+	if (shirudo_deny_bpffs_mount(BPF_CORE_READ(from, s_dev),
+				     SHIRUDO_TAMPER_BPFFS_MOUNT) ||
+	    shirudo_deny_bpffs_mount(BPF_CORE_READ(to, s_dev),
+				     SHIRUDO_TAMPER_BPFFS_MOUNT))
+		return -EPERM;
+	ret = shirudo_image_mount(from, true);
+	return ret ? ret : shirudo_image_mount(to, true);
 }
 
-/*
- * Deny mounting anything whose target path resolves onto shirudo's
- * bpffs -- i.e. mounting over the pin tree to shadow it. init's own
- * mount is unaffected: it runs before this hook attaches, and at that
- * point the mountpoint still resolves to the underlying fs, not the
- * (not-yet-mounted) bpffs.
- */
 SEC("lsm/sb_mount")
 int BPF_PROG(shirudo_lsm_sb_mount, const char *dev_name,
 	     const struct path *path, const char *type,
-	     unsigned long flags, void *data)
+	     unsigned long flags, void *data, int ret)
 {
-	return shirudo_deny_bpffs_mount(BPF_CORE_READ(path, mnt, mnt_sb, s_dev),
-					SHIRUDO_TAMPER_BPFFS_MOUNT);
+	struct super_block *sb = BPF_CORE_READ(path, mnt, mnt_sb);
+
+	if (ret)
+		return ret;
+	if ((flags & ((1UL << 17) | (1UL << 18) | (1UL << 19) |
+		      (1UL << 20))) && shirudo_parent_mount(sb, false))
+		return -EPERM;
+	ret = shirudo_parent_mount(sb, true);
+	if (ret)
+		return ret;
+	ret = shirudo_deny_bpffs_mount(BPF_CORE_READ(sb, s_dev),
+				       SHIRUDO_TAMPER_BPFFS_MOUNT);
+	return ret ? ret : shirudo_image_mount(sb, true);
 }
 
 SEC("lsm/sb_remount")
-int BPF_PROG(shirudo_lsm_sb_remount, struct super_block *sb, void *mnt_opts)
+int BPF_PROG(shirudo_lsm_sb_remount, struct super_block *sb,
+	     void *mnt_opts, int ret)
 {
-	return shirudo_deny_bpffs_mount(BPF_CORE_READ(sb, s_dev),
-					SHIRUDO_TAMPER_BPFFS_MOUNT);
+	if (ret)
+		return ret;
+	ret = shirudo_parent_mount(sb, false);
+	if (ret)
+		return ret;
+	ret = shirudo_deny_bpffs_mount(BPF_CORE_READ(sb, s_dev),
+				       SHIRUDO_TAMPER_BPFFS_MOUNT);
+	return ret ? ret : shirudo_image_mount(sb, false);
+}
+
+struct dm_verity_digest___shirudo {
+	const char *alg;
+	const __u8 *digest;
+	size_t digest_len;
+} __attribute__((preserve_access_index));
+
+SEC("lsm.s/bdev_setintegrity")
+int BPF_PROG(shirudo_lsm_bdev_setintegrity, struct block_device *bdev,
+	     enum lsm_integrity_type type, const void *value,
+	     size_t size, int ret)
+{
+	const struct dm_verity_digest___shirudo *digest = value;
+	struct shirudo_sb_id *id = shirudo_policy();
+	struct shirudo_device device = {};
+	__u64 cookie = (__u64)bdev;
+	const unsigned char *root;
+	const char *algorithm;
+	unsigned int i;
+	char name[8];
+	int diff;
+
+	if (ret)
+		return ret;
+	if (!id || !id->runtime_mode || type != LSM_INT_DMVERITY_ROOTHASH)
+		return 0;
+	if (!value) {
+		bpf_map_delete_elem(&shirudo_devices, &cookie);
+		return 0;
+	}
+	if (shirudo_bdev_device(bdev))
+		return -EPERM;
+	if (BPF_CORE_READ(digest, digest_len) != sizeof(device.root))
+		return 0;
+	algorithm = BPF_CORE_READ(digest, alg);
+	if (bpf_probe_read_kernel_str(name, sizeof(name), algorithm) != 7 ||
+	    name[0] != 's' || name[1] != 'h' || name[2] != 'a' ||
+	    name[3] != '2' || name[4] != '5' || name[5] != '6')
+		return 0;
+	root = BPF_CORE_READ(digest, digest);
+	if (bpf_probe_read_kernel(device.root, sizeof(device.root), root))
+		return -EACCES;
+	diff = 0;
+	for (i = 0; i < sizeof(device.root); i++)
+		diff |= device.root[i] ^ id->runtime_root[i];
+	if (!diff)
+		device.kind = SHIRUDO_DEVICE_RUNTIME;
+	else if (shirudo_task_is_self(id))
+		device.kind = SHIRUDO_DEVICE_CONFIG;
+	else
+		return 0;
+	device.dev = BPF_CORE_READ(bdev, bd_dev);
+	device.diskseq = BPF_CORE_READ(bdev, bd_disk, diskseq);
+	if (!device.diskseq)
+		return -EACCES;
+	if (bpf_map_update_elem(&shirudo_devices, &cookie, &device,
+				BPF_ANY))
+		return -ENOMEM;
+	return 0;
+}
+
+SEC("lsm/bdev_free_security")
+void BPF_PROG(shirudo_lsm_bdev_free_security, struct block_device *bdev)
+{
+	__u64 cookie = (__u64)bdev;
+
+	bpf_map_delete_elem(&shirudo_devices, &cookie);
+}
+
+#define SHIRUDO_DM_CONTROL_DEV	((10U << 20) | 236U)
+#define SHIRUDO_DM_IOCTL_TYPE	0xfdU
+
+/* Match the kernel's type/number dispatch. */
+static __always_inline int shirudo_dm_ioctl(struct file *file,
+					    unsigned int cmd, int ret)
+{
+	struct shirudo_sb_id *id = shirudo_policy();
+	struct inode *inode;
+
+	if (ret || !id || !id->runtime_mode || shirudo_task_is_self(id))
+		return ret;
+	inode = BPF_CORE_READ(file, f_inode);
+	if ((BPF_CORE_READ(inode, i_mode) & 0170000) != 0020000 ||
+	    BPF_CORE_READ(inode, i_rdev) != SHIRUDO_DM_CONTROL_DEV)
+		return 0;
+	if (((cmd >> 8) & 0xff) != SHIRUDO_DM_IOCTL_TYPE)
+		return -EPERM;
+	switch (cmd & 0xff) {
+	case 0:  /* DM_VERSION */
+	case 2:  /* DM_LIST_DEVICES */
+	case 7:  /* DM_DEV_STATUS */
+	case 8:  /* DM_DEV_WAIT */
+	case 11: /* DM_TABLE_DEPS */
+	case 12: /* DM_TABLE_STATUS */
+	case 13: /* DM_LIST_VERSIONS */
+	case 17: /* DM_GET_TARGET_VERSION */
+		return 0;
+	default:
+		return -EPERM;
+	}
+}
+
+SEC("lsm/file_ioctl")
+int BPF_PROG(shirudo_lsm_file_ioctl, struct file *file, unsigned int cmd,
+	     unsigned long arg, int ret)
+{
+	return shirudo_dm_ioctl(file, cmd, ret);
 }

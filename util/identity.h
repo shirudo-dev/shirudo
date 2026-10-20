@@ -17,31 +17,57 @@
 /* The most keys the anchor keyring holds; util/keys.h bounds the set. */
 #define SHIRUDO_IDENTITY_KEYS_MAX	16
 
-/*
- * Must match struct shirudo_sb_id in bpf/lib/shirudo_identity.h byte for
- * byte. exe is the binary that keeps running the target; alt_exe, when
- * set, the initrd's copy that ran init and is gone after the switch to
- * the root. key_serials are the anchor keyring's keys, which
- * lsm/key_permission guards with the keyring itself.
- */
+/* The frozen ABI shared with bpf/lib/shirudo_identity.h. */
 struct shirudo_identity {
-	__u32		sb_dev;
-	__u32		exe_dev;
-	__u64		exe_ino;
+	__u32	sb_dev;
+	__u32	exe_dev;
+	__u64	exe_ino;
 	__s32		keyring_serial;
-	__u32		keyring_type;
-	__u32		alt_exe_dev;
-	__u32		pad;
-	__u64		alt_exe_ino;
-	__u32		n_keys;
-	__u32		pad2;
+	__u32	keyring_type;
+	__u32	alt_exe_dev;
+	__u32	pad;
+	__u64	alt_exe_ino;
+	__u32	n_keys;
+	__u32	pad2;
 	__s32		key_serials[SHIRUDO_IDENTITY_KEYS_MAX];
+	__u32	runtime_mode;
+	__u32	run_dev;
+	__u8		runtime_root[32];
 };
+
+#define SHIRUDO_TASK_TRUSTED	1
+#define SHIRUDO_TASK_BOOTSTRAP	2
+
+#define SHIRUDO_DEVICE_RUNTIME	1
+#define SHIRUDO_DEVICE_CONFIG	2
+
+struct shirudo_device_authority {
+	__u32	dev;
+	__u32	kind;
+	__u8		root[32];
+	__u64	diskseq;
+};
+
+struct shirudo_task_authority {
+	__u8	trusted;
+	__u8	candidate_valid;
+	__u8	candidate_trusted;
+	__u8	pad;
+	__u32	pad2;
+};
+
+_Static_assert(sizeof(struct shirudo_device_authority) == 48,
+	       "device authority ABI");
+_Static_assert(sizeof(struct shirudo_task_authority) == 8,
+	       "task authority ABI");
+_Static_assert(sizeof(struct shirudo_identity) == 152,
+	       "frozen identity ABI");
 
 /*
  * The identity map init populated, froze and pinned this boot. -ENOENT
  * when init has not run, another -errno when the pin cannot be read.
  */
+int shirudo_identity_mode(void);
 int identity_read(struct shirudo_identity *out);
 
 #endif /* SHIRUDO_UTIL_IDENTITY_H */

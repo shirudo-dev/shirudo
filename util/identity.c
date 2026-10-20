@@ -7,6 +7,7 @@
 
 #include <errno.h>
 #include <string.h>
+#include <sys/prctl.h>
 #include <unistd.h>
 
 #include <linux/bpf.h>
@@ -16,7 +17,21 @@
 #include <shirudo/misc.h>
 
 #include "identity.h"
+#include "shirudo_mode.h"
 #include "paths.h"
+
+int shirudo_identity_mode(void)
+{
+	int mode = prctl(SHIRUDO_PR_GET_MODE, 0, 0, 0, 0);
+
+	if (mode >= 0)
+		return -EPROTO;
+	if (errno == SHIRUDO_PR_MODE_LEGACY_ERR)
+		return SHIRUDO_MODE_LEGACY;
+	if (errno == SHIRUDO_PR_MODE_IMAGE_ERR)
+		return SHIRUDO_MODE_IMAGE;
+	return errno == EINVAL || errno == ENOSYS ? SHIRUDO_MODE_NONE : -errno;
+}
 
 int identity_read(struct shirudo_identity *out)
 {

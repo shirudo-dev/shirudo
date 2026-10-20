@@ -1,18 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
-/*
- * Copyright (c) 2026 Authors of shirudo
- *
- * The identity record shirudo init freezes, shared by the bpf2 and seal
- * objects. Include it after vmlinux.h and the libbpf BPF headers.
- */
+/* Copyright (c) 2026 Authors of shirudo */
 
 #ifndef SHIRUDO_BPF_IDENTITY_H
 #define SHIRUDO_BPF_IDENTITY_H
 
-/*
- * Populated by init before the programs attach. Must match struct
- * shirudo_identity in util/identity.h byte for byte.
- */
+/* Frozen ABI shared with struct shirudo_identity in util/identity.h. */
 #define SHIRUDO_IDENTITY_KEYS_MAX	16
 
 struct shirudo_sb_id {
@@ -27,6 +19,9 @@ struct shirudo_sb_id {
 	__u32	n_keys;
 	__u32	pad2;
 	__s32	key_serials[SHIRUDO_IDENTITY_KEYS_MAX];
+	__u32	runtime_mode;
+	__u32	run_dev;
+	__u8	runtime_root[32];
 };
 
 struct {
@@ -52,7 +47,7 @@ static __always_inline bool shirudo_file_is_self(const struct shirudo_sb_id *id,
 	       ino == id->alt_exe_ino;
 }
 
-static __always_inline bool shirudo_task_is_self(const struct shirudo_sb_id *id)
+static __always_inline bool shirudo_task_matches_exe(const struct shirudo_sb_id *id)
 {
 	struct task_struct *task = bpf_get_current_task_btf();
 
