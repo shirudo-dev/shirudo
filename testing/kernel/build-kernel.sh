@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
-# build-kernel.sh: build bootable kernel packages from the upstream/* branches
-# of this repository with the hardened configuration assembled from
-# kernel.conf, kernel.<arch>.conf and blacklist.conf.
+# build-kernel.sh: build bootable kernel packages from the upstream/bpf-next
+# branch of this repository, the only base patches/ supports for now, with
+# the hardened configuration assembled from kernel.conf, kernel.<arch>.conf
+# and blacklist.conf.
 #
 # The source is checked out as a detached git worktree under build/src,
 # patches/*.patch are applied on top, the configuration is assembled out
@@ -20,8 +21,8 @@ usage: ${0##*/} [options]
   -a, --arch ARCH        x86-64 | arm64 | riscv64 (default: host arch)
   -f, --format FORMAT    deb | rpm | both (default: deb when dpkg-deb
                          exists, otherwise rpm)
-  -r, --ref REF          git ref to build (default: upstream/linux;
-                         upstream/bpf and upstream/bpf-next exist too)
+  -r, --ref REF          git ref to build (default and, for now, the only
+                         one supported: upstream/bpf-next, see patches/)
   -o, --out DIR          work and output directory (default: build/)
   -j, --jobs N           parallel jobs (default: nproc)
   -t, --toolchain TC     llvm | gcc (default: llvm when clang and ld.lld
@@ -65,7 +66,7 @@ host_arch() {
 
 ARCH="$(host_arch)"
 FORMAT=""
-REF="upstream/linux"
+REF="upstream/bpf-next"
 OUT="$REPO/build"
 JOBS="$(nproc)"
 TOOLCHAIN=""
@@ -100,6 +101,10 @@ while [ $# -gt 0 ]; do
 	*) usage >&2; die "unknown argument: $1" ;;
 	esac
 done
+
+# Apply the carried patches to their upstream bpf-next base.
+[ "$REF" = upstream/bpf-next ] ||
+	die "unsupported --ref $REF: patches/ targets upstream/bpf-next, the only tree supported for now"
 
 # Architecture table: kernel ARCH, uname machine, Debian arch, GNU triplet
 # prefix for a GCC cross build, the arch defconfig target.
