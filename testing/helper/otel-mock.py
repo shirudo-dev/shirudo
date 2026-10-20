@@ -24,6 +24,7 @@ certificate and key the sink speaks HTTPS.
 import gzip
 import http.server
 import json
+import os
 import pathlib
 import ssl
 import sys
@@ -122,7 +123,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.server.done = True
 
 
-server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+server = http.server.HTTPServer(("127.0.0.1", int(os.environ.get("SHIRUDO_TEST_OTEL_PORT", "0"))), Handler)
 server.done = False
 if tls:
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)

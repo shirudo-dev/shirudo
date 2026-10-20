@@ -556,6 +556,10 @@ verity-test-helpers: $(VERITY_TEST_HELPERS)
 
 # Compiled test helpers (also usable as fuzz entry points).
 TEST_HELPERS := $(VERITY_TEST_HELPERS) \
+                testing/helper/test-image-cli \
+                testing/helper/test-image-config \
+                testing/helper/test-config-image \
+                testing/helper/test-image-keys \
                 testing/helper/test-json-parser \
                 testing/helper/test-string \
                 testing/helper/test-conditions \
@@ -740,7 +744,25 @@ testing/helper/test-config-image: testing/helper/test-config-image.c \
 
 
 
+testing/helper/test-image-keys: testing/helper/test-image-keys.c \
+		util/image_keys.o util/keys.o $(REGISTER_OBJS)
+	@printf '  CC      $@\n'
+	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(REGISTER_LIBS)
 
+testing/helper/test-image-config: testing/helper/test-image-config.c \
+		util/config.o util/image_config.o util/io.o util/log.o util/malloc.o util/hex.o \
+		util/string.o
+	@printf '  CC      $@\n'
+	$(Q)$(CC) $(CFLAGS) -o $@ $^
+
+testing/helper/test-image-cli: testing/helper/test-image-cli.c builtin-bpm.c \
+		$(filter-out $(call obj,builtin-bpm.o),$(BUILTIN_OBJS)) \
+		$(UTIL_OBJS) $(VERSION_OBJ) $(LIBBPF_A)
+	@printf '  CC      $@\n'
+	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) $(RPATH_LDFLAGS) -o $@ \
+		$(filter-out builtin-bpm.c,$^) \
+		-Wl,--wrap=bpm_tree_fetch_publication \
+		$(STATIC_LIBS) $(DYNAMIC_LIBS)
 
 test-helpers: $(TEST_HELPERS)
 

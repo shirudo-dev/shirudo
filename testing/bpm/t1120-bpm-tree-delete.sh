@@ -27,8 +27,8 @@ do
 	[ -s "$fixture" ] || test_skip_all "missing tree fixture: $fixture"
 done
 
-[ ! -e "$TREE_CONFIG" ] || test_skip_all "tree config already exists"
-[ ! -e "$TREE_LABELS" ] || test_skip_all "node labels already exist"
+[ "${SHIRUDO_TEST_MODE:-legacy}" = verity ] || [ ! -e "$TREE_CONFIG" ] || test_skip_all "tree config already exists"
+[ "${SHIRUDO_TEST_MODE:-legacy}" = verity ] || [ ! -e "$TREE_LABELS" ] || test_skip_all "node labels already exist"
 [ "$(tree_state_field tree_id)" = shirudo-test-tree ] &&
 	[ "$(tree_state_field last_seq)" = 3 ] &&
 	[ -e "$MATCH_PIN" ] ||
@@ -42,7 +42,7 @@ cleanup()
 			"$FIXTURES/shirudo-test-tree-match.unload.upatch" \
 			--no-precheck >/dev/null 2>&1 || true
 	fi
-	rm -f "$TREE_CONFIG" "$TREE_LABELS"
+	tree_cleanup_config
 	rm -rf "$WORK"
 }
 trap cleanup EXIT

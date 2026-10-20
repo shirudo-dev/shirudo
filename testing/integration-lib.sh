@@ -72,11 +72,21 @@ tree_state_field() {
 
 # Point the target at the fixture tree at the given reference.
 tree_configure() {
+	if [ "${SHIRUDO_TEST_MODE:-legacy}" = verity ]; then
+		"$SHIRUDO_BIN" image update \
+			"$SHIRUDO_TEST_KEY_FIXTURES/config-tree-$1"
+		return
+	fi
 	mkdir -p /etc/shirudo/bpm
 	printf 'env=tree-test\n' >"$TREE_LABELS"
 	printf '%s\n' \
 		'endpoint = oci://127.0.0.1:5443/shirudo/upatch-tree' \
 		"reference = $1" >"$TREE_CONFIG"
+}
+
+tree_cleanup_config() {
+	[ "${SHIRUDO_TEST_MODE:-legacy}" != verity ] || return 0
+	rm -f "$TREE_CONFIG" "$TREE_LABELS"
 }
 
 # Serve the fixture registry $1 on 127.0.0.1:5443, logging requests to

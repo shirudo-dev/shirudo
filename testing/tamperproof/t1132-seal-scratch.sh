@@ -16,7 +16,10 @@ for c in python3 mkfs.ext4 debugfs; do
 	command -v "$c" >/dev/null 2>&1 || test_skip_all "no $c"
 done
 
-STATE=/var/lib/shirudo/keys/cert.der
+case "${SHIRUDO_TEST_MODE:-legacy}" in
+verity) STATE=/var/lib/shirudo/eventlog ;;
+*) STATE=/var/lib/shirudo/keys/cert.der ;;
+esac
 [ -e "$STATE" ] || test_skip_all "no labelled state at $STATE"
 WORK=$(mktemp -d) || test_skip_all "cannot make a scratch directory"
 MNT=$WORK/mnt
@@ -86,6 +89,7 @@ PYEOF
 
 test_expect_success 'control: an unlabelled copy of a shell cannot open a labelled file for write' '
 	cp "$SH" "$WORK/ctl" &&
+	"$WORK/ctl" -c ":" &&
 	! "$WORK/ctl" -c ": >> $STATE" 2>/dev/null
 '
 
@@ -97,6 +101,7 @@ os.setxattr(sys.argv[1], \"security.bpf.shirudo\", open(sys.argv[2], \"rb\").rea
 '
 
 test_expect_success 'a binary its file system labels cannot open a labelled file for write' '
+	"$MNT/sh" -c ":" &&
 	! "$MNT/sh" -c ": >> $STATE" 2>/dev/null
 '
 

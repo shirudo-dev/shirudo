@@ -280,7 +280,7 @@ test_expect_success 'the runtime image gives the appliance the host resolvers in
 	! grep -qx -- "--install" "$WORK/dns-args" &&
 	grep -q "cat /root/shirudo-nameservers >>/etc/resolv.conf" "$WORK/dns-args" &&
 	grep -q "apt-get \$apt_opts update" "$WORK/dns-args" &&
-	grep -q "apt-get \$apt_opts install ca-certificates keyutils" "$WORK/dns-args" &&
+	grep -q "apt-get \$apt_opts install ca-certificates e2fsprogs keyutils" "$WORK/dns-args" &&
 	grep -q "ripgrep rsync" "$WORK/dns-args" &&
 	run_dns "$WORK/no-such-resolv.conf" &&
 	! test -s "$WORK/dns-ns" &&
@@ -938,6 +938,39 @@ test_expect_success 'operator and target runners have disjoint explicit scopes' 
 	done &&
 	forbidden=$(printf '%s%s' SHIRUDO_ INTEGRATION) &&
 	! grep -R -q "$forbidden" ../testing/Makefile ../contrib ../testing
+'
+
+test_expect_success 'test-vm rejects unknown policy modes before boot' '
+	! TEST_VM_MODE=typo "$RUNNER" >"$WORK/policy-mode.out" 2>&1 &&
+	grep -q "TEST_VM_MODE must be legacy or verity" "$WORK/policy-mode.out"
+'
+
+test_expect_success 'image VM requires initrd enrollment and complete guards' '
+	! TEST_VM_MODE=verity TEST_VM_INITRD=0 "$RUNNER" \
+		>"$WORK/image-initrd.out" 2>&1 &&
+	grep -q "verity mode requires TEST_VM_INITRD=1" "$WORK/image-initrd.out" &&
+	! TEST_VM_MODE=verity TEST_VM_INITRD=1 TEST_VM_SKIP_SEAL=1 "$RUNNER" \
+		>"$WORK/image-seal.out" 2>&1 &&
+	grep -q "TEST_VM_SKIP_SEAL=0" "$WORK/image-seal.out"
+'
+
+test_expect_success 'image VM refuses an incompatible partial suite' '
+	! TEST_VM_MODE=verity TEST_VM_INITRD=1 TEST_VM_SUITE=tree "$RUNNER" \
+		>"$WORK/image-suite.out" 2>&1 &&
+	grep -q "verity mode requires the complete test suite" "$WORK/image-suite.out"
+'
+
+test_expect_success 'target runner refuses an unknown policy mode' '
+	! SHIRUDO_TEST_MODE=typo sh ./run-target-tests.sh \
+		>"$WORK/target-mode.out" 2>&1 &&
+	grep -q "SHIRUDO_TEST_MODE must be legacy or verity" "$WORK/target-mode.out"
+'
+
+test_expect_success 'image target runner refuses missing fixture configuration' '
+	! SHIRUDO_TEST_MODE=verity SHIRUDO_BIN=/bin/true \
+		SHIRUDO_TEST_FIXTURES_DIR= SHIRUDO_TEST_KEY_FIXTURES= \
+		sh ./run-target-tests.sh >"$WORK/target-fixtures.out" 2>&1 &&
+	grep -q "signed upatch fixtures are required" "$WORK/target-fixtures.out"
 '
 
 test_done

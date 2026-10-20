@@ -10,12 +10,8 @@ import sys
 PR_SET_MM = 35
 PR_SET_MM_EXE_FILE = 13
 PR_SET_MM_MAP = 14
-SHIRUDO = os.path.abspath(sys.argv[1])
-SHIRUDO_ID = os.stat(SHIRUDO).st_dev, os.stat(SHIRUDO).st_ino
-OTHER = next(os.path.realpath(path) for path in
-             ("/bin/true", "/usr/bin/true", sys.executable)
-             if os.path.isfile(path) and os.access(path, os.X_OK) and
-             (os.stat(path).st_dev, os.stat(path).st_ino) != SHIRUDO_ID)
+SHIRUDO_COMMAND = os.path.abspath(sys.argv[1])
+RUNTIME = "/run/shirudo/runtime"
 
 libc = ctypes.CDLL(None, use_errno=True)
 libc.prctl.argtypes = [ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong,
@@ -23,9 +19,25 @@ libc.prctl.argtypes = [ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong,
 libc.prctl.restype = ctypes.c_int
 libc.syscall.restype = ctypes.c_long
 
+ctypes.set_errno(0)
+mode_result = libc.prctl(0x53520001, 0, 0, 0, 0)
+mode_errno = ctypes.get_errno()
+assert mode_result == -1 and mode_errno in (errno.EINVAL, 1001, 1002), \
+    ("Shirudo mode query", mode_result, mode_errno)
+IMAGE_MODE = mode_errno == 1002
+SHIRUDO = os.path.abspath(os.environ.get("SHIRUDO_TEST_RUNTIME_BIN",
+                                        RUNTIME + "/usr/bin/shirudo")) \
+    if IMAGE_MODE else SHIRUDO_COMMAND
+SHIRUDO_ID = os.stat(SHIRUDO).st_dev, os.stat(SHIRUDO).st_ino
+OTHER = next(os.path.realpath(path) for path in
+             ("/bin/true", "/usr/bin/true", sys.executable)
+             if os.path.isfile(path) and os.access(path, os.X_OK) and
+             (os.stat(path).st_dev, os.stat(path).st_ino) != SHIRUDO_ID)
+
 BPF_SYSCALL = {"x86_64": 321, "aarch64": 280,
                "riscv64": 280}[platform.machine()]
 BPF_OBJ_GET = 7
+BPF_OBJ_GET_INFO_BY_FD = 15
 BPF_MAP_LOOKUP_ELEM = 1
 BPF_F_RDONLY = 1 << 3
 
@@ -44,6 +56,21 @@ class MapElemAttr(ctypes.Structure):
                 ("flags", ctypes.c_uint64)]
 
 
+class ObjInfoAttr(ctypes.Structure):
+    _fields_ = [("bpf_fd", ctypes.c_uint32),
+                ("info_len", ctypes.c_uint32),
+                ("info", ctypes.c_uint64)]
+
+
+class MapInfoPrefix(ctypes.Structure):
+    _fields_ = [("type", ctypes.c_uint32),
+                ("id", ctypes.c_uint32),
+                ("key_size", ctypes.c_uint32),
+                ("value_size", ctypes.c_uint32),
+                ("max_entries", ctypes.c_uint32),
+                ("map_flags", ctypes.c_uint32)]
+
+
 class ShirudoIdentity(ctypes.Structure):
     _fields_ = [("sb_dev", ctypes.c_uint32),
                 ("exe_dev", ctypes.c_uint32),
@@ -58,6 +85,12 @@ class ShirudoIdentity(ctypes.Structure):
                 ("key_serials", ctypes.c_int32 * 16)]
 
 
+class ShirudoImageIdentity(ShirudoIdentity):
+    _fields_ = [("runtime_mode", ctypes.c_uint32),
+                ("run_dev", ctypes.c_uint32),
+                ("runtime_root", ctypes.c_uint8 * 32)]
+
+
 def assert_frozen_executable_identity():
     path = b"/run/shirudo/bpffs/identity\0"
     name = ctypes.create_string_buffer(path)
@@ -66,16 +99,40 @@ def assert_frozen_executable_identity():
                       ctypes.sizeof(get_attr))
     assert fd >= 0, ("open identity map", ctypes.get_errno())
     try:
+        info = MapInfoPrefix()
+        info_attr = ObjInfoAttr(fd, ctypes.sizeof(info), ctypes.addressof(info))
+        result = libc.syscall(BPF_SYSCALL, BPF_OBJ_GET_INFO_BY_FD,
+                              ctypes.byref(info_attr), ctypes.sizeof(info_attr))
+        assert result == 0, ("identity map metadata", ctypes.get_errno())
+        assert info.type == 2 and info.key_size == 4 and info.max_entries == 1, \
+            ("identity map shape", info.type, info.key_size, info.max_entries)
+        assert ctypes.sizeof(ShirudoIdentity) <= info.value_size <= 1024 * 1024, \
+            ("identity map value size", info.value_size)
         key = ctypes.c_uint32(0)
-        value = ShirudoIdentity()
+        buffer = ctypes.create_string_buffer(info.value_size)
         lookup_attr = MapElemAttr(fd, 0, ctypes.addressof(key),
-                                  ctypes.addressof(value), 0)
+                                  ctypes.addressof(buffer), 0)
         result = libc.syscall(BPF_SYSCALL, BPF_MAP_LOOKUP_ELEM,
                               ctypes.byref(lookup_attr),
                               ctypes.sizeof(lookup_attr))
         assert result == 0, ("read identity map", ctypes.get_errno())
     finally:
         os.close(fd)
+    value = ShirudoIdentity.from_buffer_copy(buffer.raw)
+    if IMAGE_MODE:
+        assert info.value_size >= ctypes.sizeof(ShirudoImageIdentity), \
+            ("image identity extension missing", info.value_size)
+        image = ShirudoImageIdentity.from_buffer_copy(buffer.raw)
+        assert image.runtime_mode == 1 and any(image.runtime_root), \
+            ("frozen image trust mode", image.runtime_mode)
+        executable = os.path.realpath(SHIRUDO)
+        runtime = os.path.realpath(RUNTIME)
+        assert os.path.commonpath((executable, runtime)) == runtime, executable
+        assert os.stat(executable).st_dev == os.stat(runtime).st_dev, executable
+        return
+    if info.value_size >= ctypes.sizeof(ShirudoImageIdentity):
+        image = ShirudoImageIdentity.from_buffer_copy(buffer.raw)
+        assert image.runtime_mode == 0, ("legacy trust mode", image.runtime_mode)
     st = os.stat(SHIRUDO)
     expected_dev = (os.major(st.st_dev) << 20) | os.minor(st.st_dev)
     assert (value.exe_dev, value.exe_ino) == (expected_dev, st.st_ino), \
@@ -185,7 +242,8 @@ assert child_succeeds(lambda: mm_map_result(OTHER)), \
 def invalid_fd_then_exec():
     result, err = call_prctl(PR_SET_MM, PR_SET_MM_EXE_FILE, 1 << 30)
     assert result == -1 and err == errno.EPERM, (result, err)
-    os.execve(SHIRUDO, [SHIRUDO, "status", "--json"], os.environ.copy())
+    os.execve(SHIRUDO_COMMAND, [SHIRUDO_COMMAND, "status", "--json"],
+              os.environ.copy())
 
 
 assert child_succeeds(invalid_fd_then_exec), \

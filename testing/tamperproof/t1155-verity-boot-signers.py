@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+
+import ctypes
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import platform
+import secrets
+import struct
+import sys
+
+
+spec = importlib.util.spec_from_file_location(
+    "config_test", Path(__file__).with_name("t1154-verity-config.py"))
+config = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(config)
+require = config.require
+FIXTURES = Path(os.environ["SHIRUDO_TEST_KEY_FIXTURES"])
+BOOT = FIXTURES / "config-boot-keys"
+CANDIDATE = FIXTURES / "config-live-new-key"
+ROOT = BOOT.with_suffix(".roothash").read_text()
+LIBC = ctypes.CDLL(None, use_errno=True)
+LIBC.syscall.restype = ctypes.c_long
+ADD_KEY, KEYCTL = {"x86_64": (248, 250), "aarch64": (217, 219),
+                   "riscv64": (217, 219)}[platform.machine()]
+
+
+def syscall(number, *arguments):
+    result = LIBC.syscall(ctypes.c_long(number),
+                          *(ctypes.c_long(value) for value in arguments))
+    if result < 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error))
+    return result
+
+
+def describe(serial):
+    buffer = ctypes.create_string_buffer(4096)
+    length = syscall(KEYCTL, 6, serial, ctypes.addressof(buffer), len(buffer), 0)
+    require(0 < length <= len(buffer), "key description overflow")
+    fields = buffer.value.decode().split(";", 4)
+    require(len(fields) == 5, "invalid key description")
+    return fields
+
+
+def certificate_description(path):
+    # A private thread-keyring probe gets the kernel's canonical certificate ID.
+    der = path.read_bytes()
+    payload = ctypes.create_string_buffer(der)
+    key_type = ctypes.create_string_buffer(b"asymmetric")
+    serial = syscall(ADD_KEY, ctypes.addressof(key_type), 0,
+                     ctypes.addressof(payload), len(der), -1)
+    try:
+        fields = describe(serial)
+        require(fields[0] == "asymmetric", "unexpected probe key type")
+        return fields[4]
+    finally:
+        syscall(KEYCTL, 9, serial, -1, 0, 0)
+
+
+def keyring(expected=2):
+    # GET_KEYRING_ID requests unpossessed SEARCH; direct READ needs no search.
+    serial = -9
+    identity = describe(serial)
+    require(identity[0] == "keyring" and identity[4] == ".bpf", identity)
+    buffer = ctypes.create_string_buffer(4096)
+    length = syscall(KEYCTL, 11, serial, ctypes.addressof(buffer), len(buffer), 0)
+    require(0 < length <= len(buffer) and length % 4 == 0, "bad keyring read")
+    keys = {str(key): describe(key)
+            for (key,) in struct.iter_unpack("=i", buffer.raw[:length])}
+    require(len(keys) == expected, f"expected {expected} boot-enrolled keys: {keys}")
+    require(all(value[0] == "asymmetric" for value in keys.values()), keys)
+    return {"serial": serial, "identity": identity, "keys": keys}
+
+
+def check_members(ring):
+    descriptions = {fields[4] for fields in ring["keys"].values()}
+    expected = {certificate_description(FIXTURES / name)
+                for name in ("primary.der", "boot.der")}
+    require(len(expected) == 2 and descriptions == expected,
+            "the live .bpf keyring does not hold exactly primary and boot keys")
+    require(certificate_description(FIXTURES / "live.der") not in descriptions,
+            "the new live signer was already enrolled")
+    for name in ("boot", "live"):
+        fingerprint = (FIXTURES / (name + ".fingerprint")).read_text().strip()
+        actual = config.run(name + "-fingerprint", "bpm", "key", "fingerprint",
+                            FIXTURES / (name + ".der")).strip()
+        require(actual == fingerprint and len(fingerprint) == 64,
+                f"wrong fixture fingerprint: {name}")
+        if name == "boot":
+            trusted = config.CONFIG / "keys/trusted"
+            require((trusted / (fingerprint + ".der")).read_bytes() ==
+                    (FIXTURES / "boot.der").read_bytes(), "wrong mounted boot key")
+            require((trusted / (fingerprint + ".vouch")).stat().st_size > 0,
+                    "boot signer has no vouch")
+
+
+def snapshot(label):
+    effects = config.snapshot(label)
+    effects["keyring"] = keyring()
+    require(effects["status"]["root_hash"] == ROOT, "wrong boot root")
+    require("map_export.tenant_id = config-boot-keys\n" in effects["settings"],
+            "wrong boot configuration")
+    config.save(label, effects)
+    return effects
+
+
+def main():
+    require(len(ROOT) == 64, "wrong boot root size")
+    mode = sys.argv[1]
+    if mode == "initial":
+        (config.RESULTS / "anchor.json").unlink(missing_ok=True)
+        check_members(keyring())
+        snapshot("initial")
+    elif mode in ("new-signer", "repeat"):
+        before = snapshot(mode + "-before")
+        config.run(mode + "-update", "image", "update",
+                   CANDIDATE if mode == "new-signer" else BOOT,
+                   success=mode == "repeat")
+        if mode == "new-signer":
+            error = (config.RESULTS / (mode + "-update.stderr")).read_text()
+            require("BPF signer was not enrolled at boot" in error and
+                    "reboot with the new trusted key set required" in error,
+                    "update failed for a reason other than boot-only enrollment")
+        after = snapshot(mode + "-after")
+        differences = [key for key in before if before[key] != after[key]]
+        require(not differences, f"{mode} changed state: {differences}")
+    else:
+        raise ValueError(mode)
+
+
+if __name__ == "__main__":
+    main()

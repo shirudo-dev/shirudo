@@ -9,6 +9,17 @@ set -eu
 
 cd "$(dirname "$0")"
 
+case "${SHIRUDO_TEST_MODE:-legacy}" in
+legacy)
+	if mountpoint -q /run/shirudo/runtime; then
+		printf 'legacy suite refuses an active image runtime\n' >&2
+		exit 1
+	fi
+	;;
+verity) exec sh ./run-target-verity-tests.sh ;;
+*) printf 'SHIRUDO_TEST_MODE must be legacy or verity\n' >&2; exit 2 ;;
+esac
+
 # The keyring substitution test deliberately destroys the trust anchor.
 # It runs last.
 fail=0

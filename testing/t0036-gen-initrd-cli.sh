@@ -14,9 +14,15 @@ W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
 printf 'not a certificate\n' >"$W/cert.der"
 : >"$W/shirudo-target_0_amd64.deb"
+printf "eventlog.max_bytes = 1048576\n" >"$W/ordinary.conf"
+printf "runtime.image = /var/lib/shirudo/images/runtime\nruntime.root_hash = %064d\n" 0 >"$W/image.conf"
 
 test_expect_success 'the generator prints the kernel parameter the initrd needs' '
-	[ "$(bash $G --print-cmdline)" = "bpf.keyring_unsealed=1" ]
+	[ "$(bash $G --bootstrap-conf "$W/ordinary.conf" --print-cmdline)" = "bpf.keyring_unsealed=1" ]
+'
+
+test_expect_success 'image bootstrap also enables boot enrollment in the dm-verity keyring' '
+	[ "$(bash $G --bootstrap-conf "$W/image.conf" --print-cmdline)" = "bpf.keyring_unsealed=1 dm_verity.keyring_unsealed=1" ]
 '
 
 test_expect_success 'the generator refuses an unknown option' '

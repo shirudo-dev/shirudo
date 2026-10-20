@@ -19,6 +19,8 @@ UPPER=/var/tmp/shirudo-upper
 OVERLAY_WORK=/var/tmp/shirudo-overlay-work
 WORKSPACE=/workspace/shirudo
 VM_MODE="${VM_MODE:-test}"
+TEST_MODE="${TEST_VM_MODE:-legacy}"
+SHIRUDO_BIN=/usr/local/bin/shirudo
 SKIP_SEAL="${TEST_VM_SKIP_SEAL:-0}"
 VM_INITRD="${TEST_VM_INITRD:-0}"
 
@@ -71,7 +73,14 @@ install_kernel_modules()
 		modprobe "$module"
 	done
 	for module in veth bridge 8021q nf_flow_table nf_flow_table_inet; do
-		lsmod | awk -v module="$module" '$1 == module { found = 1 } END { exit !found }'
+		if [[ -d "/sys/module/$module" ]]; then
+			continue
+		fi
+		# Built-in modules without parameters need not appear in sysfs.
+		grep -Eq "(^|/)$module\.ko$" "$target/modules.builtin" || {
+			log "required networking module is unavailable: $module"
+			return 1
+		}
 	done
 	# nf_flow_table_procfs (CONFIG_NF_FLOW_TABLE_PROCFS) is built into
 	# nf_flow_table.ko when enabled; it therefore does not have a separate
@@ -322,6 +331,23 @@ test -c /dev/tpm0
 test -c /dev/tpmrm0
 tpm2_getrandom 8 >/dev/null
 
+if [[ "$TEST_MODE" == verity ]]; then
+	(cd "$BUNDLE/verity" && sha256sum -c manifest)
+	mountpoint -q /run/shirudo/runtime
+	mountpoint -q /run/shirudo/config
+	install -m 0755 "$BUNDLE/verity/shirudo-runtime" /usr/local/bin/shirudo-runtime
+	SHIRUDO_BIN=/usr/local/bin/shirudo-runtime
+	for unit in "${TARGET_UNITS[@]}"; do
+		case "$unit" in *.service) ;; *) continue ;; esac
+		mkdir -p "/etc/systemd/system/$unit.d"
+		{
+			printf '[Service]\nExecStart=\n'
+			sed -n 's|^ExecStart=/usr/local/bin/shirudo |ExecStart=/usr/local/bin/shirudo-runtime |p' \
+				"/usr/lib/systemd/system/$unit"
+		} >"/etc/systemd/system/$unit.d/runtime.conf"
+	done
+	systemctl daemon-reload
+else
 log "importing operator certificate and attaching the measured Shirudo LSM"
 install -d -m 0700 /var/lib/shirudo/keys
 
@@ -358,11 +384,15 @@ if [[ "$SKIP_SEAL" == 1 ]]; then
 fi
 configure_bpm_tree
 /usr/local/bin/shirudo init "${init_args[@]}"
+fi
+if [[ "$TEST_MODE" == verity ]]; then
+	"$SHIRUDO_BIN" init
+fi
 test -e /run/shirudo/bpffs/lsm_link
 if [[ "$VM_INITRD" == 1 ]]; then
 	log "checking that the initrd brought enforcement up"
 	journalctl -b -u shirudo-initrd.service --no-pager | tail -20 || true
-	/usr/local/bin/shirudo status --json | python3 -c '
+	"$SHIRUDO_BIN" status --json | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
 assert d["mode"] == "production", d["mode"]
@@ -370,7 +400,7 @@ assert d["tpm"]["bound_in"] == "initrd", d["tpm"]
 '
 	test ! -e /run/shirudo/eventlog.pending
 fi
-/usr/local/bin/shirudo status --json >/tmp/shirudo-status.json
+"$SHIRUDO_BIN" status --json >/tmp/shirudo-status.json
 python3 - /tmp/shirudo-status.json <<'PY'
 import json
 import sys
@@ -424,20 +454,24 @@ log "running target test suite: ${TEST_VM_SUITE:-all}"
 : >/mnt/shirudo-out/failed-suites
 (
 	cd testing
+	export SHIRUDO_BIN
+	export SHIRUDO_TEST_MODE="$TEST_MODE"
+	export SHIRUDO_TEST_KEY_FIXTURES="$BUNDLE/verity"
+	export SHIRUDO_TEST_RESULTS=/mnt/shirudo-out/verity
 	if [[ "${TEST_VM_SUITE:-all}" == obs ]]; then
-			SHIRUDO_BIN=/usr/local/bin/shirudo \
+			SHIRUDO_BIN="$SHIRUDO_BIN" \
 				SHIRUDO_TEST_FIXTURES_DIR="$BUNDLE/fixtures" \
 				SHIRUDO_TEST_FAILURES_FILE=/mnt/shirudo-out/failed-tests \
 				SHIRUDO_TEST_SUITE_FAILURES_FILE=/mnt/shirudo-out/failed-suites \
 				./run-target-obs-tests.sh
 		elif [[ "${TEST_VM_SUITE:-all}" == tree ]]; then
-			SHIRUDO_BIN=/usr/local/bin/shirudo \
+			SHIRUDO_BIN="$SHIRUDO_BIN" \
 				SHIRUDO_TEST_FIXTURES_DIR="$BUNDLE/fixtures" \
 				SHIRUDO_TEST_FAILURES_FILE=/mnt/shirudo-out/failed-tests \
 				SHIRUDO_TEST_SUITE_FAILURES_FILE=/mnt/shirudo-out/failed-suites \
 				./run-target-tree-tests.sh
 		else
-			SHIRUDO_BIN=/usr/local/bin/shirudo \
+			SHIRUDO_BIN="$SHIRUDO_BIN" \
 				SHIRUDO_TEST_FIXTURES_DIR="$BUNDLE/fixtures" \
 				SHIRUDO_TEST_FAILURES_FILE=/mnt/shirudo-out/failed-tests \
 				SHIRUDO_TEST_SUITE_FAILURES_FILE=/mnt/shirudo-out/failed-suites \

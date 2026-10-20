@@ -63,6 +63,7 @@ DISK_SIZE="${TEST_VM_DISK_SIZE:-30G}"
 VM_TIMEOUT="${TEST_VM_TIMEOUT:-3600}"
 VM_MODE="${VM_MODE:-test}"
 VM_SUITE="${TEST_VM_SUITE:-all}"
+TEST_MODE="${TEST_VM_MODE:-legacy}"
 SKIP_SEAL="${TEST_VM_SKIP_SEAL:-0}"
 VM_INITRD="${TEST_VM_INITRD:-0}"
 VM_INITRD_MODULES="${TEST_VM_INITRD_MODULES:-base systemd systemd-initrd dracut-systemd rootfs-block fs-lib udev-rules terminfo shirudo}"
@@ -154,6 +155,16 @@ valid_vm_name()
 
 validate_mode()
 {
+	case "$TEST_MODE" in
+	legacy) ;;
+	verity)
+		[[ "$VM_INITRD" == 1 && "$SKIP_SEAL" == 0 ]] ||
+			die "verity mode requires TEST_VM_INITRD=1 and TEST_VM_SKIP_SEAL=0"
+		[[ "$VM_SUITE" == all && "$VM_MODE" == test ]] ||
+			die "verity mode requires the complete test suite"
+		;;
+	*) die "TEST_VM_MODE must be legacy or verity" ;;
+	esac
 	case "$VM_MODE" in
 	interactive|test) ;;
 	*) die "VM_MODE must be 'interactive' or 'test'" ;;
@@ -949,7 +960,7 @@ kernel_release_of()
 # identity and the cloud-init stage later finds the files in place.
 build_initrd()
 {
-	local kver gen unit seed trusted fp
+	local kver gen unit seed trusted fp cert
 	local -a args
 
 	kver="$(kernel_release_of "$KERNEL")" ||
@@ -983,12 +994,31 @@ EOF
 		die "cannot fingerprint the bundle's own certificate"
 	cp "$TEST_VM_HOST_BUNDLE/fixtures/own.der" "$trusted/$fp.der"
 	cp "$TEST_VM_HOST_BUNDLE/fixtures/own.vouch" "$trusted/$fp.vouch"
+	if [[ "$TEST_MODE" == verity ]]; then
+		[[ -s "$TEST_VM_HOST_BUNDLE/verity/manifest" ]] ||
+			die "verity fixtures missing from the host bundle"
+		(cd "$TEST_VM_HOST_BUNDLE/verity" && sha256sum -c manifest) ||
+			die "verity fixture checksum mismatch"
+		mkdir -p "$seed/shirudo-test-images"
+		cp "$TEST_VM_HOST_BUNDLE/verity/"*.{img,verity,roothash,p7s} \
+			"$seed/shirudo-test-images/"
+		cp "$TEST_VM_HOST_BUNDLE/verity/bootstrap.conf" \
+			"$seed/shirudo-test-images/bootstrap.conf"
+		cat >>"$seed/usr/lib/systemd/system/shirudo-test-seed.service" <<'EOF'
+ExecStart=/bin/sh -c 'mkdir -p /sysroot/var/lib/shirudo/images /sysroot/etc/shirudo && cp /shirudo-test-images/*.img /shirudo-test-images/*.verity /shirudo-test-images/*.roothash /shirudo-test-images/*.p7s /sysroot/var/lib/shirudo/images/ && cp /shirudo-test-images/bootstrap.conf /sysroot/etc/shirudo/shirudo.conf'
+EOF
+	fi
+	cert="$RUN_DIR/cert.der"
+	cp "$TEST_VM_HOST_BUNDLE/fixtures/cert.der" "$cert"
 	args=(--kver "$kver" --output "$RUN_DIR/initrd.img"
 	      --binary "$TEST_VM_HOST_BUNDLE/root/usr/local/bin/shirudo"
 	      --binary-path /usr/local/bin/shirudo
-	      --cert "$TEST_VM_HOST_BUNDLE/fixtures/cert.der"
+	      --cert "$cert"
 	      --trusted-dir "$trusted"
 	      --unit "$unit" --module-dir "$REPO_ROOT/tools/gen-initrd")
+	if [[ "$TEST_MODE" == verity ]]; then
+		args+=(--bootstrap-conf "$seed/shirudo-test-images/bootstrap.conf")
+	fi
 	if [[ -n "$KERNEL_ARTIFACT_DIR" ]]; then
 		args+=(--kmoddir "$KERNEL_ARTIFACT_DIR/lib/modules")
 	else
@@ -1356,6 +1386,7 @@ if [[ -n "$KERNEL_ARTIFACT_DIR" ]]; then
 EOF
 fi
 printf '      export VM_MODE=%q\n' "$VM_MODE" >>"$USER_DATA"
+printf '      export TEST_VM_MODE=%q\n' "$TEST_MODE" >>"$USER_DATA"
 printf '      export TEST_VM_SUITE=%q\n' "$VM_SUITE" >>"$USER_DATA"
 printf '      export TEST_VM_SKIP_SEAL=%q\n' "$SKIP_SEAL" >>"$USER_DATA"
 printf '      export TEST_VM_INITRD=%q\n' "$VM_INITRD" >>"$USER_DATA"
@@ -1456,6 +1487,9 @@ log "booting $(basename "$KERNEL") with ${CPUS} CPUs and ${MEMORY} memory"
 # The bpf keyring is left open for init to enrol the certificate and
 # seal it, as a production initrd does.
 KERNEL_LSM_ARGS="lsm=bpf bpf.keyring_unsealed=1"
+if [ "$TEST_MODE" = verity ]; then
+	KERNEL_LSM_ARGS+=" dm_verity.keyring_unsealed=1"
+fi
 KERNEL_NET_DEVICE="virtio-net-pci,netdev=net0"
 
 # The virt machine has no if=virtio mapping, so its disks are explicit PCI

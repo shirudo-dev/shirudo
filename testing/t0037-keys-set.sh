@@ -73,4 +73,19 @@ test_expect_success 'malformed trusted certificates are rejected before or after
 	./$H reject "$W/malformed"
 '
 
+test_expect_success 'image revocation preserves historical vouches while excluding revoked signing keys' '
+	rm "$W/keys/revoked/$fp_c.der" &&
+	$SHB keys vouch "$W/c/cert.der" -o "$W/keys/trusted/$fp_c.vouch" \
+		--keys-dir "$W/b" >/dev/null 2>&1 &&
+	fp_a=$(../shirudo bpm key fingerprint "$W/a/cert.der" 2>/dev/null) &&
+	cp "$W/a/cert.der" "$W/keys/revoked/$fp_a.der" &&
+	cp "$W/b/cert.der" "$W/keys/revoked/$fp_b.der" &&
+	./$H image "$W/keys" >"$W/image-set" &&
+	grep -qx "n=1 revoked=2 unvouched=0" "$W/image-set" &&
+	grep -q "^$(sha "$W/c/cert.der") $fp_c trusted " "$W/image-set" &&
+	! grep -q "^$(sha "$W/a/cert.der") " "$W/image-set" &&
+	! grep -q "^$(sha "$W/b/cert.der") " "$W/image-set"
+'
+
+
 test_done

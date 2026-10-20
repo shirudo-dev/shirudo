@@ -26,6 +26,7 @@ STAMP_FILE="${TEST_VM_BUNDLE_STAMP:-${BUNDLE_DIR}/.stamp}"
 STAMP_INPUTS="${TEST_VM_BUNDLE_INPUTS:-}"
 PACKAGE_CERT="${TEST_VM_PACKAGE_CERT:-}"
 RUNTIME_PREP_VERSION=4
+TEST_VM_MODE=${TEST_VM_MODE:-legacy}
 RUNTIME_DISK_SIZE="${TEST_VM_RUNTIME_DISK_SIZE:-8G}"
 
 log()
@@ -204,6 +205,10 @@ done
 # which Ubuntu 24.04 no longer installs; without it apt in the appliance
 # reaches nothing.
 [[ "$TEST_VM_HOST_PKG" != apt ]] || require_command dhclient isc-dhcp-client
+if [[ "$TEST_VM_MODE" == verity ]]; then
+	require_command veritysetup cryptsetup-bin cryptsetup
+	require_command mkfs.ext4 e2fsprogs e2fsprogs
+fi
 check_libguestfs_host
 
 resolve_rootfs()
@@ -263,6 +268,9 @@ bundle_is_current()
 {
 	local input
 
+	[[ -s "$BUNDLE_DIR/test-mode" &&
+	   "$(cat "$BUNDLE_DIR/test-mode")" == "$TEST_VM_MODE" ]] || return 1
+
 	[[ -f "$STAMP_FILE" && -n "$STAMP_INPUTS" ]] || return 1
 	[[ -x "$BUNDLE_DIR/root/usr/local/bin/shirudo" ]] || return 1
 	[[ -s "$BUNDLE_DIR/runtime-image-key" ]] || return 1
@@ -278,6 +286,7 @@ bundle_is_current()
 command -v flock >/dev/null 2>&1 ||
 	die "flock is required; install it with: $(test_vm_install_cmd util-linux)"
 
+case "$TEST_VM_MODE" in legacy|verity) ;; *) die "invalid TEST_VM_MODE" ;; esac
 validate_package_cert
 
 mkdir -p "$(dirname "$BUNDLE_DIR")"
@@ -305,6 +314,10 @@ cleanup()
 trap cleanup EXIT
 
 make -C "$REPO_ROOT" DESTDIR="$TMP_DIR/root" install-target
+if [[ "$TEST_VM_MODE" == verity ]]; then
+	make -C "$REPO_ROOT" -j"$(nproc)" -f Makefile.shirudo \
+		PROFILE=target CONFIG_MK=config-target.mk verity-test-helpers
+fi
 
 install -d "$TMP_DIR/test-helpers/testing/helper" \
 	"$TMP_DIR/test-helpers/testing/upatch/kernel-obs/exec"
@@ -329,6 +342,7 @@ testing/upatch/kernel-obs/exec/exec-paths
 testing/helper/otel-mock.py
 testing/helper/test-oci-registry.py
 EOF
+
 
 build_fixture()
 {
@@ -719,6 +733,12 @@ fi
 	sha256sum -- *.upatch cert.der own.der own.vouch third.der \
 		third.vouch package-cert.der > manifest
 )
+
+if [[ "$TEST_VM_MODE" == verity ]]; then
+	"$REPO_ROOT/contrib/verity-vm-bundle.sh" "$TMP_DIR" "$FIXTURE_WORK" \
+		"$FIXTURE_WORK/trusted" "$FIXTURE_WORK/own"
+fi
+printf '%s\n' "$TEST_VM_MODE" >"$TMP_DIR/test-mode"
 
 printf 'shirudo-test-vm-bundle-v1\n' >"$TMP_DIR/format"
 printf 'vendored-tools\n' >"$TMP_DIR/dependency-mode"

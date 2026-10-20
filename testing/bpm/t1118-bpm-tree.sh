@@ -26,15 +26,15 @@ do
 	[ -s "$fixture" ] || test_skip_all "missing tree fixture: $fixture"
 done
 
-[ ! -e "$TREE_CONFIG" ] || test_skip_all "tree config already exists"
+[ "${SHIRUDO_TEST_MODE:-legacy}" = verity ] || [ ! -e "$TREE_CONFIG" ] || test_skip_all "tree config already exists"
 [ ! -e /var/lib/shirudo/bpm/upatch-tree ] ||
 	test_skip_all "tree state already exists"
-[ ! -e "$TREE_LABELS" ] || test_skip_all "node labels already exist"
+[ "${SHIRUDO_TEST_MODE:-legacy}" = verity ] || [ ! -e "$TREE_LABELS" ] || test_skip_all "node labels already exist"
 
 cleanup()
 {
 	tree_registry_stop
-	rm -f "$TREE_CONFIG" "$TREE_LABELS"
+	tree_cleanup_config
 	rm -rf "$WORK"
 }
 trap cleanup EXIT

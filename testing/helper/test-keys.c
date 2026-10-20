@@ -59,15 +59,24 @@ int main(int argc, char **argv)
 		printf("%s\n", rc == 1 ? "yes" : rc == 0 ? "no" : "error");
 		return rc < 0 ? 1 : 0;
 	}
-	rc = keys_load(argv[2], NULL,
-		       argc < 4 || strcmp(argv[3], "primary"), &set);
+	if (!strcmp(argv[1], "image")) {
+		char primary[PATH_MAX];
+
+		snprintf(primary, sizeof(primary), "%s/cert.der", argv[2]);
+		rc = shirudo_keys_load_image(primary, argv[2], NULL, true,
+					     &set);
+	} else {
+		rc = keys_load(argv[2], NULL,
+			       argc < 4 || strcmp(argv[3], "primary"),
+				       &set);
+	}
 	if (!strcmp(argv[1], "reject"))
 		return rc == -EINVAL ? 0 : 1;
 	if (rc) {
 		printf("rc=%d\n", rc);
 		return 1;
 	}
-	if (strcmp(argv[1], "load") == 0) {
+	if (!strcmp(argv[1], "load") || !strcmp(argv[1], "image")) {
 		printf("n=%zu revoked=%zu unvouched=%zu\n", set.n,
 		       set.n_revoked, set.n_unvouched);
 		for (i = 0; i < set.n; i++) {

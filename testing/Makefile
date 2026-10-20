@@ -27,9 +27,14 @@ KERNEL_PATCHES ?= $(if $(wildcard $(ROOT)/kernel/*.patch),$(ROOT)/kernel/,)
 override KERNEL_PATCHES := $(if $(strip $(KERNEL_PATCHES)),$(call root-path,$(KERNEL_PATCHES)),)
 PACKAGE_FORMAT ?= $(call test-vm-arch,TEST_VM_HOST_PKG_FORMAT)
 
+TEST_VM_MODE ?= legacy
+ifneq ($(filter $(TEST_VM_MODE),legacy verity),$(TEST_VM_MODE))
+  $(error TEST_VM_MODE must be legacy or verity)
+endif
+TEST_VM_INITRD ?= $(if $(filter verity,$(TEST_VM_MODE)),1,0)
 TEST_VM_WORK_DIR ?= build/test-vm
 override TEST_VM_WORK_DIR := $(call root-path,$(TEST_VM_WORK_DIR))
-TEST_VM_BUNDLE_DIR ?= $(TEST_VM_WORK_DIR)/host-bundle-$(VM_KERNEL_TAG)$(KERNEL_COMMIT_SUFFIX)
+TEST_VM_BUNDLE_DIR ?= $(TEST_VM_WORK_DIR)/host-bundle-$(VM_KERNEL_TAG)$(KERNEL_COMMIT_SUFFIX)-$(TEST_VM_MODE)
 TEST_VM_RUNTIME_CACHE_DIR ?= $(TEST_VM_WORK_DIR)/cache/runtime
 override TEST_VM_RUNTIME_CACHE_DIR := $(call root-path,$(TEST_VM_RUNTIME_CACHE_DIR))
 TEST_VM_MAP_EXPORT_CA ?=
@@ -111,7 +116,9 @@ TEST_VM_BUNDLE_SOURCES := $(sort $(wildcard \
 	$(ROOT)/vendor/libbpf/include/linux/*.h \
 	$(ROOT)/vendor/libbpf/include/uapi/linux/*.h \
 	$(ROOT)/vendor/libbpf/include/asm/*.h \
-	$(ROOT)/testing/helper/*.c $(ROOT)/testing/helper/*.py \
+	$(ROOT)/testing/helper/*.c $(ROOT)/testing/helper/*.h $(ROOT)/testing/helper/*.py \
+	$(ROOT)/testing/tamperproof/*.c $(ROOT)/contrib/verity-*.sh \
+	$(ROOT)/tools/gen-image/shirudo-gen-* \
 	$(ROOT)/testing/upatch/kernel-obs/exec/*.c $(ROOT)/completion/* $(ROOT)/systemd/*.in \
 	$(ROOT)/systemd/*.timer $(ROOT)/testing/fixtures/*.c $(ROOT)/testing/fixtures/*.lua \
 	$(ROOT)/testing/fixtures/decoders/* \
@@ -138,7 +145,8 @@ $(ROOT)/config.mk: $(ROOT)/Makefile.config
 test-vm-bundle: $(VM_KERNEL_DEP) $(TEST_VM_BUNDLE_STAMP)
 
 $(TEST_VM_BUNDLE_STAMP): $(TEST_VM_BUNDLE_INPUTS)
-	$(Q)TEST_VM_HOST_BUNDLE="$(abspath $(TEST_VM_BUNDLE_DIR))" \
+	$(Q)TEST_VM_MODE="$(TEST_VM_MODE)" TEST_VM_INITRD="$(TEST_VM_INITRD)" \
+		TEST_VM_HOST_BUNDLE="$(abspath $(TEST_VM_BUNDLE_DIR))" \
 		TEST_VM_WORK_DIR="$(abspath $(TEST_VM_WORK_DIR))" \
 		TEST_VM_RUNTIME_CACHE_DIR="$(abspath $(TEST_VM_RUNTIME_CACHE_DIR))" \
 		TEST_VM_UBUNTU_CODENAME="$(TEST_VM_UBUNTU_CODENAME)" \
@@ -199,6 +207,7 @@ vm: $(VM_KERNEL_DEP) test-vm-bundle
 		TEST_VM_PACKAGE_CERT="$(TEST_VM_PACKAGE_CERT)" \
 		TEST_VM_BPM_OCI_REPOSITORY="$(TEST_VM_BPM_OCI_REPOSITORY)" \
 		TEST_VM_BPM_OCI_INDEX_CERT="$(TEST_VM_BPM_OCI_INDEX_CERT)" \
+		TEST_VM_MODE="$(TEST_VM_MODE)" TEST_VM_INITRD="$(TEST_VM_INITRD)" \
 		TEST_VM_HOST_BUNDLE="$(abspath $(TEST_VM_BUNDLE_DIR))" \
 		$(ROOT)/contrib/test-vm.sh
 vm-console:
@@ -222,6 +231,7 @@ test-tgt: $(VM_KERNEL_DEP) test-vm-bundle
 		TEST_VM_OCI_CA="$(TEST_VM_OCI_CA)" \
 		TEST_VM_BPM_OCI_REPOSITORY="$(TEST_VM_BPM_OCI_REPOSITORY)" \
 		TEST_VM_BPM_OCI_INDEX_CERT="$(TEST_VM_BPM_OCI_INDEX_CERT)" \
+		TEST_VM_MODE="$(TEST_VM_MODE)" TEST_VM_INITRD="$(TEST_VM_INITRD)" \
 		TEST_VM_HOST_BUNDLE="$(abspath $(TEST_VM_BUNDLE_DIR))" \
 		$(ROOT)/contrib/test-vm.sh
 
@@ -238,6 +248,7 @@ test-tgt-obs: $(VM_KERNEL_DEP) test-vm-bundle
 		TEST_VM_OCI_CA="$(TEST_VM_OCI_CA)" \
 		TEST_VM_BPM_OCI_REPOSITORY="$(TEST_VM_BPM_OCI_REPOSITORY)" \
 		TEST_VM_BPM_OCI_INDEX_CERT="$(TEST_VM_BPM_OCI_INDEX_CERT)" \
+		TEST_VM_MODE="$(TEST_VM_MODE)" TEST_VM_INITRD="$(TEST_VM_INITRD)" \
 		TEST_VM_HOST_BUNDLE="$(abspath $(TEST_VM_BUNDLE_DIR))" \
 		$(ROOT)/contrib/test-vm.sh
 
@@ -292,7 +303,8 @@ help:
 	  '  make -C testing test-op' \
 	  '  make -C testing test-helpers' \
 	  '  make -C testing fuzz [FUZZ_SECONDS=60]' \
-	  '  make -C testing test-tgt [TEST_VM_INITRD=1]' \
+	  '  make -C testing test-tgt TEST_VM_MODE=legacy [TEST_VM_INITRD=1]' \
+	  '  make -C testing test-tgt TEST_VM_MODE=verity (dracut initrd, root required)' \
 	  '  make -C testing test-tgt-obs' \
 	  '  make -C testing test-installer' \
 	  '  make -C testing vm, vm-console, vm-ssh, vm-stop, or vm-clean' \
