@@ -1,0 +1,45 @@
+From 6eab7fbb582962a62642b348913e57f2de2642e6 Mon Sep 17 00:00:00 2001
+From: Daniel Borkmann <daniel@iogearbox.net>
+Date: Tue, 20 Oct 2026 11:28:20 +0000
+Subject: [PATCH] riscv: build without LLVM's GlobalMerge pass
+
+LLVM 20 runs the GlobalMerge pass on RISC-V by default.  It folds
+static globals that are used together into one .L_MergedGlobals object
+and keeps the original names as aliases into it, per-CPU variables in
+.data..percpu included.  pahole 1.25 then emits a VAR for the alias and
+for the merged object at the same offset, the .data..percpu DATASEC of
+vmlinux gets overlapping entries, and the kernel rejects vmlinux BTF at
+boot:
+
+  BPF: type_id=70575 offset=4224 size=8
+  BPF: Invalid offset
+
+Without vmlinux BTF every fentry, fexit, fmod_ret, lsm and iterator
+program fails to load with -EINVAL, and so does every module that
+carries BTF ("failed to validate module [dummy] BTF: -22").
+
+clang 18 does not merge these globals, and arm64 and x86 builds with
+clang 20 are not affected.  Turn the pass off for RISC-V with the
+backend option, which LLVM 18 accepts as well; cc-option drops it for
+compilers that do not know it.
+---
+ arch/riscv/Makefile | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/arch/riscv/Makefile b/arch/riscv/Makefile
+index 44f5a439741a9..c5c7e909b9cdd 100644
+--- a/arch/riscv/Makefile
++++ b/arch/riscv/Makefile
+@@ -109,6 +109,12 @@ KBUILD_AFLAGS += $(call as-option,-Wa$(comma)-mno-arch-attr)
+ KBUILD_CFLAGS_MODULE += $(call cc-option,-mno-relax)
+ KBUILD_AFLAGS_MODULE += $(call as-option,-Wa$(comma)-mno-relax)
+ 
++# LLVM 20 runs GlobalMerge on RISC-V by default and folds static globals,
++# per-CPU ones included, into .L_MergedGlobals with the old names left as
++# aliases.  pahole then describes both at the same .data..percpu offset and
++# the kernel rejects vmlinux BTF as invalid.
++KBUILD_CFLAGS += $(call cc-option,-mllvm -riscv-enable-global-merge=false)
++
+ # GCC versions that support the "-mstrict-align" option default to allowing
+ # unaligned accesses.  While unaligned accesses are explicitly allowed in the
+ # RISC-V ISA, they're emulated by machine mode traps on all extant
