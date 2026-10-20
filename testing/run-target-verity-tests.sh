@@ -38,6 +38,7 @@ fail=0
 # Boot assertions precede updates; the interruption leaves state pending.
 for t in \
 	tamperproof/t1155-verity-boot-signers.sh \
+	tamperproof/t1138-mode-objects.sh \
 	t1200-target-fixtures.sh \
 	t1103-version-gate.sh \
 	t1104-payload-mismatch.sh \

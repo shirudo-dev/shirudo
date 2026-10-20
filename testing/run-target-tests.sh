@@ -25,6 +25,7 @@ esac
 fail=0
 : "${SHIRUDO_TEST_SUITE_FAILURES_FILE:=}"
 for t in \
+	tamperproof/t1138-mode-objects.sh \
 	t1200-target-fixtures.sh \
 	bpm/t1118-bpm-tree.sh \
 	bpm/t1119-bpm-tree-sequential.sh \
