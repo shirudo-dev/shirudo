@@ -48,6 +48,15 @@ struct shirudo_device_authority {
 	__u64	diskseq;
 };
 
+/* Image-only task storage for one config mapping preparation. */
+struct shirudo_expected_root {
+	__u8	root[32];
+	__u32 valid;
+};
+
+_Static_assert(sizeof(struct shirudo_expected_root) == 36,
+	       "expected config root ABI");
+
 struct shirudo_task_authority {
 	__u8	trusted;
 	__u8	candidate_valid;

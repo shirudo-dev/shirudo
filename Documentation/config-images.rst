@@ -402,7 +402,21 @@ mode query used to keep commands inside image policy.
 
 The LSM observes dm-verity metadata through the existing
 ``bdev_setintegrity`` hook. Lookup checks the block-device pointer, device
-number and disk sequence. The free hook attempts to delete the record,
+number and disk sequence. The runtime root must match the authenticated
+bootstrap value. A config root must match the expected root staged by the
+trusted task creating that mapping. An unrelated mapping made by a trusted
+task is not a config device.
+
+Expected roots live in image-only task storage. The hook reads the preparing
+task's entry and consumes it when the kernel reports the matching root.
+Creation clears it on every exit and reports an error if cleanup fails. A
+remaining valid entry blocks another preparation until cleared or task exit.
+The same helper covers boot activation, temporary download verification and
+live config activation. Initial trusted boot validates the key set before
+installing the guards, then recreates those mappings under enforcement.
+Untrusted tasks cannot modify the expectation map through BPF or a writable
+FD.
+The free hook attempts to delete the device record,
 but upstream dispatch can skip that notification. Device identity checks
 and cleanup are distinct concerns.
 

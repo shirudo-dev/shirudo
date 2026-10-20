@@ -34,6 +34,7 @@ enum shirudo_guard_map_index {
 	SHIRUDO_GUARD_IDENTITY,
 	SHIRUDO_GUARD_TASKS,
 	SHIRUDO_GUARD_DEVICES,
+	SHIRUDO_GUARD_ROOTS,
 	SHIRUDO_GUARD_TAMPER,
 	SHIRUDO_GUARD_MAP_COUNT,
 };
@@ -63,6 +64,14 @@ extern const struct shirudo_image_guard
 extern const struct shirudo_guard_map
 	shirudo_guard_maps[SHIRUDO_GUARD_MAP_COUNT];
 
+struct shirudo_config_root_guard {
+	int map_fd;
+	int task_fd;
+};
+
+int shirudo_config_root_begin(const __u8 root[32],
+			      struct shirudo_config_root_guard *guard);
+int shirudo_config_root_end(struct shirudo_config_root_guard *guard);
 int shirudo_image_guards_ready(void);
 
 #endif /* SHIRUDO_IMAGE_GUARDS_H */

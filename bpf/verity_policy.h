@@ -26,6 +26,19 @@ struct {
 	__type(value, struct shirudo_device);
 } shirudo_devices SEC(".maps");
 
+/* Trusted userspace records the expected root for the preparing task. */
+struct shirudo_expected_root {
+	__u8	root[32];
+	__u32	valid;
+};
+
+struct {
+	__uint(type, BPF_MAP_TYPE_TASK_STORAGE);
+	__uint(map_flags, BPF_F_NO_PREALLOC);
+	__type(key, int);
+	__type(value, struct shirudo_expected_root);
+} shirudo_roots SEC(".maps");
+
 struct inode *bpf_real_data_inode(struct file *file) __ksym;
 
 static __always_inline bool shirudo_bootstrap_task(void)

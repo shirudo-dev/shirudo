@@ -692,7 +692,8 @@ static int share_policy_maps(struct bpf_object *source,
 	int rc;
 
 	for (i = 0; i < ARRAY_SIZE(shirudo_guard_maps); i++) {
-		if (!image_mode && i == SHIRUDO_GUARD_DEVICES)
+		if (!image_mode && (i == SHIRUDO_GUARD_DEVICES ||
+				    i == SHIRUDO_GUARD_ROOTS))
 			continue;
 		from = bpf_object__find_map_by_name(source,
 						    shirudo_guard_maps[i].name);
@@ -802,7 +803,7 @@ static void collect_asymmetric(key_serial_t serial, const char *type,
 	k->serials[k->n++] = (__s32)serial;
 }
 
-/* Seed bootstrap before hooks attach, then forbid userspace map writes. */
+/* Seed bootstrap and freeze shared state except the expected config root. */
 static int freeze_task_maps(struct bpf_object *obj)
 {
 	struct shirudo_task_authority authority = {
@@ -819,7 +820,8 @@ static int freeze_task_maps(struct bpf_object *obj)
 		const struct shirudo_guard_map *expected =
 			&shirudo_guard_maps[i];
 
-		if (!image_mode && i == SHIRUDO_GUARD_DEVICES)
+		if (!image_mode && (i == SHIRUDO_GUARD_DEVICES ||
+				    i == SHIRUDO_GUARD_ROOTS))
 			continue;
 		map = bpf_object__find_map_by_name(obj, expected->name);
 		if (!map) {
@@ -832,7 +834,9 @@ static int freeze_task_maps(struct bpf_object *obj)
 			rc = -errno;
 			break;
 		}
-		if (bpf_map_freeze(fd) || bpf_obj_pin(fd, expected->pin)) {
+		/* Expected roots change for each mapping. */
+		if ((i != SHIRUDO_GUARD_ROOTS && bpf_map_freeze(fd)) ||
+		    bpf_obj_pin(fd, expected->pin)) {
 			rc = -errno;
 			break;
 		}
@@ -1131,6 +1135,7 @@ out:
 		(void)unlink(SHIRUDO_TAMPER_PIN);
 		(void)unlink(SHIRUDO_BPFFS_DIR "/task_authority");
 		(void)unlink(SHIRUDO_BPFFS_DIR "/devices");
+		(void)unlink(SHIRUDO_BPFFS_DIR "/config_roots");
 	}
 	bpf_object__close(seal_obj);
 	bpf_link__destroy(link_bpf);

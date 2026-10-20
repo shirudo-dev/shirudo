@@ -27,6 +27,7 @@
 
 #include "dm_verity.h"
 #include "hex.h"
+#include "image_guards.h"
 #include "keyring.h"
 #include "malloc.h"
 
@@ -426,12 +427,16 @@ int shirudo_dm_verity_create(const struct shirudo_config_image_open *image,
 	struct shirudo_dm_verity device = {.data_loop_fd = -1,
 					   .hash_loop_fd = -1};
 	char root[65], salt[65], params[512], signature[64];
+	struct shirudo_config_root_guard guard = {
+		.map_fd = -1,
+		.task_fd = -1,
+	};
 	struct stat data_st, hash_st;
 	struct dm_target_spec *target;
 	union dm_buffer buf;
 	bool created = false;
 	key_serial_t key = -1;
-	int control = -1, rc, n;
+	int control = -1, rc, cleanup, n;
 
 	if (!image || !out || !dm_name_ok(name))
 		return -EINVAL;
@@ -506,6 +511,11 @@ int shirudo_dm_verity_create(const struct shirudo_config_image_open *image,
 	memcpy(target + 1, params, n + 1);
 	target->next = (sizeof(*target) + n + 1 + 7) & ~7u;
 	buf.io.data_size = buf.io.data_start + target->next;
+	if (image->image.signed_root) {
+		rc = shirudo_config_root_begin(image->image.root_hash, &guard);
+		if (rc)
+			goto out;
+	}
 	rc = dm_command(control, DM_TABLE_LOAD, &buf);
 	if (rc)
 		goto out;
@@ -522,6 +532,9 @@ int shirudo_dm_verity_create(const struct shirudo_config_image_open *image,
 	if (!rc)
 		rc = device_path(&device, buf.io.dev);
 out:
+	cleanup = shirudo_config_root_end(&guard);
+	if (!rc)
+		rc = cleanup;
 	if (key >= 0)
 		(void)keyring_unlink_key(KEY_SPEC_THREAD_KEYRING, key);
 	if (rc) {

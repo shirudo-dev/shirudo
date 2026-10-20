@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 #include <linux/bpf.h>
@@ -20,6 +21,7 @@
 #include "log.h"
 #include "macros.h"
 #include "paths.h"
+#include "shirudo_mode.h"
 #include "tamper.h"
 
 const struct shirudo_image_guard
@@ -123,12 +125,86 @@ const struct shirudo_guard_map shirudo_guard_maps[SHIRUDO_GUARD_MAP_COUNT] = {
 		BPF_MAP_TYPE_HASH, sizeof(__u64),
 		sizeof(struct shirudo_device_authority), 128, 0,
 	},
+	[SHIRUDO_GUARD_ROOTS] = {
+		"shirudo_roots", SHIRUDO_BPFFS_DIR "/config_roots",
+		BPF_MAP_TYPE_TASK_STORAGE, sizeof(__u32),
+		sizeof(struct shirudo_expected_root), 0, BPF_F_NO_PREALLOC,
+	},
 	[SHIRUDO_GUARD_TAMPER] = {
 		"shirudo_tamper", SHIRUDO_TAMPER_PIN,
 		BPF_MAP_TYPE_ARRAY, sizeof(__u32),
 		sizeof(__u64), SHIRUDO_TAMPER_MAX, 0,
 	},
 };
+
+/* Initial authenticated boot creates mappings before these guards exist. */
+int shirudo_config_root_begin(const __u8 root[32],
+			      struct shirudo_config_root_guard *guard)
+{
+	struct shirudo_expected_root previous = {}, expected = { .valid = 1 };
+	const struct shirudo_guard_map *map =
+		&shirudo_guard_maps[SHIRUDO_GUARD_ROOTS];
+	int mode, rc;
+
+	*guard = (struct shirudo_config_root_guard) {
+		.map_fd = -1,
+		.task_fd = -1,
+	};
+	mode = shirudo_identity_mode();
+	if (mode == SHIRUDO_MODE_NONE)
+		return 0;
+	if (mode != SHIRUDO_MODE_IMAGE)
+		return mode < 0 ? mode : -EPERM;
+	guard->map_fd = bpf_obj_get(map->pin);
+	if (guard->map_fd < 0)
+		return -errno;
+	guard->task_fd = syscall(SYS_pidfd_open, getpid(), 0);
+	if (guard->task_fd < 0) {
+		rc = -errno;
+		goto fail;
+	}
+	if (bpf_map_lookup_elem(guard->map_fd, &guard->task_fd, &previous)) {
+		if (errno != ENOENT) {
+			rc = -errno;
+			goto fail;
+		}
+	} else if (previous.valid) {
+		rc = -EBUSY;
+		goto fail;
+	}
+	memcpy(expected.root, root, sizeof(expected.root));
+	if (bpf_map_update_elem(guard->map_fd, &guard->task_fd, &expected,
+				BPF_ANY)) {
+		rc = -errno;
+		goto fail;
+	}
+	return 0;
+fail:
+	if (guard->task_fd >= 0)
+		close(guard->task_fd);
+	close(guard->map_fd);
+	guard->map_fd = -1;
+	guard->task_fd = -1;
+	return rc;
+}
+
+/* Clear through retained FDs on every exit; report failure to clear. */
+int shirudo_config_root_end(struct shirudo_config_root_guard *guard)
+{
+	struct shirudo_expected_root empty = {};
+	int rc = 0;
+
+	if (guard->map_fd < 0)
+		return 0;
+	if (bpf_map_update_elem(guard->map_fd, &guard->task_fd, &empty,
+				BPF_ANY))
+		rc = -errno;
+	close(guard->task_fd);
+	close(guard->map_fd);
+	guard->map_fd = -1;
+	guard->task_fd = -1;
+	return rc;
+}
 
 static int guard_map_ids(__u32 ids[SHIRUDO_GUARD_MAP_COUNT])
 {

@@ -123,6 +123,10 @@ struct dm_verity_digest___shirudo {
 	size_t digest_len;
 } __attribute__((preserve_access_index));
 
+/*
+ * Runtime roots match the frozen UKI value. Config roots must match the current
+ * trusted task's one-use expectation; unrelated mappings gain no status.
+ */
 SEC("lsm.s/bdev_setintegrity")
 int BPF_PROG(shirudo_lsm_bdev_setintegrity, struct block_device *bdev,
 	     enum lsm_integrity_type type, const void *value,
@@ -130,6 +134,7 @@ int BPF_PROG(shirudo_lsm_bdev_setintegrity, struct block_device *bdev,
 {
 	const struct dm_verity_digest___shirudo *digest = value;
 	struct shirudo_sb_id *id = shirudo_policy();
+	struct shirudo_expected_root *expected;
 	struct shirudo_device device = {};
 	__u64 cookie = (__u64)bdev;
 	const unsigned char *root;
@@ -161,12 +166,24 @@ int BPF_PROG(shirudo_lsm_bdev_setintegrity, struct block_device *bdev,
 	diff = 0;
 	for (i = 0; i < sizeof(device.root); i++)
 		diff |= device.root[i] ^ id->runtime_root[i];
-	if (!diff)
+	if (!diff) {
 		device.kind = SHIRUDO_DEVICE_RUNTIME;
-	else if (shirudo_task_is_self(id))
+	} else {
+		if (!shirudo_task_is_self(id))
+			return 0;
+		expected = bpf_task_storage_get(&shirudo_roots,
+						bpf_get_current_task_btf(),
+						NULL, 0);
+		if (!expected || !expected->valid)
+			return 0;
+		diff = 0;
+		for (i = 0; i < sizeof(device.root); i++)
+			diff |= device.root[i] ^ expected->root[i];
+		if (diff)
+			return 0;
+		expected->valid = 0;
 		device.kind = SHIRUDO_DEVICE_CONFIG;
-	else
-		return 0;
+	}
 	device.dev = BPF_CORE_READ(bdev, bd_dev);
 	device.diskseq = BPF_CORE_READ(bdev, bd_disk, diskseq);
 	if (!device.diskseq)
