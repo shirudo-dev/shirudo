@@ -290,7 +290,8 @@ one usually still compiles and passes tests.
   UBSan (CI does too); `make -C testing test-tgt` runs the target suite in the
   QEMU/swtpm VM (`make -C testing help` lists the VM target groups).
 - `make -C testing test-tgt TEST_VM_INITRD=1` boots the guest from a dracut initrd
-  that runs `shirudo-initrd.service`; `make -C testing test-installer` runs
+  that runs `shirudo-initrd.service`; CI runs `test-tgt` both ways through
+  `.github/scripts/target-tests.sh`. `make -C testing test-installer` runs
   `testing/t1300-installer-e2e.sh`, the installer end to end in a QEMU
   guest with a vTPM, two reboots included.
 - `make -C Documentation html-docs` renders `Documentation/*.rst` with docutils in strict

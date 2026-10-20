@@ -201,7 +201,8 @@ Before sending
 
 * Build both profiles and the helper (``make``, ``make shirudo-build``)
   and run ``make -C testing test-op``; run ``make -C testing test-tgt`` when the change
-  touches target-side behaviour.  Run the host-side suite once more
+  touches target-side behaviour.  CI runs the target suite in both
+  configurations as the ``Target tests`` check.  Run the host-side suite once more
   with ``make -C testing SANITIZE=address,undefined test-op`` when the change
   touches memory handling or binary formats; CI runs the same sweep.
 * Run ``make -C Documentation html-docs`` when the change touches ``Documentation/``;
