@@ -322,10 +322,15 @@ T11 Image-mode config and executable substitution
     alone does not authenticate backing bytes: corruption or incomplete reads
     refuse preparation. The target neither reconstructs the hash tree nor
     invokes ``veritysetup``. Shirudo observes the mapping
-    metadata exposed by existing upstream hooks. Existing ioctl hooks restrict DM-control mutations to trusted
+    metadata exposed by existing upstream hooks. The native ioctl hook restricts DM-control mutations to trusted
     image tasks, including through old or inherited FDs; this restriction
-    applies to unrelated DM devices too. No kernel patches are included,
-    and the mount hooks do not cover every mount attribute change or
+    applies to unrelated DM devices too. Config device classification also
+    requires the root expected by the trusted task creating that mapping.
+    Image mode requires 32-bit compatibility disabled in the kernel; its
+    device-mapper checks cover native ioctls only.
+    Enforcement uses existing LSM hooks; direct access to the dm-verity
+    keyring requires the upstream keyring-ID API. The mount hooks do not
+    cover every mount attribute change or
     unmount of a parent mount above the image mounts. A
     candidate config cannot supply bootstrap keys or TPM settings, and config symlinks and special
     files are refused. Repository certificate paths resolve inside the held

@@ -420,7 +420,9 @@ The free hook attempts to delete the device record,
 but upstream dispatch can skip that notification. Device identity checks
 and cleanup are distinct concerns.
 
-The existing ``file_ioctl`` and ``file_ioctl_compat`` hooks deny mutating
+Image mode requires a kernel without 32-bit compatibility support, as
+listed in the `kernel requirements <requirements.rst>`__.
+The ``file_ioctl`` hook denies mutating
 DM-control commands from untrusted callers, including commands on old or
 inherited FDs. The restriction covers all DM devices in image mode, so
 ordinary untrusted volume-management tools cannot mutate unrelated DM

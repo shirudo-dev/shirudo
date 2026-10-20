@@ -390,12 +390,16 @@ than mutable ``mm->exe_file``. ``PR_SET_MM`` cannot grant authority.
 
 ``bdev_setintegrity`` records metadata available through the existing
 upstream hook. Device lookup checks the block-device pointer, device number
-and disk sequence. ``bdev_free_security`` attempts cleanup, but upstream
+and disk sequence. Runtime records require the authenticated bootstrap root.
+Config records require an authorized task and the expected root it staged
+for that mapping. ``bdev_free_security`` attempts cleanup, but upstream
 can omit the notification.
-The existing ``file_ioctl`` and ``file_ioctl_compat`` hooks deny untrusted
+The ``file_ioctl`` hook denies untrusted
 callers mutating device-mapper control operations, including through old or
 inherited FDs. This restriction applies to all DM devices in image mode.
-Trusted image tasks retain control access. No kernel patches are included.
+Trusted image tasks retain control access. These checks use existing LSM
+hooks. Direct keyring access additionally requires the upstream
+``KEY_SPEC_DM_VERITY_KEYRING`` API described in the requirements.
 The metadata hook does not expose all verity options; complete mount-tree
 protection remains unestablished. ``mmap_file`` and
 ``file_mprotect`` prevent trusted tasks from introducing host or anonymous

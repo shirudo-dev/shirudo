@@ -15,11 +15,12 @@ features fail at build or pre-flight time; there is no compatibility mode.
 1) Target kernel
 ----------------
 
-The validated source baseline is upstream bpf-next commit
+The signed-loader ABI is present at upstream bpf-next commit
 ``0867b7bfa9de65674c6e599fa21b762b71011b14``, which reports a
-``7.3.0-rc5``-based release string in the validation build. No kernel patches
-are applied. A released-version minimum has not been established by this
-validation, so a release number alone is not an admission check.
+``7.3.0-rc5``-based release string in the initial validation build. Image mode
+also requires the upstream keyring-ID API described below. A released-version
+minimum has not been established by this validation, so a release number
+alone is not an admission check.
 
 ``shirudo init`` checks the running kernel's signed-loader support through
 ``signed_loader_kernel_abi`` and refuses an incompatible ABI. Such a load
@@ -115,6 +116,11 @@ accepts the signed-attributes form.
 
 Image-mode requirements
 ~~~~~~~~~~~~~~~~~~~~~~~
+
+Image mode supports 64-bit userspace only. Disable 32-bit compatibility
+(``CONFIG_COMPAT=n``); on x86-64, disable ``CONFIG_IA32_EMULATION`` and
+``CONFIG_X86_X32_ABI``. Device-mapper restrictions use the native
+``file_ioctl`` hook and do not cover compat ioctls.
 
 The opt-in dm-verity mode additionally requires ``CONFIG_BLK_DEV_DM``,
 ``CONFIG_DM_VERITY``, ``CONFIG_BLK_DEV_LOOP`` and ``CONFIG_EXT4_FS``. Runtime
