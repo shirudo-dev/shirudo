@@ -20,6 +20,7 @@ int shirudo_image_boot(void);
 int shirudo_image_boot_complete(void);
 int shirudo_image_enter(const char *command, int argc, const char **argv);
 void shirudo_image_leave(void);
+int shirudo_image_update(const char *prefix);
 int shirudo_image_status(void);
 
 #endif /* SHIRUDO_IMAGE_RUNTIME_H */

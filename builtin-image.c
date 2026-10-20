@@ -16,6 +16,7 @@ static void image_help(void)
 	fprintf(stderr,
 		"usage: shirudo image build [image builder options]\n"
 		"       shirudo image verify <prefix> --cert <certificate>\n"
+		"       shirudo image update <prefix-or-https-prefix>\n"
 		"       shirudo image status\n");
 }
 
@@ -24,7 +25,7 @@ int cmd_image(int argc, const char **argv)
 	int rc;
 
 	if (argc == 2 && !strcmp(argv[1], "--list-cmds")) {
-		puts("build verify status");
+		puts("build verify update status");
 		return 0;
 	}
 	if (argc < 2 || !strcmp(argv[1], "--help") || !strcmp(argv[1], "-h")) {
@@ -48,7 +49,9 @@ int cmd_image(int argc, const char **argv)
 		xfree(helper, bytes);
 		return rc;
 	}
-	if (!strcmp(argv[1], "status") && argc == 2) {
+	if (!strcmp(argv[1], "update") && argc == 3) {
+		rc = shirudo_image_update(argv[2]);
+	} else if (!strcmp(argv[1], "status") && argc == 2) {
 		rc = shirudo_image_status();
 	} else {
 		image_help();

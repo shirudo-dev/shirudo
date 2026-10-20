@@ -1015,3 +1015,233 @@ void shirudo_image_leave(void)
 	image.certificate_fd = -1;
 	explicit_bzero(&image.bootstrap_config, sizeof(image.bootstrap_config));
 }
+
+struct image_download {
+	int fd;
+	__u64 limit;
+	__u64 written;
+};
+
+static size_t download_write(char *data, size_t size, size_t count, void *ctx)
+{
+	struct image_download *download = ctx;
+	size_t bytes;
+
+	if (size && count > SIZE_MAX / size)
+		return 0;
+	bytes = size * count;
+	if (bytes > download->limit - download->written ||
+	    write_complete(download->fd, data, bytes))
+		return 0;
+	download->written += bytes;
+	return bytes;
+}
+
+static int copy_file(const char *source, const char *destination, __u64 max)
+{
+	struct image_download download;
+	CURL *curl = NULL;
+	char buffer[65536];
+	CURLcode result;
+	struct stat st;
+	ssize_t n;
+	int input = -1, output, rc = 0;
+
+	output = open(destination,
+		      O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW,
+		      0600);
+	if (output < 0)
+		return -errno;
+	rc = seal_fd(NULL, output);
+	download = (struct image_download){ .fd = output, .limit = max };
+	if (rc)
+		goto out;
+	if (!strncmp(source, "https://", 8)) {
+		curl = curl_easy_init();
+		if (!curl) {
+			rc = -ENOMEM;
+			goto out;
+		}
+		rc = tls_curl_policy(curl, NULL);
+		if (rc)
+			goto out;
+		curl_easy_setopt(curl, CURLOPT_URL, source);
+		curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
+		curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
+		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+		curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
+		curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
+		curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L);
+		curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
+		curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L);
+		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, download_write);
+		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &download);
+		result = curl_easy_perform(curl);
+		if (result != CURLE_OK)
+			rc = -EIO;
+	} else {
+		input = open(source, O_RDONLY | O_CLOEXEC | O_NOFOLLOW |
+			     O_NONBLOCK);
+		if (input < 0) {
+			rc = -errno;
+			goto out;
+		}
+		if (fstat(input, &st)) {
+			rc = -errno;
+			goto out;
+		}
+		if (!S_ISREG(st.st_mode) || st.st_size < 0 ||
+		    (__u64)st.st_size > max) {
+			rc = -EINVAL;
+			goto out;
+		}
+		while ((n = read(input, buffer, sizeof(buffer))) != 0) {
+			if (n < 0) {
+				if (errno == EINTR)
+					continue;
+				rc = -errno;
+				break;
+			}
+			if (download_write(buffer, 1, n, &download) !=
+			    (size_t)n) {
+				rc = -EFBIG;
+				break;
+			}
+		}
+	}
+	if (!rc && fsync(output))
+		rc = -errno;
+out:
+	if (curl)
+		curl_easy_cleanup(curl);
+	if (input >= 0)
+		close(input);
+	close(output);
+	return rc;
+}
+
+/* Verify downloads before publishing their root-hash-named cache files. */
+static int verify_incoming(const struct shirudo_config_image_open *opened,
+			   const char *staging)
+{
+	struct shirudo_dm_verity device = {
+		.data_loop_fd = -1,
+		.hash_loop_fd = -1,
+	};
+	int rc, cleanup;
+	char name[128];
+
+	snprintf(name, sizeof(name), "shirudo-verify-%s",
+		 strrchr(staging, '/') + 1);
+	rc = shirudo_dm_verity_create(opened, name, &device);
+	if (rc)
+		return rc;
+	rc = shirudo_dm_verity_verify(&device, opened);
+	cleanup = shirudo_dm_verity_remove(&device, true);
+	if (cleanup)
+		pr_warn("image: cannot remove incoming mapping: %s",
+			strerror(-cleanup));
+	shirudo_dm_verity_close(&device);
+	return rc ? rc : cleanup;
+}
+
+static int cache_image(const char *source,
+		       struct shirudo_config_update_target *target)
+{
+	static const char *const extensions[] = {
+		".roothash",
+		".p7s",
+		".img",
+		".verity",
+	};
+	struct shirudo_config_image_open opened;
+	char staging[] = SHIRUDO_IMAGE_CACHE_DIR "/incoming-XXXXXX";
+	char incoming[PATH_MAX], from[PATH_MAX], to[PATH_MAX];
+	char hex[65];
+	int dir = -1, rc;
+	size_t i;
+
+	rc = mkdir_owned(SHIRUDO_IMAGE_CACHE_DIR);
+	if (rc)
+		return rc;
+	if (!mkdtemp(staging))
+		return -errno;
+	rc = seal_label(staging);
+	if (rc)
+		goto out;
+	snprintf(incoming, sizeof(incoming), "%s/image", staging);
+	for (i = 0; i < ARRAY_SIZE(extensions); i++) {
+		__u64 max = i == 0 ? 65 :
+			       i == 1 ? SHIRUDO_CONFIG_IMAGE_SIG_MAX :
+					SHIRUDO_CONFIG_IMAGE_MAX_BYTES;
+
+		if (snprintf(from, sizeof(from), "%s%s", source,
+			     extensions[i]) >= (int)sizeof(from) ||
+		    snprintf(to, sizeof(to), "%s%s", incoming, extensions[i]) >=
+			    (int)sizeof(to)) {
+			rc = -ENAMETOOLONG;
+			goto out;
+		}
+		rc = copy_file(from, to, max);
+		if (rc)
+			goto out;
+	}
+	rc = shirudo_config_image_open(incoming, &opened);
+	if (rc)
+		goto out;
+	rc = verify_incoming(&opened, staging);
+	if (!rc) {
+		memcpy(target->root_hash, opened.image.root_hash, 32);
+		hex_encode(target->root_hash, 32, hex);
+		snprintf(target->prefix, sizeof(target->prefix), "%s/%s",
+			 SHIRUDO_IMAGE_CACHE_DIR, hex);
+	}
+	shirudo_config_image_close(&opened);
+	if (rc)
+		goto out;
+	for (i = 0; i < ARRAY_SIZE(extensions); i++) {
+		snprintf(from, sizeof(from), "%s%s", incoming, extensions[i]);
+		snprintf(to, sizeof(to), "%s%s", target->prefix, extensions[i]);
+		if (link(from, to) && errno != EEXIST) {
+			rc = -errno;
+			goto out;
+		}
+	}
+	dir = open(SHIRUDO_IMAGE_CACHE_DIR,
+		   O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+	if (dir < 0 || fsync(dir)) {
+		rc = -errno;
+		goto out;
+	}
+	rc = shirudo_config_image_open(target->prefix, &opened);
+	if (!rc) {
+		if (memcmp(opened.image.root_hash, target->root_hash, 32))
+			rc = -EKEYREJECTED;
+		shirudo_config_image_close(&opened);
+	}
+out:
+	if (dir >= 0)
+		close(dir);
+	for (i = 0; i < ARRAY_SIZE(extensions); i++) {
+		snprintf(to, sizeof(to), "%s/image%s", staging, extensions[i]);
+		unlink(to);
+	}
+	rmdir(staging);
+	return rc;
+}
+
+int shirudo_image_update(const char *prefix)
+{
+	struct shirudo_config_update_target target = {};
+	int rc;
+
+	if (!image.locked)
+		return -ENODEV;
+	rc = current_config();
+	if (!rc)
+		rc = cache_image(prefix, &target);
+	if (!rc)
+		rc = shirudo_config_update_begin(&image.update, &target,
+						 image.bootstrap.pcr);
+	return rc;
+}

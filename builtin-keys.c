@@ -826,12 +826,12 @@ static int purge_signed_by(const __u8 *der, size_t der_sz,
 
 int shirudo_keys_revoke_image(const __u8 *der, size_t size, bool boot)
 {
+	struct shirudo_trusted_cert cert = {};
 	key_serial_t ring, key;
+	char fingerprint[65];
 	size_t unloaded;
 	int rc;
 
-	if (!boot)
-		return -EOPNOTSUPP;
 	ring = keyring_bpf_serial();
 	if (ring < 0)
 		return ring;
@@ -842,6 +842,16 @@ int shirudo_keys_revoke_image(const __u8 *der, size_t size, bool boot)
 		rc = keyring_unlink_key(ring, key);
 		if (rc)
 			return rc;
+		if (!boot) {
+			rc = keys_digest_der(der, size, cert.sha256,
+					     cert.fingerprint);
+			if (rc)
+				return rc;
+			hex_encode(cert.fingerprint, 32, fingerprint);
+			rc = measure_revoke(&cert, fingerprint);
+			if (rc)
+				return rc;
+		}
 	}
 	rc = purge_signed_by(der, size, &unloaded);
 	return rc < 0 ? rc : 0;

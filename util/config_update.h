@@ -75,6 +75,9 @@ int shirudo_config_update_open(const char *directory,
 void shirudo_config_update_close(struct shirudo_config_update *update);
 int shirudo_config_update_read(struct shirudo_config_update *update,
 			       struct shirudo_config_update_record *out);
+int shirudo_config_update_begin(struct shirudo_config_update *update,
+				const struct shirudo_config_update_target *t,
+				__u32 pcr);
 /* Boot leaves intent pending until upatch restoration and NV init succeed. */
 int shirudo_config_update_boot(struct shirudo_config_update *update,
 			       const struct shirudo_config_update_target *t,

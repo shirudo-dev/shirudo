@@ -598,6 +598,27 @@ static int begin_event(struct shirudo_config_update *update,
 	return complete(update);
 }
 
+int shirudo_config_update_begin(struct shirudo_config_update *update,
+				const struct shirudo_config_update_target *t,
+				__u32 pcr)
+{
+	struct shirudo_config_update_record previous;
+	int rc;
+
+	if (!update || update->dir_fd < 0 || target_valid(t) ||
+	    shirudo_config_measure_pcr_valid(pcr))
+		return -EINVAL;
+	rc = shirudo_config_update_check(update, &previous);
+	if (rc)
+		return rc;
+	if (pcr != previous.pcr)
+		return -EPERM;
+	if (!memcmp(t->root_hash, previous.target.root_hash, 32))
+		return 0;
+	return begin_event(update, t, &previous, pcr,
+			   SHIRUDO_CONFIG_EVENT_UPDATE);
+}
+
 int shirudo_config_update_boot(struct shirudo_config_update *update,
 			       const struct shirudo_config_update_target *t,
 			       __u32 pcr)
