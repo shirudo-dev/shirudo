@@ -115,13 +115,10 @@ if [ -n "$unit_output" ]; then
 	case "$interpreter$library_path" in *[[:space:]\\\"%]*) die 'runtime paths cannot be encoded in a systemd ExecStart' ;; esac
 	(
 		set -o noclobber
-		cat >"$unit_output" <<EOF
-# SPDX-License-Identifier: BSD-2-Clause
-# Copyright (c) 2026 Authors of shirudo
-[Service]
-EnvironmentFile=
-ExecStart=
-ExecStart=/run/shirudo/runtime$interpreter --inhibit-cache --library-path $library_path /run/shirudo/runtime/usr/bin/shirudo init
-EOF
+		interpreter_escaped=$(printf '%s' "$interpreter" | sed 's/[\&|]/\\&/g')
+		library_path_escaped=$(printf '%s' "$library_path" | sed 's/[\&|]/\\&/g')
+		sed -e "s|@interpreter@|$interpreter_escaped|g" \
+			-e "s|@library_path@|$library_path_escaped|g" \
+			"$here/runtime-service.conf.in" >"$unit_output"
 	)
 fi

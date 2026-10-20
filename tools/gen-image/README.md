@@ -67,6 +67,10 @@ for `config.verification_key` in the bootstrap configuration. The initial
 BPF certificate is `keys/cert.der` inside the image. Runtime images have no
 shell or debugger unless the operator explicitly supplies one.
 
+The generated service content is kept in `runtime-service.conf.in` beside
+the scripts. Keep that template with the scripts when copying this directory.
+The generator substitutes only the interpreter and library paths.
+
 Pass `--unit-output runtime-service.conf` to generate a systemd drop-in for
 the root phase. Install it as
 `/etc/systemd/system/shirudo.service.d/verity.conf`. It clears the writable
