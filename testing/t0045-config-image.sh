@@ -185,6 +185,40 @@ test_expect_success 'builder never overwrites existing outputs and cleans partia
 	[ ! -e "$W/existing.p7s" ]
 '
 
+test_expect_success 'failed format, signing or verification leaves no output files' '
+	mkdir "$W/build-wrapper" &&
+	ln -s "$(pwd)/fixtures/image-veritysetup-failure.sh" "$W/build-wrapper/veritysetup" &&
+	for stage in format verify; do
+		! PATH="$W/build-wrapper:$PATH" IMAGE_BUILD_FAILURE="$stage" REAL_VERITY="$REAL_VERITY" \
+			"$B" image build "$W/data" -o "$W/failed-$stage" --keys-dir "$W/keys" || exit 1
+	done &&
+	! "$B" image build "$W/data" -o "$W/failed-sign" \
+		--key "$W/missing-key" --cert "$W/keys/cert.der" &&
+	for stage in format sign verify; do
+		for suffix in img verity roothash p7s; do
+			[ ! -e "$W/failed-$stage.$suffix" ] || exit 1
+		done
+	done &&
+	[ -z "$(find "$W" -name ".shirudo-image.*" -print -quit)" ]
+'
+
+test_expect_success 'a late output conflict preserves that file and removes partial output' '
+	! PATH="$W/build-wrapper:$PATH" IMAGE_BUILD_FAILURE=publish REAL_VERITY="$REAL_VERITY" \
+		IMAGE_OUTPUT="$W/late" "$B" image build "$W/data" -o "$W/late" --keys-dir "$W/keys" &&
+	[ "$(cat "$W/late.roothash")" = sentinel ] &&
+	[ ! -e "$W/late.img" ] && [ ! -e "$W/late.verity" ] && [ ! -e "$W/late.p7s" ] &&
+	[ -z "$(find "$W" -name ".shirudo-image.*" -print -quit)" ]
+'
+
+test_expect_success 'installed helper finds the image scripts beside it' '
+	mkdir -p "$W/operator/gen-image" &&
+	cp "$B" "$W/operator/shirudo-build" &&
+	cp ../tools/gen-image/shirudo-gen-* ../tools/gen-image/common.sh \
+		../tools/gen-image/runtime-service.conf.in "$W/operator/gen-image/" &&
+	"$W/operator/shirudo-build" image build "$W/data" -o "$W/installed" --keys-dir "$W/keys" &&
+	verify "$W/installed" "$W/keys/cert.der"
+'
+
 test_expect_success 'offline verification retains its authenticated file descriptors' '
 	copy_bundle && mkdir "$W/wrapper" &&
 	printf "%s\n" "#!/bin/sh" \

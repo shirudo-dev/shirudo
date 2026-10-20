@@ -118,11 +118,12 @@ TEST_VM_BUNDLE_SOURCES := $(sort $(wildcard \
 	$(ROOT)/vendor/libbpf/include/asm/*.h \
 	$(ROOT)/testing/helper/*.c $(ROOT)/testing/helper/*.h $(ROOT)/testing/helper/*.py \
 	$(ROOT)/testing/tamperproof/*.c $(ROOT)/contrib/verity-*.sh \
-	$(ROOT)/tools/gen-image/shirudo-gen-* $(ROOT)/tools/gen-image/*.in \
+	$(ROOT)/tools/gen-image/shirudo-gen-* $(ROOT)/tools/gen-image/*.sh \
+	$(ROOT)/tools/gen-image/*.in \
 	$(ROOT)/contrib/verity-vm/* \
 	$(ROOT)/testing/upatch/kernel-obs/exec/*.c $(ROOT)/completion/* $(ROOT)/systemd/*.in \
 	$(ROOT)/systemd/*.timer $(ROOT)/testing/fixtures/*.c $(ROOT)/testing/fixtures/*.lua \
-	$(ROOT)/testing/fixtures/*.conf \
+	$(ROOT)/testing/fixtures/*.conf $(ROOT)/testing/fixtures/*.sh \
 	$(ROOT)/testing/fixtures/decoders/* \
 	$(ROOT)/upatches/kernel-obs/*.c $(ROOT)/upatches/kernel-obs/*.h $(ROOT)/upatches/kernel-obs/*.list \
 		$(ROOT)/upatches/kernel-obs/*.py $(ROOT)/upatches/kernel-obs/Beefile \
