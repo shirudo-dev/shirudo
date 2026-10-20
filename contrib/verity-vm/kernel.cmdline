@@ -1,0 +1,1 @@
+console=ttyS0,115200 root=/dev/vda rw nokaslr lsm=bpf bpf.keyring_unsealed=1 dm_verity.keyring_unsealed=1

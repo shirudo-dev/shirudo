@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+endpoint = oci://127.0.0.1:5443/shirudo/upatch-tree
+reference = @reference@

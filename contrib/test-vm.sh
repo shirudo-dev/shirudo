@@ -971,18 +971,10 @@ build_initrd()
 		"$REPO_ROOT/systemd/shirudo-initrd.service.in" >"$unit"
 	seed="$RUN_DIR/initrd-seed"
 	mkdir -p "$seed/usr/lib/systemd/system/initrd.target.wants"
-	cat >"$seed/usr/lib/systemd/system/shirudo-test-seed.service" <<'EOF'
-[Unit]
-Description=shirudo test VM: seed the root file system with the bundle
-DefaultDependencies=no
-After=initrd-root-fs.target
-Before=shirudo-initrd.service
-RequiresMountsFor=/sysroot
-
-[Service]
-Type=oneshot
-ExecStart=/bin/sh -c 'mkdir -p /sysroot/usr/local/bin /sysroot/var/lib/shirudo/keys/trusted && cp /usr/local/bin/shirudo /sysroot/usr/local/bin/shirudo && chmod 0755 /sysroot/usr/local/bin/shirudo && cp /etc/shirudo/keys/cert.der /sysroot/var/lib/shirudo/keys/cert.der && cp /etc/shirudo/keys/trusted/* /sysroot/var/lib/shirudo/keys/trusted/ && chmod 0700 /sysroot/var/lib/shirudo /sysroot/var/lib/shirudo/keys /sysroot/var/lib/shirudo/keys/trusted'
-EOF
+	cp "$REPO_ROOT/contrib/verity-vm/shirudo-test-seed.service" \
+		"$seed/usr/lib/systemd/system/shirudo-test-seed.service"
+	cp "$REPO_ROOT/contrib/verity-vm/seed-root.sh" \
+		"$seed/shirudo-test-seed-root.sh"
 	ln -sf ../shirudo-test-seed.service \
 		"$seed/usr/lib/systemd/system/initrd.target.wants/shirudo-test-seed.service"
 	# The bundle's own-keyring certificate rides along as a second
@@ -1004,9 +996,10 @@ EOF
 			"$seed/shirudo-test-images/"
 		cp "$TEST_VM_HOST_BUNDLE/verity/bootstrap.conf" \
 			"$seed/shirudo-test-images/bootstrap.conf"
-		cat >>"$seed/usr/lib/systemd/system/shirudo-test-seed.service" <<'EOF'
-ExecStart=/bin/sh -c 'mkdir -p /sysroot/var/lib/shirudo/images /sysroot/etc/shirudo && cp /shirudo-test-images/*.img /shirudo-test-images/*.verity /shirudo-test-images/*.roothash /shirudo-test-images/*.p7s /sysroot/var/lib/shirudo/images/ && cp /shirudo-test-images/bootstrap.conf /sysroot/etc/shirudo/shirudo.conf'
-EOF
+		cp "$REPO_ROOT/contrib/verity-vm/seed-images.sh" \
+			"$seed/shirudo-test-seed-images.sh"
+		cat "$REPO_ROOT/contrib/verity-vm/shirudo-test-seed-images.conf" \
+			>>"$seed/usr/lib/systemd/system/shirudo-test-seed.service"
 	fi
 	cert="$RUN_DIR/cert.der"
 	cp "$TEST_VM_HOST_BUNDLE/fixtures/cert.der" "$cert"

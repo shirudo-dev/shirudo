@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+[Unit]
+Description=shirudo test VM: seed the root file system with the bundle
+DefaultDependencies=no
+After=initrd-root-fs.target
+Before=shirudo-initrd.service
+RequiresMountsFor=/sysroot
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /shirudo-test-seed-root.sh

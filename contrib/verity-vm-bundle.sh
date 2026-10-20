@@ -4,6 +4,7 @@
 
 set -euo pipefail
 source_dir=$(cd "$(dirname "$0")/.." && pwd)
+templates="$source_dir/contrib/verity-vm"
 [ "$#" -eq 4 ] || exit 2
 bundle=$1
 work=$2
@@ -13,12 +14,8 @@ boot_keys=$4
 	--boot-keys-dir "$boot_keys" --output "$work/verity"
 mkdir "$bundle/verity"
 cp -a "$work/verity/public/." "$bundle/verity/"
-cat >"$work/runtime.conf" <<'EOF'
-config.image = /var/lib/shirudo/images/config-boot-keys
-config.verification_key = /run/shirudo/runtime/etc/shirudo/config-cert.der
-config.pcr = 14
-tpm.tcti = device:/dev/tpmrm0
-EOF
+sed 's/@config_image@/config-boot-keys/g' "$templates/runtime.conf.in" \
+	>"$work/runtime.conf"
 "$source_dir/tools/gen-image/shirudo-gen-runtime" \
 	--binary "$bundle/root/usr/local/bin/shirudo" \
 	--bootstrap-conf "$work/runtime.conf" --cert "$keys/cert.der" \
@@ -28,12 +25,14 @@ EOF
 	--extra-binary "$source_dir/build/verity-tests/shirudo-image-fault" \
 	--unit-output "$bundle/verity/runtime-service.conf" \
 	>"$bundle/verity/runtime.root"
-printf 'runtime.image = /var/lib/shirudo/images/runtime\nruntime.root_hash = %s\n' \
-	"$(cat "$bundle/verity/runtime.root")" >"$bundle/verity/bootstrap.conf"
+sed "s/@root_hash@/$(cat "$bundle/verity/runtime.root")/g" \
+	"$templates/bootstrap.conf.in" >"$bundle/verity/bootstrap.conf"
 command=$(sed -n 's/^ExecStart=\(.*\) init$/\1/p' \
 	"$bundle/verity/runtime-service.conf")
 [ -n "$command" ]
-printf '#!/bin/sh\nexec %s "$@"\n' "$command" >"$bundle/verity/shirudo-runtime"
+command_escaped=$(printf '%s' "$command" | sed 's/[\&|]/\\&/g')
+sed "s|@runtime_command@|$command_escaped|g" "$templates/shirudo-runtime.in" \
+	>"$bundle/verity/shirudo-runtime"
 chmod 0755 "$bundle/verity/shirudo-runtime"
 (cd "$bundle/verity" && sha256sum -- *.img *.verity *.roothash *.p7s *.der \
 	*.fingerprint *.upatch bootstrap.conf runtime-service.conf shirudo-runtime >manifest)

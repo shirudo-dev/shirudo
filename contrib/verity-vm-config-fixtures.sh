@@ -6,6 +6,7 @@ set -euo pipefail
 umask 077
 
 source_dir=$(cd "$(dirname "$0")/.." && pwd)
+templates="$source_dir/contrib/verity-vm"
 keys_dir=
 boot_keys_dir=
 output=
@@ -69,23 +70,18 @@ for name in config-boot-keys config-live-new-key config-a config-b config-bad co
 	[ "$name" != config-builtin ] || [ -n "$builtin_key" ] || continue
 	root="$output/source/$name"
 	mkdir -p "$root/etc/shirudo" "$root/keys/trusted" "$root/keys/revoked"
-	printf 'eventlog.max_bytes = 0\nmap_export.tenant_id = %s\n' "$name" \
+	sed "s/@tenant@/$name/g" "$templates/config.conf.in" \
 		>"$root/etc/shirudo/shirudo.conf"
 	case "$name" in
 	config-tree-*)
 		mkdir -p "$root/etc/shirudo/bpm"
-		printf 'env=tree-test\n' >"$root/etc/shirudo/node.labels"
-		printf 'endpoint = oci://127.0.0.1:5443/shirudo/upatch-tree\nreference = %s\n' \
-			"${name#config-tree-}" >"$root/etc/shirudo/bpm/upatch-tree.conf"
+		cp "$templates/node.labels" "$root/etc/shirudo/node.labels"
+		sed "s/@reference@/${name#config-tree-}/g" \
+			"$templates/upatch-tree.conf.in" \
+			>"$root/etc/shirudo/bpm/upatch-tree.conf"
 		;;
 	config-otel)
-		cat >"$root/etc/shirudo/shirudo.conf" <<'EOF'
-eventlog.max_bytes = 0
-map_export.tenant_id = tenant-config-0000
-map_export.otel_endpoint = http://127.0.0.1:5444
-map_export.otel_insecure = true
-map_export.otel_retries = 0
-EOF
+		cp "$templates/otel.conf" "$root/etc/shirudo/shirudo.conf"
 		;;
 	esac
 	cp "$output/public/boot.der" "$root/keys/trusted/$boot_fp.der"

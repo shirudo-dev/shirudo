@@ -5,6 +5,7 @@
 set -euo pipefail
 
 source_dir=$(cd "$(dirname "$0")/.." && pwd)
+templates="$source_dir/contrib/verity-vm"
 state=${SHIRUDO_VERITY_VM_STATE:-$HOME/.linux-kernel-vscode/shirudo-verity}
 kernel=
 keys_dir=
@@ -29,7 +30,7 @@ release=$(cat "$kernel/include/config/kernel.release")
 
 for name in config-a config-b config-bad; do
 	mkdir -p "$work/$name/etc/shirudo" "$work/$name/keys/trusted" "$work/$name/keys/revoked"
-	printf 'eventlog.max_bytes = 0\nmap_export.tenant_id = %s\n' "$name" \
+	sed "s/@tenant@/$name/g" "$templates/config.conf.in" \
 		>"$work/$name/etc/shirudo/shirudo.conf"
 	if [ "$name" = config-bad ]; then
 		printf 'invalid certificate\n' >"$work/$name/keys/revoked/0000000000000000000000000000000000000000000000000000000000000000.der"
@@ -38,12 +39,8 @@ for name in config-a config-b config-bad; do
 		--output "$work/$name" --keys-dir "$keys_dir" --size 8 \
 		--builder "$source_dir/tools/shirudo-build/shirudo-build"
 done
-cat >"$work/runtime.conf" <<'EOF'
-config.image = /var/lib/shirudo/images/config-a
-config.verification_key = /run/shirudo/runtime/etc/shirudo/config-cert.der
-config.pcr = 14
-tpm.tcti = device:/dev/tpmrm0
-EOF
+sed 's/@config_image@/config-a/g' "$templates/runtime.conf.in" \
+	>"$work/runtime.conf"
 extra=()
 for probe in "${probes[@]}"; do
 	extra+=(--extra-binary "$probe")
@@ -55,9 +52,11 @@ done
 	--unit-output "$work/runtime-service.conf" "${extra[@]}" >"$work/runtime-root"
 runtime_command=$(sed -n 's/^ExecStart=\(.*\) init$/\1/p' "$work/runtime-service.conf")
 [ -n "$runtime_command" ]
-printf '#!/bin/sh\nexec %s "$@"\n' "$runtime_command" >"$work/shirudo-runtime"
-printf 'runtime.image = /var/lib/shirudo/images/runtime\nruntime.root_hash = %s\n' \
-	"$(cat "$work/runtime-root")" >"$work/bootstrap.conf"
+command_escaped=$(printf '%s' "$runtime_command" | sed 's/[\&|]/\\&/g')
+sed "s|@runtime_command@|$command_escaped|g" "$templates/shirudo-runtime.in" \
+	>"$work/shirudo-runtime"
+sed "s/@root_hash@/$(cat "$work/runtime-root")/g" \
+	"$templates/bootstrap.conf.in" >"$work/bootstrap.conf"
 
 make -C "$kernel" -j"$(nproc)" LLVM=1 INSTALL_MOD_STRIP=1 INSTALL_MOD_PATH="$work/modules" modules_install
 
@@ -79,32 +78,14 @@ done
 sed 's|@bindir@|/usr/local/bin|g' "$source_dir/systemd/shirudo-initrd.service.in" >"$work/shirudo-initrd.service"
 "$vm" push "$work/shirudo-initrd.service" /usr/lib/systemd/system/shirudo-initrd.service
 
-"$vm" ssh bash -s -- "$release" <<'GUEST'
-set -euo pipefail
-chmod 0755 /usr/local/bin/shirudo /usr/local/bin/shirudo-runtime /usr/local/bin/shirudo-gen-initrd /usr/lib/dracut/modules.d/90shirudo/module-setup.sh
-mkdir -p /root/prototype-backup
-if [ -d /var/lib/shirudo/upatches ] && [ ! -e /root/prototype-backup/upatches ]; then
-	mv /var/lib/shirudo/upatches /root/prototype-backup/upatches
-fi
-mkdir -p /var/lib/shirudo/upatches
-printf 'console=ttyS0,115200 root=/dev/vda rw nokaslr lsm=bpf bpf.keyring_unsealed=1 dm_verity.keyring_unsealed=1\n' >/etc/kernel/cmdline
-/usr/local/bin/shirudo-gen-initrd --kver "$1" --output /boot/initrd-shirudo-verity.img \
-	--binary /usr/local/bin/shirudo --binary-path /usr/local/bin/shirudo \
-	--cert /var/lib/shirudo/keys/cert.der --bootstrap-conf /etc/shirudo/shirudo.conf \
-	--unit /usr/lib/systemd/system/shirudo-initrd.service \
-	-- --no-hostonly --no-hostonly-cmdline --add-drivers 'efivarfs dm_mod dm_verity loop ext4' \
-	--modules 'base systemd systemd-initrd dracut-systemd rootfs-block fs-lib udev-rules terminfo shirudo' \
-	>/root/test-results/verity/initrd-build.log 2>&1
-ukify build --linux /boot/vmlinuz-shirudo-verity --initrd /boot/initrd-shirudo-verity.img \
-	--cmdline @/etc/kernel/cmdline --os-release @/etc/os-release \
-	--output /boot/shirudo-verity.efi >/root/test-results/verity/uki-build.log 2>&1
-GUEST
+"$vm" push "$templates/kernel.cmdline" /etc/kernel/cmdline
+"$vm" ssh bash -s -- "$release" <"$templates/install-guest.sh"
 "$vm" pull /boot/shirudo-verity.efi "$state/shirudo-verity.efi"
 "$vm" pull /boot/initrd-shirudo-verity.img "$state/initrd-verity.img"
 image_file=$(mktemp "$state/esp.img.XXXXXX")
 trap 'rm -f "$image_file"' EXIT
 truncate -s 256M "$image_file"
-printf 'label: gpt\nstart=2048, type=U\n' | sfdisk "$image_file" >/dev/null
+sfdisk "$image_file" <"$templates/esp.sfdisk" >/dev/null
 mformat -i "$image_file@@1048576" -F -v SHIRUDOV ::
 mmd -i "$image_file@@1048576" ::/EFI ::/EFI/BOOT
 mcopy -i "$image_file@@1048576" "$state/shirudo-verity.efi" ::/EFI/BOOT/BOOTX64.EFI

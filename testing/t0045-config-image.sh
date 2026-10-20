@@ -238,9 +238,8 @@ if command -v mkfs.ext4 >/dev/null 2>&1 && command -v debugfs >/dev/null 2>&1; t
 	'
 
 	test_expect_success 'runtime generator includes interpreter, public keys and trusted probe' '
-		printf "config.verification_key = /run/shirudo/runtime/etc/shirudo/config-cert.der\nconfig.pcr = 14\nconfig.image = /var/lib/shirudo/images/config\n" >"$W/bootstrap.conf" &&
-		printf "int main(void) { return 0; }\n" >"$W/static-probe.c" &&
-		${CC:-cc} -static "$W/static-probe.c" -o "$W/static-probe" &&
+		cp fixtures/image-runtime.conf "$W/bootstrap.conf" &&
+		${CC:-cc} -static fixtures/image-static-probe.c -o "$W/static-probe" &&
 		../tools/gen-image/shirudo-gen-runtime --binary "$S" \
 			--bootstrap-conf "$W/bootstrap.conf" --cert "$W/keys/cert.der" \
 			--config-cert "$W/other/cert.der" --keys-dir "$W/keys" --builder "$B" \
