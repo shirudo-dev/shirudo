@@ -3,6 +3,7 @@
 # Copyright (c) 2026 Authors of shirudo
 
 import ctypes
+import errno
 import hashlib
 import importlib.util
 import json
@@ -75,6 +76,53 @@ def keyring(expected=2):
     require(len(keys) == expected, f"expected {expected} boot-enrolled keys: {keys}")
     require(all(value[0] == "asymmetric" for value in keys.values()), keys)
     return {"serial": serial, "identity": identity, "keys": keys}
+
+
+def expect_error(expected, number, *arguments):
+    try:
+        syscall(number, *arguments)
+    except OSError as error:
+        require(error.errno == expected, f"expected errno {expected}: {error}")
+    else:
+        raise AssertionError(f"syscall {number} unexpectedly succeeded")
+
+
+def config_keyring():
+    special = -10  # KEY_SPEC_DM_VERITY_KEYRING
+    serial = syscall(KEYCTL, 0, special, 0, 0, 0)
+    require(serial > 0, "dm-verity special ID did not resolve")
+    identity = describe(special)
+    require(identity[0] == "keyring" and identity[4] == ".dm-verity",
+            identity)
+    require(describe(serial) == identity, "special ID resolved another key")
+    buffer = ctypes.create_string_buffer(4096)
+    length = syscall(KEYCTL, 11, special, ctypes.addressof(buffer),
+                     len(buffer), 0)
+    require(0 < length <= len(buffer) and length % 4 == 0,
+            "dm-verity keyring has no boot certificate")
+    before = buffer.raw[:length]
+    live = certificate_description(FIXTURES / "live.der")
+    require(all(describe(key)[4] != live for (key,) in
+                struct.iter_unpack("=i", before)),
+            "test certificate already belongs to dm-verity trust")
+    key_type = ctypes.create_string_buffer(b"keyring")
+    name = ctypes.create_string_buffer(b".dm-verity")
+    expect_error(errno.EPERM, ADD_KEY, ctypes.addressof(key_type),
+                 ctypes.addressof(name), 0, 0, -1)
+    expect_error(errno.EEXIST, KEYCTL, 29, special, 0, 0, 0)
+    key_type = ctypes.create_string_buffer(b"asymmetric")
+    der = (FIXTURES / "live.der").read_bytes()
+    payload = ctypes.create_string_buffer(der)
+    expect_error(errno.EPERM, ADD_KEY, ctypes.addressof(key_type), 0,
+                 ctypes.addressof(payload), len(der), special)
+    require(syscall(KEYCTL, 0, special, 0, 0, 0) == serial,
+            "dm-verity serial changed")
+    after_length = syscall(KEYCTL, 11, special, ctypes.addressof(buffer),
+                           len(buffer), 0)
+    require(after_length == length and buffer.raw[:length] == before,
+            "dm-verity membership changed")
+    config.save("dm-verity-keyring", {"serial": serial, "identity": identity,
+                                     "members": before.hex()})
 
 
 def check_members(ring):
@@ -156,7 +204,9 @@ def snapshot(label):
 def main():
     require(len(ROOT) == 64, "wrong boot root size")
     mode = sys.argv[1]
-    if mode == "initial":
+    if mode == "config-keyring":
+        config_keyring()
+    elif mode == "initial":
         (config.RESULTS / "anchor.json").unlink(missing_ok=True)
         check_members(keyring())
         snapshot("initial")

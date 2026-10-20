@@ -38,6 +38,10 @@ else
 fi
 export SHIRUDO_BIN SHIRUDO_TEST_KEY_FIXTURES
 
+test_expect_success 'kernel dm-verity special ID is stable, reserved and sealed' '
+	python3 tamperproof/t1155-verity-boot-signers.py config-keyring "$work"
+'
+
 test_expect_success 'boot enrolls the vouched signer and quotes its signed CONFIG' '
 	python3 tamperproof/t1155-verity-boot-signers.py initial "$work"
 '
