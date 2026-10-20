@@ -325,11 +325,8 @@ int BPF_PROG(shirudo_lsm_inode_removexattr, struct mnt_idmap *idmap,
  * hooks are self-protecting: their own pins live in the bpffs they keep
  * mounted.
  *
- * A lazy unmount (MNT_DETACH) of a mount above the bpffs, /run or the
- * root, takes the subtree down with it and fires sb_umount for the
- * ancestor alone, so sb_umount also refuses any mount that has the
- * bpffs beneath it. Nothing unmounts /run or the root on a live
- * system; switch-root moves /run and never unmounts it.
+ * A lazy unmount of a parent such as /run can still detach this bpffs
+ * without calling sb_umount for it.
  */
 static __always_inline __u32 shirudo_bpffs_dev(void)
 {
@@ -351,81 +348,11 @@ shirudo_deny_bpffs_mount(__u32 sb_dev, enum shirudo_tamper_point point)
 	return shirudo_tamper_deny(point, -EPERM);
 }
 
-/* The address a trusted pointer holds, as a plain number. */
-static __always_inline unsigned long shirudo_ptr_addr(const void *ptr)
-{
-	unsigned long addr = 0;
-
-	bpf_probe_read_kernel(&addr, sizeof(addr), &ptr);
-	return addr;
-}
-
-#define shirudo_mount_of(ptr, member)					\
-	((struct mount *)((unsigned long)(ptr) -			\
-			  bpf_core_field_offset(struct mount, member)))
-
-#define SHIRUDO_MOUNT_WALK_MAX	4096
-#define SHIRUDO_MOUNT_DEPTH_MAX	64
-
-/*
- * Whether `root` or a mount below it is of the file system `sb_dev`:
- * the subtree an unmount of `root` takes down. The walk is over the
- * caller's own mount tree, so a copy of the bpffs mount in another
- * namespace is found where a propagated unmount would reach it.
- * Stackless: down to the first child, else across to the next sibling
- * of the nearest ancestor that has one, until the walk is back at
- * `root`. A tree the budget cannot cover is taken to hold the bpffs.
- */
-static __always_inline bool shirudo_mount_tree_has(struct mount *root,
-						   __u32 sb_dev)
-{
-	struct mount *cur = root, *parent;
-	struct list_head *next;
-	bool climbed;
-	int i, j;
-
-	bpf_for(i, 0, SHIRUDO_MOUNT_WALK_MAX) {
-		if (BPF_CORE_READ(cur, mnt.mnt_sb, s_dev) == sb_dev)
-			return true;
-		next = BPF_CORE_READ(cur, mnt_mounts.next);
-		if (next != &cur->mnt_mounts) {
-			cur = shirudo_mount_of(next, mnt_child);
-			continue;
-		}
-		climbed = false;
-		bpf_for(j, 0, SHIRUDO_MOUNT_DEPTH_MAX) {
-			if (cur == root)
-				return false;
-			parent = BPF_CORE_READ(cur, mnt_parent);
-			next = BPF_CORE_READ(cur, mnt_child.next);
-			if (next != &parent->mnt_mounts) {
-				cur = shirudo_mount_of(next, mnt_child);
-				climbed = true;
-				break;
-			}
-			cur = parent;
-		}
-		if (!climbed)
-			return true;
-	}
-	return true;
-}
-
 SEC("lsm/sb_umount")
 int BPF_PROG(shirudo_lsm_sb_umount, struct vfsmount *mnt, int flags)
 {
-	__u32 bpffs = shirudo_bpffs_dev();
-	struct mount *target;
-
-	if (!bpffs)
-		return 0;
-	if (BPF_CORE_READ(mnt, mnt_sb, s_dev) == bpffs)
-		return shirudo_tamper_deny(SHIRUDO_TAMPER_BPFFS_UMOUNT, -EPERM);
-	target = shirudo_mount_of(shirudo_ptr_addr(mnt), mnt);
-	if (shirudo_mount_tree_has(target, bpffs))
-		return shirudo_tamper_deny(SHIRUDO_TAMPER_BPFFS_UMOUNT_ABOVE,
-					   -EPERM);
-	return 0;
+	return shirudo_deny_bpffs_mount(BPF_CORE_READ(mnt, mnt_sb, s_dev),
+					SHIRUDO_TAMPER_BPFFS_UMOUNT);
 }
 
 SEC("lsm/move_mount")

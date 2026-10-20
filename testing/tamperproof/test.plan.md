@@ -27,7 +27,7 @@ checks that Shirudo can still export the pre-existing Python exec record.
 | TP-05 | Add a key to the sealed BPF keyring | Covered | `t1121-bpf-keyring.sh` | Keep sealing denial and enrollment checks. |
 | TP-06 | Unlink, clear, revoke, invalidate, re-permission, timeout, or link a key in the anchor | Covered | `t1125-key-permission.sh` | Keep per-operation denial assertions and status check. |
 | TP-07 | Root modifies a labelled file under `/var/lib/shirudo` or changes its xattr | Covered | `t1101-seal.sh` | Keep certificate and archived-upatch write, xattr, unlink, rename-away, and rename-over denial assertions. |
-| TP-08 | Direct or lazy unmount, remount, or mount over private bpffs, or lazy unmount of a mount above it | Covered | `t1113-mount-lockdown.sh` | Keep mountpoint and enforcement-survival checks; the ancestor case runs in a private mount namespace. |
+| TP-08 | Direct or lazy unmount, remount, or mount over private bpffs | Covered | `t1113-mount-lockdown.sh` | Keep mountpoint and enforcement-survival checks. |
 | TP-09 | Obtain writable serializer-array or arena FD by pinned path | Covered | `t1130-map-lockdown.sh` | Current test covers `shirudo_ser` and `obs_i_arena`. |
 | TP-10 | Obtain writable map FD by map ID | Covered | `t1130-map-lockdown.sh` | Current test covers both maps. |
 | TP-11 | Read-only map FD access as a positive control | Covered | `t1130-map-lockdown.sh` | Preserve both path and map-ID read-only checks. |

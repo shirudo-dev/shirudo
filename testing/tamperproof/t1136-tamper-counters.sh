@@ -84,13 +84,6 @@ test_expect_success 'an unmount of the bpffs moves BpffsUmount' '
 	grew BpffsUmount "$before"
 '
 
-test_expect_success 'an unmount above the bpffs moves BpffsUmountAbove' '
-	before=$(counter BpffsUmountAbove) &&
-	unshare -m sh -c "umount -l /run" 2>/dev/null
-	mountpoint -q "$B" &&
-	grew BpffsUmountAbove "$before"
-'
-
 test_expect_success 'a link creation moves ProgAttach and a pin moves ObjPin' '
 	ProgAttach=$(counter ProgAttach) && pin=$(counter ObjPin) &&
 	[ "$(./$C LINK_CREATE)" = "errno=13" ] &&
@@ -114,7 +107,7 @@ test_expect_success 'the human report lists the counters that moved' '
 	"$SHIRUDO_BIN" status >"$W/status" &&
 	grep -q "^Tamper attempts (refused this boot):" "$W/status" &&
 	grep -q "^  PinRename  *[1-9][0-9]*  rename of a pin" "$W/status" &&
-	grep -q "^  BpffsUmountAbove  *[1-9][0-9]*  unmount of a mount above" \
+	grep -q "^  BpffsUmount  *[1-9][0-9]*  unmount of the private bpffs" \
 		"$W/status" &&
 	! grep -q "^  none$" "$W/status"
 '

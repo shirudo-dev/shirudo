@@ -295,9 +295,7 @@ unlinking a key is ``shirudo keys revoke`` and nothing else.
 ``lsm/sb_umount``, ``lsm/move_mount``,
 ``lsm/sb_mount`` and ``lsm/sb_remount`` deny unconditionally, for every
 caller including shirudo, any unmount, relocation, mount-over or
-remount of that superblock, and ``sb_umount`` refuses any mount with
-the bpffs beneath it, which a lazy unmount would take down too.  This
-last set is load-bearing, not
+remount of that superblock.  This last set is load-bearing, not
 defence in depth: shirudo is agentless, the pins are the only thing
 keeping the enforcement programs alive, and one ``umount`` would
 otherwise detach everything.  Every guard counts what it refuses, by

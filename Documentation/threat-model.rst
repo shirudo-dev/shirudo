@@ -129,10 +129,7 @@ T2  Detaching or replacing enforcement
     drop its only reference), and ``sb_umount``, ``move_mount``,
     ``sb_mount`` and ``sb_remount`` deny everyone, so neither ``rm``
     nor ``mv`` nor ``umount`` nor mounting over the directory removes a
-    pin; ``sb_umount`` also refuses any mount with the bpffs beneath
-    it, so a lazy unmount of ``/run`` or of a bind of it, which would
-    take the subtree down with the hook fired for the ancestor alone,
-    is refused as well. Infrastructure maps are
+    pin. Infrastructure maps are
     frozen at creation, so even with the LSM gone userspace could not
     rewrite the identity map. ``lsm/bpf_map`` denies writable map fds
     to every process except shirudo; map updates and freezes have the
@@ -277,7 +274,7 @@ T10 An attempt that leaves no trace
     load that is no signed loader, one without a signature, one whose
     signature was verified against the wrong kind of keyring or the
     wrong keyring, a writable map descriptor, a rename of a pin, an
-    unmount above the bpffs, a write to a sealed file, a ptrace of a
+    unmount of the bpffs, a write to a sealed file, a ptrace of a
     shirudo task, and so on), in a map ``init`` pins and freezes, so
     that no task, shirudo included, can reset it from userspace while
     the hooks still add to it. ``shirudo status`` lists the counters
@@ -318,20 +315,17 @@ Each of these is known, documented and bounded; none is silent.
     ``CAP_SYS_RESOURCE`` out of untrusted contexts with
     ``CapabilityBoundingSet=`` and container capability profiles.
 
-3.  A lazy (``MNT_DETACH``) unmount of an ancestor of
-    ``/run/shirudo/bpffs`` tears the subtree down and fires
-    ``sb_umount`` for the ancestor alone, so ``sb_umount`` walks the
-    mount tree below its target and refuses one that has the bpffs
-    beneath it, in the caller's own namespace, where a copy of the
-    bpffs mount sits wherever a propagated unmount would reach the
-    original.  The walk is bounded; a tree it cannot cover is refused.
-    The cost is that a tree holding a bind of the bpffs cannot be
-    unmounted by anyone until the boot ends, which nothing legitimate
-    does.  A namespace torn down with its last task frees its copies
-    without any unmount, and the original mount keeps the superblock.
-    Mounting over ``/run/shirudo`` hides the pins without
-    detaching anything: enforcement stays, and every state-changing
-    command refuses ``lsm_detached`` until the mount is gone.
+3.  A lazy unmount of a mount above ``/run/shirudo/bpffs``, such as
+    ``umount -l /run``, can detach the bpffs with it. The kernel calls
+    ``sb_umount`` for the requested parent mount alone, so the direct
+    bpffs check does not stop this. Once its last references disappear,
+    the pins can be released and enforcement can detach. The mount-tree
+    check was reverted because it blocked systemd service startup.
+    `Issue 22 <https://github.com/shirudo-dev/shirudo/issues/22>`__ tracks
+    keeping the pins alive without depending on a visible mount tree.
+    Mounting over ``/run/shirudo`` only hides the pins; it does not release
+    them. Enforcement continues, but state-changing commands refuse
+    ``lsm_detached`` while their pins are hidden.
 
 4.  Register denial of service.  A process that can open
     ``/dev/tpmrm0`` can extend PCR 9 or the written register with
