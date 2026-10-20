@@ -13,6 +13,14 @@ and how the pieces survive the switch from one to the other.  The
 ``threat-model`` document says why it matters; ``tpm`` describes the
 register the initrd binds.
 
+The opt-in dm-verity mode keeps the same systemd handoff, with two
+additional image mounts under ``/run/shirudo``. It requires the runtime image
+hash and startup settings in authenticated boot, and writable state available
+inside the initrd for the config activation journal. See
+`config-images <config-images.rst>`__ for image generation and activation.
+The read-only state bind and inode identities below describe the ordinary
+installation.
+
 1) Two runs of init
 -------------------
 
@@ -155,8 +163,8 @@ The generator
     result::
 
         sudo shirudo-gen-initrd                    # the running kernel
-        sudo shirudo-gen-initrd --kver 7.4.0 --output /boot/initrd.img-7.4.0
-        shirudo-gen-initrd --check /boot/initrd.img-7.4.0
+        sudo shirudo-gen-initrd --kver <kernel-release> --output /boot/initrd-shirudo.img
+        shirudo-gen-initrd --check /boot/initrd-shirudo.img
         shirudo-gen-initrd --print-cmdline         # bpf.keyring_unsealed=1
 
     Run from a checkout it installs the module into dracut's directory
@@ -218,3 +226,41 @@ with a vTPM gets the bpf-next kernel packages, reboots into them, runs
 ``install.sh`` with a local target package and certificate, reboots
 again and must come up in the production configuration, with ``t1122``
 passing on the installed system.
+
+6) Image-mode boot
+------------------
+
+The authenticated initrd first verifies the runtime root and selected
+config to determine the authorized boot signer set. It enrolls and seals that
+set, attaches device and task protection, mounts the runtime under those
+guards and completes measured config activation and upatch restore. The root
+filesystem's service invokes the image binary through its packaged ELF
+interpreter and libraries; ``shirudo-gen-runtime --unit-output`` writes that
+invocation. The config is mounted ``ro,nodev,nosuid,noexec``; runtime
+is ``ro,nodev,nosuid``. The host root filesystem is not replaced.
+
+Image mode must be able to persist the config bundle and activation record
+before extending the PCR. Make ``/var/lib/shirudo`` writable and available
+in the initrd, including a separate state filesystem when used. The ordinary
+installation continues to use its read-only state bind. Config and runtime
+mounts live under ``/run`` to survive switch-root, as bpffs does.
+
+The selected config is checked again at every boot. After a TPM reset it
+receives a fresh BOOT measurement. A same-boot repeat of init does not add
+another config event. An interrupted activation is completed from its saved
+record; the target cannot silently use an invalid candidate and report
+success. Updating the runtime image or config verification certificate
+requires rebuilding authenticated boot and rebooting.
+
+An existing activation journal selects its cached config prefix before the
+runtime's initial ``config.image`` default. A live update requiring a new
+BPF signer is refused before measurement; it is not queued for reboot.
+Provision the signed boot selection through the authenticated boot rollout.
+The current CLI has no separate next-boot staging command; changing only the
+bootstrap default cannot replace a journaled selection. See the operational
+limitation in `config-images <config-images.rst>`__.
+
+The standard image-mode integration run is ``sudo make -C testing test-tgt
+TEST_VM_MODE=verity``. It requires the initrd and seeds a disposable target
+with public fixtures. A direct QEMU kernel/initrd boot tests the handoff but
+does not establish a measured UKI boot or its PCR 11 phase distinction.

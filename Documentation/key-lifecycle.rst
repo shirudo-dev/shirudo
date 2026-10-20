@@ -13,6 +13,10 @@ in protection, and what to do when one is compromised.  The
 `threat-model <threat-model.rst>`__ says why the mechanisms are shaped
 the way they are; this document says what to do.
 
+The procedures below describe the ordinary installation. Image mode uses
+signed config images for boot-time key enrollment and live revocation; its differences
+are in section 8 and `config-images <config-images.rst>`__.
+
 1) The keys in the system
 -------------------------
 
@@ -326,3 +330,57 @@ A compromised key
   copied: into the initrd, into a registry registration, into an
   inventory.
 * Treat a key that left the operator host, even once, as compromised.
+
+8) Keys in image mode
+---------------------
+
+The initial BPF certificate is inside the authenticated runtime image.
+Additional certificates and their existing vouch signatures are in the
+config image's ``keys/trusted/``; revocation records are in
+``keys/revoked/``. A config signature approves that filesystem but does not
+replace the BPF trust chain: a new BPF key still needs a valid vouch.
+
+Image mode enrolls the authorized BPF trust set at boot, then installs the
+existing reject-all keyring restriction. That restriction cannot be replaced
+or bypassed by trusted image callers. There is no live key enrollment and
+no new keyring restriction or key-lifetime kernel hooks are required.
+
+To enroll a key, create its vouch on the operator and include the certificate
+and vouch in the signed config selected for the next boot. Reboot is required
+before the live keyring can use the new signer. Live update refuses a
+candidate requiring a signer absent from the keyring before measuring it;
+it does not accept that candidate as pending enrollment. To revoke a key,
+include its certificate under ``keys/revoked/<fingerprint>.der`` in a new
+signed config. Activation unlinks it and purges affected upatches. The config
+PCR records the selected trust settings and the NV register records each
+purged upatch's unload. Image-mode ``keys add``, ``bpm key add`` and
+``keys revoke`` are refused; there is no target-local override. Removing
+a certificate file alone is not a revocation.
+
+The current CLI does not stage a new signer for the next boot. The saved
+activation record selects its cached bundle ahead of the initial
+``config.image`` default, so changing that default and rebooting is
+insufficient on an already initialized target. A complete operational
+rollout for changing that boot selection is not provided by this CLI;
+provisioning must account for the existing selection without discarding its
+journal. Do not use the refused live-update path as a staging operation.
+
+The config PCR records the selected trust settings; the boot enrolls keys.
+Merely omitting a certificate from a newer image does not revoke a key already
+enrolled during this boot; use an explicit revocation record. Vouch
+verification retains the historical chain to the initial runtime
+certificate. Revoking a key for BPF signature verification does not erase
+its earlier authorization of a successor or remove the immutable vouch
+anchor.
+
+The config verification certificate is a separate bootstrap trust choice.
+It lives in authenticated runtime ``shirudo.conf`` as a reference to a
+certificate inside that image. Replacing it requires a new runtime image,
+an updated authenticated boot hash and reboot. Provide a config that the
+new certificate verifies before rebooting. A config update cannot rotate
+its own verification key.
+
+Image mode accepts older correctly signed config images. Revocation
+freshness therefore depends on selecting the intended config; neither its
+signature nor its PCR measurement prevents rollback. This is a deferred
+policy, not permanent local revocation storage.

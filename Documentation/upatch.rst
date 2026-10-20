@@ -15,6 +15,16 @@ load path and the registry formats, and the `telemetry
 <telemetry.rst>`__ document covers decoders and the export pipeline in
 depth.  This guide is the workflow that ties them together.
 
+Operator build, sign and publish commands are the same for both target
+policy modes. The writable repository-registration examples below describe
+the ordinary installation. Image-mode targets instead receive repository
+definitions, public verification certificates, the tree subscription and node
+labels in a signed config image. Local ``bpm config register`` mutations and
+``bpm key add`` are refused there. Package installation, upgrades and tree
+sync still run on the target; they read the selected authenticated config.
+New BPF signers require boot enrollment, while signed revocation configs and
+upatch updates remain live. See `config-images <config-images.rst>`__.
+
 1) What an upatch is
 --------------------
 
@@ -267,7 +277,7 @@ A package is a directory with a ``Beefile`` next to the sources::
     unload_artifact = "upatches/shield.unload.upatch"
 
     [upatches.tree.selector]
-    kernel_release_prefix = ["7.4"]
+    kernel_release_prefix = ["7.3.0-rc5"]
     kernel_build_id = ["534043106db415bc0a983a3393e06c81b431bd39"]
     architecture = ["x86_64"]
 

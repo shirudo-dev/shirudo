@@ -8,19 +8,24 @@ System requirements
 This is the single list of what a host needs before shirudo is built,
 installed or initialised on it.  The operator and target roles have
 different needs; a development host that plays both needs the union.
-shirudo requires Linux v7.4 or newer and a current toolchain and has
-no fallback paths for older ones, so a missing item here fails loudly at
-build or pre-flight time rather than degrading silently.
+shirudo requires the signed-loader ABI and BPF LSM interfaces in the
+validated upstream development kernel, plus a current toolchain. Missing
+features fail at build or pre-flight time; there is no compatibility mode.
 
 1) Target kernel
 ----------------
 
-The target runs Linux v7.4 or newer.  That release is the base
-minimum: it carries the signed BPF loader support shirudo builds on,
-and shirudo tracks current upstream from there.  The ``shirudo init``
-pre-flight checks that the running kernel has that support
-(``signed_loader_kernel_abi``) and refuses otherwise; a load on an
-older kernel reports ``kernel_abi_unsupported``.
+The validated source baseline is upstream bpf-next commit
+``0867b7bfa9de65674c6e599fa21b762b71011b14``, which reports a
+``7.3.0-rc5``-based release string in the validation build. No kernel patches
+are applied. A released-version minimum has not been established by this
+validation, so a release number alone is not an admission check.
+
+``shirudo init`` checks the running kernel's signed-loader support through
+``signed_loader_kernel_abi`` and refuses an incompatible ABI. Such a load
+reports ``kernel_abi_unsupported``. Build against the target kernel's BTF
+and keep the configuration below; passing this ABI check alone does not
+establish that every optional upatch attach point is available.
 
 The table below is what shirudo itself needs; without any of it,
 ``shirudo init`` does not complete. The test VM kernel uses the slim
@@ -68,8 +73,9 @@ fixture.
        and sealed it.  The kernel is booted with
        ``bpf.keyring_unsealed=1`` so that the keyring takes the
        certificate from the initrd; booted without, it is sealed
-       empty and a ``shirudo`` keyring under the user keyring stages
-       the certificate until the next reboot.
+       empty. Ordinary installations then stage the certificate in a
+       ``shirudo`` user keyring until the next reboot. Image mode
+       refuses initialization instead of staging.
    * - ``CONFIG_X509_CERTIFICATE_PARSER``,
        ``CONFIG_PKCS7_MESSAGE_PARSER``,
        ``CONFIG_SYSTEM_DATA_VERIFICATION``
@@ -106,6 +112,39 @@ fixture.
 ``CONFIG_PKCS7_WAIVE_AUTHATTRS_REJECTION_FOR_MLDSA`` is not required: it
 only relaxes module-signature checks, and BPF signature verification
 accepts the signed-attributes form.
+
+Image-mode requirements
+~~~~~~~~~~~~~~~~~~~~~~~
+
+The opt-in dm-verity mode additionally requires ``CONFIG_BLK_DEV_DM``,
+``CONFIG_DM_VERITY``, ``CONFIG_BLK_DEV_LOOP`` and ``CONFIG_EXT4_FS``. Runtime
+and config mappings use verity format 1, SHA-256, 4096-byte blocks and a
+standard verity superblock. ``CONFIG_DM_VERITY_VERIFY_ROOTHASH_SIG`` is
+required for the config root signature. The kernel must provide the
+``.dm-verity`` keyring enrollment and sealing API. Image boot uses
+``dm_verity.keyring_unsealed=1`` so the trusted initrd can enroll its config
+certificate and seal that keyring. Built-in trusted certificates remain
+part of the kernel's dm-verity trust path. The runtime must match the exact
+UKI-authenticated root; config-signing trust does not authorize executables.
+
+Image mode uses existing upstream kernel APIs and carries no kernel
+patches. Existing hooks do not establish every desired protection against
+hostile device-mapper controls or mount-tree changes; see the limitations in
+`config-images <config-images.rst>`__. BPF signing keys are enrolled at boot
+before reject-all keyring sealing. Ordinary installations do not enable
+image mode implicitly.
+
+Production image mode requires authenticated measured UKI boot, the
+runtime root hash in authenticated bootstrap settings, a reserved static
+SHA-256 PCR outside the existing PCR 9/11 binding, and writable Shirudo state
+mounted in the initrd. All executable loader and library dependencies must
+be inside the runtime image. The operator image generators additionally
+need ``mkfs.ext4`` from ``e2fsprogs`` and ``veritysetup`` from
+``cryptsetup-bin`` (Debian/Ubuntu) or ``cryptsetup`` (Fedora/RHEL).
+Offline ``shirudo image verify`` also requires the operator build helper
+and ``veritysetup``. Targets need none of these external tools: they
+validate authenticated metadata and read the entire strict dm-verity
+mapping through kernel APIs before accepting image contents.
 
 Attach points for upatches
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -170,6 +209,10 @@ kernel that a current clang and OpenSSL 3.5 run on will do.
    * - Inspect artifacts and packages offline (``shirudo upatch info``,
        ``shirudo bpm info``)
      - None.
+   * - Build or verify signed images offline (``shirudo image build``,
+       ``shirudo image verify``)
+     - No loaded DM target or root privilege. The operator helper uses
+       ``veritysetup format`` and ``veritysetup verify`` on regular files.
    * - Craft and test mitigations: reproduce the bug, load the shield,
        run the reproducer against it
      - A kernel that mimics the target: the fleet's release,
@@ -275,8 +318,13 @@ since the libguestfs appliance resolves names through DNS alone.
   committed), so neither a submodule nor bpftool is needed.  ``make
   bpf-deps`` refreshes the vendored copy from a kernel tree on
   demand.
-* Nothing else: packages, indexes and trees are built and published
-  through the same ``shirudo-build`` helper.
+* ``veritysetup`` for image formatting and offline verification, provided
+  by ``cryptsetup-bin`` on Debian/Ubuntu or ``cryptsetup`` on Fedora/RHEL.
+  Directory-to-image generators additionally require ``mkfs.ext4`` from
+  ``e2fsprogs``. The operator package depends on the verity tool; target
+  packages and initrds do not.
+* Packages, indexes and trees are built and published through the same
+  ``shirudo-build`` helper.
 
 The operator never needs a TPM, the kernel keyring or ``CAP_BPF``; only
 the private key under ``/var/lib/shirudo/keys/``.
@@ -345,7 +393,17 @@ sysroot, and run ``make target``.  Retain that source, the build rules
 and the dependency sources/notices with the distribution's relinking
 materials.  Rebuild the initrd and reboot after replacing the target
 binary, as described in `operations <operations.rst>`__.
-7) Documentation and tests
+
+7) Development kernel baseline
+-------------------------------
+
+Use the upstream development-tree ABI and options described above. Image
+mode uses existing LSM hooks and adds no kernel patches. The
+`config-images <config-images.rst>`__ guide describes the two policy modes,
+test commands and remaining protection gaps. Run both complete policy-mode
+suites when validating a deployment.
+
+8) Documentation and tests
 --------------------------
 
 * ``make -C Documentation html-docs`` renders the documents with

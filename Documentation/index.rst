@@ -41,6 +41,12 @@ Deploying shirudo
     creating a signing key, initialising a target, loading an upatch
     and publishing packages to a registry.
 
+Using executable and config images
+    `config-images <config-images.rst>`__ describes the opt-in dm-verity
+    mode: separate runtime and config images, operator generation,
+    bootstrap trust, live config and key updates, static-PCR measurements,
+    interrupted activation, manual reboot, enforcement and current limitations.
+
 Writing and shipping upatches
     `upatch <upatch.rst>`__ is the author's and operator's guide: the
     BPF side of a upatch, building and signing, testing on a target,

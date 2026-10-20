@@ -35,9 +35,11 @@ runs.  The payload program is hash-locked to the loader
 (``excl_prog_hash``), so a signature over a few kilobytes of loader
 covers every instruction that ends up attached.
 
-Everything else follows from that.  The kernel-side enforcement is a
-set of BPF LSM programs that shirudo loads through the same signed
-path.  Every state change extends a per-boot TPM measurement register
+The kernel-side enforcement is a set of embedded BPF LSM programs loaded
+during trusted bootstrap, before the signature-admission gates attach.
+Authenticated initrd boot protects that bootstrap; subsequent upatch loads
+use the signed-loader path above. Every upatch state change extends a
+per-boot TPM measurement register
 anchored in a PCR, so an operator predicts from the signed set what a
 target must report and has the TPM certify that it does.
 The userspace side is one binary with git-like subcommands; on the
@@ -117,11 +119,12 @@ The operator holds the private signing key and runs ``genkey``,
 ``build`` and the ``bpm build``, ``bpm push`` and ``bpm tree append``
 commands.  Those are implemented in the separate ``shirudo-build``
 helper (``$(libexecdir)/shirudo/shirudo-build``), which links the CMS
-signer and execs clang; the core binary only execs the helper with the
-argument vector.  That exec is the single subprocess in shirudo, and it
-exists only in the operator package.  The operator never opens the TPM
-or the kernel keyring, and persists nothing but the keypair and the
-files the caller names.
+signer and executes clang. Image building and offline ``image verify`` also
+dispatch to this helper; it runs the standard ``veritysetup`` executable
+for formatting and verification. These subprocesses belong to operator
+operations. Target commands use linked libraries and kernel APIs. The
+operator never opens the TPM or the kernel keyring, and persists nothing
+but the keypair and the files the caller names.
 
 The core binary exposes the operator-only BPM commands only when it can
 resolve ``shirudo-build``.  The installed operator package provides the
@@ -205,10 +208,21 @@ target ELF's GNU build ID.  The format specification has the encoding.
 6) Enforcement in the kernel
 ----------------------------
 
-Two BPF objects are embedded in the binary and loaded by ``shirudo
-init`` through the signed path: ``bpf/bpf2.c`` guards the ``bpf()``
-syscall and the private bpffs, ``bpf/seal.c`` guards shirudo's files
-and processes.  Both are BPF LSM programs.  Their verdicts compose with
+The ordinary installation uses the executable identities and seal described
+below. The opt-in dm-verity mode uses an authenticated executable image
+and committed task authority instead; its differences follow at the end of
+this section and in `config-images <config-images.rst>`__.
+
+Two BPF objects are embedded in the binary: ``bpf/bpf2.c`` guards the
+``bpf()`` syscall and the private bpffs; ``bpf/seal.c`` guards shirudo's
+files and processes. ``shirudo init`` opens these embedded objects and loads
+them with ``bpf_object__load()`` before attaching the BPF admission gates.
+They are bootstrap objects, not signed upatch-loader artifacts. In the
+production boot flow their provenance comes from the authenticated initrd.
+The map-access, ``bpf_prog_load`` and ``bpf`` gates attach last, after the
+bootstrap objects have loaded and their identity maps are frozen. Subsequent
+upatch code must enter through the signature-gated loader path.
+Both objects contain BPF LSM programs.  Their verdicts compose with
 SELinux, AppArmor, SMACK and Yama to the most restrictive result, and
 they never override another LSM's deny.
 
@@ -225,12 +239,12 @@ its maps. Allowed without a signature are the commands
 that cannot introduce code: map create only from the executable
 ``init`` recorded as shirudo (signed-loader map creation runs in kernel
 context and is already allowed), map update and freeze only from
-shirudo's executable, object pin, link create and raw tracepoint open
-(a program fd is only obtainable from a signed load or from an
-already-vetted program), and the read-only commands (``*_GET_FD_BY_ID``,
+shirudo's executable, and object pin, link create and raw tracepoint open
+only from shirudo's executable. In image mode these operations require
+committed task authority instead. The read-only commands (``*_GET_FD_BY_ID``,
 ``*_GET_NEXT_ID``, ``OBJ_GET_INFO_BY_FD``,
 ``MAP_LOOKUP_ELEM``, ``MAP_LOOKUP_BATCH``, ``MAP_GET_NEXT_KEY``,
-``PROG_QUERY``, ``TASK_FD_QUERY``) that keep
+``PROG_QUERY``, ``TASK_FD_QUERY``) keep
 ``bpftool`` and ``shirudo status`` working. ``OBJ_GET`` is subject to
 ``lsm/bpf_map``: non-Shirudo callers can get only read-only map fds.
 Everything else, including
@@ -294,49 +308,58 @@ keys from being added; this stops root from taking them away, so that
 unlinking a key is ``shirudo keys revoke`` and nothing else.
 ``lsm/sb_umount``, ``lsm/move_mount``,
 ``lsm/sb_mount`` and ``lsm/sb_remount`` deny unconditionally, for every
-caller including shirudo, any unmount, relocation, mount-over or
-remount of that superblock.  This last set is load-bearing, not
-defence in depth: shirudo is agentless, the pins are the only thing
+caller including shirudo, direct unmount, relocation, mount-over and
+remount of that superblock. A lazy unmount of a parent mount is not covered;
+see residual risk 3 in the threat model and
+`issue 22 <https://github.com/shirudo-dev/shirudo/issues/22>`__.
+The pins are the only thing
 keeping the enforcement programs alive, and one ``umount`` would
-otherwise detach everything.  Every guard counts what it refuses, by
-point, in a frozen map pinned beside the identity map
-(``bpf/lib/shirudo_tamper.h``); ``shirudo status`` reads it back.
+otherwise detach everything. Named refusal points increment counters in
+a frozen map pinned beside the identity map
+(``bpf/lib/shirudo_tamper.h``); ``shirudo status`` reads it back. Image-only
+device, parent-mount and process checks do not yet have counters. A refusal
+at an earlier image check therefore need not increment a shared counter.
 
-Filesystem seal.  ``bpf/seal.c`` relies on every inode under
-``/var/lib/shirudo/`` and the installed binary carrying the xattr
-``security.bpf.shirudo`` with one fixed 64-byte value, the same for
-every build.  The label says what is protected, not who may touch it:
-its value is public, and a binary that carries it proves nothing, since
-any file system root mounts can present it.  The ``file_open`` (for
-write), ``inode_unlink``, ``inode_rename``, ``inode_setattr``,
-``inode_setxattr`` and ``inode_removexattr`` hooks read the label of the
-target inode, both ends of a rename, and, when there is one, allow only
-the task that runs the executable ``init`` recorded in the frozen
-identity map, the same ``(dev, ino)`` test the bpffs guards use.
-``inode_setxattr`` also lets only that task set the label itself, so
-root cannot mark files of its choosing.  No ``bpf_d_path()``, no path
-strings, nothing a bind mount or a mount namespace can confuse.
-``bprm_check_security`` and ``bprm_committed_creds`` mark tasks that
-exec a labelled binary in task-local storage, ``task_alloc`` inherits
-the mark, and ``ptrace_access_check`` and ``perf_event_alloc`` deny
-against marked tasks, so a root debugger cannot attach to a running
-shirudo and a profiler cannot bind an event to one; a forged label can
-only mark its forger.  An inode
-created under a labelled directory is born with the label:
-``inode_init_security`` hands it to the file system inside the
-transaction that creates the inode, through
-``bpf_inode_init_xattr()``, so a new file of shirudo's never exists
-unlabelled.  That hook sees the parent as a bare inode and cannot
-sleep to read its label, so the seal remembers a labelled directory in
-inode storage from the hooks that hold a trusted handle on it:
-``file_open`` of the directory, ``inode_post_setxattr`` and
-``inode_post_removexattr`` on it, and the creation of a directory
-under a marked parent, which marks the child in turn.  The label a new
-inode gets is its parent's.  shirudo's own writers (``util/seal.c``)
-open the directory before creating in it, so that it is marked and its
-inode stays in memory for the duration, create relative to it, and put
-the label on afterwards where the kernel could not, with no seal
-attached or on a file system that takes no xattrs at creation.
+Filesystem seal. Initialization labels existing state under
+``/var/lib/shirudo/`` and, in ordinary mode, the installed binary with
+``security.bpf.shirudo``. The fixed 64-byte label marks a protected target;
+its public value does not identify an authorized caller. The ``file_open``
+(for write), ``inode_unlink``, ``inode_rename``, ``inode_setattr``,
+``inode_setxattr`` and ``inode_removexattr`` hooks require the ordinary
+caller's executable to match the frozen ``(dev, ino)`` identity or its
+initrd copy. Image mode instead requires committed task authority.
+Only an authorized caller may set the exact seal xattr, including on an
+unlabelled inode. A binary carrying a copied label gains no authority.
+
+A label of any size, or an error reading it, requires caller authority,
+except for ``ENODATA``, ``EOPNOTSUPP``, ``EACCES`` and ``EPERM``. The latter
+two exceptions preserve write-only opens and unlinking unreadable files:
+the xattr kfunc checks the caller's read permission. Failure to allocate
+scratch storage also requires caller authority. Rename checks both the
+source and an existing destination. Ordinary mode permits replacement of
+the recorded primary executable for package upgrades; its replacement has
+no authority until a later initialization records it. ``inode_setattr``
+covers truncate, chmod, chown and timestamp changes to labelled targets.
+
+``inode_init_security`` uses ``bpf_inode_init_xattr()`` to give a new inode
+its parent's label inside the filesystem's creation transaction. That hook
+cannot sleep to read the parent xattr, so it uses an inode-storage directory
+mark populated by directory opens, post-xattr hooks and directory creation
+under a marked parent. Shirudo's writers hold an open parent directory and
+create files relative to it; they also apply the label after creation when
+the kernel could not. Cached marks can be absent after inode eviction, and
+link or rename can introduce an existing unlabelled inode. This does not
+authorize every directory-entry change against the parent or revoke
+existing writable descriptors and mappings.
+
+In ordinary mode, ``bprm_check_security`` and ``bprm_committed_creds`` mark
+tasks that successfully exec a labelled binary, and ``task_alloc`` inherits
+the mark. These marks protect processes from observation and do not grant
+filesystem mutation authority. ``ptrace_access_check`` and
+``perf_event_alloc`` deny against tasks already marked when those hooks
+run. The perf allocation check is not serialized with the exec transition;
+the separate `perf/exec race investigation <https://github.com/shirudo-dev/shirudo/issues/11>`__
+records the source-derived limitation.
 
 Process hardening.  ``util/harden.c`` runs at startup on the target:
 ``PR_SET_DUMPABLE`` off, ``PR_SET_NO_NEW_PRIVS``, ``PR_SET_PTRACER`` to
@@ -349,8 +372,68 @@ either; ``/etc/hosts`` and ``/etc/resolv.conf``, a local resolver stub
 included, still apply.  The zeroing allocator in ``util/malloc.c``
 wipes freed memory; the libc allocators are poisoned project-wide.
 
+Image-mode enforcement. The UKI authenticates a runtime image mounted at
+``/run/shirudo/runtime``; signed configuration is mounted separately at
+``/run/shirudo/config`` with ``noexec``. Neither is the host root filesystem.
+Every executable on the runtime image is equally eligible for authority.
+``bprm_check_security`` stages the candidate decision and
+``bprm_committed_creds`` commits it after successful exec. ``task_alloc``
+inherits the mark. A failed exec leaves the current mark alone; a successful
+outside-image exec clears it. Protected operations consult this mark rather
+than mutable ``mm->exe_file``. ``PR_SET_MM`` cannot grant authority.
+
+``bdev_setintegrity`` records metadata available through the existing
+upstream hook. Device lookup checks the block-device pointer, device number
+and disk sequence. ``bdev_free_security`` attempts cleanup, but upstream
+can omit the notification.
+The existing ``file_ioctl`` and ``file_ioctl_compat`` hooks deny untrusted
+callers mutating device-mapper control operations, including through old or
+inherited FDs. This restriction applies to all DM devices in image mode.
+Trusted image tasks retain control access. No kernel patches are included.
+The metadata hook does not expose all verity options; complete mount-tree
+protection remains unestablished. ``mmap_file`` and
+``file_mprotect`` prevent trusted tasks from introducing host or anonymous
+executable pages. Existing ptrace and process-memory checks still apply.
+
+Writable state keeps its seal xattrs, while neither image receives seal
+writes. Image mode uses the task mark for writable-state and bpffs access.
+The authorized BPF signing keys are enrolled at boot and the ``.bpf``
+keyring then receives the existing reject-all restriction. A live config
+update refuses a candidate requiring a signer absent from that sealed
+keyring before measurement; new keys require boot-time enrollment and a
+reboot. The existing key protection remains in place.
+
+Image bundles use a standard verity superblock and a 64-character lowercase
+SHA-256 root hash. The detached config signature covers exactly those ASCII
+root bytes. The kernel verifies config signatures through its ``.dm-verity``
+trust path, including built-in trusted keys. The trusted initrd enrolls the
+bootstrap config certificate and seals the dedicated keyring. Runtime
+acceptance instead requires the exact root authenticated by the UKI; a
+valid config signature never grants executable authority.
+
+Target image preflight validates the fixed verity format and exact backing
+file sizes, creates or validates a strict read-only mapping and reads the
+entire data device through kernel dm-verity before parsing contents. The
+target has no userspace hash-tree implementation or external verifier.
+
+Config activation verifies the candidate, persists its pending selection,
+measures its root into the reserved static PCR, finishes key and mount
+effects, then records completion. Its measurement log is separate from the
+upatch NV register. Once pending, an interruption blocks further state
+changes and config attestation until an operator reboots. The node keeps
+running; Shirudo never triggers a reboot. Trusted startup verifies that
+selection again, measures a fresh BOOT event and completes initialization;
+it never retries the previous boot's PCR extension. The
+`config-images <config-images.rst>`__ guide describes this flow and the
+deferred TPM writer limitation.
+
 7) Target state
 ---------------
+
+The sequence below describes the ordinary installation. Image mode first
+verifies and measures the selected config, uses the runtime image's initial
+BPF certificate and the config image's vouched keys, and keeps the state
+filesystem writable in the initrd for its durable activation journal.
 
 ``shirudo init`` is idempotent and runs on every boot from
 ``systemd/shirudo.service`` (``Type=oneshot``, ``KeyringMode=inherit``,
@@ -394,7 +477,8 @@ instead, and the target stays in staging.  It does, in order:
    appends the record an initrd run left under ``/run`` to the
    eventlog; the initrd run itself skips both, its root being
    read-only;
-6. loads bpf2 and, unless ``--no-seal``, seal through the signed path,
+6. loads the embedded bpf2 object and, unless ``--no-seal``, seal during
+   trusted bootstrap, before attaching the BPF admission gates;
    freezes and pins the identity map (the bpffs, the executable that
    keeps running the target, from the initrd also the initrd's own
    copy for that run, the keyring kind and serial, and the serials of
@@ -518,7 +602,7 @@ the registry's detached-CMS-signed index at
 ``shirudo/bpm-index:stable``.  Published versions are immutable; an
 index that already lists a version with other digests is refused.
 
-On the target, ``shirudo bpm config register add <name> oci://host
+In the ordinary installation, ``shirudo bpm config register add <name> oci://host
 --key-file cert.der`` records the registry and the certificate that
 must sign its index.  ``shirudo bpm repo update`` fetches and verifies
 the index; ``shirudo bpm install <name>/<pkg>[@ver]`` (or an ``oci://``
@@ -529,6 +613,15 @@ the package's unload directives; ``list`` and ``info`` inspect.
 to a different one while a key is active.  The ``repo update`` and
 ``tree sync`` timers (60 s) and the map-export and keepalive timers
 (5 s) are the only always-on infrastructure.
+
+In image mode, repository definitions and verification certificates come
+from the signed config. Local repository and key mutations refuse with
+instructions for config activation or boot-time signer enrollment. The
+package and tree update commands remain available. Repository ``key_file``
+paths are confined to the held config image; tree signatures use the runtime
+image's initial certificate. Node labels and the tree subscription also
+come from the selected config. Config settings are validated before their
+activation is measured.
 
 upatch trees.  A tree is an append-only, globally ordered sequence of
 ``add`` and ``delete`` operations published as a CMS-signed JSON
@@ -656,10 +749,11 @@ hashes the source tree and build configuration, not binary bytes, so
 the same source yields the same identity on x86-64, arm64 and riscv64;
 the pre-flight refuses a ``version_mismatch``.
 
-shirudo requires Linux v7.4 or newer and the current upstream clang.
-There are no fallbacks for older kernels: a missing feature
-fails the build or the pre-flight with a message, never a degraded
-mode.
+shirudo requires the signed-loader and BPF LSM interfaces in the validated
+upstream development kernel and current upstream clang. The `requirements
+<requirements.rst>`__ document identifies the tested bpf-next commit and
+configuration. The signed-loader ABI check, rather than a release string,
+rejects incompatible kernels; missing features fail the build or pre-flight.
 
 12) Project layout
 ------------------

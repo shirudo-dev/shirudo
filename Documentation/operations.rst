@@ -13,6 +13,10 @@ The `getting-started <getting-started.rst>`__ document brings a target
 up; the `initrd <initrd.rst>`__ document describes the production
 configuration; this one is about the time after that.
 
+For the opt-in image mode, see `config-images <config-images.rst>`__
+and section 8 below. The ordinary installation's paths and executable-upgrade
+procedure remain as documented here.
+
 1) The moving parts
 -------------------
 
@@ -58,9 +62,12 @@ State lives in two places.  ``/var/lib/shirudo`` is persistent:
 ``keys/`` (the primary certificate, the trusted set with its vouches,
 the revoked certificates), ``eventlog``, the ``upatches/`` archive
 ``init`` restores at boot, ``bpm/`` (indexes, cached packages, tree
-state) and ``locks/``, all labelled with the seal xattr so that only
-shirudo can change them, each from the instant it is created: a new
-inode gets the label of the directory it is created in.
+state) and ``locks/``. The seal protects labelled files against the
+operations listed in the `threat model <threat-model.rst>`__. New inodes
+inherit the label during creation when their parent has a cached seal
+mark; Shirudo's writers hold the parent directory open while creating.
+This does not exclude every foreign directory entry or revoke existing
+writable references.
 ``/run/shirudo`` is per boot: the private bpffs with the
 LSM pins, the frozen identity map and the pending init record between
 the initrd run and the root's.
@@ -128,8 +135,8 @@ Conditions
     again, which only a TPM reset should allow.
 
 ``tamper_attempts``
-    What the guards refused this boot: ``total`` and one counter per
-    point of refusal under ``counters`` (``LoadNotLoader``,
+    What the named guard points refused this boot: ``total`` and one counter
+    per point of refusal under ``counters`` (``LoadNotLoader``,
     ``LoadUnsigned``, ``LoadUnverified``, ``LoadKeyringKind``,
     ``LoadKeyring``, ``MapFdWrite``, ``PinRename``,
     ``BpffsUmountAbove``, ``SealWrite``, ``SealPtrace`` and the rest,
@@ -138,7 +145,8 @@ Conditions
     counters that are not zero with what each means under ``Tamper
     attempts``.  A count is an attempt that was refused, so the
     conditions stay ``OK``; it is the operator's cue to look at the
-    journal and the host.
+    journal and the host. Image-only device, parent-mount and process
+    refusals are not counted; zero does not mean no attempts occurred.
 
 The same conditions leave the target every five seconds as the OTLP
 keepalive, so a collector sees a target go ``WARN`` or ``ERROR``, or go
@@ -413,3 +421,60 @@ success, ``1`` on any refusal or failure and ``2`` on a usage error;
    * - ``unknown``
      - An error without a closer category; errno is in the report.
      - Read the report.
+
+8) Operating image mode
+-----------------------
+
+Use ``shirudo image status`` to inspect the active config root hash, PCR,
+TPM reset and restart counts, event sequence and pending state. Ordinary target commands
+hold the config operation lock and use one held config directory for the
+operation. They refuse a pending activation or PCR/history inconsistency;
+attestation follows the same rule.
+
+Activate a complete locally staged bundle or pull it by HTTPS prefix::
+
+    shirudo image update /path/to/new-config
+    shirudo image update https://config.example/shirudo/config
+
+A successful command means required key and mount effects completed.
+Validation failures before the pending selection is saved leave the current
+config usable. Once activation is pending, interruption or an ambiguous TPM
+response blocks further mutations and config attestation. The node keeps
+running; Shirudo never initiates a reboot and has no same-boot recovery
+command. The operator chooses when to reboot. Trusted startup then verifies
+the pending selection and records a fresh BOOT event before completing
+initialization. Do not remove pending records or rewrite the eventlog to
+make a failure disappear.
+
+Additional BPF keys and revocations arrive through signed config images;
+local ``keys add``, ``bpm key add`` and ``keys revoke`` commands are refused.
+Repository registration changes also require a signed config: ``bpm config
+register add``, ``remove`` and ``rm`` do not mutate image-mode trust inputs.
+Package installation and upgrades, tree sync, export and attestation remain
+available using the active authenticated configuration. New BPF signing keys
+require boot-time enrollment and a reboot; live activation cannot add them
+to the sealed keyring. Config updates using the existing signing-key set and
+the signed upatch flow remain live. Runtime executable updates are
+intentionally disruptive: replace the runtime image and authenticated boot
+hash, regenerate the UKI and reboot. Replacing the config verification
+certificate uses that same reboot procedure.
+
+New signer enrollment has a provisioning limitation: the CLI does not queue
+an otherwise refused candidate for reboot. An existing activation record
+selects its cached bundle before the bootstrap ``config.image`` default.
+Changing only the default does not select a new signer set. Plan the
+boot-time provisioning separately; do not erase the journal to force the
+selection. First-boot provisioning and live updates with already enrolled
+signers are the workflows exercised by the image fixture suite.
+
+Back up the image bundles under ``/var/lib/shirudo/images`` together with
+``/var/lib/shirudo/config-update``, normal installed state and eventlogs.
+The activation journal includes TPM reset identity and expected PCR values;
+a journal from another target or an inconsistent partial restore must not be
+accepted as the current boot. The selected cached config is verified and
+receives a fresh BOOT event after reset. Retain operator source directories
+and signing keys separately from target backups.
+
+A valid old config remains acceptable in this implementation. Check the intended
+root hash when operating a deployment; do not infer rollback prevention or
+proof of activation against direct TPM writers from the measurement alone.

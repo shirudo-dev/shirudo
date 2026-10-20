@@ -167,22 +167,27 @@ building and passing on its own.
 Each of these is enforced by the design, not by a compiler. Breaking
 one usually still compiles and passes tests.
 
-- **No subprocesses, no daemons.** The core `shirudo` binary never
-  forks or execs on either side; every external operation goes through
-  a linked library. The single exception is the operator-only dispatch
-  in `builtin-build.c`: `shirudo build` and the operator bpm commands
-  exec the separate `shirudo-build` binary, which signs in-process and
-  execs `clang`. `shirudo-build` and `clang` ship only in the operator
-  package, so the invariant is absolute on every target-side path. A
-  feature that seems to need a shell-out needs a library binding, not
-  `system(3)`.
+- **No target subprocesses, no daemons.** Target operations in the core
+  `shirudo` binary use linked libraries and kernel APIs. Operator commands
+  dispatch to the separate `shirudo-build` helper. That helper signs
+  in-process, executes `clang` for BPF compilation and executes the standard
+  `veritysetup` tool for image formatting and offline verification. Those
+  external tools are operator-only dependencies. Target image preflight
+  checks the standard verity superblock and root. The kernel verifies config
+  signatures through its dm-verity trust path; runtime acceptance requires
+  the exact UKI root. A strict read-only mapping is read completely before
+  parsing contents or extending the activation PCR. Config signatures cover
+  exactly the 64 lowercase ASCII root bytes and never authorize executables.
+  Do not add a target shell-out or a custom userspace verity hash-tree
+  implementation.
 - **Operator code does not ship to targets.** Signing (`util/sign.c`)
   and the package builder and publisher (`tools/shirudo-build/`) are
   linked only into `shirudo-build`. The core binary only dispatches.
-- **The signature-gated `BPF_PROG_LOAD` is the trust boundary.** Every
-  signed artifact (the LSM bootstrap, every load and unload directive)
-  goes through the same load path; a second loading path is wrong.
-  Userspace may attach, pin and run the signed-loader data-map
+- **The signature-gated `BPF_PROG_LOAD` is the upatch trust boundary.**
+  Every signed load and unload directive goes through the same load path.
+  The embedded LSM bootstrap loads during `init`, before its admission
+  gates attach. Production deployments authenticate it through the initrd.
+  Authorized Shirudo tasks may attach, pin and run the signed-loader data-map
   pattern, because none of those can introduce unsigned code; detach,
   update and corruption of BPF objects from userspace are denied by the
   LSM. In the `lsm/bpf` hook the `bool kernel` argument is the
@@ -190,9 +195,9 @@ one usually still compiles and passes tests.
   userspace calls are filtered.
 - **The operator never touches the kernel keyring or the TPM; the
   target never touches the private key.**
-- **The bpf keyring is the trust anchor; the user keyring is staging.**
-  `init` enrols the trusted set in the kernel's `.bpf` keyring and
-  seals it, which needs the kernel booted with `bpf.keyring_unsealed=1`
+- **The bpf keyring is the trust anchor.** In ordinary mode, the user
+  keyring provides staging. `init` enrols the trusted set in the kernel's
+  `.bpf` keyring and seals it, which needs the kernel booted with `bpf.keyring_unsealed=1`
   and `init` run from the initrd; a kernel that sealed it empty at boot
   makes `init` stage the primary certificate alone in a sealed
   `shirudo` user keyring until the next reboot. The set (`util/keys.c`)
@@ -206,18 +211,24 @@ one usually still compiles and passes tests.
   keyring that record says, `lsm/bpf_prog_load` admits only that kind,
   and for a staged user keyring only that serial (the kernel records
   none for its own bpf keyring), and `lsm/key_permission` lets shirudo
-  alone write, unlink, revoke or invalidate the keyring and its keys.
-  `keys revoke` is the only way a key leaves during a boot: marker in
+  alone write, unlink or revoke the keyring and its keys. Staging has a
+  reproduced invalidation exception through possessed `KEY_NEED_SEARCH`
+  references.
+  `keys revoke` is the ordinary authorized revocation path: marker in
   `revoked/` first, then the unlink, the measured `key_revoke` event
   and the purge of everything the key signed. There is no file pin to
-  forge or lose.
+  forge or lose. Image mode requires the `.bpf` keyring and refuses
+  staging. It enrols the verified config's signer set at boot. Live
+  signed config activation can revoke an enrolled signer and purge its
+  upatches, but cannot enrol a new signer. Local `keys add` and
+  `keys revoke` are refused in image mode.
 - **The operator is stateless.** It writes only the keypair (`genkey`)
   and the artifacts or reports the caller names. No hidden caches,
   state files, logs or staging directories; `--expect-chain` comes
   from the caller or from `shirudo attest predict`.
-- **Every target state change extends the TPM measurement register**
-  with a domain-separated tag, in deterministic order, and refuses on
-  drift (`tampered`) rather than retrying. Boot restore is exactly one
+- **Upatch state changes extend the TPM measurement register**
+  with a domain-separated tag, in deterministic order. Commands refuse
+  on drift (`tampered`) rather than retrying. Boot restore is exactly one
   register event and a re-run of `init` adds none. The register follows
   systemd's NvPCR construction (`util/chain.c`): an NV extend index that
   clears at TPM reset, a first write only possible while PCRs 9 and 11
@@ -227,7 +238,12 @@ one usually still compiles and passes tests.
   persistent index or
   an auth value derived from the certificate; the upatch tree measures
   into the same register. A TPM 2.0 is mandatory; there is no
-  unmeasured mode.
+  unmeasured mode. Image config activation extends the separate PCR
+  selected in authenticated bootstrap settings. A durable pending selection
+  requires manual reboot after any interruption; Shirudo never reboots the
+  node automatically. There is no same-boot recovery or
+  ambiguous-extension retry. Trusted startup verifies that selection and
+  records a fresh BOOT event before completing initialization.
 - **Evidence is signed by the TPM, verified by the operator.** The
   attestation key is a fixed-template primary under the endorsement
   hierarchy, pinned by name and tied to the endorsement key by
@@ -239,7 +255,7 @@ one usually still compiles and passes tests.
   value the target wrote about itself is not a check.
 - **Pin the bpf_link before anything else fallible** in `shirudo init`,
   or a crash leaves an attached, unowned link that the kernel detaches.
-- **init runs twice in production and the two halves are fixed.** The
+- **init runs twice in production.** In ordinary mode, the
   initrd run (`shirudo-initrd.service`, detected by `/etc/initrd-release`
   with the root at `/sysroot`) enrols the initrd's own
   `/etc/shirudo/keys/cert.der`, attaches the LSM with its pins under
@@ -250,17 +266,40 @@ one usually still compiles and passes tests.
   root run labels the tree and adopts that record. Anything else the
   initrd would write to the root is wrong: the root is read-only there,
   and `/run` is the only thing systemd carries across switch-root
-  besides the API file systems. Non-systemd initrds are unsupported.
+  besides the API file systems. Image mode instead requires writable
+  persistent state during initrd startup, binds it writable and labels
+  it before attaching enforcement. Config activation writes its durable
+  image cache and pending selection there. The initrd enrolls the config
+  certificate into the kernel's .dm-verity keyring and seals it; built-in
+  dm-verity trust remains accepted. Executable authority comes from a task
+  mark committed after successful exec from the trusted runtime image;
+  the authenticated bootstrap task has temporary authority to complete
+  initialization. Non-systemd initrds are unsupported.
+- **Seal labels mark targets, not caller authority.** Ordinary mode
+  authorizes the frozen executable device/inode or its initrd copy; image
+  mode authorizes the committed task mark. A copied label grants neither.
+  Only an authorized caller may set the exact seal xattr. The seal checks
+  labelled targets on write open, unlink, both rename endpoints, setattr
+  and xattr changes. Ordinary mode allows replacing the recorded primary
+  executable for upgrades without granting its replacement authority.
+  Label read errors require authority except ENODATA, EOPNOTSUPP, EACCES
+  and EPERM; scratch allocation failure also requires authority. The seal
+  labels new inodes during creation when the parent has a cached directory
+  mark. Writers hold an open parent directory to retain that mark. Directory
+  eviction and foreign link/rename entries remain limitations; existing
+  writable descriptors and mappings are not revoked.
 - **Single shirudo instance per host.** Keyring name, private bpffs,
   `/var/lib/shirudo`, the `security.bpf.shirudo` xattr namespace and
   the NV index are single-tenant by design.
 - **Kernel + shirudo is the target TCB.** Ask of every change whether it
   grows the TCB; the agentless design exists to keep it minimal.
-- **Bleeding-edge kernel and toolchain only.** Linux v7.4 or newer
-  and current clang/LLVM are hard prerequisites. No legacy-kernel detection, no
-  runtime feature-probe fallbacks; a missing kernel feature fails the
-  build or the load. x86-64, arm64 and riscv64 are the supported
-  architectures.
+- **Bleeding-edge kernel and toolchain only.** The signed-loader ABI
+  described in `Documentation/requirements.rst` and current clang/LLVM are
+  hard prerequisites. Development trees can expose that ABI before the
+  corresponding release number changes; use a verified commit, not just
+  `uname`, to identify the tested kernel. No legacy-kernel fallback paths;
+  a missing kernel feature fails the build or the load. x86-64, arm64 and
+  riscv64 are the supported architectures.
 - **BPF is CO-RE.** Hard-coded struct offsets sign fine and fail on the
   wrong kernel as `btf_mismatch`.
 - **Upatch state lives in BPF arenas where possible.** A upatch that

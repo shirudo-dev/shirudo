@@ -18,6 +18,15 @@ that give a record its shape, the documents on the wire, the transport
 and its configuration, and how to land the data in the OpenTelemetry
 Collector, ClickHouse, Splunk or a collector of your own.
 
+In image mode, persistent ``map_export.*`` settings belong in
+``etc/shirudo/shirudo.conf`` inside the signed config image. Build and activate
+that config with ``shirudo image update``; editing the host's file does not
+change image-mode settings. Configure the export and keepalive services to
+invoke the runtime binary through its packaged interpreter and libraries.
+The map, serializer, decoder and OTLP flows below are shared by both modes.
+Bootstrap TPM and trust-path environment overrides are refused in image
+mode; ordinary export options do not authorize changes to those inputs.
+
 1) The pipeline
 ---------------
 

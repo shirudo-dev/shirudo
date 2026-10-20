@@ -588,3 +588,38 @@ exercises binding, extending, replay, recreation, a TPM reset and
 simulator's ``volatile`` state file is a TPM reset.  The target suite
 runs the same path against swtpm in the QEMU VM (``make -C testing test-tgt``);
 ``contrib/swtpm.sh`` starts a software TPM for a development target.
+
+
+Configuration image measurements
+================================
+
+Image mode adds a reserved static SHA-256 PCR for config selections. It does
+not replace the upatch NV register or its PCR 9/11 bootstrap binding. The
+PCR number and config verification certificate come from authenticated
+runtime bootstrap settings; config images cannot override either.
+
+Each BOOT or UPDATE event hashes ``"shirudo-config-root-v1\0"``, the
+big-endian 32-bit event kind and the 32-byte binary root hash, then extends
+this PCR before config effects. BOOT is 1 and UPDATE is 2. The durable
+selection records TPM reset and restart counts. Once pending, an interrupted
+activation blocks further state changes and config attestation until a
+manual reboot; no same-boot retry is attempted. The node keeps running and
+Shirudo never initiates the reboot. The
+`config-images <config-images.rst>`__ guide gives the pending-selection rules.
+
+``shirudo attest`` automatically includes this PCR and emits the current
+boot's config history: schema, PCR index, reset/restart counts, initial PCR
+and events containing sequence, kind and root hash. The quote binds PCR
+values and TPM boot identity. Verify the intended config with both
+``--expect-config-root=<64 hex>`` and ``--expect-config-pcr=<number>``.
+The verifier derives each event digest and rejects malformed roots,
+discontinuous sequences, incorrect boot identity, a mismatching selected
+root or a replay that does not reach the quoted PCR. Pending activations
+cannot produce healthy evidence through the normal CLI.
+
+Without an expected config root, successful replay is reported as
+consistency without operator approval. Neither this replay nor a static
+PCR proves that only the trusted updater issued the TPM command: direct
+measurement writers can record a selection without the corresponding
+operation. Restricting writers remains separate work for both the config
+PCR and the existing NV register; no IMA integration is added.
