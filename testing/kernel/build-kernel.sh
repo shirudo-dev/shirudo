@@ -212,9 +212,15 @@ fi
 PATCHES=()
 if [ "$APPLY_PATCHES" = 1 ] && [ "$KEEP_SRC" = 0 ]; then
 	while IFS= read -r p; do PATCHES+=("$p"); done < <(find "$REPO/patches" -maxdepth 1 -name '*.patch' -type f 2>/dev/null | sort)
+	# git am would record whoever runs this, and now, as committer of each
+	# patch commit, so HEAD, its describe string and the build timestamp
+	# taken from HEAD below would change on every run.  Pin the committer
+	# to the build identity and the date of REF's commit instead.
+	AM_DATE="$(git -C "$REPO" log -1 --format=%cd --date=raw "$SHA")"
 	for p in "${PATCHES[@]}"; do
 		log "applying $(basename "$p")"
-		if ! git -C "$SRC" am --quiet --3way "$p"; then
+		if ! GIT_COMMITTER_NAME=shirudo GIT_COMMITTER_EMAIL=shirudo@build-kernel \
+		     GIT_COMMITTER_DATE="$AM_DATE" git -C "$SRC" am --quiet --3way "$p"; then
 			git -C "$SRC" am --abort || true
 			die "patch does not apply to $REF: $p"
 		fi
@@ -386,6 +392,8 @@ STAMP="$(date -u +%Y%m%d%H%M)"
 PKGDIR="$OUT/pkgs/$ARCH/$KREL-$STAMP"
 mkdir -p "$PKGDIR"
 # Reproducible metadata: timestamp of the source commit, fixed user/host.
+# Patch commits carry REF's commit date (see git am above), so with
+# patches applied this is still the upstream date.
 export KBUILD_BUILD_TIMESTAMP="$(git -C "$SRC" log -1 --format=%cD HEAD)"
 export KBUILD_BUILD_USER=shirudo KBUILD_BUILD_HOST=build-kernel
 export SOURCE_DATE_EPOCH="$(git -C "$SRC" log -1 --format=%ct HEAD)"
