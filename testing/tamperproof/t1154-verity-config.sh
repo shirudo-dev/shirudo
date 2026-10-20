@@ -30,7 +30,7 @@ else
 fi
 export SHIRUDO_BIN
 
-test_expect_success 'current CONFIG and direct PCR replay agree' '
+test_expect_success 'current CONFIG and PCR evidence verify' '
 	python3 tamperproof/t1154-verity-config.py initial "$work"
 '
 

@@ -94,8 +94,10 @@ def mapping_inventory():
 
 
 def snapshot(label):
+    # Capture effects before a subsequent command can collect stale mappings.
     effects = {
-        "mount": mount(CONFIG), "runtime_mount": mount(RUNTIME),
+        "mount": mount(CONFIG),
+        "runtime_mount": mount(RUNTIME),
         "settings": (CONFIG / "etc/shirudo/shirudo.conf").read_text(),
         "journal": {p.name: p.read_bytes().hex()
                     for p in sorted(JOURNAL.iterdir()) if p.is_file()},
@@ -103,31 +105,62 @@ def snapshot(label):
     }
     status = json.loads(run(label + "-status", "image", "status"))
     require(status["consistent"] and not status["pending"], status)
-    records = [json.loads(line) for line in (JOURNAL / "events").read_text().splitlines()]
-    records = [r for r in records if r["reset_count"] == status["reset_count"] and
-               r["restart_count"] == status["restart_count"]]
-    require(records and records[0]["kind"] == 1, "missing boot event")
-    events = [{k: r[k] for k in ("sequence", "kind", "root_hash")} for r in records]
-    view = {"events": events, "initial_pcr": records[0]["initial_pcr"]}
-    result = subprocess.run(["tpm2_pcrread", "sha256:" + str(status["pcr"])],
-                            capture_output=True, text=True, timeout=30)
-    require(result.returncode == 0, result.stderr)
-    (RESULTS / (label + ".pcr.stdout")).write_text(result.stdout)
-    import re
-    match = re.search(r"\b" + str(status["pcr"]) + r"\s*:\s*0x([0-9a-fA-F]{64})", result.stdout)
-    require(match is not None, "missing PCR value")
-    pcr = match.group(1).lower()
+    require(status["pcr"] == 14, status)
+    selected = next((name for name in NAMES
+                     if (IMAGES / (name + ".roothash")).exists() and
+                     root(name) == status["root_hash"]), None)
+    require(selected is not None, f"unexpected current root: {status}")
+    tenant = "tenant-config-0000" if selected == "config-otel" else selected
+    require(f"map_export.tenant_id = {tenant}\n" in effects["settings"],
+            "mounted settings do not match the selected root")
+    nonce = secrets.token_hex(32)
+    evidence = json.loads(run(label + "-evidence", "attest",
+                              "--pcrs=0,9", "--nonce=" + nonce))
+    save(label + "-evidence", evidence)
+    require(evidence["nonce"] == nonce, "nonce mismatch")
+    require(evidence["pcr_bank"] == "sha256", "wrong PCR bank")
+    require(evidence["pcr_mask"] == (1 | (1 << 9) | (1 << 14)),
+            "CONFIG PCR was not added to requested quote selection")
+    view = evidence["config"]
+    require(view["schema"] == 1, "invalid config evidence schema")
+    for field in ("pcr", "reset_count", "restart_count"):
+        require(view[field] == status[field], f"status/evidence mismatch: {field}")
+    events = view["events"]
+    require(bool(events), "missing BOOT event")
     value = bytes.fromhex(view["initial_pcr"])
-    for event in events:
+    previous = None
+    for index, event in enumerate(events):
+        require(event["kind"] == (2 if index else 1), "bad BOOT/UPDATE order")
+        if previous is not None:
+            require(event["sequence"] == previous["sequence"] + 1,
+                    "discontinuous history")
+        require(event["root_hash"] in tuple(root(name) for name in NAMES
+                if (IMAGES / (name + ".roothash")).exists()),
+                "event does not describe a signed test fixture")
         digest = hashlib.sha256(b"shirudo-config-root-v1\0" +
                                 struct.pack(">I", event["kind"]) +
                                 bytes.fromhex(event["root_hash"])).digest()
         value = hashlib.sha256(value + digest).digest()
-    require(value.hex() == pcr, "journal replay differs from direct PCR read")
-    require(events[-1]["root_hash"] == status["root_hash"] and
-            events[-1]["sequence"] == status["sequence"], "history/status mismatch")
-    report = json.loads(run(label + "-register", "status", "--json"))
-    effects.update(status=status, config=view, pcr=pcr, chain=report["tpm"]["chain"])
+        previous = event
+    require(previous["sequence"] == status["sequence"] and
+            previous["root_hash"] == root(selected),
+            "history does not end at current root")
+    pcrs = {p["index"]: p["value"] for p in evidence["pcrs"]}
+    require(value.hex() == pcrs[14], "replay differs from quoted PCR")
+    anchor_path = RESULTS / "anchor.json"
+    anchor = load("anchor") if anchor_path.exists() else {
+        "ak": evidence["ak"]["name"], "chain": evidence["register"]["value"]}
+    # Pin this test session; deployment enrollment is outside this fixture.
+    run(label + "-verify", "attest", "verify",
+        "--evidence=" + str(RESULTS / (label + "-evidence.json")),
+        "--nonce=" + nonce, "--ak-name=" + anchor["ak"],
+        "--expect-chain=" + anchor["chain"],
+        "--expect-config-root=" + root(selected), "--expect-config-pcr=14")
+    if not anchor_path.exists():
+        save("anchor", anchor)
+    effects.update(status=status, config=view, pcr=pcrs[14],
+                   chain=evidence["register"]["value"])
+    # JSON round-trip makes tuples comparable with stored snapshots.
     effects = json.loads(json.dumps(effects))
     save(label, effects)
     return effects

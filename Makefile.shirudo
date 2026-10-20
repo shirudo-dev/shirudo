@@ -579,6 +579,7 @@ TEST_HELPERS := $(VERITY_TEST_HELPERS) \
                 testing/helper/test-image-config \
                 testing/helper/test-config-image \
                 testing/helper/test-config-update \
+                testing/helper/test-config-attest \
                 testing/helper/test-image-keys \
                 testing/helper/test-json-parser \
                 testing/helper/test-string \
@@ -768,6 +769,10 @@ testing/helper/test-config-update: testing/helper/test-config-update.c \
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(REGISTER_LIBS)
 
+testing/helper/test-config-attest: testing/helper/test-config-attest.c \
+		util/attest.o $(REGISTER_OBJS)
+	@printf '  CC      $@\n'
+	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(REGISTER_LIBS)
 
 testing/helper/test-image-keys: testing/helper/test-image-keys.c \
 		util/image_keys.o util/keys.o $(REGISTER_OBJS)

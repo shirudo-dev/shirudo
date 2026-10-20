@@ -100,11 +100,55 @@ def check_members(ring):
 
 
 def snapshot(label):
-    effects = config.snapshot(label)
-    effects["keyring"] = keyring()
-    require(effects["status"]["root_hash"] == ROOT, "wrong boot root")
+    effects = {
+        "keyring": keyring(),
+        "mount": config.mount(config.CONFIG),
+        "runtime_mount": config.mount(config.RUNTIME),
+        "settings": (config.CONFIG / "etc/shirudo/shirudo.conf").read_text(),
+        "journal": {p.name: p.read_bytes().hex()
+                    for p in sorted(config.JOURNAL.iterdir()) if p.is_file()},
+        "mappings": config.mapping_inventory(),
+    }
+    status = json.loads(config.run(label + "-status", "image", "status"))
+    require(status["consistent"] and not status["pending"] and
+            status["root_hash"] == ROOT and status["pcr"] == 14, status)
     require("map_export.tenant_id = config-boot-keys\n" in effects["settings"],
-            "wrong boot configuration")
+            "selected CONFIG does not contain the boot-key fixture settings")
+    nonce = secrets.token_hex(32)
+    evidence = json.loads(config.run(label + "-evidence", "attest",
+                                     "--pcrs=0,9", "--nonce=" + nonce))
+    config.save(label + "-evidence", evidence)
+    view = evidence["config"]
+    require(evidence["nonce"] == nonce and evidence["pcr_bank"] == "sha256",
+            "incorrect nonce or PCR bank")
+    require(evidence["pcr_mask"] == (1 | (1 << 9) | (1 << 14)),
+            "CONFIG PCR missing from quote")
+    require(view["schema"] == 1, "invalid CONFIG evidence schema")
+    for field in ("pcr", "reset_count", "restart_count"):
+        require(view[field] == status[field], f"status/evidence mismatch: {field}")
+    require(len(view["events"]) == 1, "expected one BOOT event this boot")
+    event = view["events"][0]
+    require(event["sequence"] == status["sequence"], "BOOT sequence mismatch")
+    require(event["kind"] == 1 and event["root_hash"] == ROOT,
+            "BOOT did not select the signed boot-key fixture")
+    digest = hashlib.sha256(b"shirudo-config-root-v1\0" +
+                            struct.pack(">I", 1) + bytes.fromhex(ROOT)).digest()
+    after = hashlib.sha256(bytes.fromhex(view["initial_pcr"]) + digest).hexdigest()
+    pcrs = {entry["index"]: entry["value"] for entry in evidence["pcrs"]}
+    require(pcrs[14] == after, "BOOT replay disagrees with quoted PCR")
+    anchor_path = config.RESULTS / "anchor.json"
+    anchor = config.load("anchor") if anchor_path.exists() else {
+        "ak": evidence["ak"]["name"], "chain": evidence["register"]["value"]}
+    config.run(label + "-verify", "attest", "verify",
+               "--evidence=" + str(config.RESULTS / (label + "-evidence.json")),
+               "--nonce=" + nonce, "--ak-name=" + anchor["ak"],
+               "--expect-chain=" + anchor["chain"],
+               "--expect-config-root=" + ROOT, "--expect-config-pcr=14")
+    if not anchor_path.exists():
+        config.save("anchor", anchor)
+    effects.update(status=status, config=view, pcr=pcrs[14],
+                   chain=evidence["register"]["value"])
+    effects = json.loads(json.dumps(effects))
     config.save(label, effects)
     return effects
 
