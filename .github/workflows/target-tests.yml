@@ -1,0 +1,90 @@
+name: Target tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A new push to the pull request supersedes the run in progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-tgt:
+    name: Target suite in the test VM, staging and production
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # bpf-next moves daily; a week-old kernel still tests the tree, and
+      # building one takes most of the run.
+      - name: Name the kernel cache week
+        id: week
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the bpf-next kernel
+        id: kernel
+        uses: actions/cache/restore@v4
+        with:
+          path: artifacts/bpf-next-kernel-debs
+          key: test-vm-kernel-${{ steps.week.outputs.week }}-${{ hashFiles('contrib/build-kernel-package.sh', 'contrib/test-vm-arch.sh') }}
+
+      - name: Restore the static target dependencies
+        id: target-deps
+        uses: actions/cache/restore@v4
+        with:
+          path: build/target-deps
+          key: target-deps-${{ hashFiles('Makefile.target-deps') }}
+
+      - name: Restore the VM images
+        id: images
+        uses: actions/cache/restore@v4
+        with:
+          path: build/test-vm/cache
+          key: test-vm-images-${{ hashFiles('contrib/test-vm-runtime-packages', 'contrib/prepare-test-vm-runtime.sh', 'contrib/build-test-vm-bundle.sh', 'contrib/test-vm-arch.sh') }}
+
+      - name: Prepare the runner as the VM host
+        run: .github/scripts/target-tests.sh setup
+
+      - name: Run the target suite in the staging configuration
+        run: .github/scripts/target-tests.sh staging
+
+      # Every unit with a private mount namespace fails after switch-root
+      # since d2ffd16 ("bpf: refuse unmounting any mount above the
+      # private bpffs"); the step reports without failing the job until
+      # that is fixed.
+      - name: Run the target suite in the production configuration
+        continue-on-error: true
+        run: .github/scripts/target-tests.sh production
+
+      # Each part is saved once it is complete, even when a later step
+      # fails, so that the next run does not build it again.
+      - name: Save the bpf-next kernel
+        if: always() && steps.kernel.outputs.cache-hit != 'true' && hashFiles('artifacts/bpf-next-kernel-debs/bzImage.sha256sum') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: artifacts/bpf-next-kernel-debs
+          key: ${{ steps.kernel.outputs.cache-primary-key }}
+
+      - name: Save the static target dependencies
+        if: always() && steps.target-deps.outputs.cache-hit != 'true' && hashFiles('build/target-deps/lib/libcrypto.a') != '' && hashFiles('build/target-deps/curl/lib/libcurl.a') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: build/target-deps
+          key: ${{ steps.target-deps.outputs.cache-primary-key }}
+
+      - name: Save the VM images
+        if: always() && steps.images.outputs.cache-hit != 'true' && hashFiles('build/test-vm/cache/runtime/*.qcow2') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: build/test-vm/cache
+          key: ${{ steps.images.outputs.cache-primary-key }}
