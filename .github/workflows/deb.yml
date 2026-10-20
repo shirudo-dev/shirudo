@@ -88,6 +88,7 @@ jobs:
               curl \
               binutils \
               file \
+              jq \
               git
 
             git config --global --add safe.directory /host
@@ -232,6 +233,13 @@ jobs:
             cp shirudo-target-*.rpm /tmp/shirudo-packages/
             cp /tmp/shirudo-packages/* .
 
+            # An SPDX SBOM beside every package, from the dependency builds
+            # the binaries linked.
+            SHIRUDO_TARGET_PKG_CONFIG_PATH=/tmp/shirudo-curl/lib/pkgconfig:/tmp/shirudo-openssl/lib/pkgconfig \
+            SHIRUDO_TARGET_STATIC_LIBDIR=/tmp/shirudo-target-deps/lib \
+              .github/scripts/gen-sbom.sh shirudo-*.deb shirudo-target-*.rpm \
+              shirudo.tar.gz shirudo-static.tar.gz
+
             apt-get update
             apt-get install -y /host/shirudo-operator_*.deb
 
@@ -251,14 +259,18 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: shirudo-deb
-          path: shirudo-*.deb
+          path: |
+            shirudo-*.deb
+            shirudo-*.deb.spdx.json
           if-no-files-found: error
 
       - name: Upload target rpm package
         uses: actions/upload-artifact@v4
         with:
           name: shirudo-rpm-target
-          path: shirudo-target-*.rpm
+          path: |
+            shirudo-target-*.rpm
+            shirudo-target-*.rpm.spdx.json
           if-no-files-found: error
 
       - name: Upload installer tarballs
@@ -268,6 +280,8 @@ jobs:
           path: |
             shirudo.tar.gz
             shirudo-static.tar.gz
+            shirudo.tar.gz.spdx.json
+            shirudo-static.tar.gz.spdx.json
           if-no-files-found: error
 
       - name: Upload the bpf-next vmlinux.h
@@ -287,7 +301,7 @@ jobs:
         run: |
           dnf -q install -y gcc make pkgconf-pkg-config git python3 rpm-build \
             clang llvm openssl openssl-devel libcurl-devel tpm2-tss-devel \
-            elfutils-libelf-devel zlib-ng-compat-devel luajit-devel
+            elfutils-libelf-devel zlib-ng-compat-devel luajit-devel jq
 
       - name: Check out repository
         uses: actions/checkout@v4
@@ -325,6 +339,7 @@ jobs:
           cmp bpf-next/vmlinux.h build/rpm/operator/usr/share/shirudo/vmlinux.h
           rpm -qpi shirudo-operator-*.rpm
           rpm -qp --requires shirudo-operator-*.rpm | grep -qx clang
+          .github/scripts/gen-sbom.sh shirudo-operator-*.rpm
 
       - name: Install, exercise and remove both packages
         run: |
@@ -358,7 +373,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: shirudo-rpm-operator
-          path: shirudo-operator-*.rpm
+          path: |
+            shirudo-operator-*.rpm
+            shirudo-operator-*.rpm.spdx.json
           if-no-files-found: error
 
   release:
@@ -369,21 +386,23 @@ jobs:
       contents: write
 
     steps:
-      - name: Download deb, rpm and tarball packages
+      - name: Download deb, rpm and tarball packages and their SBOMs
         uses: actions/download-artifact@v4
         with:
           pattern: shirudo-*
           merge-multiple: true
 
-      - name: Upload packages to GitHub Release
+      - name: Upload packages and SBOMs to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" shirudo-*.deb shirudo-*.rpm shirudo*.tar.gz --clobber
+            gh release upload "$RELEASE_TAG" shirudo-*.deb shirudo-*.rpm shirudo*.tar.gz \
+              shirudo*.spdx.json --clobber
           else
             gh release create "$RELEASE_TAG" shirudo-*.deb shirudo-*.rpm shirudo*.tar.gz \
+              shirudo*.spdx.json \
               --draft --verify-tag --title "$RELEASE_TAG" --generate-notes
           fi
