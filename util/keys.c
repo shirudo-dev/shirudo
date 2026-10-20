@@ -335,8 +335,11 @@ static int scan_trusted(const char *keys_dir, const char *revoked_dir,
 			break;
 		rc = shirudo_keys_digest_der(c->der, c->der_sz, c->sha256,
 					     c->fingerprint);
-		if (rc)
+		if (rc) {
+			xfree(c->der, c->der_sz);
+			c->der = NULL;
 			break;
+		}
 		if (shirudo_keys_is_revoked(revoked_dir, c->fingerprint)) {
 			xfree(c->der, c->der_sz);
 			c->der = NULL;
