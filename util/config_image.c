@@ -3,6 +3,7 @@
 
 #include <shirudo/misc.h>
 
+#include <endian.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -15,20 +16,28 @@
 #include "config_image.h"
 #include "hex.h"
 
-#define IMAGE_DIGESTS_PER_BLOCK (SHIRUDO_CONFIG_IMAGE_BLOCK_SIZE / 32)
+#define VERITY_DIGESTS_PER_BLOCK (SHIRUDO_CONFIG_IMAGE_BLOCK_SIZE / 32)
 
-static __u32 get_le32(const __u8 *p)
-{
-	return (__u32)p[0] | (__u32)p[1] << 8 |
-	       (__u32)p[2] << 16 | (__u32)p[3] << 24;
-}
+/* The standard veritysetup superblock occupies the first 512 bytes. */
+struct verity_superblock {
+	__u8 magic[8];
+	__u32 version_le;
+	__u32 hash_type_le;
+	__u8 uuid[16];
+	char algorithm[32];
+	__u32 data_block_size_le;
+	__u32 hash_block_size_le;
+	__u64 data_blocks_le;
+	__u16 salt_size_le;
+	__u8 reserved[6];
+	__u8 salt[256];
+	__u8 padding[168];
+};
 
-static __u64 get_le64(const __u8 *p)
-{
-	return (__u64)get_le32(p) | (__u64)get_le32(p + 4) << 32;
-}
+_Static_assert(sizeof(struct verity_superblock) == 512,
+	       "verity superblock layout must match the disk format");
 
-static int hash_blocks(__u64 data_blocks, __u64 *out)
+static int verity_hash_blocks(__u64 data_blocks, __u64 *out)
 {
 	__u64 total = 1;
 
@@ -36,15 +45,15 @@ static int hash_blocks(__u64 data_blocks, __u64 *out)
 					SHIRUDO_CONFIG_IMAGE_BLOCK_SIZE)
 		return -EFBIG;
 	while (data_blocks > 1) {
-		data_blocks = (data_blocks + IMAGE_DIGESTS_PER_BLOCK - 1) /
-			      IMAGE_DIGESTS_PER_BLOCK;
+		data_blocks = (data_blocks + VERITY_DIGESTS_PER_BLOCK - 1) /
+			      VERITY_DIGESTS_PER_BLOCK;
 		total += data_blocks;
 	}
 	*out = total;
 	return 0;
 }
 
-static int regular_size(int fd, __u64 *size)
+static int regular_file_size(int fd, __u64 *size)
 {
 	struct stat st;
 
@@ -57,7 +66,7 @@ static int regular_size(int fd, __u64 *size)
 	return 0;
 }
 
-static int read_at_start(int fd, void *buffer, size_t size)
+static int read_exact_at_start(int fd, void *buffer, size_t size)
 {
 	size_t done = 0;
 	ssize_t n;
@@ -76,33 +85,43 @@ static int read_at_start(int fd, void *buffer, size_t size)
 	return 0;
 }
 
-/* Standard veritysetup superblock fields, in little-endian disk order. */
-int shirudo_config_image_read_header(int hash_fd,
-				     struct shirudo_config_image *out)
+static int validate_superblock(const struct verity_superblock *header)
 {
 	static const __u8 magic[8] = "verity";
 	static const char algorithm[32] = "sha256";
+
+	if (memcmp(header->magic, magic, sizeof(magic)) ||
+	    le32toh(header->version_le) != 1 ||
+	    le32toh(header->hash_type_le) != 1 ||
+	    memcmp(header->algorithm, algorithm, sizeof(algorithm)) ||
+	    le32toh(header->data_block_size_le) !=
+		SHIRUDO_CONFIG_IMAGE_BLOCK_SIZE ||
+	    le32toh(header->hash_block_size_le) !=
+		SHIRUDO_CONFIG_IMAGE_BLOCK_SIZE ||
+	    le16toh(header->salt_size_le) != SHIRUDO_CONFIG_IMAGE_SALT_SIZE)
+		return -EINVAL;
+	return 0;
+}
+
+int shirudo_config_image_read_header(int hash_fd,
+				     struct shirudo_config_image *out)
+{
 	struct shirudo_config_image image = {};
-	__u8 header[512];
+	struct verity_superblock header;
 	int rc;
 
 	if (!out)
 		return -EINVAL;
-	rc = read_at_start(hash_fd, header, sizeof(header));
+	rc = read_exact_at_start(hash_fd, &header, sizeof(header));
+	if (!rc)
+		rc = validate_superblock(&header);
 	if (rc)
 		return rc;
-	if (memcmp(header, magic, sizeof(magic)) ||
-	    get_le32(header + 8) != 1 || get_le32(header + 12) != 1 ||
-	    memcmp(header + 32, algorithm, sizeof(algorithm)) ||
-	    get_le32(header + 64) != SHIRUDO_CONFIG_IMAGE_BLOCK_SIZE ||
-	    get_le32(header + 68) != SHIRUDO_CONFIG_IMAGE_BLOCK_SIZE ||
-	    header[80] != SHIRUDO_CONFIG_IMAGE_SALT_SIZE || header[81])
-		return -EINVAL;
-	image.data_blocks = get_le64(header + 72);
-	rc = hash_blocks(image.data_blocks, &image.hash_blocks);
+	image.data_blocks = le64toh(header.data_blocks_le);
+	rc = verity_hash_blocks(image.data_blocks, &image.hash_blocks);
 	if (rc)
 		return rc;
-	memcpy(image.salt, header + 88, sizeof(image.salt));
+	memcpy(image.salt, header.salt, sizeof(image.salt));
 	*out = image;
 	return 0;
 }
@@ -115,14 +134,14 @@ int shirudo_config_image_check_files(int data_fd, int hash_fd,
 
 	if (!image)
 		return -EINVAL;
-	rc = hash_blocks(image->data_blocks, &blocks);
+	rc = verity_hash_blocks(image->data_blocks, &blocks);
 	if (rc)
 		return rc;
 	if (blocks != image->hash_blocks)
 		return -EINVAL;
-	rc = regular_size(data_fd, &data_size);
+	rc = regular_file_size(data_fd, &data_size);
 	if (!rc)
-		rc = regular_size(hash_fd, &hash_size);
+		rc = regular_file_size(hash_fd, &hash_size);
 	if (rc)
 		return rc;
 	if (data_size != image->data_blocks * SHIRUDO_CONFIG_IMAGE_BLOCK_SIZE ||
@@ -153,11 +172,11 @@ static int read_root(const char *prefix, __u8 root[32])
 	fd = open_part(prefix, ".roothash");
 	if (fd < 0)
 		return fd;
-	rc = regular_size(fd, &size);
+	rc = regular_file_size(fd, &size);
 	if (!rc && size != 64)
 		rc = -EINVAL;
 	if (!rc)
-		rc = read_at_start(fd, text, 64);
+		rc = read_exact_at_start(fd, text, 64);
 	close(fd);
 	if (rc)
 		return rc;
@@ -220,7 +239,7 @@ static int open_image(const char *prefix, const __u8 *expected_root,
 		image.image.signed_root = true;
 		image.signature_fd = open_part(prefix, ".p7s");
 		rc = image.signature_fd < 0 ? image.signature_fd :
-			regular_size(image.signature_fd, &size);
+			regular_file_size(image.signature_fd, &size);
 		if (!rc && (!size || size > SHIRUDO_CONFIG_IMAGE_SIG_MAX))
 			rc = -EINVAL;
 	}
