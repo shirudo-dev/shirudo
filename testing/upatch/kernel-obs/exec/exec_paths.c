@@ -161,7 +161,7 @@ static int dirfd_exec_path(const char *directory, const char *path)
 
 static void exec_drop_euid(const char *path)
 {
-	if (setresuid(65534, 0, 65534))
+	if (setresuid(65534, 65534, 65534))
 		_exit(125);
 	exec_payload(path);
 }

@@ -12,7 +12,7 @@ NAME=kernel-obs
 LOAD="$FIXTURES/$NAME.upatch"
 UNLOAD="$FIXTURES/$NAME.unload.upatch"
 PIN="/run/shirudo/bpffs/upatches/$NAME/link_0"
-TABLES="exec net listen watch dns priv file"
+TABLES="exec net socket listen watch dns priv file"
 WORK=$(mktemp -d)
 
 cleanup()
@@ -21,7 +21,6 @@ cleanup()
 		"$SHIRUDO_BIN" upatch unload "$UNLOAD" --no-precheck \
 			>/dev/null 2>&1 || true
 	fi
-	rm -f "/var/lib/shirudo/upatches/$NAME.upatch"
 	rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -59,7 +58,7 @@ documents = [json.loads(line) for line in open(sys.argv[1], encoding="utf-8")]
 records = [document for document in documents
            if isinstance(document, dict) and "map" in document]
 metrics = [document for document in documents if isinstance(document, list)]
-expected = {"exec", "net", "listen", "watch", "dns", "priv", "file"}
+expected = {"exec", "net", "socket", "listen", "watch", "dns", "priv", "file"}
 assert {record["map"] for record in records} == expected, documents
 assert len(metrics) == 1, documents
 assert metrics[0][0]["name"] == "kernel_obs.watch_attempts", metrics
@@ -235,7 +234,7 @@ assert not any(r["kind"] in ("userns_create", "mount")
                for r in tables["priv"]), tables["priv"]
 PY
 
-test_expect_success 'kernel-obs upatch loads with seven serializers' '
+test_expect_success 'kernel-obs upatch loads with eight serializers' '
 	load_observability &&
 	for map in $TABLES; do
 		[ -e "/run/shirudo/bpffs/upatches/$NAME/serializers/$map" ] ||

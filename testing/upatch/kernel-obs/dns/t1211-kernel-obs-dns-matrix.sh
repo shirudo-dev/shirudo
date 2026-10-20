@@ -20,7 +20,6 @@ cleanup()
 		"$SHIRUDO_BIN" upatch unload "$UNLOAD" --no-precheck \
 			>/dev/null 2>&1 || true
 	fi
-	rm -f "/var/lib/shirudo/upatches/$NAME.upatch"
 	rm -rf "$WORK"
 }
 trap cleanup EXIT

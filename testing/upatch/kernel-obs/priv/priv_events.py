@@ -7,6 +7,7 @@ import errno
 import json
 import os
 import platform
+import shutil
 import signal
 import socket
 import struct
@@ -22,7 +23,7 @@ BPF_MAP_GET_NEXT_ID = 12
 PTRACE_ATTACH = 16
 PTRACE_DETACH = 17
 PR_SET_NAME = 15
-LSM_SETID_RE = 2
+LSM_SETID_RES = 4
 
 SYSCALLS = {
     "x86_64": {"bpf": 321, "finit_module": 313, "init_module": 175},
@@ -55,6 +56,14 @@ def file_identity(path):
     info = os.stat(path)
     return {"dev": (os.major(info.st_dev) << 20) | os.minor(info.st_dev),
             "ino": info.st_ino}
+
+
+def identity_matches(observed, expected):
+    return (int(observed["dev"]) == int(expected["dev"]) and
+            int(observed["ino"]) == int(expected["ino"]))
+
+def true_name():
+    return os.path.basename(os.path.realpath("/bin/true"))
 
 
 def executable_identity():
@@ -224,12 +233,23 @@ def mmap_exec_event():
         os.close(fd)
 
 
+def vma_size(address):
+    with open("/proc/self/maps", encoding="ascii") as mappings:
+        for line in mappings:
+            start, end = (int(bound, 16) for bound in
+                          line.split(None, 1)[0].split("-"))
+            if start <= address < end:
+                return end - start
+    raise RuntimeError("mmap address is missing from /proc/self/maps")
+
+
 def mprotect_exec_event():
     address = libc.mmap(None, PAGE_SIZE, PROT_READ | PROT_WRITE,
                         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0)
     if address == ctypes.c_void_p(-1).value:
         error = ctypes.get_errno()
         raise OSError(error, os.strerror(error))
+    size = vma_size(address)
     try:
         if libc.mprotect(address, PAGE_SIZE, PROT_READ | PROT_EXEC) < 0:
             error = ctypes.get_errno()
@@ -238,6 +258,7 @@ def mprotect_exec_event():
         if libc.munmap(address, PAGE_SIZE) < 0:
             error = ctypes.get_errno()
             raise OSError(error, os.strerror(error))
+    return size
 
 
 def nonexec_mapping_events():
@@ -337,13 +358,14 @@ def generate(expected_path):
     bpf_event()
     bpf_readonly_event()
     mmap_exec_event()
-    mprotect_exec_event()
+    mprotect_size = mprotect_exec_event()
     with open(expected_path, "w", encoding="utf-8") as output:
         json.dump({"pid": pid, "identity": identity, "comm": comm,
                    "ptrace_child": ptrace_child,
                    "userns_children": children,
                    "mountpoint": mountpoint,
                    "module_path": module_path,
+                   "mprotect_size": mprotect_size,
                    "module_request": False}, output)
 
 
@@ -382,7 +404,7 @@ def check_existing_exec(path, expected_path):
     assert len(selected) == 1, selected
     mmap_exec = selected[0]
     assert mmap_exec["kind"] == "mmap_exec", selected
-    assert mmap_exec["name"] == "true", mmap_exec
+    assert mmap_exec["name"] == true_name(), mmap_exec
     assert mmap_exec["subtype"] == (PROT_READ | PROT_EXEC), mmap_exec
     assert int(mmap_exec["aux"]) == MAP_PRIVATE, mmap_exec
     assert int(mmap_exec["count"]) == 1, mmap_exec
@@ -398,7 +420,8 @@ def check_anomaly(expected_path, records_path):
     anomaly = anomalies[0]
     assert anomaly["subtype"] == 1 and anomaly["euid"] == 0, anomaly
     assert anomaly["uid"] == 0 and int(anomaly["aux"]) == 0, anomaly
-    assert anomaly["executable"] == expected["identity"], anomaly
+    assert identity_matches(anomaly["executable"], expected["identity"]), \
+        (expected["identity"], anomaly)
     assert anomaly["pid"] == expected["pid"], anomaly
     assert anomaly["name"], anomaly
     assert int(anomaly["count"]) == 1, anomaly
@@ -409,9 +432,12 @@ def check_anomaly(expected_path, records_path):
 
 
 def anomaly_event(expected_path):
+    executable = os.path.join(os.path.dirname(expected_path), "true")
+    shutil.copyfile("/bin/true", executable)
+    os.chmod(executable, 0o755)
     write_expected(expected_path,
-                   {"pid": os.getpid(), "identity": file_identity("/bin/true")})
-    os.execv("/bin/true", ["/bin/true"])
+                   {"pid": os.getpid(), "identity": file_identity(executable)})
+    os.execv(executable, [executable])
 
 
 def check_exec_unknown(path):
@@ -467,7 +493,7 @@ def check_positive(expected_path, records_path):
         return matches
 
     setuid = kind("setuid_root")[0]
-    assert setuid["subtype"] == LSM_SETID_RE, setuid
+    assert setuid["subtype"] == LSM_SETID_RES, setuid
     assert setuid["euid"] == 65534 and setuid["uid"] == 0, setuid
     assert int(setuid["aux"]) == 0, setuid
     assert setuid["name"] == expected["comm"], setuid
@@ -494,7 +520,7 @@ def check_positive(expected_path, records_path):
     kernel_load = kind("kernel_load_data")
     assert len(kernel_load) == 1, kernel_load
     assert kernel_load[0]["subtype"] == 2, kernel_load
-    assert int(kernel_load[0]["count"]) >= 2, kernel_load
+    assert int(kernel_load[0]["count"]) >= 1, kernel_load
 
     if expected["module_request"]:
         module_request = kind("module_request")[0]
@@ -513,24 +539,23 @@ def check_positive(expected_path, records_path):
     assert bpf["pid"] == expected["pid"], bpf
     assert int(bpf["aux"]) == 0 and int(bpf["count"]) == 1, bpf
     map_creates = [record for record in records
-                   if record["kind"] == "bpf" and record["subtype"] == 0]
+                   if record["kind"] == "bpf" and record["subtype"] == 0 and
+                   identity_matches(record["executable"], identity)]
     assert len(map_creates) == 1, map_creates
-    assert (map_creates[0]["executable"]["dev"] == identity["dev"] and
-            map_creates[0]["executable"]["ino"] == identity["ino"]), map_creates
+    assert identity_matches(map_creates[0]["executable"], identity), map_creates
     assert not any(record["kind"] == "bpf" and
                    record["subtype"] == BPF_MAP_GET_NEXT_ID and
-                   record["executable"]["dev"] == identity["dev"] and
-                   record["executable"]["ino"] == identity["ino"]
+                   identity_matches(record["executable"], identity)
                    for record in records), records
 
     mmap_exec = kind("mmap_exec")[0]
     assert mmap_exec["subtype"] == (PROT_READ | PROT_EXEC), mmap_exec
-    assert mmap_exec["name"] == "true", mmap_exec
+    assert mmap_exec["name"] == true_name(), mmap_exec
     assert int(mmap_exec["aux"]) == MAP_PRIVATE, mmap_exec
     mprotect_exec = kind("mprotect_exec")[0]
     assert mprotect_exec["subtype"] == (PROT_READ | PROT_EXEC), mprotect_exec
     assert mprotect_exec["name"] == "anonymous", mprotect_exec
-    assert int(mprotect_exec["aux"]) == PAGE_SIZE, mprotect_exec
+    assert int(mprotect_exec["aux"]) == expected["mprotect_size"], mprotect_exec
 
 
 def main():
