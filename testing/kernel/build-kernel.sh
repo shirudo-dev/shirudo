@@ -33,6 +33,10 @@ usage: ${0##*/} [options]
       --module-key PEM   sign modules with this key+certificate PEM
                          (ML-DSA-87, see kernel.conf) instead of a key
                          generated in the object tree
+      --llvm VER         LLVM version for --toolchain llvm, e.g. 20 for
+                         clang-20, ld.lld-20 and llvm-config-20 (default:
+                         the newest one installed completely, else the
+                         unversioned tools)
       --openssl DIR      OpenSSL >= 3.5 prefix for key generation and
                          sign-file (bin/ and lib*/pkgconfig/ are used);
                          also read from \$OPENSSL_PREFIX
@@ -69,6 +73,7 @@ BASE="defconfig"
 LOCALVERSION=""
 MODULE_KEY=""
 OPENSSL_PREFIX="${OPENSSL_PREFIX:-}"
+LLVM_VER=""
 CONFIG_ONLY=0
 WITH_DBG=0
 APPLY_PATCHES=1
@@ -86,6 +91,7 @@ while [ $# -gt 0 ]; do
 	--localversion) LOCALVERSION="$2"; shift 2 ;;
 	--module-key) MODULE_KEY="$(readlink -f "$2")"; shift 2 ;;
 	--openssl) OPENSSL_PREFIX="$2"; shift 2 ;;
+	--llvm) LLVM_VER="$2"; shift 2 ;;
 	--config-only) CONFIG_ONLY=1; shift ;;
 	--with-dbg) WITH_DBG=1; shift ;;
 	--no-patches) APPLY_PATCHES=0; shift ;;
@@ -110,6 +116,7 @@ if [ -z "$FORMAT" ]; then
 	else die "neither dpkg-deb nor rpmbuild found"; fi
 fi
 case "$FORMAT" in deb|rpm|both) ;; *) die "unsupported --format $FORMAT" ;; esac
+[[ -z "$LLVM_VER" || "$LLVM_VER" =~ ^[0-9]+$ ]] || die "--llvm takes a version number such as 20, not $LLVM_VER"
 [ "$FORMAT" = rpm ] || have dpkg-deb || die "dpkg-deb (dpkg-dev) is required for deb packages"
 [ "$FORMAT" = rpm ] || have fakeroot || die "fakeroot is required for deb packages"
 [ "$FORMAT" = deb ] || have rpmbuild || die "rpmbuild (rpm-build) is required for rpm packages"
@@ -165,16 +172,35 @@ ALLOW_DROP=(
 # Toolchain
 # ---------------------------------------------------------------------------
 HOST="$(host_arch)"
+# One LLVM version throughout: the unversioned tools for suffix "", or
+# clang-20, ld.lld-20 and so on for "-20".  The newest complete versioned
+# install is the default because the fmodret candidates plugin in patches/
+# needs newer LLVM headers than the distribution default clang may have,
+# and the plugin must be built against the compiler that loads it
+# (Kbuild takes llvm-config with the same suffix).
+llvm_complete() {
+	local t
+	for t in clang ld.lld llvm-objcopy llvm-ar llvm-nm; do have "$t$1" || return 1; done
+}
+newest_llvm() {
+	local v best=""
+	for v in $(compgen -c clang- | sed -n 's/^clang-\([0-9][0-9]*\)$/\1/p' | sort -n -u); do
+		llvm_complete "-$v" && best="$v"
+	done
+	echo "$best"
+}
+[ -n "$LLVM_VER" ] || LLVM_VER="$(newest_llvm)"
+LLVM_SFX="${LLVM_VER:+-$LLVM_VER}"
 if [ -z "$TOOLCHAIN" ]; then
-	if have clang && have ld.lld && have llvm-objcopy; then TOOLCHAIN=llvm; else TOOLCHAIN=gcc; fi
+	if llvm_complete "$LLVM_SFX"; then TOOLCHAIN=llvm; else TOOLCHAIN=gcc; fi
 fi
 MAKE_TC=()
 case "$TOOLCHAIN" in
 llvm)
-	have clang && have ld.lld && have llvm-objcopy && have llvm-ar && have llvm-nm ||
-		die "LLVM toolchain incomplete (clang, ld.lld, llvm-objcopy, llvm-ar, llvm-nm)"
-	MAKE_TC=(LLVM=1)
-	OBJCOPY=llvm-objcopy
+	llvm_complete "$LLVM_SFX" ||
+		die "LLVM toolchain incomplete (clang$LLVM_SFX, ld.lld$LLVM_SFX, llvm-objcopy$LLVM_SFX, llvm-ar$LLVM_SFX, llvm-nm$LLVM_SFX)"
+	MAKE_TC=(LLVM="${LLVM_SFX:-1}")
+	OBJCOPY="llvm-objcopy$LLVM_SFX"
 	;;
 gcc)
 	if [ "$HOST" != "$ARCH" ]; then
