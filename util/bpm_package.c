@@ -6,6 +6,7 @@
  */
 
 #include <errno.h>
+#include <fcntl.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -13,6 +14,7 @@
 #include <string.h>
 #include <strings.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <zlib.h>
 #include <openssl/bio.h>
 #include <openssl/evp.h>
@@ -26,11 +28,13 @@
 #include "bpm_package.h"
 #include "bpm_tree.h"
 #include "crypto.h"
+#include "io.h"
 #include "json.h"
 #include "log.h"
 #include "macros.h"
 #include "malloc.h"
 #include "seal.h"
+#include "upatch.h"
 
 struct index_sink {
 	struct bpm_index_entry *items;
@@ -411,10 +415,35 @@ out:
 	return rc;
 }
 
+/*
+ * The new directories and their entries reach the disk before the
+ * state that names the package is committed, so a power cut cannot
+ * leave the package recorded with files missing.
+ */
+static int sync_tree(const char *dest)
+{
+	int fd, rc = 0;
+
+	fd = open(dest, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	if (fd < 0)
+		return -errno;
+	if (syncfs(fd) != 0)
+		rc = -errno;
+	close(fd);
+	return rc;
+}
+
+/*
+ * The archive is taken apart before its certificate is checked, and a
+ * small one inflates far, so the files it may write are bounded.
+ */
+#define BPM_PKG_EXTRACT_MAX	(64u * 1024u * 1024u)
+
 int bpm_pkg_extract(const char *archive, const char *dest)
 {
 	gzFile gz = gzopen(archive, "rb");
 	char root[256] = {};
+	__u64 total = 0;
 	__u8 h[512];
 	int rc = 0;
 
@@ -486,8 +515,14 @@ int bpm_pkg_extract(const char *archive, const char *dest)
 				break;
 		} else if (type == '0') {
 			char parent[PATH_MAX];
-			FILE *fp;
+			int fd;
 
+			if (size > SHIRUDO_UPATCH_FILE_MAX ||
+			    size > BPM_PKG_EXTRACT_MAX - total) {
+				rc = -EFBIG;
+				break;
+			}
+			total += size;
 			strscpy(parent, path, sizeof(parent));
 			slash = strrchr(parent, '/');
 			if (slash) {
@@ -496,27 +531,31 @@ int bpm_pkg_extract(const char *archive, const char *dest)
 				if (rc)
 					break;
 			}
-			fp = fopen(path, "wb");
-			if (!fp) {
-				rc = -errno;
+			fd = seal_open(path, O_WRONLY | O_CREAT | O_EXCL |
+				       O_NOFOLLOW, 0644);
+			if (fd < 0) {
+				rc = fd;
 				break;
 			}
 			remain = size;
-			while (remain) {
+			while (remain && !rc) {
 				__u8 buf[65536];
 				size_t want = remain > sizeof(buf) ? sizeof(buf) : (size_t)remain;
 
 				n = gzread(gz, buf, (__u32)want);
-				if (n <= 0 || fwrite(buf, 1, (size_t)n, fp) != (size_t)n) {
+				if (n <= 0) {
 					rc = -EIO;
 					break;
 				}
+				rc = write_all(fd, buf, (size_t)n);
 				remain -= (size_t)n;
 			}
-			fclose(fp);
+			if (!rc && fsync(fd) != 0)
+				rc = -errno;
+			if (close(fd) != 0 && !rc)
+				rc = -errno;
 			if (rc)
 				break;
-			chmod(path, 0644);
 		} else {
 			rc = -EPERM;
 			break;
@@ -538,6 +577,8 @@ int bpm_pkg_extract(const char *archive, const char *dest)
 	}
 	if (gzclose(gz) != Z_OK && !rc)
 		rc = -EINVAL;
+	if (!rc)
+		rc = sync_tree(dest);
 	if (rc)
 		return rc;
 	return root[0] ? 0 : -EINVAL;
