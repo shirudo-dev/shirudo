@@ -53,6 +53,7 @@ static int on_index_entry(void *ud)
 	    !s->scratch.package_digest[0] || s->scratch.package_size < 0)
 		return -EINVAL;
 	s->items[s->n++] = s->scratch;
+	memset(&s->scratch, 0, sizeof(s->scratch));
 	return 0;
 }
 

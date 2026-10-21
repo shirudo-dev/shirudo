@@ -644,6 +644,7 @@ static int on_state_entry(void *ud)
 	    strcmp(expected, s->scratch.path))
 		return -EINVAL;
 	s->items[s->n++] = s->scratch;
+	memset(&s->scratch, 0, sizeof(s->scratch));
 	return 0;
 }
 
@@ -1499,6 +1500,7 @@ static int tree_write_pending(const struct shirudo_tree_operation *op)
 {
 	char buf[1024];
 	struct shirudo_json_emit e = { .buf = buf, .cap = sizeof(buf) };
+	int rc;
 
 	json_obj_open(&e);
 	json_kv_int(&e, "schema", 1);
@@ -1508,8 +1510,9 @@ static int tree_write_pending(const struct shirudo_tree_operation *op)
 	json_obj_close(&e);
 	if (e.err)
 		return e.err;
-	if (seal_mkdir_p(SHIRUDO_BPM_TREE_VAR_DIR, 0700))
-		return -errno;
+	rc = seal_mkdir_p(SHIRUDO_BPM_TREE_VAR_DIR, 0700);
+	if (rc)
+		return rc;
 	return seal_write_file(SHIRUDO_BPM_TREE_PENDING_PATH, buf,
 			       e.len, 0600);
 }
