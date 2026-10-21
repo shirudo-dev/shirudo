@@ -124,10 +124,12 @@ case "$FORMAT" in deb|rpm|both) ;; *) die "unsupported --format $FORMAT" ;; esac
 [[ -z "$LLVM_VER" || "$LLVM_VER" =~ ^[0-9]+$ ]] || die "--llvm takes a version number such as 20, not $LLVM_VER"
 [ "$FORMAT" = rpm ] || have dpkg-deb || die "dpkg-deb (dpkg-dev) is required for deb packages"
 [ "$FORMAT" = rpm ] || have fakeroot || die "fakeroot is required for deb packages"
+[ "$FORMAT" = rpm ] || have dh_listpackages || die "dh_listpackages (debhelper) is required for deb packages; install debhelper"
 [ "$FORMAT" = deb ] || have rpmbuild || die "rpmbuild (rpm-build) is required for rpm packages"
 for t in make flex bison bc pahole python3 cpio zstd xz pkg-config; do
 	have "$t" || die "$t is required"
 done
+have rsync || die "rsync is required (install rsync; Linux headers_install uses it)"
 if [ -n "$OPENSSL_PREFIX" ]; then
 	[ -d "$OPENSSL_PREFIX" ] || die "--openssl prefix not found: $OPENSSL_PREFIX"
 	export PATH="$OPENSSL_PREFIX/bin:$PATH"
