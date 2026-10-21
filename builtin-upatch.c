@@ -1169,6 +1169,16 @@ static int upatches_pin_dir(void)
 	return 0;
 }
 
+static int prog_type(int fd)
+{
+	struct bpf_prog_info info = {};
+	__u32 len = sizeof(info);
+
+	if (bpf_prog_get_info_by_fd(fd, &info, &len))
+		return -errno;
+	return (int)info.type;
+}
+
 static void count_attach_progs(const struct shirudo_prog_spec *specs,
 			       __u32 nr_progs, __u32 *out)
 {
@@ -1258,6 +1268,17 @@ static int attach_and_pin_progs(const struct shirudo_loader_ctx *cx,
 
 		if (inner_fd <= 0) {
 			pr_err("loader produced no fd for prog %u", i);
+			rc = -EINVAL;
+			goto out;
+		}
+		/*
+		 * The role is unsigned metadata: one that would pin an
+		 * attachable program unattached is refused by its type.
+		 */
+		if (spec->role != SHIRUDO_UPATCH_PROG_ROLE_ATTACH &&
+		    prog_type(inner_fd) != BPF_PROG_TYPE_SYSCALL) {
+			pr_err("prog %u is not a syscall program, as its role "
+			       "needs", i);
 			rc = -EINVAL;
 			goto out;
 		}
@@ -1897,6 +1918,32 @@ static int upatch_apply(const char *path, bool verify_only,
 
 	pr_info("loader ok, retval=%d (maps=%u progs=%u)", (__s32)retval,
 		u.hdr.nr_maps, u.hdr.nr_progs);
+
+	/*
+	 * The counts the descriptors are read by are the header's, which
+	 * the signature does not cover. The loader writes a descriptor for
+	 * every map and program it made into a context that starts zeroed,
+	 * so a byte written past the ones the header counts means it
+	 * understates them, and a load read that way would attach less
+	 * than it measures.
+	 */
+	{
+		size_t tail = prog_desc_off + (size_t)u.hdr.nr_progs *
+			      sizeof(struct shirudo_prog_desc), i;
+
+		for (i = tail; i < ctx_sz; i++) {
+			if (((const __u8 *)cx)[i])
+				break;
+		}
+		if (i < ctx_sz) {
+			pr_err("upatch: the loader made more maps or programs "
+			       "than the header counts; refusing");
+			rep_fail(rep, "payload_load", "parser_rejected", 0,
+				 "header counts understate the loader's");
+			rc = 1;
+			goto out;
+		}
+	}
 
 	/*
 	 * Without a pinned link a program detaches when this one-shot CLI
