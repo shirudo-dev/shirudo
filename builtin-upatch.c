@@ -2237,21 +2237,27 @@ out:
 
 static int append_json_record(const char *path, const char *json, size_t len)
 {
+	int fd, tries, rc = 0;
+	off_t original_size;
 	struct stat st;
 	char last;
-	off_t original_size;
-	int fd, rc = 0;
 
 	if (!path || !path[0] || !json)
 		return -EINVAL;
-	fd = open(path, O_RDWR | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+	/*
+	 * The records carry every user's execs, lookups and connections, and
+	 * a reader holding a lock on the file must not stall the export.
+	 */
+	fd = open(path, O_RDWR | O_CREAT | O_APPEND | O_CLOEXEC | O_NOFOLLOW,
+		  0600);
 	if (fd < 0)
 		return -errno;
-	while (flock(fd, LOCK_EX) != 0) {
-		if (errno != EINTR) {
-			rc = -errno;
+	for (tries = 0; flock(fd, LOCK_EX | LOCK_NB) != 0; tries++) {
+		if ((errno != EWOULDBLOCK && errno != EINTR) || tries == 100) {
+			rc = errno == EWOULDBLOCK ? -EBUSY : -errno;
 			goto out;
 		}
+		usleep(50 * 1000);
 	}
 	if (fstat(fd, &st) != 0) {
 		rc = -errno;
