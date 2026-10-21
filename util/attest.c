@@ -1002,6 +1002,16 @@ int attest_verify(const char *evidence, size_t len,
 	    ct_eq(expected_name, p->init.name, SHIRUDO_TPM_NAME_LEN),
 	    "register: public area is bound to PCRs %u and %u as recorded",
 	    p->init.pcr, p->init.phase_pcr);
+	/*
+	 * The index and the PCRs are the target's word too: an index of
+	 * its choosing, bound to the resettable PCRs, would carry a history
+	 * of its choosing past every check above.
+	 */
+	say(&rep, reg_index == SHIRUDO_NV_INDEX &&
+	    p->init.pcr == SHIRUDO_CHAIN_PCR &&
+	    p->init.phase_pcr == SHIRUDO_CHAIN_PHASE_PCR,
+	    "register: index 0x%08X bound to PCRs %u and %u, shirudo's",
+	    SHIRUDO_NV_INDEX, SHIRUDO_CHAIN_PCR, SHIRUDO_CHAIN_PHASE_PCR);
 	for (bit = 0; bit < 24; bit++) {
 		const __u8 *held;
 

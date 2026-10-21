@@ -427,7 +427,9 @@ checks, in order:
    bound to that record's ``pcr_before`` and ``phase_before`` must
    have, computed in software from the handle, the attributes with
    ``TPMA_NV_WRITTEN``, the policy and the size, equals both the
-   certified name and the recorded one.  Every ``--expect-bind-pcr``
+   certified name and the recorded one, and the handle and the two
+   PCRs are shirudo's, ``0x01818E00``, 9 and 11, whatever the document
+   lists.  Every ``--expect-bind-pcr``
    value equals the recorded one for that PCR, so the operator pins
    the ``enter-initrd`` phase value from the UKI, and
    ``--require-initrd`` fails unless the record says the binding was
