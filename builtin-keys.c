@@ -505,6 +505,14 @@ static int check_cert_algorithm(const __u8 *der, size_t der_sz,
  * right now, not only one on disk, when the live target's set is the
  * one being extended.
  */
+static bool same_dir(const char *a, const char *b)
+{
+	struct stat sa, sb;
+
+	return stat(a, &sa) == 0 && stat(b, &sb) == 0 &&
+	       sa.st_dev == sb.st_dev && sa.st_ino == sb.st_ino;
+}
+
 static int check_voucher_live(const struct shirudo_trusted_set *set,
 			      const __u8 voucher[32])
 {
@@ -622,7 +630,7 @@ static int keys_add(int argc, const char **argv)
 		goto out;
 	}
 	hex_encode(by, 32, by_hex);
-	if (!strcmp(keys_dir, SHIRUDO_KEYS_DIR)) {
+	if (same_dir(keys_dir, SHIRUDO_KEYS_DIR)) {
 		rc = check_voucher_live(&set, by);
 		if (rc) {
 			pr_err("keys add: the vouching certificate %s is not "
