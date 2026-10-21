@@ -813,6 +813,8 @@ static int unpin_stale(void)
 		SHIRUDO_MOVE_MOUNT_LINK_PIN,
 		SHIRUDO_SB_MOUNT_LINK_PIN,
 		SHIRUDO_SB_REMOUNT_LINK_PIN,
+		SHIRUDO_FILE_IOCTL_LINK_PIN,
+		SHIRUDO_FILE_IOCTL_COMPAT_LINK_PIN,
 		SHIRUDO_LSM_BPF_MAP_LINK_PIN,
 		SHIRUDO_LSM_PROG_LOAD_LINK_PIN,
 	};
@@ -843,11 +845,14 @@ static int init_lsm(bool attach_filesystem_seal, bool anchored)
 	static const struct {
 		const char	*prog;
 		const char	*pin;
-	} mount_hooks[] = {
+	} guard_hooks[] = {
 		{ "shirudo_lsm_sb_umount",  SHIRUDO_SB_UMOUNT_LINK_PIN },
 		{ "shirudo_lsm_move_mount", SHIRUDO_MOVE_MOUNT_LINK_PIN },
 		{ "shirudo_lsm_sb_mount",   SHIRUDO_SB_MOUNT_LINK_PIN },
 		{ "shirudo_lsm_sb_remount", SHIRUDO_SB_REMOUNT_LINK_PIN },
+		{ "shirudo_lsm_file_ioctl", SHIRUDO_FILE_IOCTL_LINK_PIN },
+		{ "shirudo_lsm_file_ioctl_compat",
+		  SHIRUDO_FILE_IOCTL_COMPAT_LINK_PIN },
 	};
 	static const struct {
 		const char	*prog;
@@ -856,7 +861,7 @@ static int init_lsm(bool attach_filesystem_seal, bool anchored)
 		{ "shirudo_lsm_task_prctl", SHIRUDO_TASK_PRCTL_LINK_PIN },
 	};
 	struct bpf_link *prctl_links[ARRAY_SIZE(prctl_hooks)] = {};
-	struct bpf_link *mount_links[ARRAY_SIZE(mount_hooks)] = {};
+	struct bpf_link *guard_links[ARRAY_SIZE(guard_hooks)] = {};
 	const struct shirudo_embedded_bpf *blob = bpf2_blob();
 	struct bpf_program *p_bpf, *p_bpf_map, *p_unlink, *p_setx, *p_rmx;
 	struct bpf_program *p_pload, *p_rename;
@@ -1094,22 +1099,23 @@ static int init_lsm(bool attach_filesystem_seal, bool anchored)
 	}
 
 	/*
-	 * With the other bpffs guards, so the mount is immutable before
-	 * enforcement goes live.
+	 * With the other bpffs guards, so the mount is immutable and no
+	 * program can be put on a perf event by ioctl before enforcement
+	 * goes live.
 	 */
-	for (i = 0; i < (int)ARRAY_SIZE(mount_hooks); i++) {
+	for (i = 0; i < (int)ARRAY_SIZE(guard_hooks); i++) {
 		struct bpf_program *p;
 
-		p = bpf_object__find_program_by_name(obj, mount_hooks[i].prog);
+		p = bpf_object__find_program_by_name(obj, guard_hooks[i].prog);
 		if (!p) {
 			pr_err("program %s missing in bpf2 object",
-			       mount_hooks[i].prog);
+			       guard_hooks[i].prog);
 			err = -ENOENT;
 			goto out;
 		}
-		err = attach_pin(p, mount_hooks[i].pin, &mount_links[i]);
+		err = attach_pin(p, guard_hooks[i].pin, &guard_links[i]);
 		if (err) {
-			pr_err("attach %s: %s", mount_hooks[i].prog,
+			pr_err("attach %s: %s", guard_hooks[i].prog,
 			       strerror(-err));
 			goto out;
 		}
@@ -1150,8 +1156,8 @@ out:
 		drop_link(prctl_links[i], err);
 	for (i = 0; i < (int)ARRAY_SIZE(seal_links); i++)
 		drop_link(seal_links[i], err);
-	for (i = 0; i < (int)ARRAY_SIZE(mount_links); i++)
-		drop_link(mount_links[i], err);
+	for (i = 0; i < (int)ARRAY_SIZE(guard_links); i++)
+		drop_link(guard_links[i], err);
 	bpf_object__close(seal_obj);
 	drop_link(link_bpf, err);
 	drop_link(link_bpf_map, err);

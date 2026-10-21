@@ -29,6 +29,7 @@
 #define PR_SET_MM		35
 #define PR_SET_MM_EXE_FILE	13
 #define PR_SET_MM_MAP		14
+#define PERF_EVENT_IOC_SET_BPF	0x40042408	/* _IOW('$', 8, __u32) */
 
 char _license[] SEC("license") = "Dual BSD/GPL";
 
@@ -149,6 +150,28 @@ int BPF_PROG(shirudo_lsm_bpf_prog_load, struct bpf_prog *prog,
 					   -EACCES);
 	}
 	return 0;
+}
+
+/*
+ * A perf event takes a program by ioctl, outside bpf(), so a signed
+ * kprobe program fetched by its id could be put on any other function.
+ */
+SEC("lsm/file_ioctl")
+int BPF_PROG(shirudo_lsm_file_ioctl, struct file *file, unsigned int cmd,
+	     unsigned long arg)
+{
+	if (cmd != PERF_EVENT_IOC_SET_BPF)
+		return 0;
+	return shirudo_self_or_deny(SHIRUDO_TAMPER_ATTACH);
+}
+
+SEC("lsm/file_ioctl_compat")
+int BPF_PROG(shirudo_lsm_file_ioctl_compat, struct file *file,
+	     unsigned int cmd, unsigned long arg)
+{
+	if (cmd != PERF_EVENT_IOC_SET_BPF)
+		return 0;
+	return shirudo_self_or_deny(SHIRUDO_TAMPER_ATTACH);
 }
 
 SEC("lsm/task_prctl")

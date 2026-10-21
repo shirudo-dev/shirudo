@@ -240,7 +240,9 @@ Everything else, including
 ``lsm/bpf_map`` denies writable map file descriptors when the caller's
 executable identity is not shirudo. Root can retrieve read-only map fds
 for observation, but direct map updates and writable mappings of arena
-maps are denied. The ``task_prctl`` hook denies
+maps are denied. ``lsm/file_ioctl`` leaves ``PERF_EVENT_IOC_SET_BPF``,
+which puts a program on a perf event outside ``bpf()``, to shirudo's
+own executable. The ``task_prctl`` hook denies
 ``PR_SET_MM_EXE_FILE`` and ``PR_SET_MM_MAP`` to callers whose executable
 identity is not the frozen Shirudo executable or its initrd copy. This
 also denies these two operations to checkpoint and restore tools. A

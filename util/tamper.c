@@ -39,7 +39,8 @@ static const struct {
 	[SHIRUDO_TAMPER_PROG_RUN] = { "ProgRun",
 		"test run of a program by another executable" },
 	[SHIRUDO_TAMPER_ATTACH] = { "ProgAttach",
-		"link or raw tracepoint attach by another executable" },
+		"link, raw tracepoint or perf event attach by another "
+		"executable" },
 	[SHIRUDO_TAMPER_OBJ_PIN] = { "ObjPin",
 		"pin of a BPF object by another executable" },
 	[SHIRUDO_TAMPER_BPF_CMD] = { "BpfCommand",
