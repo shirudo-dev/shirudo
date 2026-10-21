@@ -781,6 +781,13 @@ int bpm_tree_fetch_publication(struct bpm_oci_client *c,
 		if (rc)
 			goto out;
 		rc = bpm_oci_get_blob(c, url, layers[i].media, dst);
+		/*
+		 * Only a missing manifest means no publication; one that
+		 * names a blob the registry has lost is a broken one, and
+		 * tree append must not start over on top of it.
+		 */
+		if (rc == -ENOENT)
+			rc = -EBADMSG;
 		if (rc)
 			goto out;
 		if ((layers[i].size >= 0 && (__s64)dst->len != layers[i].size) ||
