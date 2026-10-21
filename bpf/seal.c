@@ -251,6 +251,16 @@ int BPF_PROG(shirudo_seal_ptrace_access_check,
 	return 0;
 }
 
+static __always_inline bool seal_is_exe(struct inode *inode)
+{
+	struct shirudo_sb_id *id;
+	__u32 zero = 0;
+
+	id = bpf_map_lookup_elem(&shirudo_bpffs_sb, &zero);
+	return id && BPF_CORE_READ(inode, i_sb, s_dev) == id->exe_dev &&
+	       BPF_CORE_READ(inode, i_ino) == id->exe_ino;
+}
+
 SEC("lsm.s/file_open")
 int BPF_PROG(shirudo_seal_file_open, struct file *file)
 {
@@ -272,6 +282,13 @@ int BPF_PROG(shirudo_seal_file_open, struct file *file)
 	}
 	if (!(BPF_CORE_READ(file, f_mode) & FMODE_WRITE))
 		return 0;
+	/*
+	 * Whoever cannot read the label passes seal_verdict(), and an ACL,
+	 * which no sleepable hook sees, can grant write without read: the
+	 * binary that is shirudo does not depend on the label.
+	 */
+	if (seal_is_exe(inode))
+		return seal_caller(SHIRUDO_TAMPER_SEAL_WRITE);
 	s = seal_scratch_get(task);
 	if (!s) /* cannot read the label */
 		return seal_caller(SHIRUDO_TAMPER_SEAL_WRITE);
@@ -364,16 +381,6 @@ int BPF_PROG(shirudo_seal_inode_unlink, struct inode *dir,
 	return seal_dentry(dentry, SHIRUDO_TAMPER_SEAL_UNLINK);
 }
 
-static __always_inline bool seal_is_exe(struct inode *inode)
-{
-	struct shirudo_sb_id *id;
-	__u32 zero = 0;
-
-	id = bpf_map_lookup_elem(&shirudo_bpffs_sb, &zero);
-	return id && BPF_CORE_READ(inode, i_sb, s_dev) == id->exe_dev &&
-	       BPF_CORE_READ(inode, i_ino) == id->exe_ino;
-}
-
 /*
  * The recorded executable may be renamed over, as a package upgrade
  * does; the new binary is not shirudo until init records it.
@@ -398,6 +405,10 @@ SEC("lsm.s/inode_setattr")
 int BPF_PROG(shirudo_seal_inode_setattr, struct mnt_idmap *idmap,
 	     struct dentry *dentry, struct iattr *attr)
 {
+	struct inode *inode = BPF_CORE_READ(dentry, d_inode);
+
+	if (inode && seal_is_exe(inode))
+		return seal_caller(SHIRUDO_TAMPER_SEAL_SETATTR);
 	return seal_dentry(dentry, SHIRUDO_TAMPER_SEAL_SETATTR);
 }
 
@@ -411,9 +422,16 @@ int BPF_PROG(shirudo_seal_inode_setxattr, struct mnt_idmap *idmap,
 	return seal_dentry(dentry, SHIRUDO_TAMPER_SEAL_XATTR);
 }
 
+/*
+ * The label itself is shirudo's to remove, whatever seal_dentry() can
+ * read: a caller with CAP_SYS_ADMIN and an fsuid that cannot read the
+ * inode would pass it, and nothing else would stand in the way.
+ */
 SEC("lsm.s/inode_removexattr")
 int BPF_PROG(shirudo_seal_inode_removexattr, struct mnt_idmap *idmap,
 	     struct dentry *dentry, const char *name)
 {
+	if (seal_is_label(name))
+		return seal_caller(SHIRUDO_TAMPER_SEAL_LABEL);
 	return seal_dentry(dentry, SHIRUDO_TAMPER_SEAL_XATTR);
 }

@@ -426,6 +426,19 @@ Each of these is known, documented and bounded; none is silent.
     ``init`` labels the tree.  Rename and link bring an existing inode
     in without creating one, so they bring it in unlabelled.
 
+15. The seal reads a file's label with the caller's own read
+    permission, and a caller that may not read the file is let through,
+    or every write-only open and every unlink of an unreadable file on
+    the host would be refused.  The label itself and the binary that is
+    shirudo do not depend on that read: only shirudo removes the label,
+    and only shirudo writes to or changes the attributes of its own
+    executable.  The rest of the tree does: root can give another uid
+    write access to a sealed file through an ACL, which no sleepable
+    LSM hook sees, and that uid, unable to read the file, can then write
+    it.  Closing this needs the kernel to let the BPF LSM read
+    ``security.bpf.*`` without the caller's permission, or a sleepable
+    ACL hook.
+
 Deferred mitigations
 ~~~~~~~~~~~~~~~~~~~~
 
