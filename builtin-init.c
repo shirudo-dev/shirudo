@@ -1336,35 +1336,45 @@ static int chain_extend_init(struct shirudo_measured_upatch *set, size_t n)
 	chain_init_event(cert_sha, set, n, tree_root, set_digest,
 			 init_digest);
 
+	/*
+	 * From the root file system the bind and its record go in under the
+	 * lock a measured operation takes, so that no operation started by
+	 * a timer lands between them.
+	 */
+	if (!initrd_mode) {
+		rc = eventlog_lock(true);
+		if (rc)
+			return rc;
+	}
 	rc = chain_init(init_digest, &info);
 	if (rc == -ENODEV) {
 		pr_err("tpm: not usable; shirudo requires a TPM 2.0 "
 		       "(tpm_error)");
-		return rc;
+		goto out;
 	}
 	if (rc == -EEXIST) {
 		pr_err("tpm: the register this boot recorded is gone or "
 		       "replaced; refusing to bind another before the next "
 		       "TPM reset (tampered)");
-		return rc;
+		goto out;
 	}
 	if (rc == -EACCES) {
 		pr_err("tpm: register 0x%08X cannot be bound (tpm_error); on "
 		       "a TPM with owner auth set, supply it via "
 		       "tpm.owner_auth in /etc/shirudo/shirudo.conf or "
 		       "SHIRUDO_TPM_OWNER_AUTH", SHIRUDO_NV_INDEX);
-		return rc;
+		goto out;
 	}
 	if (rc) {
 		pr_err("tpm: register extend failed -- chain NOT advanced "
 		       "while LSM active (tpm_error); operator must "
 		       "reconcile");
-		return rc;
+		goto out;
 	}
 	if (info.reused) {
 		pr_info("tpm: register already bound this boot; chain "
 			"unchanged (index 0x%08X)", SHIRUDO_NV_INDEX);
-		return 0;
+		goto out;
 	}
 
 	rc = append_init_event(set, n, cert_sha, set_digest, tree_root,
@@ -1372,7 +1382,7 @@ static int chain_extend_init(struct shirudo_measured_upatch *set, size_t n)
 	if (rc) {
 		pr_err("eventlog: append failed after extend -- chain/log "
 		       "desync; operator must reconcile");
-		return rc;
+		goto out;
 	}
 
 	pr_info("tpm: register bound in the %s and extended (index 0x%08X, "
@@ -1388,7 +1398,10 @@ static int chain_extend_init(struct shirudo_measured_upatch *set, size_t n)
 			"measures enter-initrd only for a measured UKI boot, so "
 			"a verifier cannot pin this binding to the initrd by it",
 			SHIRUDO_CHAIN_PHASE_PCR);
-	return 0;
+out:
+	if (!initrd_mode)
+		eventlog_unlock();
+	return rc;
 }
 
 static const struct shirudo_help_item init_options[] = {

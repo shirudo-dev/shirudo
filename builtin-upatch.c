@@ -2046,37 +2046,42 @@ static int upatch_chain_event(const char *tag, const char *type,
 		out_chain[0] = '\0';
 	chain_upatch_event(tag, name, payload, event);
 
+	rc = eventlog_lock(true);
+	if (rc)
+		return rc;
 	rc = chain_extend(event, chain);
 	if (rc == -ENODEV) {
 		pr_err("upatch %s: TPM/register unavailable (category: "
 		       "tpm_error) -- op done but NOT measured; shirudo "
 		       "requires the register init bound this boot", op);
-		return rc;
+		goto out;
 	}
 	if (rc == -EACCES) {
 		pr_err("upatch %s: register is not the one init bound "
 		       "(category: tampered) -- op done but NOT measured; "
 		       "operator must reconcile", op);
-		return rc;
+		goto out;
 	}
 	if (rc) {
 		pr_err("upatch %s: chain extend failed (category: tpm_error) "
 		       "-- op done but chain NOT advanced; operator must "
 		       "reconcile", op);
-		return rc;
+		goto out;
 	}
 	rc = append_upatch_event(type, name, payload, event, reason);
 	if (rc) {
 		pr_err("upatch %s: eventlog append failed after extend -- "
 		       "chain/log desync; operator must reconcile", op);
-		return rc;
+		goto out;
 	}
 	hex_encode(chain, 32, chain_hex);
 	if (out_chain)
 		memcpy(out_chain, chain_hex, sizeof(chain_hex));
 	pr_info("upatch %s: chain extended, value=%s", op, chain_hex);
 	pr_audit("upatch %s measured: name=%s chain=%s", op, name, chain_hex);
-	return 0;
+out:
+	eventlog_unlock();
+	return rc;
 }
 
 /*

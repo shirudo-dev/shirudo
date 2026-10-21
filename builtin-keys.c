@@ -735,6 +735,9 @@ static int measure_revoke(const struct shirudo_trusted_cert *c,
 	int rc;
 
 	chain_key_event("shirudo-key-revoke", c->sha256, event);
+	rc = eventlog_lock(true);
+	if (rc)
+		return rc;
 	rc = chain_extend(event, chain);
 	if (rc) {
 		pr_err("keys revoke: register %s (category: %s); the key is "
@@ -744,19 +747,21 @@ static int measure_revoke(const struct shirudo_trusted_cert *c,
 		       rc == -EACCES ? "is not the one init bound" :
 		       "extend failed",
 		       rc == -EACCES ? "tampered" : "tpm_error");
-		return rc;
+		goto out;
 	}
 	hex_encode(c->sha256, 32, sha_hex);
 	rc = append_key_event("key_revoke", fp_hex, sha_hex, event);
 	if (rc) {
 		pr_err("keys revoke: eventlog append failed after extend -- "
 		       "chain/log desync; operator must reconcile");
-		return rc;
+		goto out;
 	}
 	hex_encode(chain, 32, chain_hex);
 	pr_audit("key revoke measured: fingerprint=%s chain=%s", fp_hex,
 		 chain_hex);
-	return 0;
+out:
+	eventlog_unlock();
+	return rc;
 }
 
 /*

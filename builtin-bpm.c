@@ -1555,9 +1555,12 @@ static int tree_measure_operation(const struct shirudo_tree_operation *op,
 	int rc;
 
 	chain_tree_event(op->seq, operation_digest, event);
-	rc = chain_extend(event, chain);
+	rc = eventlog_lock(true);
 	if (rc)
 		return rc;
+	rc = chain_extend(event, chain);
+	if (rc)
+		goto out;
 
 	eventlog_timestamp(ts, sizeof(ts));
 	eventlog_boot_id(boot_id, sizeof(boot_id));
@@ -1581,9 +1584,10 @@ static int tree_measure_operation(const struct shirudo_tree_operation *op,
 	json_obj_close(&e);
 	json_kv_string(&e, "chain", chain_hex);
 	json_obj_close(&e);
-	if (e.err)
-		return e.err;
-	return eventlog_append(line);
+	rc = e.err ? e.err : eventlog_append(line);
+out:
+	eventlog_unlock();
+	return rc;
 }
 
 /*

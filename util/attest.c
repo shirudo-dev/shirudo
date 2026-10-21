@@ -170,9 +170,14 @@ int attest_evidence(const __u8 *nonce, size_t nonce_len,
 	    (pcr_mask & ~0x00FFFFFFu))
 		return -EINVAL;
 
-	rc = tpm_open(&tpm);
+	rc = eventlog_lock(false);
 	if (rc)
-		return -ENXIO;
+		return rc;
+	rc = tpm_open(&tpm);
+	if (rc) {
+		rc = -ENXIO;
+		goto out;
+	}
 	rc = tpm_nv_info(tpm, SHIRUDO_NV_INDEX, &nv);
 	if (rc)
 		goto out;
@@ -363,6 +368,7 @@ out:
 		tpm_key_flush(tpm, &ak);
 		tpm_close(tpm);
 	}
+	eventlog_unlock();
 	xfree(ek_cert, ek_cert ? EK_CERT_MAX : 0);
 	xfree(ek_b64, ek_b64_cap);
 	xfree(fw, fw_cap);

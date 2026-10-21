@@ -523,7 +523,7 @@ int cmd_status(int argc, const char **argv)
 	bool json_stdout = false, otel = false;
 	bool include_system = false, include_eventlog = false;
 	bool include_kernel_log = false, include_modules = false;
-	bool show_full = false;
+	bool show_full = false, locked;
 	__u32 kernel_log_lines = 10;
 	bool lsm_attached, keyring_present, is_operator, cert_present, is_target;
 	key_serial_t keyring_serial, keyring_pinned;
@@ -689,6 +689,7 @@ int cmd_status(int argc, const char **argv)
 		snprintf(nv_index, sizeof(nv_index), "0x%08X", SHIRUDO_NV_INDEX);
 		if (tpm_tcti(tcti, sizeof(tcti)))
 			strscpy(tcti, "?", sizeof(tcti));
+		locked = eventlog_lock(false) == 0;
 		chain_rc = chain_status(&cst);
 		if (chain_rc == 0 && !(cst.defined && cst.written))
 			chain_rc = -ENODEV;
@@ -721,6 +722,8 @@ int cmd_status(int argc, const char **argv)
 				ct_eq(cst.value, replay,
 				      sizeof(replay));
 		}
+		if (locked)
+			eventlog_unlock();
 	}
 
 	if (json) {
