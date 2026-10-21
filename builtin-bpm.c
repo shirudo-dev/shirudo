@@ -981,9 +981,22 @@ static int package_install(const struct bpm_source *s, const struct bpm_index_en
 			rc = -EKEYREJECTED;
 			goto out;
 		}
-		if (access(package_dir, F_OK) == 0) {
+		/*
+		 * The state names the installed version. A directory for
+		 * this one is what an install stopped before its state was
+		 * written left behind; its upatches are the ones this install
+		 * loads again, and loading what is loaded completes.
+		 */
+		if (old_path && strcmp(old_path, package_dir) == 0) {
 			rc = -EEXIST;
 			goto out;
+		}
+		if (access(package_dir, F_OK) == 0) {
+			pr_warn("bpm: removing %s, left by an install that did "
+				"not finish", package_dir);
+			rc = remove_tree(package_dir);
+			if (rc)
+				goto out;
 		}
 		extracted = true;
 		rc = bpm_pkg_extract(archive, package_dir);
@@ -1151,6 +1164,27 @@ out:
 	if (rc && extracted)
 		(void)remove_tree(package_dir);
 	return rc;
+}
+
+/* <dir>/<name>/<version> and the archive saved beside it. */
+static void retire_package(const char *path)
+{
+	char parent[PATH_MAX], bee[PATH_MAX];
+	const char *version, *name;
+
+	if (strscpy(parent, path, sizeof(parent)) < 0)
+		return;
+	version = strrchr(path, '/');
+	name = NULL;
+	if (version) {
+		parent[version - path] = '\0';
+		name = strrchr(parent, '/');
+	}
+	if (version && name &&
+	    strsprintf(bee, sizeof(bee), "%s/%s-%s.bee", parent, name + 1,
+		       version + 1) >= 0)
+		unlink(bee);
+	(void)remove_tree(path);
 }
 
 static int parse_package_ref(const char *raw, char *source, size_t ssz,
@@ -2468,16 +2502,24 @@ int cmd_bpm(int argc, const char **argv)
 	}
 	if (!strcmp(sub, "upgrade") && argc == 2) {
 		struct bpm_state_entry state[BPM_MAX_STATE];
-		int n_state, lock, rc, wrc, i;
+		int n_state, lock, rc, wrc, i, n_retired = 0;
+		char (*retired)[PATH_MAX];
 
 		if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
 			return bpm_fail("initialize curl", -EIO);
+		retired = xcalloc(BPM_MAX_STATE, sizeof(*retired));
+		if (!retired)
+			return bpm_fail("upgrade", -ENOMEM);
 		lock = with_bpm_lock();
-		if (lock < 0)
+		if (lock < 0) {
+			xfree(retired, BPM_MAX_STATE * sizeof(*retired));
 			return bpm_finish(-1, lock, "lock");
+		}
 		rc = state_read(state, &n_state);
-		if (rc)
+		if (rc) {
+			xfree(retired, BPM_MAX_STATE * sizeof(*retired));
 			return bpm_finish(lock, rc, "read state");
+		}
 		for (i = 0; i < n_state; i++) {
 			struct bpm_index_entry entries[BPM_MAX_ENTRIES], selected;
 			struct bpm_source source_cfg;
@@ -2512,10 +2554,16 @@ int cmd_bpm(int argc, const char **argv)
 				rc = -ENAMETOOLONG;
 				break;
 			}
+			strscpy(retired[n_retired++], state[i].path,
+				sizeof(retired[0]));
 			bpm_copy_string(state[i].path, sizeof(state[i].path), path);
 		}
 		/* Packages upgraded before a failure stay on record. */
 		wrc = state_write(state, n_state);
+		/* What the state no longer names would only fill the disk. */
+		for (i = 0; !wrc && i < n_retired; i++)
+			retire_package(retired[i]);
+		xfree(retired, BPM_MAX_STATE * sizeof(*retired));
 		if (rc)
 			return bpm_finish(lock, rc, "upgrade");
 		return bpm_finish(lock, wrc, "write state");
