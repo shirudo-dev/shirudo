@@ -14,12 +14,15 @@
 #
 # Sourced after a leading `cd "$(dirname "$0")"` in each test.
 
-. ./test-lib.sh
+INTEGRATION_TESTING_DIR=.
+[ -f "$INTEGRATION_TESTING_DIR/test-lib.sh" ] ||
+	INTEGRATION_TESTING_DIR=..
+. "$INTEGRATION_TESTING_DIR/test-lib.sh"
 
 # Binary under test (the one that init'd the host) and the operator-side
 # builder. Overridable for out-of-tree layouts.
 : "${SHIRUDO_BIN:=/usr/local/bin/shirudo}"
-: "${SHIRUDO_BUILD_BIN:=../tools/shirudo-build/shirudo-build}"
+: "${SHIRUDO_BUILD_BIN:=$INTEGRATION_TESTING_DIR/../tools/shirudo-build/shirudo-build}"
 
 # Skip the whole script unless every precondition holds.
 target_guard() {

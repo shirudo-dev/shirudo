@@ -25,9 +25,9 @@ for t in \
 	t1108-tpm-chain.sh \
 	t1111-upatch-get.sh \
 	t1114-uprobe-multi.sh \
-	t1115-map-export-all.sh \
-	t1116-otel-backend.sh \
-	t1117-otel-serialized-metric.sh \
+	otel/t1115-map-export-all.sh \
+	otel/t1116-otel-backend.sh \
+	otel/t1117-otel-serialized-metric.sh \
 	t1122-initrd.sh \
 	t1123-keys.sh \
 	tamperproof/t1121-bpf-keyring.sh \

@@ -26,8 +26,8 @@ this review.
 | UI-15 | Target rejects an artifact signed by an untrusted key | Covered | `t1200-target-fixtures.sh` | Keep the foreign-signed fixture rejection and valid non-Shirudo keyring denial. |
 | UI-16 | `upatch get` reads loaded source information from the kernel | Covered | `t1111-upatch-get.sh` | The current assertion checks that the loaded marker source appears in output. Detailed JSON and line-location assertions are not present. |
 | UI-17 | uprobe.multi verifies target identity and attaches all matched offsets | Covered | `t1114-uprobe-multi.sh` | Keep build-ID mismatch refusal, target/function status, and execution of both matched functions. |
-| UI-18 | `upatch map` emits detailed map JSON and appends NDJSON records | Covered | `t0008-upatch-serializer-pages.sh`, `t1115-map-export-all.sh`, `t1200-target-fixtures.sh` | Keep output-path validation, schema and per-map JSON checks. This row covers the upatch map interface, not exporter transport. |
-| UI-19 | Target executes a serializer and decodes its output | Covered | `t1117-otel-serialized-metric.sh` | Keep the serialized-counter fixture assertions for decoded values and cumulative metric fields; generic exporter behavior is outside this matrix. |
+| UI-18 | `upatch map` emits detailed map JSON and appends NDJSON records | Covered | `t0008-upatch-serializer-pages.sh`, `otel/t1115-map-export-all.sh`, `t1200-target-fixtures.sh` | Keep output-path validation, schema and per-map JSON checks. This row covers the upatch map interface, not exporter transport. |
+| UI-19 | Target executes a serializer and decodes its output | Covered | `otel/t1117-otel-serialized-metric.sh` | Keep the serialized-counter fixture assertions for decoded values and cumulative metric fields; generic exporter behavior is outside this matrix. |
 
 ## Review notes
 

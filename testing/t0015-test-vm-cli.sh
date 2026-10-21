@@ -900,6 +900,7 @@ test_expect_success 'make -C testing test runs the complete pipeline in order' '
 
 test_expect_success 'operator and target runners have disjoint explicit scopes' '
 	grep -q "for t in t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
+	grep -q "for t in otel/t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
 	! grep -q "t1101" ../testing/run-tests.sh &&
 	for test_name in \
 		t1200-target-fixtures.sh \
@@ -913,9 +914,9 @@ test_expect_success 'operator and target runners have disjoint explicit scopes' 
 		t1108-tpm-chain.sh \
 		t1111-upatch-get.sh \
 		t1114-uprobe-multi.sh \
-		t1115-map-export-all.sh \
-		t1116-otel-backend.sh \
-		t1117-otel-serialized-metric.sh \
+		otel/t1115-map-export-all.sh \
+		otel/t1116-otel-backend.sh \
+		otel/t1117-otel-serialized-metric.sh \
 		t1122-initrd.sh \
 		t1123-keys.sh \
 		t1124-keys-add.sh \

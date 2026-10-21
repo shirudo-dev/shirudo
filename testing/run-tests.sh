@@ -28,6 +28,19 @@ for t in t0[0-9][0-9][0-9]-*.sh; do
 	fi
 done
 
+for t in otel/t0[0-9][0-9][0-9]-*.sh; do
+	[ -e "$t" ] || continue
+	found=1
+	if sh "$t"; then
+		:
+	else
+		fail=$((fail + 1))
+		if [ -n "$SHIRUDO_TEST_SUITE_FAILURES_FILE" ]; then
+			printf '%s\n' "$t" >>"$SHIRUDO_TEST_SUITE_FAILURES_FILE" 2>/dev/null || :
+		fi
+	fi
+done
+
 for t in upatch/kernel-obs/dns/t0[0-9][0-9][0-9]-*.sh; do
 	[ -e "$t" ] || continue
 	found=1

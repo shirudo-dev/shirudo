@@ -5,7 +5,7 @@
 # t1117 -- serializer-to-OTLP metric coverage using a host-built fixture.
 
 cd "$(dirname "$0")"
-. ./integration-lib.sh
+. ../integration-lib.sh
 target_guard
 command -v python3 >/dev/null 2>&1 || test_skip_all "no python3"
 command -v systemctl >/dev/null 2>&1 || test_skip_all "no systemctl"
@@ -58,7 +58,7 @@ assert metrics["shirudo.serialized.bytes"]["sum"]["dataPoints"][0]["asInt"] == "
 PY
 
 test_expect_success 'serialized counters become cumulative OTLP metrics' '
-	python3 helper/otel-mock.py success "$WORK/otel.port" "$WORK/otel.body" "$WORK/otel.meta" &
+	python3 ../helper/otel-mock.py success "$WORK/otel.port" "$WORK/otel.body" "$WORK/otel.meta" &
 	SERVER=$!;
 	i=0; while test ! -s "$WORK/otel.port" && test "$i" -lt 100; do i=$((i+1)); sleep .1; done;
 	test -s "$WORK/otel.port" &&

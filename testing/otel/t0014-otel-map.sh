@@ -3,10 +3,10 @@
 # Copyright (c) 2026 Authors of shirudo
 
 cd "$(dirname "$0")"
-. ./test-lib.sh
+. ../test-lib.sh
 
-H=helper/test-otel-map
-S=../shirudo
+H=../helper/test-otel-map
+S=../../shirudo
 
 test_expect_success 'OTLP CLI options reject invalid combinations early' '
 	! "$S" upatch map --otel-retries=11 >/dev/null 2>&1 &&
@@ -113,7 +113,7 @@ assert p["startTimeUnixNano"] == "1544712660300000000"
 
 test_expect_success 'OTLP base URL always appends the selected signal path' '
 	rm -f otel.port otel.body otel.meta;
-	python3 helper/otel-mock.py success otel.port otel.body otel.meta &
+	python3 ../helper/otel-mock.py success otel.port otel.body otel.meta &
 	server=$!;
 	i=0; while test ! -s otel.port && test $i -lt 50; do i=$((i+1)); sleep .02; done &&
 	port=$(cat otel.port) &&
@@ -121,7 +121,7 @@ test_expect_success 'OTLP base URL always appends the selected signal path' '
 	wait $server &&
 	grep -q "\"path\": \"/base/v1/logs\"" otel.meta &&
 	rm -f otel.port otel.body otel.meta;
-	python3 helper/otel-mock.py success otel.port otel.body otel.meta &
+	python3 ../helper/otel-mock.py success otel.port otel.body otel.meta &
 	server=$!;
 	i=0; while test ! -s otel.port && test $i -lt 50; do i=$((i+1)); sleep .02; done &&
 	port=$(cat otel.port) &&
@@ -134,7 +134,7 @@ d=json.load(open("otel.body"))
 assert d["resourceMetrics"][0]["scopeMetrics"][0]["metrics"][0]["sum"]["dataPoints"][0]["asInt"] == "12"
 '\'' &&
 	rm -f otel.port otel.body otel.meta;
-	python3 helper/otel-mock.py success otel.port otel.body otel.meta &
+	python3 ../helper/otel-mock.py success otel.port otel.body otel.meta &
 	server=$!;
 	i=0; while test ! -s otel.port && test $i -lt 50; do i=$((i+1)); sleep .02; done &&
 	port=$(cat otel.port) &&
@@ -162,7 +162,7 @@ test_expect_success 'tenant IDs are validated after OTEL header decoding' '
 
 test_expect_success 'OTLP HTTP sends JSON, auth headers, gzip, and retries' '
 	rm -f otel.port otel.body otel.meta;
-	python3 helper/otel-mock.py retry otel.port otel.body otel.meta &
+	python3 ../helper/otel-mock.py retry otel.port otel.body otel.meta &
 	server=$!;
 	i=0; while test ! -s otel.port && test $i -lt 50; do i=$((i+1)); sleep .02; done &&
 	port=$(cat otel.port) &&
@@ -180,7 +180,7 @@ assert m == {"attempts":3,"path":"/v1/logs","authorization":"Bearer secret","con
 
 test_expect_success 'OTLP partial success is a non-retryable failure' '
 	rm -f otel.port otel.body otel.meta;
-	python3 helper/otel-mock.py partial otel.port otel.body otel.meta &
+	python3 ../helper/otel-mock.py partial otel.port otel.body otel.meta &
 	server=$!;
 	i=0; while test ! -s otel.port && test $i -lt 50; do i=$((i+1)); sleep .02; done &&
 	port=$(cat otel.port) &&
@@ -202,7 +202,7 @@ test_expect_success 'HTTPS verifies by default and --otel-insecure disables veri
 	openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
 		-subj /CN=localhost -addext subjectAltName=DNS:localhost \
 		-keyout otel.key -out otel.crt >/dev/null 2>&1;
-	python3 helper/otel-mock.py success otel.port otel.body otel.meta otel.crt otel.key &
+	python3 ../helper/otel-mock.py success otel.port otel.body otel.meta otel.crt otel.key &
 	server=$!;
 	i=0; while test ! -s otel.port && test $i -lt 50; do i=$((i+1)); sleep .02; done &&
 	port=$(cat otel.port) &&
@@ -210,7 +210,7 @@ test_expect_success 'HTTPS verifies by default and --otel-insecure disables veri
 		"$H" send-log "https://localhost:$port" 0 &&
 	wait $server &&
 	rm -f otel.port otel.body otel.meta;
-	python3 helper/otel-mock.py success otel.port otel.body otel.meta otel.crt otel.key &
+	python3 ../helper/otel-mock.py success otel.port otel.body otel.meta otel.crt otel.key &
 	server=$!;
 	i=0; while test ! -s otel.port && test $i -lt 50; do i=$((i+1)); sleep .02; done &&
 	port=$(cat otel.port) &&
@@ -222,7 +222,7 @@ test_expect_success 'HTTPS verifies by default and --otel-insecure disables veri
 
 test_expect_success '--otel=s3 uploads gzip JSON then emits a small reference event' '
 	rm -f s3.port s3.snapshot s3.log s3.meta;
-	python3 helper/otel-s3-mock.py success s3.port s3.snapshot s3.log s3.meta &
+	python3 ../helper/otel-s3-mock.py success s3.port s3.snapshot s3.log s3.meta &
 	server=$!;
 	i=0; while test ! -s s3.port && test $i -lt 50; do i=$((i+1)); sleep .02; done &&
 	port=$(cat s3.port) &&
@@ -267,7 +267,7 @@ assert len(open("s3.log","rb").read()) < 16384
 
 test_expect_success '--otel=s3 streams snapshots larger than the configured OTLP limit' '
 	rm -f s3.port s3.snapshot s3.log s3.meta;
-	python3 helper/otel-s3-mock.py success s3.port s3.snapshot s3.log s3.meta &
+	python3 ../helper/otel-s3-mock.py success s3.port s3.snapshot s3.log s3.meta &
 	server=$!;
 	i=0; while test ! -s s3.port && test $i -lt 50; do i=$((i+1)); sleep .02; done &&
 	port=$(cat s3.port) &&
@@ -291,7 +291,7 @@ assert len(open("s3.log","rb").read()) < 16384
 
 test_expect_success '--otel=s3 retries PUT and accepts a content-addressed duplicate' '
 	rm -f s3.port s3.snapshot s3.log s3.meta;
-	python3 helper/otel-s3-mock.py s3-retry s3.port s3.snapshot s3.log s3.meta &
+	python3 ../helper/otel-s3-mock.py s3-retry s3.port s3.snapshot s3.log s3.meta &
 	server=$!;
 	i=0; while test ! -s s3.port && test $i -lt 50; do i=$((i+1)); sleep .02; done &&
 	port=$(cat s3.port) &&
@@ -306,7 +306,7 @@ puts=[r for r in m["requests"] if r["method"] == "PUT"]
 assert m["put_attempts"] == 2 and puts[0]["path"] == puts[1]["path"]
 '\'' &&
 	rm -f s3.port s3.snapshot s3.log s3.meta;
-	python3 helper/otel-s3-mock.py exists s3.port s3.snapshot s3.log s3.meta &
+	python3 ../helper/otel-s3-mock.py exists s3.port s3.snapshot s3.log s3.meta &
 	server=$!;
 	i=0; while test ! -s s3.port && test $i -lt 50; do i=$((i+1)); sleep .02; done &&
 	port=$(cat s3.port) &&
@@ -318,7 +318,7 @@ assert m["put_attempts"] == 2 and puts[0]["path"] == puts[1]["path"]
 
 test_expect_success '--otel=s3 preserves upload-before-reference failure ordering' '
 	rm -f s3.port s3.snapshot s3.log s3.meta;
-	python3 helper/otel-s3-mock.py s3-fail s3.port s3.snapshot s3.log s3.meta &
+	python3 ../helper/otel-s3-mock.py s3-fail s3.port s3.snapshot s3.log s3.meta &
 	server=$!;
 	i=0; while test ! -s s3.port && test $i -lt 50; do i=$((i+1)); sleep .02; done &&
 	port=$(cat s3.port) &&
@@ -327,7 +327,7 @@ test_expect_success '--otel=s3 preserves upload-before-reference failure orderin
 		"$H" send-s3 "http://127.0.0.1:$port" 0 2>s3-fail.err &&
 	wait $server && test ! -e s3.log && ! grep -q secret s3-fail.err &&
 	rm -f s3.port s3.snapshot s3.log s3.meta;
-	python3 helper/otel-s3-mock.py otel-fail s3.port s3.snapshot s3.log s3.meta &
+	python3 ../helper/otel-s3-mock.py otel-fail s3.port s3.snapshot s3.log s3.meta &
 	server=$!;
 	i=0; while test ! -s s3.port && test $i -lt 50; do i=$((i+1)); sleep .02; done &&
 	port=$(cat s3.port) &&

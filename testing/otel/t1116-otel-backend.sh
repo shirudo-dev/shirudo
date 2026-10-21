@@ -5,7 +5,7 @@
 # t1116 -- systemd map-export service and timer coverage.
 
 cd "$(dirname "$0")"
-. ./integration-lib.sh
+. ../integration-lib.sh
 target_guard
 command -v python3 >/dev/null 2>&1 || test_skip_all "no python3"
 command -v systemctl >/dev/null 2>&1 || test_skip_all "no systemctl"

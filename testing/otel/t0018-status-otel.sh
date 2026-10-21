@@ -3,13 +3,13 @@
 # Copyright (c) 2026 Authors of shirudo
 
 cd "$(dirname "$0")"
-. ./test-lib.sh
+. ../test-lib.sh
 
-S=../shirudo
+S=../../shirudo
 
 test_expect_success 'status --otel sends a structured keepalive log' '
 	work=$(mktemp -d)
-	python3 helper/otel-mock.py success "$work/port" "$work/body" \
+	python3 ../helper/otel-mock.py success "$work/port" "$work/body" \
 		"$work/meta" &
 	server=$!
 	trap "kill $server 2>/dev/null || true; wait $server 2>/dev/null || true; rm -rf $work" EXIT
@@ -55,7 +55,7 @@ PY
 
 test_expect_success 'status --json --otel keeps JSON output available' '
 	work=$(mktemp -d)
-	python3 helper/otel-mock.py success "$work/port" "$work/body" \
+	python3 ../helper/otel-mock.py success "$work/port" "$work/body" \
 		"$work/meta" &
 	server=$!
 	trap "kill $server 2>/dev/null || true; wait $server 2>/dev/null || true; rm -rf $work" EXIT

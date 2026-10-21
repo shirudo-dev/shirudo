@@ -3,7 +3,7 @@
 # Copyright (c) 2026 Authors of shirudo
 
 cd "$(dirname "$0")"
-. ./integration-lib.sh
+. ../integration-lib.sh
 target_guard
 command -v python3 >/dev/null 2>&1 || test_skip_all "no python3"
 FIXTURES=${SHIRUDO_TEST_FIXTURES_DIR:?target fixture directory is not set}

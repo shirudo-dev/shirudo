@@ -3,10 +3,10 @@
 # Copyright (c) 2026 Authors of shirudo
 
 cd "$(dirname "$0")"
-. ./test-lib.sh
+. ../test-lib.sh
 
 test_expect_success 'map export configuration validates defaults and values' '
-	./helper/test-config
+	../helper/test-config
 '
 
 test_done
