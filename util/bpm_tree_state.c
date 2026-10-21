@@ -528,12 +528,44 @@ int tree_state_write(const struct shirudo_tree_state *s)
 	return tree_atomic_write(SHIRUDO_BPM_TREE_STATE_PATH, buf, e.len);
 }
 
+/*
+ * Each line goes in with one write, newline included, so a file that
+ * does not end in one ends in an append a crash cut short. The chain
+ * runs over every line and cannot pass over it: the torn tail goes,
+ * and the operation it recorded is applied again.
+ */
+static int drop_torn_tail(int fd, off_t size, off_t *kept)
+{
+	char tail[4096];
+	off_t from;
+	ssize_t n;
+
+	*kept = size;
+	if (size == 0)
+		return 0;
+	from = size > (off_t)sizeof(tail) ? size - (off_t)sizeof(tail) : 0;
+	n = pread(fd, tail, (size_t)(size - from), from);
+	if (n != size - from)
+		return n < 0 ? -errno : -EIO;
+	if (tail[n - 1] == '\n')
+		return 0;
+	while (n > 0 && tail[n - 1] != '\n')
+		n--;
+	if (n == 0 && from > 0)
+		return -EBADMSG;
+	*kept = from + n;
+	pr_warn("tree: dropping a torn record at the end of %s",
+		SHIRUDO_BPM_TREE_EVENTLOG_PATH);
+	return ftruncate(fd, *kept) != 0 ? -errno : 0;
+}
+
 int tree_event_append(__s64 seq, const char *operation_digest,
 		      const __u8 projection_root[32])
 {
 	char buf[1024], root[65];
-	struct shirudo_json_emit e = { .buf = buf, .cap = sizeof(buf) };
+	struct shirudo_json_emit e = { .buf = buf, .cap = sizeof(buf) - 1 };
 	struct stat st;
+	off_t kept;
 	int fd, rc;
 
 	if (!operation_digest || strncmp(operation_digest, "sha256:", 7) ||
@@ -552,7 +584,7 @@ int tree_event_append(__s64 seq, const char *operation_digest,
 	if (rc)
 		return rc;
 	fd = seal_open(SHIRUDO_BPM_TREE_EVENTLOG_PATH,
-		       O_WRONLY | O_CREAT | O_APPEND, 0600);
+		       O_RDWR | O_CREAT | O_APPEND, 0600);
 	if (fd < 0)
 		return fd;
 	/* A partial line would fail every later replay; roll it back. */
@@ -566,12 +598,14 @@ int tree_event_append(__s64 seq, const char *operation_digest,
 		rc = -errno;
 		goto out;
 	}
-	rc = write_all(fd, buf, e.len);
-	if (!rc)
-		rc = write_all(fd, "\n", 1);
+	rc = drop_torn_tail(fd, st.st_size, &kept);
+	if (rc)
+		goto out;
+	buf[e.len] = '\n';
+	rc = write_all(fd, buf, e.len + 1);
 	if (!rc && fsync(fd))
 		rc = -errno;
-	if (rc && ftruncate(fd, st.st_size))
+	if (rc && ftruncate(fd, kept))
 		pr_warn("tree: could not roll back a partial append to %s: %s",
 			SHIRUDO_BPM_TREE_EVENTLOG_PATH, strerror(errno));
 out:
