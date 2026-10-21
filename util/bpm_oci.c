@@ -165,7 +165,7 @@ static int base64_value(int c)
 static int decode_basic(const char *in, char *user, size_t usz,
 			char *pass, size_t psz)
 {
-	unsigned char out[1024];
+	unsigned char out[BPM_OCI_BASIC_RAW_SIZE];
 	size_t n = 0, i = 0;
 	int val = 0, bits = -8, x;
 	char *colon;
@@ -203,7 +203,7 @@ static int encode_basic(const char *user, const char *pass,
 {
 	static const char alphabet[] =
 		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-	char raw[1024];
+	char raw[BPM_OCI_BASIC_RAW_SIZE];
 	size_t len, need, i, o = 0;
 
 	if (snprintf(raw, sizeof(raw), "%s:%s", user, pass) >= (int)sizeof(raw))
@@ -455,7 +455,8 @@ static int get_bearer_token(struct bpm_oci_client *c, const char *challenge)
 	const char *provided_token = getenv("BPM_OCI_BEARER_TOKEN");
 	char realm[PATH_MAX] = {}, service[256] = {}, scope[512] = {};
 	char url[PATH_MAX * 2];
-	char basic[2048], auth_header[sizeof(basic) + 32];
+	char basic[BPM_OCI_BASIC_ENCODED_SIZE];
+	char auth_header[BPM_OCI_BASIC_HEADER_SIZE];
 	CURL *curl = NULL;
 	struct curl_slist *headers = NULL;
 	struct bpm_http_response r = {};
@@ -551,7 +552,7 @@ int bpm_oci_get_memory(struct bpm_oci_client *c, const char *url,
 			   const char *accept, struct bpm_buffer *out)
 {
 	struct bpm_http_response r = {};
-	char auth[8192];
+	char auth[BPM_OCI_AUTH_VALUE_SIZE];
 	int rc;
 
 	rc = curl_once(c, "GET", url, accept, NULL, &r, NULL);
@@ -562,7 +563,7 @@ int bpm_oci_get_memory(struct bpm_oci_client *c, const char *url,
 			if (rc) goto out;
 			snprintf(auth, sizeof(auth), "Bearer %s", c->token);
 		} else if (!strncasecmp(r.www_auth, "Basic", 5) && c->username[0]) {
-			char encoded[2048];
+			char encoded[BPM_OCI_BASIC_ENCODED_SIZE];
 			rc = encode_basic(c->username, c->password, encoded, sizeof(encoded));
 			if (rc) goto out;
 			snprintf(auth, sizeof(auth), "Basic %s", encoded);
@@ -582,7 +583,7 @@ int bpm_oci_get_file(struct bpm_oci_client *c, const char *url,
 {
 	struct bpm_http_response r = {};
 	FILE *fp;
-	char auth[8192];
+	char auth[BPM_OCI_AUTH_VALUE_SIZE];
 	int rc;
 
 	fp = fopen(path, "wb");
@@ -603,7 +604,7 @@ int bpm_oci_get_file(struct bpm_oci_client *c, const char *url,
 		}
 	} else if (!rc && r.status == 401 && r.www_auth[0] &&
 		   !strncasecmp(r.www_auth, "Basic", 5) && c->username[0]) {
-		char encoded[2048];
+		char encoded[BPM_OCI_BASIC_ENCODED_SIZE];
 		fclose(fp); unlink(path); fp = fopen(path, "wb");
 		if (!fp) {
 			rc = -errno;
@@ -634,7 +635,7 @@ static int bpm_oci_request(struct bpm_oci_client *c, const char *method,
 			   const char *content_type, const void *body,
 			   size_t body_len, struct bpm_http_response *r)
 {
-	char auth[8192] = {};
+	char auth[BPM_OCI_AUTH_VALUE_SIZE] = {};
 	int rc;
 
 	*r = (struct bpm_http_response){};
@@ -649,7 +650,7 @@ static int bpm_oci_request(struct bpm_oci_client *c, const char *method,
 				return rc;
 			snprintf(auth, sizeof(auth), "Bearer %s", c->token);
 		} else if (!strncasecmp(r->www_auth, "Basic", 5) && c->username[0]) {
-			char encoded[2048];
+			char encoded[BPM_OCI_BASIC_ENCODED_SIZE];
 
 			rc = encode_basic(c->username, c->password, encoded,
 					   sizeof(encoded));

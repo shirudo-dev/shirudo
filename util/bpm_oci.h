@@ -26,6 +26,16 @@ struct shirudo_json_emit;
 #define BPM_MAX_ENTRIES 512
 #define BPM_MAX_STATE 256
 #define BPM_MAX_HTTP_BODY (256u * 1024u * 1024u)
+#define BPM_OCI_USERNAME_SIZE 256
+#define BPM_OCI_PASSWORD_SIZE 4096
+#define BPM_OCI_TOKEN_SIZE 4096
+#define BPM_OCI_BASIC_RAW_SIZE (BPM_OCI_USERNAME_SIZE + BPM_OCI_PASSWORD_SIZE)
+#define BPM_OCI_BASIC_ENCODED_SIZE \
+	(4u * ((BPM_OCI_BASIC_RAW_SIZE + 2u) / 3u) + 1u)
+#define BPM_OCI_AUTH_VALUE_SIZE \
+	(BPM_OCI_BASIC_ENCODED_SIZE + sizeof("Basic "))
+#define BPM_OCI_BASIC_HEADER_SIZE \
+	(BPM_OCI_AUTH_VALUE_SIZE + sizeof("Authorization: ") - 1u)
 #define BPM_INDEX_REPOSITORY "shirudo/bpm-index"
 #define BPM_INDEX_TAG "stable"
 #define BPM_INDEX_MEDIA "application/vnd.shirudo.bpm.index.v1+json"
@@ -59,9 +69,9 @@ struct bpm_http_response {
 struct bpm_oci_client {
 	char base_url[BPM_MAX_ENDPOINT];
 	char registry[BPM_MAX_ENDPOINT];
-	char username[256];
-	char password[256];
-	char token[4096];
+	char username[BPM_OCI_USERNAME_SIZE];
+	char password[BPM_OCI_PASSWORD_SIZE];
+	char token[BPM_OCI_TOKEN_SIZE];
 	char ca_file[PATH_MAX];
 	struct shirudo_tls_ca tls_ca;
 };
