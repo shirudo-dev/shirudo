@@ -106,6 +106,10 @@ static int validate_bounds(const struct shirudo_upatch_header *h, size_t n)
 		return -EINVAL;
 	if (h->loader_insns_len == 0 || h->signature_len == 0)
 		return -EINVAL;
+	/* They size the loader's context, and the signature leaves them out. */
+	if (h->nr_maps > SHIRUDO_UPATCH_OBJECTS_MAX ||
+	    h->nr_progs > SHIRUDO_UPATCH_OBJECTS_MAX)
+		return -E2BIG;
 	return 0;
 }
 
@@ -351,6 +355,26 @@ int upatch_select(const struct dirent *e)
 	return n > 7 && strcmp(e->d_name + n - 7, ".upatch") == 0;
 }
 
+/*
+ * A serializer is pinned under its map's name, which comes from the
+ * unsigned metadata: a BPF object name, never a path.
+ */
+static bool map_name_valid(const char *name)
+{
+	size_t i;
+
+	if (!name[0] || name[0] == '.')
+		return false;
+	for (i = 0; name[i]; i++) {
+		char c = name[i];
+
+		if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+		      (c >= '0' && c <= '9') || c == '_' || c == '.'))
+			return false;
+	}
+	return true;
+}
+
 void prog_specs_free(struct shirudo_prog_spec *specs, __u32 nr_progs)
 {
 	__u32 i;
@@ -422,7 +446,7 @@ int prog_specs_parse(const void *metadata, __u32 metadata_len,
 			if (prog.kind || prog.offset || prog.target[0])
 				goto out;
 			if (!memchr(prog.map, '\0', sizeof(prog.map)) ||
-			    prog.map[0] == '\0')
+			    !map_name_valid(prog.map))
 				goto out;
 			spec->role = role;
 			memcpy(spec->map, prog.map, sizeof(spec->map));
