@@ -103,6 +103,9 @@ int chain_init(const __u8 event[SHIRUDO_CHAIN_DIGEST_LEN],
 int chain_extend(const __u8 event[SHIRUDO_CHAIN_DIGEST_LEN],
 		 __u8 out_chain[SHIRUDO_CHAIN_DIGEST_LEN]);
 
+/* chain_extend()'s -ENODEV and -EACCES, without extending. */
+int chain_ready(void);
+
 /* The live value; -ENODEV when no register is written this boot. */
 int chain_read(__u8 out[SHIRUDO_CHAIN_DIGEST_LEN]);
 

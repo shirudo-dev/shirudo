@@ -184,10 +184,14 @@ The detach itself is userspace: shirudo reads the
 ``security.bpf.shirudo.payload`` xattr of the live pin, compares it
 constant-time against the directive's expected payload, and refuses
 with ``payload_mismatch`` on disagreement or when the xattr cannot be
-read.  Otherwise it unlinks the map pins, the link pin and the pin
-directory, removes the persisted ``.upatch``, and extends the register
-with ``SHA256("shirudo-unload\0" || payload_sha256 || name)``.  A
-missing pin is ``already_unloaded`` and extends nothing.  The kernel's
+read.  Otherwise it extends the register with
+``SHA256("shirudo-unload\0" || payload_sha256 || name)``, then unlinks
+the map pins, the link pin and the pin directory and removes the
+persisted ``.upatch``: an unload that fails midway leaves the upatch
+attached and recorded as gone, never detached and recorded as loaded.
+A missing pin is ``already_unloaded`` and extends nothing.  Load,
+unload and purge all check that the register init bound this boot is
+on the TPM before they change anything.  The kernel's
 ``bpf_sys_bpf()`` allowlist has no detach or unlink command, which is
 why the detach is not inside the signed BPF; what that costs the trust
 model is residual risk 1 in the threat model.

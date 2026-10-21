@@ -383,6 +383,31 @@ out:
 	return rc;
 }
 
+/*
+ * What chain_extend() will need, checked before an operation changes
+ * anything: a missing TPM or a foreign register then refuses it rather
+ * than leaving it done and unmeasured.
+ */
+int chain_ready(void)
+{
+	struct shirudo_eventlog_init rec;
+	struct shirudo_tpm *tpm = NULL;
+	struct tpm_nv_info nv;
+	int rc;
+
+	if (eventlog_boot_init(&rec))
+		return -ENODEV;
+	if (tpm_open(&tpm))
+		return -ENODEV;
+	rc = tpm_nv_info(tpm, SHIRUDO_NV_INDEX, &nv);
+	if (!rc && (!nv.defined || !nv.written))
+		rc = -ENODEV;
+	else if (!rc && !name_equals(&nv, rec.name))
+		rc = -EACCES;
+	tpm_close(tpm);
+	return rc;
+}
+
 int chain_read(__u8 out[32])
 {
 	struct shirudo_tpm *tpm = NULL;

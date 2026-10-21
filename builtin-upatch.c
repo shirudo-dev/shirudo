@@ -2028,6 +2028,27 @@ static int append_upatch_event(const char *type, const char *name,
 	return eventlog_append(buf);
 }
 
+static int register_ready(struct shirudo_op_report *rep, const char *op)
+{
+	int rc = chain_ready();
+
+	if (!rc)
+		return 0;
+	if (rc == -EACCES) {
+		pr_err("upatch %s: register is not the one init bound "
+		       "(category: tampered); refusing before anything "
+		       "changes", op);
+		rep_fail(rep, "pre_flight", "tampered", EACCES,
+			 "register is not the one init bound");
+	} else {
+		pr_err("upatch %s: TPM/register unavailable (category: "
+		       "tpm_error); refusing before anything changes", op);
+		rep_fail(rep, "pre_flight", "tpm_error", -rc,
+			 "TPM/register unavailable");
+	}
+	return -1;
+}
+
 /*
  * Each operator operation is its own register event, where boot restore
  * coalesces into one. A missing TPM or register is an error, never an
@@ -2445,6 +2466,8 @@ static int cmd_upatch_load(int argc, const char **argv)
 			 "unsafe upatch name");
 		goto done;
 	}
+	if (register_ready(&rep, "load") != 0)
+		goto done;
 
 	if (upatch_apply(file, false, &rep) != 0)
 		goto done;
@@ -2525,8 +2548,10 @@ static int cmd_upatch_unload(int argc, const char **argv)
 	__u8 payload[SHIRUDO_UPATCH_PAYLOAD_HASH_LEN] = {};
 	struct shirudo_upatch u;
 	struct shirudo_op_report rep = { .op = "upatch_unload", .phase = "done" };
+	__u8 live[SHIRUDO_UPATCH_PAYLOAD_HASH_LEN];
+	__u8 zero[SHIRUDO_UPATCH_PAYLOAD_HASH_LEN] = {};
 	bool no_precheck, no_version_check, bound;
-	int rc, ret = 1;
+	int rc, xrc, ret = 1;
 
 	for (int i = 1; i < argc; i++) {
 		if (is_help(argv[i])) {
@@ -2621,45 +2646,12 @@ static int cmd_upatch_unload(int argc, const char **argv)
 	}
 
 	/*
-	 * The live value is the xattr bpf2 guards; the expected one is the
-	 * directive's unsigned metadata, so this catches an honest
-	 * substitution, not an attacker editing both. A pin whose value
-	 * cannot be read is refused; no pin at all is the already-unloaded
-	 * case below.
+	 * The live value is the xattr bpf2 guards, the expected one the
+	 * directive's signed .rodata. A pin whose value cannot be read is
+	 * refused; no pin at all is already unloaded.
 	 */
-	{
-		__u8 zero[SHIRUDO_UPATCH_PAYLOAD_HASH_LEN] = {};
-		__u8 live[SHIRUDO_UPATCH_PAYLOAD_HASH_LEN];
-		int xrc;
-
-		if (memcmp(payload, zero, sizeof(payload)) == 0) {
-			pr_warn("upatch unload: directive carries no expected "
-				"payload; skipping payload_mismatch check");
-		} else {
-			xrc = get_pin_payload(name, live);
-			if (xrc == 0) {
-				if (!ct_eq(live, payload, sizeof(payload))) {
-					pr_err("upatch unload: payload_mismatch -- the "
-					       "upatch loaded under '%s' is not what the "
-					       "directive expects; refusing", name);
-					rep_fail(&rep, "pin", "payload_mismatch", EPERM,
-						 "loaded payload does not match directive");
-					goto done;
-				}
-				pr_info("upatch unload: payload matches for '%s'", name);
-			} else if (xrc != -ENOENT) {
-				pr_err("upatch unload: cannot read the payload "
-				       "recorded for '%s': %s; refusing", name,
-				       strerror(-xrc));
-				rep_fail(&rep, "pin", "payload_mismatch", -xrc,
-					 "payload xattr unreadable");
-				goto done;
-			}
-		}
-	}
-
-	rc = remove_pin_dir(name);
-	if (rc == -ENOENT) {
+	xrc = get_pin_payload(name, live);
+	if (xrc == -ENOENT) {
 		if (unlink(persisted) != 0 && errno != ENOENT)
 			pr_warn("upatch unload: could not remove %s: %s",
 				persisted, strerror(errno));
@@ -2672,9 +2664,44 @@ static int cmd_upatch_unload(int argc, const char **argv)
 		ret = 0;
 		goto done;
 	}
-	if (rc) {
-		pr_err("upatch unload: failed to remove pin for %s: %s",
-		       name, strerror(-rc));
+	if (memcmp(payload, zero, sizeof(payload)) == 0) {
+		pr_warn("upatch unload: directive carries no expected "
+			"payload; skipping payload_mismatch check");
+	} else if (xrc) {
+		pr_err("upatch unload: cannot read the payload recorded for "
+		       "'%s': %s; refusing", name, strerror(-xrc));
+		rep_fail(&rep, "pin", "payload_mismatch", -xrc,
+			 "payload xattr unreadable");
+		goto done;
+	} else if (!ct_eq(live, payload, sizeof(payload))) {
+		pr_err("upatch unload: payload_mismatch -- the upatch loaded "
+		       "under '%s' is not what the directive expects; "
+		       "refusing", name);
+		rep_fail(&rep, "pin", "payload_mismatch", EPERM,
+			 "loaded payload does not match directive");
+		goto done;
+	} else {
+		pr_info("upatch unload: payload matches for '%s'", name);
+	}
+
+	/*
+	 * Measured before the detach: an unload that fails after the extend
+	 * leaves the shield in place and on record as gone, never the other
+	 * way round.
+	 */
+	if (register_ready(&rep, "unload") != 0)
+		goto done;
+	if (upatch_chain_event("shirudo-unload", "upatch_unload", "unload",
+			       name, payload, NULL, rep.chain_after) != 0) {
+		rep_fail(&rep, "tpm_extend", "tpm_error", EIO,
+			 "chain extend failed");
+		goto done;
+	}
+
+	rc = remove_pin_dir(name);
+	if (rc && rc != -ENOENT) {
+		pr_err("upatch unload: measured, but failed to remove pin for "
+		       "%s: %s", name, strerror(-rc));
 		rep_fail(&rep, "pin", "detach_failed", -rc,
 			 "pin removal failed");
 		goto done;
@@ -2685,12 +2712,6 @@ static int cmd_upatch_unload(int argc, const char **argv)
 		pr_warn("upatch unload: could not remove %s: %s",
 			persisted, strerror(errno));
 
-	if (upatch_chain_event("shirudo-unload", "upatch_unload", "unload",
-			       name, payload, NULL, rep.chain_after) != 0) {
-		rep_fail(&rep, "tpm_extend", "tpm_error", EIO,
-			 "chain extend failed");
-		goto done;
-	}
 	rep.ok = true;
 	rep.phase = "done";
 	rep.tpm_present = rep.chain_after[0] != '\0';
@@ -2716,6 +2737,7 @@ done:
 int shirudo_upatch_purge(const char *name, const char *reason)
 {
 	__u8 payload[SHIRUDO_UPATCH_PAYLOAD_HASH_LEN] = {};
+	__u8 live[SHIRUDO_UPATCH_PAYLOAD_HASH_LEN];
 	char persisted[PATH_MAX];
 	struct shirudo_upatch u;
 	bool loaded;
@@ -2732,13 +2754,19 @@ int shirudo_upatch_purge(const char *name, const char *reason)
 	memcpy(payload, u.hdr.payload_sha256, sizeof(payload));
 	upatch_close(&u);
 
-	rc = remove_pin_dir(name);
-	if (rc && rc != -ENOENT) {
-		pr_err("upatch purge: failed to remove pin for %s: %s", name,
-		       strerror(-rc));
-		return rc;
+	loaded = get_pin_payload(name, live) != -ENOENT;
+	if (loaded) {
+		rc = upatch_chain_event("shirudo-unload", "upatch_unload",
+					"purge", name, payload, reason, NULL);
+		if (rc)
+			return rc;
+		rc = remove_pin_dir(name);
+		if (rc && rc != -ENOENT) {
+			pr_err("upatch purge: measured, but failed to remove "
+			       "pin for %s: %s", name, strerror(-rc));
+			return rc;
+		}
 	}
-	loaded = rc == 0;
 	if (unlink(persisted) != 0 && errno != ENOENT) {
 		pr_err("upatch purge: could not remove %s: %s", persisted,
 		       strerror(errno));
@@ -2746,11 +2774,7 @@ int shirudo_upatch_purge(const char *name, const char *reason)
 	}
 	pr_audit("upatch purge: name=%s reason=%s %s", name, reason,
 		 loaded ? "detached" : "archive_only");
-	if (!loaded)
-		return 0;
-	rc = upatch_chain_event("shirudo-unload", "upatch_unload", "purge",
-				name, payload, reason, NULL);
-	return rc ? rc : 1;
+	return loaded ? 1 : 0;
 }
 
 /* Package installs take the same path as the upatch commands. */
