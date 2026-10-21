@@ -59,6 +59,27 @@ struct {
 	__type(value, struct seal_scratch);
 } seal_scratch_map SEC(".maps");
 
+/*
+ * Where a label is read when a task's scratch cannot be had, a failed
+ * memory charge say: shared, so tasks may garble each other's bytes, but
+ * a write or an unlink is decided by the length the read returns alone.
+ */
+struct {
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, __u32);
+	__type(value, char[LABEL_LEN]);
+} seal_fallback SEC(".maps");
+
+static __always_inline char *seal_target(struct seal_scratch *s)
+{
+	__u32 zero = 0;
+
+	if (s)
+		return s->target;
+	return bpf_map_lookup_elem(&seal_fallback, &zero);
+}
+
 struct seal_dir_mark {
 	char	label[LABEL_LEN];
 };
@@ -268,6 +289,7 @@ int BPF_PROG(shirudo_seal_file_open, struct file *file)
 	struct task_struct *task;
 	struct seal_scratch *s;
 	struct bpf_dynptr tdp;
+	char *target;
 
 	task = bpf_get_current_task_btf();
 	if (seal_is_dir(inode)) {
@@ -289,10 +311,10 @@ int BPF_PROG(shirudo_seal_file_open, struct file *file)
 	 */
 	if (seal_is_exe(inode))
 		return seal_caller(SHIRUDO_TAMPER_SEAL_WRITE);
-	s = seal_scratch_get(task);
-	if (!s) /* cannot read the label */
+	target = seal_target(seal_scratch_get(task));
+	if (!target)
 		return seal_caller(SHIRUDO_TAMPER_SEAL_WRITE);
-	bpf_dynptr_from_mem(s->target, LABEL_LEN, 0, &tdp);
+	bpf_dynptr_from_mem(target, LABEL_LEN, 0, &tdp);
 	return seal_verdict(bpf_get_file_xattr(file, SHIRUDO_XATTR, &tdp),
 			    SHIRUDO_TAMPER_SEAL_WRITE);
 }
@@ -364,12 +386,12 @@ static __always_inline int seal_dentry(struct dentry *dentry,
 				       enum shirudo_tamper_point point)
 {
 	struct task_struct *task = bpf_get_current_task_btf();
-	struct seal_scratch *s = seal_scratch_get(task);
+	char *target = seal_target(seal_scratch_get(task));
 	struct bpf_dynptr tdp;
 
-	if (!s)
+	if (!target)
 		return seal_caller(point);
-	bpf_dynptr_from_mem(s->target, LABEL_LEN, 0, &tdp);
+	bpf_dynptr_from_mem(target, LABEL_LEN, 0, &tdp);
 	return seal_verdict(bpf_get_dentry_xattr(dentry, SHIRUDO_XATTR, &tdp),
 			    point);
 }
