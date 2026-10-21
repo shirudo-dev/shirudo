@@ -42,6 +42,70 @@ const char *eventlog_pending_path(void)
 	return env && *env ? env : SHIRUDO_EVENTLOG_PENDING_PATH;
 }
 
+/*
+ * The largest line shirudo writes, an init record; a longer one is not a
+ * record and is passed over whole.
+ */
+#define EVENTLOG_LINE_CAP	(64 * 1024)
+
+/*
+ * Held across a register extend and the append that records it, so
+ * that the order of the lines is the order of the extends, and shared
+ * by readers, which would otherwise see half an append or a pending
+ * record both adopted and still pending.
+ */
+static int lock_fd = -1, lock_depth;
+static bool lock_excl;
+
+int eventlog_lock(bool exclusive)
+{
+	int fd;
+
+	if (lock_depth) {
+		if (exclusive && !lock_excl)
+			return -EDEADLK;
+		lock_depth++;
+		return 0;
+	}
+	if (exclusive) {
+		fd = seal_open(eventlog_path(), O_RDWR | O_CREAT | O_APPEND,
+			       0600);
+	} else {
+		fd = open(eventlog_path(), O_RDONLY | O_CLOEXEC);
+		if (fd < 0)
+			fd = -errno;
+	}
+	if (fd == -ENOENT) {
+		fd = -1;
+	} else if (fd < 0) {
+		pr_err("eventlog: open %s: %s", eventlog_path(),
+		       strerror(-fd));
+		return fd;
+	}
+	while (fd >= 0 && flock(fd, exclusive ? LOCK_EX : LOCK_SH) != 0) {
+		if (errno != EINTR) {
+			int rc = -errno;
+
+			close(fd);
+			return rc;
+		}
+	}
+	lock_fd = fd;
+	lock_depth = 1;
+	lock_excl = exclusive;
+	return 0;
+}
+
+void eventlog_unlock(void)
+{
+	if (!lock_depth || --lock_depth)
+		return;
+	if (lock_fd >= 0)
+		close(lock_fd);
+	lock_fd = -1;
+	lock_excl = false;
+}
+
 static int adopt_pending(void);
 
 /*
@@ -53,24 +117,68 @@ int eventlog_append(const char *json_line)
 {
 	int rc;
 
-	rc = adopt_pending();
+	rc = eventlog_lock(true);
 	if (rc)
 		return rc;
-	return eventlog_append_to(eventlog_path(), json_line);
+	rc = adopt_pending();
+	if (!rc)
+		rc = eventlog_append_to(eventlog_path(), json_line);
+	eventlog_unlock();
+	return rc;
 }
 
 /*
- * A line cut short, by a full file system say, would leave every reader
- * of the log failing on it, so a failed append is rolled back under the
+ * One write per line, behind a newline when the file does not end in
+ * one: a line cut short by a crash then stays a line of its own rather
+ * than swallowing the next. A failed append is rolled back under the
  * lock that keeps appenders from interleaving.
  */
+static int append_fd(int fd, const char *path, const char *json_line)
+{
+	size_t len = strlen(json_line), n = 0;
+	struct stat st;
+	char *buf, last;
+	int rc;
+
+	if (fstat(fd, &st) != 0)
+		return -errno;
+	buf = xmalloc(len + 2);
+	if (!buf)
+		return -ENOMEM;
+	if (st.st_size > 0) {
+		if (pread(fd, &last, 1, st.st_size - 1) != 1) {
+			rc = -EIO;
+			goto out;
+		}
+		if (last != '\n')
+			buf[n++] = '\n';
+	}
+	memcpy(buf + n, json_line, len);
+	n += len;
+	if (!len || json_line[len - 1] != '\n')
+		buf[n++] = '\n';
+
+	rc = write_all(fd, buf, n);
+	if (!rc && fsync(fd) != 0)
+		rc = -errno;
+	if (rc && ftruncate(fd, st.st_size) != 0)
+		pr_warn("eventlog: could not roll back a partial append to "
+			"%s: %s", path, strerror(errno));
+out:
+	xfree(buf, len + 2);
+	return rc;
+}
+
 int eventlog_append_to(const char *path, const char *json_line)
 {
-	size_t len = strlen(json_line);
-	struct stat st;
 	int fd, rc;
 
-	fd = seal_open(path, O_WRONLY | O_CREAT | O_APPEND, 0600);
+	if (lock_depth && lock_excl && lock_fd >= 0 &&
+	    strcmp(path, eventlog_path()) == 0) {
+		rc = append_fd(lock_fd, path, json_line);
+		goto out;
+	}
+	fd = seal_open(path, O_RDWR | O_CREAT | O_APPEND, 0600);
 	if (fd < 0) {
 		pr_err("eventlog: open %s: %s", path, strerror(-fd));
 		return fd;
@@ -78,30 +186,17 @@ int eventlog_append_to(const char *path, const char *json_line)
 	while (flock(fd, LOCK_EX) != 0) {
 		if (errno != EINTR) {
 			rc = -errno;
+			close(fd);
 			goto out;
 		}
 	}
-	if (fstat(fd, &st) != 0) {
-		rc = -errno;
-		goto out;
-	}
-
-	rc = write_all(fd, json_line, len);
-	if (!rc && (len == 0 || json_line[len - 1] != '\n'))
-		rc = write_all(fd, "\n", 1);
-	if (!rc && fsync(fd) != 0)
-		rc = -errno;
-	if (rc && ftruncate(fd, st.st_size) != 0)
-		pr_warn("eventlog: could not roll back a partial append to "
-			"%s: %s", path, strerror(errno));
-out:
+	rc = append_fd(fd, path, json_line);
 	if (close(fd) != 0 && !rc)
 		rc = -errno;
-	if (rc) {
+out:
+	if (rc)
 		pr_err("eventlog: append: %s", strerror(-rc));
-		return rc;
-	}
-	return 0;
+	return rc;
 }
 
 int eventlog_would_exceed(__u64 max_bytes)
@@ -116,114 +211,131 @@ int eventlog_would_exceed(__u64 max_bytes)
 	return cur + SHIRUDO_EVENTLOG_LINE_MAX > max_bytes;
 }
 
-static int read_log(char **out, size_t *out_len)
-{
-	size_t base_len = 0, pending_len = 0, off;
-	char *base = NULL, *pending = NULL, *buf;
-	int rc, rc_pending;
+struct walk {
+	char	boot_id[64];
+	bool	in_boot;
+	int	(*cb)(const char *line, size_t len, bool is_init, void *ctx);
+	void	*ctx;
+};
 
-	rc = read_file(eventlog_path(), SHIRUDO_JSON_MAX_BYTES,
-		       &base, &base_len);
-	if (rc && rc != -ENOENT)
-		return rc;
-	rc_pending = read_file(eventlog_pending_path(),
-			       SHIRUDO_JSON_MAX_BYTES, &pending,
-			       &pending_len);
-	if (rc_pending && rc_pending != -ENOENT) {
-		xfree(base, base_len + 1);
-		return rc_pending;
-	}
-	if (rc && rc_pending)
-		return -ENOENT;
-	if (rc_pending) {
-		*out = base;
-		*out_len = base_len;
+/*
+ * Only this boot's lines are parsed: a line of an earlier boot that a
+ * power cut left half written says nothing about this one, while a
+ * malformed line of this boot is a record the replay cannot do without.
+ */
+static int walk_line(struct walk *w, const char *line, size_t len)
+{
+	char line_boot[64], type[32];
+	struct shirudo_json_field f[] = {
+		{ "boot_id", SHIRUDO_JSON_T_STRING, line_boot,
+		  sizeof(line_boot), 0, NULL, 0 },
+		{ "type", SHIRUDO_JSON_T_STRING, type, sizeof(type),
+		  0, NULL, 0 },
+	};
+	bool is_init;
+
+	if (!w->boot_id[0] ||
+	    !memmem(line, len, w->boot_id, strlen(w->boot_id)))
 		return 0;
-	}
-	if (rc) {
-		*out = pending;
-		*out_len = pending_len;
+	line_boot[0] = '\0';
+	type[0] = '\0';
+	if (json_parse(line, len, f, 2))
+		return -EINVAL;
+	if (!f[0].seen || strcmp(line_boot, w->boot_id))
 		return 0;
+	is_init = f[1].seen && strcmp(type, "init") == 0;
+	if (is_init)
+		w->in_boot = true;
+	if (!w->in_boot)
+		return 0;
+	return w->cb(line, len, is_init, w->ctx);
+}
+
+/*
+ * Streamed, so the log may grow past what fits in memory. A NUL ends a
+ * line as a newline does: a crash can leave a run of zeros where an
+ * append was, and the records written after it must stay visible.
+ */
+static int walk_fd(int fd, struct walk *w)
+{
+	size_t cap = 2 * EVENTLOG_LINE_CAP, have = 0, start, i;
+	bool skipping = false;
+	off_t off = 0;
+	ssize_t n;
+	char *buf;
+	int rc = 0;
+
+	buf = xmalloc(cap + 1);
+	if (!buf)
+		return -ENOMEM;
+	for (;;) {
+		n = pread(fd, buf + have, cap - have, off);
+		if (n < 0) {
+			if (errno == EINTR)
+				continue;
+			rc = -errno;
+			break;
+		}
+		off += n;
+		have += (size_t)n;
+		if (n == 0 && have)
+			buf[have++] = '\0';
+		start = 0;
+		for (i = 0; i < have && !rc; i++) {
+			if (buf[i] != '\n' && buf[i] != '\0')
+				continue;
+			buf[i] = '\0';
+			if (!skipping && i > start)
+				rc = walk_line(w, buf + start, i - start);
+			skipping = false;
+			start = i + 1;
+		}
+		if (rc || n == 0)
+			break;
+		have -= start;
+		memmove(buf, buf + start, have);
+		if (have == cap) {
+			skipping = true;
+			have = 0;
+		}
 	}
-	if (base_len + pending_len > SHIRUDO_JSON_MAX_BYTES) {
-		rc = -EFBIG;
-		goto out;
-	}
-	buf = xmalloc(base_len + pending_len + 2);
-	if (!buf) {
-		rc = -ENOMEM;
-		goto out;
-	}
-	memcpy(buf, base, base_len);
-	off = base_len;
-	if (off && buf[off - 1] != '\n')
-		buf[off++] = '\n';
-	memcpy(buf + off, pending, pending_len);
-	off += pending_len;
-	buf[off] = '\0';
-	*out = buf;
-	*out_len = off;
-out:
-	xfree(base, base_len + 1);
-	xfree(pending, pending_len + 1);
+	xfree(buf, cap + 1);
+	return rc;
+}
+
+static int walk_path(const char *path, struct walk *w)
+{
+	int fd, rc;
+
+	fd = open(path, O_RDONLY | O_CLOEXEC);
+	if (fd < 0)
+		return errno == ENOENT ? 0 : -errno;
+	rc = walk_fd(fd, w);
+	close(fd);
 	return rc;
 }
 
 /*
- * This boot's records from its last init line on; the callback learns
- * which line that is so a replay can start from zero.
+ * This boot's records from its last init line on, the log's and then
+ * the pending file's; the callback learns which line that is so a
+ * replay can start from zero.
  */
-static int walk_lines(char *buf, int (*cb)(const char *line, size_t len,
-					   bool is_init, void *ctx), void *ctx)
-{
-	char boot_id[64], line_boot[64], type[32];
-	bool in_boot = false;
-	char *line, *save;
-	int rc = 0;
-
-	eventlog_boot_id(boot_id, sizeof(boot_id));
-	for (line = strtok_r(buf, "\n", &save); line && !rc;
-	     line = strtok_r(NULL, "\n", &save)) {
-		struct shirudo_json_field f[] = {
-			{ "boot_id", SHIRUDO_JSON_T_STRING, line_boot,
-			  sizeof(line_boot), 0, NULL, 0 },
-			{ "type", SHIRUDO_JSON_T_STRING, type, sizeof(type),
-			  0, NULL, 0 },
-		};
-		bool is_init;
-
-		line_boot[0] = '\0';
-		type[0] = '\0';
-		if (json_parse(line, strlen(line), f, 2)) {
-			rc = -EINVAL;
-			break;
-		}
-		if (!f[0].seen || !boot_id[0] || strcmp(line_boot, boot_id))
-			continue;
-		is_init = f[1].seen && strcmp(type, "init") == 0;
-		if (is_init)
-			in_boot = true;
-		if (!in_boot)
-			continue;
-		rc = cb(line, strlen(line), is_init, ctx);
-	}
-	if (!rc && !in_boot)
-		return -ENOENT;
-	return rc;
-}
-
 static int walk_boot(int (*cb)(const char *line, size_t len, bool is_init,
 			       void *ctx), void *ctx)
 {
-	char *buf = NULL;
-	size_t len = 0;
+	struct walk w = { .cb = cb, .ctx = ctx };
 	int rc;
 
-	rc = read_log(&buf, &len);
+	rc = eventlog_lock(false);
 	if (rc)
 		return rc;
-	rc = walk_lines(buf, cb, ctx);
-	xfree(buf, len + 1);
+	eventlog_boot_id(w.boot_id, sizeof(w.boot_id));
+	rc = lock_fd >= 0 ? walk_fd(lock_fd, &w) : 0;
+	if (!rc)
+		rc = walk_path(eventlog_pending_path(), &w);
+	eventlog_unlock();
+	if (!rc && !w.in_boot)
+		return -ENOENT;
 	return rc;
 }
 
@@ -243,22 +355,18 @@ static int adopt_seen(const char *line, size_t len, bool is_init, void *ctx)
 	return 0;
 }
 
+/* Under the exclusive lock, which holds the log open. */
 static int log_holds(const char *line, size_t len)
 {
 	struct adopt_ctx a = { .line = line, .len = len };
-	char *buf = NULL;
-	size_t blen = 0;
+	struct walk w = { .cb = adopt_seen, .ctx = &a };
 	int rc;
 
-	rc = read_file(eventlog_path(), SHIRUDO_JSON_MAX_BYTES,
-		       &buf, &blen);
-	if (rc == -ENOENT)
+	if (lock_fd < 0)
 		return 0;
+	eventlog_boot_id(w.boot_id, sizeof(w.boot_id));
+	rc = walk_fd(lock_fd, &w);
 	if (rc)
-		return rc;
-	rc = walk_lines(buf, adopt_seen, &a);
-	xfree(buf, blen + 1);
-	if (rc && rc != -ENOENT)
 		return rc;
 	return a.found ? 1 : 0;
 }
@@ -298,7 +406,14 @@ static int adopt_pending(void)
 
 int eventlog_adopt_pending(void)
 {
-	return adopt_pending();
+	int rc;
+
+	rc = eventlog_lock(true);
+	if (rc)
+		return rc;
+	rc = adopt_pending();
+	eventlog_unlock();
+	return rc;
 }
 
 static int replay_line(const char *line, size_t len, bool is_init, void *ctx)

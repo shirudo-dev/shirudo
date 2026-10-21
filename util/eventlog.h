@@ -32,6 +32,14 @@ const char *eventlog_path(void);
  */
 const char *eventlog_pending_path(void);
 
+/*
+ * Exclusive around a register extend and its append, shared around a
+ * read of the log that is compared with the register; it nests, and
+ * the calls below take it themselves.
+ */
+int eventlog_lock(bool exclusive);
+void eventlog_unlock(void);
+
 int eventlog_append(const char *json_line);
 int eventlog_append_to(const char *path, const char *json_line);
 
@@ -41,7 +49,7 @@ int eventlog_adopt_pending(void);
 /*
  * Replay this boot's records, from its last "init" record on, the way
  * the register accumulates them. -ENOENT when this boot has no init
- * record, -EINVAL on a malformed line.
+ * record, -EINVAL on a malformed line of this boot.
  */
 int eventlog_replay(__u8 out[SHIRUDO_TPM_DIGEST_LEN]);
 
