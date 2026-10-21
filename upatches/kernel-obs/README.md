@@ -91,6 +91,7 @@ rebuild the package. There is nothing to configure on the target.
 ```sh
 sudo shirudo upatch map kernel-obs
 sudo shirudo upatch map kernel-obs exec
+sudo shirudo upatch map kernel-obs exec --json
 sudo shirudo upatch map kernel-obs net --show-full
 sudo shirudo upatch map kernel-obs priv --json=./priv.ndjson
 ```

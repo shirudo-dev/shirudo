@@ -244,9 +244,9 @@ signed with SigV4 from ``AWS_ACCESS_KEY_ID``, ``AWS_SECRET_ACCESS_KEY``,
 ``AWS_CA_BUNDLE``.  Large snapshots bypass the collector's record size
 limits this way while the collector still learns that they exist.
 
-JSON lines.  ``--json=<path>`` (or ``map_export.json_path``) appends
-the map listing and the decoded records as JSON lines, for a log
-shipper that tails files.
+JSON lines.  ``--json`` prints the map listing or decoded records to
+stdout.  ``--json=<path>`` (or ``map_export.json_path``) appends them
+as JSON lines to a file for a log shipper that tails files.
 
 
 5) Transport
@@ -450,6 +450,7 @@ Air-gapped fleets use this path.
 On a target::
 
     sudo shirudo upatch map --all                           # decoded, to stdout
+    sudo shirudo upatch map --all --json                    # decoded NDJSON
     sudo shirudo upatch map --all --json=/tmp/maps.ndjson  # JSON lines
     sudo shirudo upatch map --all --otel --otel-endpoint=http://127.0.0.1:4318
     sudo shirudo status --otel --include-system

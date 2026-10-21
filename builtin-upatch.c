@@ -192,7 +192,7 @@ static const struct shirudo_help upatch_unload_help = {
 
 static const struct shirudo_help_item upatch_map_options[] = {
 	{ "--all", "export every map from every loaded upatch" },
-	{ "--json=<path>", "append the signed Lua decoder's NDJSON record to path" },
+	{ "--json[=<path>]", "print JSON or append it to path" },
 	{ "--show-full",  "lift the per-map 256-entry truncation cap" },
 	{ "--peek", "read serializer-backed maps without draining them" },
 	{ "--otel", "export through OTLP using each decoder's signed signal" },
@@ -209,7 +209,7 @@ static const struct shirudo_help_section upatch_map_sections[] = {
 
 static const struct shirudo_help upatch_map_help = {
 	.usage      = "shirudo upatch map [--all] [<upatch>] [<map>] "
-		      "[--json=<path>] [--show-full] [--peek]\n"
+		      "[--json[=<path>]] [--show-full] [--peek]\n"
 		      "                          [--otel] "
 		      "[--otel-endpoint=<url>]\n"
 		      "                          [--otel-insecure] "
@@ -230,6 +230,7 @@ static const struct shirudo_help upatch_map_help = {
 "Examples:\n"
 "  shirudo upatch map\n"
 "  shirudo upatch map --all\n"
+"  shirudo upatch map kernel-obs exec --json\n"
 "  shirudo upatch map cve-2026-31431-counter\n"
 "  shirudo upatch map cve-2026-31431-counter blocked_af_alg\n"
 "  shirudo upatch map cve-2026-31431-counter blocked_af_alg \\\n"
@@ -2323,6 +2324,22 @@ out:
 	return rc;
 }
 
+static int print_json_record(const char *json, size_t len)
+{
+	int rc;
+
+	rc = shirudo_write_all(STDOUT_FILENO, json, len);
+	if (!rc)
+		rc = shirudo_write_all(STDOUT_FILENO, "\n", 1);
+	return rc;
+}
+
+static int emit_json_record(const char *path, const char *json, size_t len)
+{
+	return path ? append_json_record(path, json, len) :
+		print_json_record(json, len);
+}
+
 static int copy_file_atomic(const char *src, const char *dst)
 {
 	char tmp[PATH_MAX + 8], buf[65536];
@@ -2945,7 +2962,7 @@ static int append_one_map_json(const char *path,
 		while (decoded_len && (decoded[decoded_len - 1] == '\n' ||
 		       decoded[decoded_len - 1] == '\r'))
 			decoded_len--;
-		rc = append_json_record(path, decoded, decoded_len);
+		rc = emit_json_record(path, decoded, decoded_len);
 		xfree(decoded, decoded_len + 1);
 		return rc;
 	}
@@ -2953,12 +2970,12 @@ static int append_one_map_json(const char *path,
 }
 
 static int export_one_map(const char *upatch, const char *map,
-			  const char *json_path, bool otel,
+			  bool json_output, const char *json_path, bool otel,
 			  const struct shirudo_otel_opts *otel_opts,
 			  bool show_full, bool peek, bool print_detail)
 {
 	struct shirudo_map_view v = {};
-	uint32_t cap = (show_full || json_path || otel) ? 0 :
+	uint32_t cap = (show_full || json_output || otel) ? 0 :
 		SHIRUDO_MAP_ENTRIES_DEFAULT;
 	int rc, ret = 0;
 
@@ -2971,11 +2988,15 @@ static int export_one_map(const char *upatch, const char *map,
 		shirudo_map_view_free(&v);
 		return 1;
 	}
-	if (json_path) {
+	if (json_output) {
 		rc = append_one_map_json(json_path, &v);
 		if (rc) {
-			pr_err("upatch map: append JSON to %s: %s",
-			       json_path, strerror(-rc));
+			if (json_path)
+				pr_err("upatch map: append JSON to %s: %s",
+				       json_path, strerror(-rc));
+			else
+				pr_err("upatch map: print JSON: %s",
+				       strerror(-rc));
 			ret = 1;
 		}
 	}
@@ -3009,7 +3030,8 @@ static int cmd_upatch_map(int argc, const char **argv)
 		.retries = 3,
 	};
 	const char *upatch = NULL, *map = NULL, *json_path = NULL;
-	bool all = false, show_full = false, otel = false, peek = false;
+	bool all = false, json_output = false, show_full = false;
+	bool otel = false, peek = false;
 	bool insecure_set = false;
 	bool retries_set = false;
 	size_t n = 0;
@@ -3029,15 +3051,19 @@ static int cmd_upatch_map(int argc, const char **argv)
 			}
 			all = true;
 		} else if (strncmp(a, "--json=", 7) == 0) {
-			if (json_path || !a[7]) {
+			if (json_output || !a[7]) {
 				fprintf(stderr,
 					"upatch map: invalid or duplicate --json\n");
 				return 2;
 			}
+			json_output = true;
 			json_path = a + 7;
 		} else if (strcmp(a, "--json") == 0) {
-			fprintf(stderr, "upatch map: --json requires a path\n");
-			return 2;
+			if (json_output) {
+				fprintf(stderr, "upatch map: duplicate --json\n");
+				return 2;
+			}
+			json_output = true;
 		} else if (strcmp(a, "--show-full") == 0) {
 			show_full = true;
 		} else if (strcmp(a, "--peek") == 0) {
@@ -3120,8 +3146,10 @@ static int cmd_upatch_map(int argc, const char **argv)
 			pr_err("upatch map: invalid map_export configuration");
 			return 2;
 		}
-		if (!json_path && export_cfg.map_export_json_path[0])
+		if (!json_output && export_cfg.map_export_json_path[0]) {
 			json_path = export_cfg.map_export_json_path;
+			json_output = true;
+		}
 		if (!otel && export_cfg.map_export_otel_endpoint[0]) {
 			otel = true;
 		}
@@ -3166,17 +3194,14 @@ static int cmd_upatch_map(int argc, const char **argv)
 			return 2;
 		}
 	}
-	if (all && !json_path && !otel)
-		return 0;
-
 	if (upatch && map) {
 		if (!safe_upatch_name(upatch)) {
 			pr_err("upatch map: invalid upatch name '%s'", upatch);
 			return 2;
 		}
-		return export_one_map(upatch, map, json_path, otel,
+		return export_one_map(upatch, map, json_output, json_path, otel,
 				      &otel_opts, show_full, peek,
-				      !json_path && !otel);
+				      !json_output && !otel);
 	}
 
 	if (all) {
@@ -3185,8 +3210,9 @@ static int cmd_upatch_map(int argc, const char **argv)
 		shirudo_upatch_maps_list_all(&list, &n);
 		for (k = 0; k < n; k++) {
 			if (export_one_map(list[k].upatch, list[k].name,
-					   json_path, otel, &otel_opts,
-					   show_full, peek, false) != 0)
+					   json_output, json_path, otel,
+					   &otel_opts, show_full, peek,
+					   !json_output && !otel) != 0)
 				ret = 1;
 		}
 		shirudo_map_summary_free(list, n);
@@ -3203,7 +3229,7 @@ static int cmd_upatch_map(int argc, const char **argv)
 		shirudo_upatch_maps_list_all(&list, &n);
 	}
 
-	if (json_path) {
+	if (json_output) {
 		struct shirudo_json_emit e = {};
 		size_t cap = 8192 + 256 * n;
 		char *buf;
@@ -3237,11 +3263,15 @@ static int cmd_upatch_map(int argc, const char **argv)
 		if (e.err) {
 			ret = 1;
 		} else {
-			int rc = append_json_record(json_path, buf, e.len);
+			int rc = emit_json_record(json_path, buf, e.len);
 
 			if (rc) {
-				pr_err("upatch map: append JSON to %s: %s",
-				       json_path, strerror(-rc));
+				if (json_path)
+					pr_err("upatch map: append JSON to %s: %s",
+					       json_path, strerror(-rc));
+				else
+					pr_err("upatch map: print JSON: %s",
+					       strerror(-rc));
 				ret = 1;
 			}
 		}

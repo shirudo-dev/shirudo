@@ -19,8 +19,13 @@ test_expect_success 'paged serializer JSON exposes pages and one data object' '
 	"$H"
 '
 
-test_expect_success 'upatch map requires a JSON output path' '
-	! "$S" upatch map --json >/dev/null 2>&1 &&
+test_expect_success 'upatch map prints JSON to stdout by default' '
+	"$S" upatch map --json >"$WORK/maps.stdout" &&
+	python3 -c '\''
+import json, sys
+doc = json.load(open(sys.argv[1], encoding="utf-8"))
+assert doc["schema"] == 1 and isinstance(doc["maps"], list)
+'\'' "$WORK/maps.stdout" &&
 	! "$S" upatch map --json= >/dev/null 2>&1
 '
 
