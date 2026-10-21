@@ -154,33 +154,85 @@ static int prerelease_compare(const char *a, const char *b)
 	return *a ? 1 : *b ? -1 : 0;
 }
 
+static int digits_compare(const char *a, size_t la, const char *b, size_t lb)
+{
+	int c;
+
+	while (la > 1 && *a == '0') {
+		a++;
+		la--;
+	}
+	while (lb > 1 && *b == '0') {
+		b++;
+		lb--;
+	}
+	if (la != lb)
+		return la > lb ? 1 : -1;
+	c = strncmp(a, b, la);
+	return c > 0 ? 1 : c < 0 ? -1 : 0;
+}
+
+/* What follows the numeric core, without build metadata: the prerelease. */
+static void version_suffix(const char *s, char *out, size_t cap)
+{
+	size_t n;
+
+	if (*s == '-')
+		s++;
+	n = strcspn(s, "+");
+	if (n >= cap)
+		n = cap - 1;
+	memcpy(out, s, n);
+	out[n] = '\0';
+}
+
 /*
- * Strict enough for repository selection: numeric dotted core, optional
- * prerelease, and build metadata.  Build metadata does not affect order.
+ * A total order, so that an upgrade never goes back and forth or stalls:
+ * an optional leading 'v', every dotted number compared as a number with
+ * a missing one as zero, then a release above its prereleases. Build
+ * metadata after '+' does not count, and a version that does not start
+ * with a number sorts below every one that does.
  */
 int bpm_semver_compare(const char *a, const char *b)
 {
 	const char *pa = a, *pb = b;
+	char sa[BPM_MAX_NAME], sb[BPM_MAX_NAME];
+	size_t na, nb;
+	int c;
 
-	for (int part = 0; part < 3; part++) {
-		size_t na = digits(pa, strlen(pa));
-		size_t nb = digits(pb, strlen(pb));
-		__u64 va, vb;
-
-		if (parse_u64(pa, na, UINT64_MAX, &va) ||
-		    parse_u64(pb, nb, UINT64_MAX, &vb))
-			return strcmp(a, b);
-		if (va != vb)
-			return va > vb ? 1 : -1;
-		pa = pa[na] == '.' ? pa + na + 1 : pa + na;
-		pb = pb[nb] == '.' ? pb + nb + 1 : pb + nb;
+	if ((*pa == 'v' || *pa == 'V') && pa[1] >= '0' && pa[1] <= '9')
+		pa++;
+	if ((*pb == 'v' || *pb == 'V') && pb[1] >= '0' && pb[1] <= '9')
+		pb++;
+	na = digits(pa, strlen(pa));
+	nb = digits(pb, strlen(pb));
+	if (!na || !nb) {
+		if (na || nb)
+			return na ? 1 : -1;
+		c = strcmp(a, b);
+		return c > 0 ? 1 : c < 0 ? -1 : 0;
 	}
-	if (*pa == '-' || *pb == '-') {
-		if (*pa != '-' || *pb != '-')
-			return *pa == '-' ? -1 : 1;
-		return prerelease_compare(pa + 1, pb + 1);
+	for (;;) {
+		c = digits_compare(na ? pa : "0", na ? na : 1,
+				   nb ? pb : "0", nb ? nb : 1);
+		if (c)
+			return c;
+		pa += na;
+		pb += nb;
+		na = *pa == '.' ? digits(pa + 1, strlen(pa + 1)) : 0;
+		nb = *pb == '.' ? digits(pb + 1, strlen(pb + 1)) : 0;
+		if (!na && !nb)
+			break;
+		if (na)
+			pa++;
+		if (nb)
+			pb++;
 	}
-	return 0;
+	version_suffix(pa, sa, sizeof(sa));
+	version_suffix(pb, sb, sizeof(sb));
+	if (!sa[0] || !sb[0])
+		return sa[0] ? -1 : sb[0] ? 1 : 0;
+	return prerelease_compare(sa, sb);
 }
 
 int bpm_verify_cms(const __u8 *payload, size_t payload_len,
