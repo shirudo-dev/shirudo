@@ -109,11 +109,36 @@ char *xasprintf(const char *fmt, ...)
 	return p;
 }
 
+#if defined(__SANITIZE_ADDRESS__)
+#define SHIRUDO_ASAN	1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define SHIRUDO_ASAN	1
+#endif
+#endif
+
+/*
+ * ASan does not look inside explicit_bzero(), so a size that runs past
+ * the allocation would go unreported in the sanitized builds and the
+ * fuzzers: there the scrub goes through memset(), which it checks, by a
+ * pointer the compiler cannot see through to drop it before free().
+ */
+static void scrub(void *ptr, size_t size)
+{
+#ifdef SHIRUDO_ASAN
+	static void *(*volatile checked)(void *, int, size_t) = memset;
+
+	checked(ptr, 0, size);
+#else
+	explicit_bzero(ptr, size);
+#endif
+}
+
 void xfree(void *ptr, size_t size)
 {
 	if (!ptr)
 		return;
-	explicit_bzero(ptr, size);
+	scrub(ptr, size);
 	free(ptr);
 }
 
@@ -121,7 +146,7 @@ void xstrfree(char *s)
 {
 	if (!s)
 		return;
-	explicit_bzero(s, strlen(s) + 1);
+	scrub(s, strlen(s) + 1);
 	free(s);
 }
 
