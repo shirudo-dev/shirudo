@@ -48,6 +48,7 @@
 #define OTEL_ENDPOINT_MAX	2048
 #define OTEL_RESPONSE_MAX	(64U * 1024U)
 #define OTEL_DEFAULT_TIMEOUT_MS	10000L
+#define OTEL_MAX_TIMEOUT_MS	120000L
 #define OTEL_MAX_HEADER_BYTES	16384U
 #define OTEL_MAX_TYPE_UNWRAP	32
 
@@ -1310,7 +1311,8 @@ static int parse_timeout(const char *value, long *out)
 		*out = OTEL_DEFAULT_TIMEOUT_MS;
 		return 0;
 	}
-	if (parse_u64(value, strlen(value), LONG_MAX, &n))
+	/* curl reads 0 as no limit at all, which would let a run hang. */
+	if (parse_u64(value, strlen(value), OTEL_MAX_TIMEOUT_MS, &n) || !n)
 		return -EINVAL;
 	*out = (long)n;
 	return 0;

@@ -285,8 +285,8 @@ Cleartext ``http://`` is allowed only to loopback.  ``--otel-insecure``
 disables certificate verification for ``https://``, with a warning each
 time; it exists for test rigs.
 
-Retries.  ``OTEL_EXPORTER_OTLP_TIMEOUT`` (milliseconds, default 10000)
-bounds each attempt.  A transport error and the responses OTLP calls
+Retries.  ``OTEL_EXPORTER_OTLP_TIMEOUT`` (milliseconds, default 10000,
+from 1 to 120000) bounds each attempt.  A transport error and the responses OTLP calls
 retryable, 429, 502, 503 and 504, are retried with exponential backoff
 from 250 ms, honouring ``Retry-After`` up to 30 s, for
 ``--otel-retries`` attempts (``map_export.otel_retries``, default 3,
