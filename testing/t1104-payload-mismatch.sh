@@ -26,4 +26,40 @@ test_expect_success 'wrong expected payload -> payload_mismatch, pin intact' '
 	[ -e "$PIN" ]
 '
 
+# Rewrites a .upatch: flags |= <flag>, metadata replaced by <hex> (32
+# bytes, appended), the signed loader and data untouched.
+forge() {
+	python3 - "$1" "$2" "$3" "$4" <<'PY'
+import struct, sys
+src, dst, flag, meta = sys.argv[1], sys.argv[2], int(sys.argv[3]), bytes.fromhex(sys.argv[4])
+b = bytearray(open(src, 'rb').read())
+struct.pack_into('<I', b, 12, struct.unpack_from('<I', b, 12)[0] | flag)
+struct.pack_into('<II', b, 8 + 4 + 4 + 256 + 32 + 16, len(b), len(meta))
+open(dst, 'wb').write(bytes(b) + meta)
+PY
+}
+
+T=$(mktemp -d)
+trap 'rm -rf "$T"' EXIT
+
+test_expect_success 'a directive repointed at another payload is refused' '
+	forge "$FIXTURES/shirudo-test-basic.unload.upatch" "$T/edited.upatch" \
+		0 "$(printf "bb%.0s" $(seq 32))" &&
+	cat=$($SHIRUDO_BIN upatch unload "$T/edited.upatch" --no-precheck \
+	      --report=- 2>/dev/null | report_field category) &&
+	[ "$cat" = "parser_rejected" ] &&
+	[ -e "$PIN" ]
+'
+
+test_expect_success 'a LOAD artifact flagged as a directive unloads nothing' '
+	payload=$($SHIRUDO_BIN upatch info "$FIXTURES/shirudo-test-basic.upatch" \
+		  --json | python3 -c "import json,sys; print(json.load(sys.stdin)[\"payload_sha256\"])") &&
+	forge "$FIXTURES/shirudo-test-basic.upatch" "$T/flagged.upatch" 1 \
+		"$payload" &&
+	cat=$($SHIRUDO_BIN upatch unload "$T/flagged.upatch" --no-precheck \
+	      --report=- 2>/dev/null | report_field category) &&
+	[ "$cat" = "parser_rejected" ] &&
+	[ -e "$PIN" ]
+'
+
 test_done

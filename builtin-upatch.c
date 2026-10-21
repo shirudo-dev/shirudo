@@ -2489,15 +2489,43 @@ done:
 	return ret;
 }
 
+/*
+ * The name and expected payload an unload directive acts on sit in its
+ * header and metadata, outside the signature, and any signed artifact
+ * passes the loader's verification. The unload template carries the
+ * same pair in .rodata, which gen_loader copies into the signed data on
+ * an 8-byte boundary: finding it there ties the pair to a directive the
+ * operator signed for exactly that upatch.
+ */
+static bool unload_params_signed(const struct shirudo_upatch *u,
+				 const char *name, const __u8 payload[32])
+{
+	__u8 params[SHIRUDO_UPATCH_NAME_MAX +
+		    SHIRUDO_UPATCH_PAYLOAD_HASH_LEN] = {};
+	const __u8 *data = upatch_data(u);
+	size_t off;
+
+	if (!data || u->hdr.data_len < sizeof(params))
+		return false;
+	strscpy((char *)params, name, SHIRUDO_UPATCH_NAME_MAX);
+	memcpy(params + SHIRUDO_UPATCH_NAME_MAX, payload,
+	       SHIRUDO_UPATCH_PAYLOAD_HASH_LEN);
+	for (off = 0; off + sizeof(params) <= u->hdr.data_len; off += 8) {
+		if (memcmp(data + off, params, sizeof(params)) == 0)
+			return true;
+	}
+	return false;
+}
+
 static int cmd_upatch_unload(int argc, const char **argv)
 {
 	const char *file, *expect_chain, *expect_version_id, *report;
 	char name[SHIRUDO_UPATCH_NAME_MAX + 1] = {};
-	char persisted[PATH_MAX];
+	char persisted[PATH_MAX], staged[PATH_MAX] = {};
 	__u8 payload[SHIRUDO_UPATCH_PAYLOAD_HASH_LEN] = {};
 	struct shirudo_upatch u;
 	struct shirudo_op_report rep = { .op = "upatch_unload", .phase = "done" };
-	bool no_precheck, no_version_check;
+	bool no_precheck, no_version_check, bound;
 	int rc, ret = 1;
 
 	for (int i = 1; i < argc; i++) {
@@ -2516,6 +2544,15 @@ static int cmd_upatch_unload(int argc, const char **argv)
 	if (version_gate(expect_version_id, no_version_check, &rep, "unload") != 0)
 		goto done;
 
+	rc = stage_upatch(file, staged, sizeof(staged));
+	if (rc) {
+		pr_err("upatch unload: read %s: %s", file, strerror(-rc));
+		rep_fail(&rep, "parse", "parser_rejected", -rc,
+			 "cannot read .upatch");
+		goto done;
+	}
+	file = staged;
+
 	rc = upatch_open(file, &u);
 	if (rc) {
 		pr_err("open %s: %s", file, strerror(-rc));
@@ -2533,14 +2570,26 @@ static int cmd_upatch_unload(int argc, const char **argv)
 	}
 	memcpy(name, u.hdr.name, SHIRUDO_UPATCH_NAME_MAX);
 	name[SHIRUDO_UPATCH_NAME_MAX] = '\0';
-	if (u.hdr.metadata_len == sizeof(payload))
-		memcpy(payload, upatch_metadata(&u), sizeof(payload));
-	else
-		pr_warn("upatch unload: directive carries no payload metadata; "
-			"chain event uses zeros");
+	if (u.hdr.metadata_len != sizeof(payload)) {
+		pr_err("upatch unload: directive carries no payload metadata; "
+		       "refusing");
+		rep_fail(&rep, "parse", "parser_rejected", 0,
+			 "no payload metadata");
+		upatch_close(&u);
+		goto done;
+	}
+	memcpy(payload, upatch_metadata(&u), sizeof(payload));
+	bound = unload_params_signed(&u, name, payload);
 	upatch_close(&u);
 	rep.name = name;
 	hex_encode(payload, sizeof(payload), rep.payload_hex);
+	if (!bound) {
+		pr_err("upatch unload: the signed data does not name '%s' with "
+		       "this payload; refusing", name);
+		rep_fail(&rep, "parse", "parser_rejected", 0,
+			 "name and payload not covered by the signature");
+		goto done;
+	}
 
 	if (!safe_upatch_name(name)) {
 		pr_err("upatch unload: refusing unsafe upatch name '%s'", name);
@@ -2656,6 +2705,8 @@ done:
 		       rep.err,
 		       rep.err ? strerror(rep.err) : "none",
 		       rep.message[0] ? rep.message : "(none)");
+	if (staged[0])
+		unlink(staged);
 	if (report)
 		report_emit(report, &rep);
 	report_free(&rep);

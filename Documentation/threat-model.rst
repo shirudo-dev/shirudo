@@ -290,13 +290,16 @@ T10 An attempt that leaves no trace
 
 Each of these is known, documented and bounded; none is silent.
 
-1.  The unload directive's target name and expected payload live in
-    unsigned metadata.  The kernel's ``bpf_sys_bpf()`` cannot detach or
-    unlink, so the detach runs in userspace, and root can repoint a
-    signed directive at another upatch loaded under the same key, or
-    edit the expected payload to match it.  ``payload_mismatch`` catches
-    honest substitution; closing this fully needs an in-kernel detach so
-    the compare runs against signed ``.rodata``.
+1.  The kernel's ``bpf_sys_bpf()`` cannot detach or unlink, so an
+    unload runs in userspace.  The directive's name and expected
+    payload are read from its header and metadata and must appear
+    together in its signed ``.rodata``, so a directive acts only on the
+    upatch and payload the operator signed it for, but it is not bound
+    to one occasion: root can replay a directive against the same
+    upatch loaded again later with the same payload, and a directive
+    signed with an all-zero payload unloads whatever is loaded under
+    its name.  Either is measured.  An in-kernel detach would let the
+    signed program itself refuse a stale directive.
 
 2.  ``CAP_SYS_RESOURCE`` can rewrite ``mm->exe_file``.  Shirudo's
     ``task_prctl`` LSM hook denies ``PR_SET_MM_EXE_FILE`` and
@@ -432,8 +435,8 @@ values of each boot and systemd-aware verifiers find it in PCR 9 before
 the separator, and measuring the anchor through ``systemd-pcrextend`` so
 systemd's measurement log explains it (residual risk 11); signed PCR
 policies for the kernel and initrd PCRs so a verifier needs no golden
-values; an in-kernel detach so the unload compare runs against
-signed ``.rodata`` (residual risk 1); and refusing creation, rename
+values; an in-kernel detach so the signed unload itself can refuse a
+stale directive (residual risk 1); and refusing creation, rename
 and link into a labelled directory from any process but shirudo, which
 would keep foreign entries out of the tree altogether, and a
 ``d_instantiate`` hook the BPF LSM can sleep in, which would mark a

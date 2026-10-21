@@ -178,7 +178,9 @@ Load.  ``shirudo upatch load fix.upatch`` on the target:
 Unload.  ``shirudo upatch unload fix.unload.upatch`` runs the same
 pre-flight and the same signature-gated ``BPF_PROG_LOAD`` of the
 directive's loader, so the kernel authorises the directive exactly as
-it authorises a load.  The detach itself is userspace: shirudo reads the
+it authorises a load, and refuses a directive whose signed data does
+not carry the name and expected payload its header and metadata give.
+The detach itself is userspace: shirudo reads the
 ``security.bpf.shirudo.payload`` xattr of the live pin, compares it
 constant-time against the directive's expected payload, and refuses
 with ``payload_mismatch`` on disagreement or when the xattr cannot be

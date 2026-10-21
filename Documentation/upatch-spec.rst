@@ -320,9 +320,13 @@ signed.  The integrity model is therefore:
 - ``metadata`` is advisory.  Tampering with a LOAD artifact's attach
   metadata changes where the hash-verified program is attached, not
   what it contains, and the target validates the blob before creating
-  links.  Tampering with an UNLOAD directive's metadata can only
-  produce a chain value the operator's expectation rejects, or a
-  ``payload_mismatch``; the residual that remains is risk 1 in
+  links.  An UNLOAD directive's name and expected payload are read
+  from the header and the metadata, and the target refuses the
+  directive unless the same pair, the template's
+  ``shirudo_unload_params``, appears on an 8-byte boundary in the
+  signed ``data``: a directive cannot be pointed at another upatch or
+  another payload, nor a LOAD artifact turned into one by setting the
+  flag.  What remains is risk 1 in
   `threat-model <threat-model.rst>`__.
 
 8) Versioning and compatibility
