@@ -379,11 +379,16 @@ int bpm_oci_parse_endpoint(const char *endpoint, struct bpm_oci_client *c)
  * A registry that stops answering must not hold a timer's unit forever;
  * a slow transfer that still moves is left alone.
  */
+/*
+ * A registry that sends a byte now and then keeps a transfer alive
+ * past any speed limit; the total bounds it.
+ */
 static void bpm_curl_deadlines(CURL *curl)
 {
 	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L);
-	curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
+	curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
 	curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L);
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 600L);
 }
 
 static int curl_once_ex(struct bpm_oci_client *c, const char *method,
