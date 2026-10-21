@@ -1180,6 +1180,12 @@ static int boot_restore(struct shirudo_measured_upatch **out_set, size_t *out_n)
 			close(fd);
 			upatch_payload_sha256(set[cnt].name, pinned_hex,
 					      sizeof(pinned_hex));
+		}
+		/*
+		 * A link without the payload xattr is an earlier run that
+		 * stopped midway; the apply below clears it and starts over.
+		 */
+		if (fd >= 0 && pinned_hex[0]) {
 			if (strcmp(pinned_hex, set[cnt].payload_hex) != 0) {
 				pr_err("boot-restore: %s is loaded with a "
 				       "payload other than the archived one "

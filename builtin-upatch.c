@@ -1240,11 +1240,12 @@ static int attach_and_pin_progs(const struct shirudo_loader_ctx *cx,
 	made = xcalloc(nr_progs, sizeof(*made));
 	if (!made)
 		return -ENOMEM;
-	rc = mkdir_if_absent(dir, 0700, &made_dir);
-	if (rc) {
+	if (mkdir(dir, 0700) != 0) {
+		rc = -errno;
 		pr_err("mkdir %s: %s", dir, strerror(-rc));
 		goto out;
 	}
+	made_dir = true;
 	count_attach_progs(specs, nr_progs, &attach_count);
 
 	for (i = 0; i < nr_progs; i++) {
@@ -1478,6 +1479,40 @@ static int get_pin_payload(const char *name, __u8 out[32])
 	return 0;
 }
 
+static int remove_pin_dir(const char *name);
+
+/*
+ * The payload xattr goes on last, so a pin directory without it is a
+ * load a crash or a kill stopped before it was recorded, never
+ * measured: it goes before the name is loaded again. An entry there
+ * that is not a directory is not shirudo's.
+ */
+static int clear_incomplete_pins(const char *name)
+{
+	char bpffs_name[SHIRUDO_UPATCH_BPFFS_NAME_MAX + 1];
+	__u8 live[SHIRUDO_UPATCH_PAYLOAD_HASH_LEN];
+	char dir[PATH_MAX];
+	struct stat st;
+	int rc;
+
+	if (upatch_bpffs_name(bpffs_name, sizeof(bpffs_name), name) ||
+	    strsprintf(dir, sizeof(dir), "%s/%s", SHIRUDO_BPFFS_UPATCHES_DIR,
+		       bpffs_name) < 0)
+		return -ENAMETOOLONG;
+	if (lstat(dir, &st) != 0)
+		return errno == ENOENT ? 0 : -errno;
+	if (!S_ISDIR(st.st_mode))
+		return unlink(dir) != 0 ? -errno : 0;
+	rc = get_pin_payload(name, live);
+	if (rc == 0)
+		return -EEXIST;
+	if (rc != -ENODATA)
+		return rc;
+	pr_warn("upatch: removing the pins of an unfinished load of %s",
+		name);
+	return remove_pin_dir(name);
+}
+
 /*
  * The anchor init froze into the identity map: the kernel's bpf keyring
  * by its spec, or a staged user keyring by its own serial rather than
@@ -1654,6 +1689,18 @@ static int upatch_apply(const char *path, bool verify_only,
 			 "unsafe upatch name");
 		rc = 1;
 		goto out;
+	}
+	if (!verify_only) {
+		rc = clear_incomplete_pins(upatch_name);
+		if (rc) {
+			pr_err("upatch: %s: %s", upatch_name,
+			       rc == -EEXIST ? "already loaded" :
+			       strerror(-rc));
+			rep_fail(rep, "pin", rc == -EEXIST ? "already_loaded" :
+				 "unknown", -rc, "pin directory in the way");
+			rc = 1;
+			goto out;
+		}
 	}
 
 	/*
