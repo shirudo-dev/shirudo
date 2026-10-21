@@ -91,7 +91,11 @@ A target trusts a set of certificates, kept under
 ``revoked/<fingerprint>.der``
     The certificates ``shirudo keys revoke`` has withdrawn.  A key
     named here is never enrolled again and ``keys add`` refuses it
-    however well vouched.
+    however well vouched.  Root can name a key here too, the primary
+    included, which leaves no certificate to enrol: ``init`` then
+    still attaches the LSM, with no trust anchor, so every BPF load is
+    refused and ``status`` says ``init-pending`` until the keys are put
+    right, rather than the boot running unenforced.
 
 The set is the same on every reader: ``init`` enrols it, ``status``
 and ``keys`` report it, the pre-flight checks every member's

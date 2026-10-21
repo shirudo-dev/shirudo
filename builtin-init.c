@@ -368,6 +368,11 @@ static int init_keyring(void)
 		enrolled = set;
 		return 0;
 	}
+	if (!set.n) {
+		pr_err("no certificate under %s is left to trust; regenerate "
+		       "the initrd after a revocation", shirudo_keys_dir());
+		return -ENOKEY;
+	}
 	if (ring > 0) {
 		rc = init_bpf_keyring(ring, &set);
 		if (rc == 0 || rc == -EEXIST) {
@@ -832,7 +837,7 @@ static void drop_link(struct bpf_link *link, bool unpin)
 	bpf_link__destroy(link);
 }
 
-static int init_lsm(bool attach_filesystem_seal)
+static int init_lsm(bool attach_filesystem_seal, bool anchored)
 {
 	struct shirudo_identity id = {};
 	static const struct {
@@ -909,47 +914,55 @@ static int init_lsm(bool attach_filesystem_seal)
 		goto out;
 
 	/*
-	 * The trust anchor lsm/bpf_prog_load enforces: only a load the
-	 * kernel verified against exactly this sealed keyring, of exactly
-	 * this kind, is admitted from userspace. init_keyring has already
-	 * enrolled the cert and sealed the keyring, so this resolves the
-	 * serial the kernel records for a load that names it as keyring_id.
+	 * Without an anchor the identity keeps keyring serial 0, which
+	 * lsm/bpf_prog_load reads as "admit nothing".
 	 */
-	if (bpf_keyring_mode) {
-		keyring = keyring_bpf_serial();
-		id.keyring_type = SHIRUDO_SIG_KEYRING_BPF;
-	} else {
-		keyring = keyring_find(SHIRUDO_KEYRING_NAME);
-		id.keyring_type = SHIRUDO_SIG_KEYRING_USER;
-	}
-	if (keyring < 0) {
-		err = keyring;
-		pr_err("resolve the %s keyring serial: %s",
-		       bpf_keyring_mode ? "bpf" : "\"shirudo\"",
-		       strerror(-err));
-		goto out;
-	}
-	id.keyring_serial = (__s32)keyring;
+	if (anchored) {
+		/*
+		 * The trust anchor lsm/bpf_prog_load enforces: only a load
+		 * the kernel verified against exactly this sealed keyring,
+		 * of exactly this kind, is admitted from userspace.
+		 * init_keyring has already enrolled the cert and sealed the
+		 * keyring, so this resolves the serial the kernel records
+		 * for a load that names it as keyring_id.
+		 */
+		if (bpf_keyring_mode) {
+			keyring = keyring_bpf_serial();
+			id.keyring_type = SHIRUDO_SIG_KEYRING_BPF;
+		} else {
+			keyring = keyring_find(SHIRUDO_KEYRING_NAME);
+			id.keyring_type = SHIRUDO_SIG_KEYRING_USER;
+		}
+		if (keyring < 0) {
+			err = keyring;
+			pr_err("resolve the %s keyring serial: %s",
+			       bpf_keyring_mode ? "bpf" : "\"shirudo\"",
+			       strerror(-err));
+			goto out;
+		}
+		id.keyring_serial = (__s32)keyring;
 
-	/*
-	 * The keys that keyring holds, for lsm/key_permission: with the
-	 * keyring itself, what no task but shirudo may write, unlink,
-	 * revoke or invalidate for the rest of the boot.
-	 */
-	err = keyring_list(keyring, collect_asymmetric, &keys);
-	if (err) {
-		pr_err("list the anchor keyring %d: %s", (int)keyring,
-		       strerror(-err));
-		goto out;
+		/*
+		 * The keys that keyring holds, for lsm/key_permission: with
+		 * the keyring itself, what no task but shirudo may write,
+		 * unlink, revoke or invalidate for the rest of the boot.
+		 */
+		err = keyring_list(keyring, collect_asymmetric, &keys);
+		if (err) {
+			pr_err("list the anchor keyring %d: %s", (int)keyring,
+			       strerror(-err));
+			goto out;
+		}
+		if (keys.overflow || keys.n == 0) {
+			pr_err("anchor keyring %d holds %s asymmetric keys",
+			       (int)keyring, keys.overflow ? "too many" : "no");
+			err = keys.overflow ? -E2BIG : -ENOKEY;
+			goto out;
+		}
+		id.n_keys = (__u32)keys.n;
+		memcpy(id.key_serials, keys.serials,
+		       keys.n * sizeof(keys.serials[0]));
 	}
-	if (keys.overflow || keys.n == 0) {
-		pr_err("anchor keyring %d holds %s asymmetric keys",
-		       (int)keyring, keys.overflow ? "too many" : "no");
-		err = keys.overflow ? -E2BIG : -ENOKEY;
-		goto out;
-	}
-	id.n_keys = (__u32)keys.n;
-	memcpy(id.key_serials, keys.serials, keys.n * sizeof(keys.serials[0]));
 
 	m_sb = bpf_object__find_map_by_name(obj, "shirudo_bpffs_sb");
 	if (!m_sb) {
@@ -1567,16 +1580,25 @@ static void initrd_leave(void)
 static int run_init(bool no_seal)
 {
 	struct shirudo_measured_upatch *set = NULL;
+	int rc, anchor_rc;
 	size_t n = 0;
-	int rc;
 
 	rc = init_bpffs();
 	if (rc)
 		return rc;
 
-	rc = init_keyring();
-	if (rc)
-		return rc;
+	/*
+	 * A certificate in place is the intent to enforce, and root cannot
+	 * remove it once sealed, while it can empty the set by naming the
+	 * primary in revoked/: without an anchor the LSM still goes up and
+	 * admits nothing, rather than the boot running unenforced.
+	 */
+	anchor_rc = init_keyring();
+	if (anchor_rc && !path_exists(shirudo_cert_path()))
+		return anchor_rc;
+	if (anchor_rc)
+		pr_err("init: no trust anchor (%s); attaching the LSM without "
+		       "one, every BPF load is refused", strerror(-anchor_rc));
 
 	/*
 	 * Label the binary + the /var/lib/shirudo tree BEFORE init_lsm
@@ -1602,9 +1624,11 @@ static int run_init(bool no_seal)
 		}
 	}
 
-	rc = init_lsm(!no_seal);
+	rc = init_lsm(!no_seal, !anchor_rc);
 	if (rc)
 		return rc;
+	if (anchor_rc)
+		return anchor_rc;
 
 	rc = boot_restore(&set, &n);
 	if (rc) {
