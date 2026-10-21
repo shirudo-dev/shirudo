@@ -282,10 +282,9 @@ static int admit_vouched(struct shirudo_trusted_set *set,
 			xfree(sig, sig_sz);
 			if (rc)
 				continue;
-			rc = set_add(set, c->path, c->sha256, c->fingerprint,
-				     voucher);
-			if (rc)
-				return rc;
+			if (set_add(set, c->path, c->sha256, c->fingerprint,
+				    voucher))
+				continue;
 			c->done = true;
 			progress = true;
 		}
@@ -310,7 +309,11 @@ static void candidates_free(struct keys_candidate *cand, size_t n)
 
 /*
  * Read every .der under trusted/: the ones not revoked become
- * candidates for admission, which needs the whole list first.
+ * candidates for admission, which needs the whole list first. Anyone
+ * with root can put a file there, so one that cannot be read or parsed,
+ * or one past the scan limit, is counted as unvouched and left out like
+ * any other file no member vouched for, rather than failing the set
+ * and with it init.
  */
 static int scan_trusted(const char *keys_dir, const char *revoked_dir,
 			struct shirudo_trusted_set *set,
@@ -329,23 +332,28 @@ static int scan_trusted(const char *keys_dir, const char *revoked_dir,
 		struct keys_candidate *c = &cand[*n_cand];
 
 		if (*n_cand >= KEYS_SCAN_MAX) {
-			rc = -E2BIG;
+			set->n_unvouched += (size_t)(n - i);
 			break;
 		}
 		if (strsprintf(c->path, sizeof(c->path), "%s/%s", dir,
 			       names[i]->d_name) < 0) {
-			rc = -ENAMETOOLONG;
-			break;
+			set->n_unvouched++;
+			continue;
 		}
 		rc = keys_read_der(c->path, &c->der, &c->der_sz);
-		if (rc)
-			break;
-		rc = keys_digest_der(c->der, c->der_sz, c->sha256,
-				     c->fingerprint);
-		if (rc) {
+		if (!rc)
+			rc = keys_digest_der(c->der, c->der_sz, c->sha256,
+					     c->fingerprint);
+		if (rc && c->der) {
 			xfree(c->der, c->der_sz);
 			c->der = NULL;
-			break;
+		}
+		if (rc) {
+			if (rc == -ENOMEM)
+				break;
+			set->n_unvouched++;
+			rc = 0;
+			continue;
 		}
 		if (keys_is_revoked(revoked_dir, c->fingerprint)) {
 			xfree(c->der, c->der_sz);

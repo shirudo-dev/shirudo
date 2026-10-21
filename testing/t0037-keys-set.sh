@@ -62,15 +62,24 @@ test_expect_success 'a revoked certificate is left out of the set' '
 	! grep -q "$fp_c" "$W/set2"
 '
 
-test_expect_success 'malformed trusted certificates are rejected before or after valid candidates' '
+test_expect_success 'a malformed trusted certificate is left out, before or after valid candidates' '
 	mkdir -p "$W/malformed/trusted" &&
 	cp "$W/a/cert.der" "$W/malformed/cert.der" &&
-	cp "$W/b/cert.der" "$W/malformed/trusted/middle.der" &&
-	printf "invalid DER" >"$W/malformed/trusted/first.der" &&
-	./$H reject "$W/malformed" &&
-	mv "$W/malformed/trusted/first.der" "$W/malformed/trusted/last.der" &&
-	mv "$W/malformed/trusted/middle.der" "$W/malformed/trusted/first.der" &&
-	./$H reject "$W/malformed"
+	cp "$W/b/cert.der" "$W/malformed/trusted/$fp_b.der" &&
+	cp "$W/keys/trusted/$fp_b.vouch" "$W/malformed/trusted/" &&
+	printf "invalid DER" >"$W/malformed/trusted/0first.der" &&
+	./$H load "$W/malformed" | grep -qx "n=2 revoked=0 unvouched=1" &&
+	mv "$W/malformed/trusted/0first.der" "$W/malformed/trusted/zlast.der" &&
+	./$H load "$W/malformed" | grep -qx "n=2 revoked=0 unvouched=1" &&
+	mkdir "$W/malformed/trusted/dir.der" &&
+	./$H load "$W/malformed" | grep -qx "n=2 revoked=0 unvouched=2"
+'
+
+test_expect_success 'files past the scan limit are counted, not fatal' '
+	for i in $(seq 70); do
+		: >"$W/malformed/trusted/junk$i.der"
+	done &&
+	./$H load "$W/malformed" | grep -q "^n=[12] revoked=0 unvouched="
 '
 
 test_done
