@@ -135,7 +135,9 @@ returns a list of OTLP ``Metric`` objects, exactly as they appear in
 the ``metrics`` array of a ``scopeMetrics`` entry, so the decoder
 decides the name, unit, description, aggregation and data points.  An
 error raised in the decoder drops that snapshot with a diagnostic; it
-never produces a partial record.  The shipped
+never produces a partial record.  Strings go out as UTF-8, with U+FFFD
+in place of a byte sequence that is not, such as a name the kernel
+cut mid-character.  The shipped
 ``upatches/kernel-obs/decoders/watch_stat.lua`` turns a per-CPU
 counter pair into one monotonic sum with two labelled points::
 

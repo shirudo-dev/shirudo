@@ -148,8 +148,9 @@ test_expect_success 'Lua decoder enforces instruction and memory limits' '
 	if ./helper/test-upatch-decode memory "$WORK/u.upatch"; then false; fi
 '
 
-test_expect_success 'Lua decoder rejects invalid UTF-8 output' '
-	if ./helper/test-upatch-decode utf8 "$WORK/u.upatch"; then false; fi
+test_expect_success 'Lua decoder output replaces invalid UTF-8' '
+	[ "$(./helper/test-upatch-decode utf8 "$WORK/u.upatch")" = \
+	  "\"\\ufffd\"" ]
 '
 
 python3 - "$WORK/u.upatch" "$WORK" <<'PY'
