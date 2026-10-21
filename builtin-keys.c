@@ -927,6 +927,49 @@ static int revoked_cert(const __u8 fp[32], const char *marker,
 	return 0;
 }
 
+/*
+ * A run stopped between the marker and the promotion leaves the revoked
+ * primary as cert.der, and with it a set no boot can enrol, since every
+ * vouch starts at the primary: the heir is found in the set as it stood
+ * before the marker.
+ */
+static int finish_promotion(const __u8 fp[32], const __u8 *heir_fp)
+{
+	const struct shirudo_trusted_cert *heir;
+	struct shirudo_trusted_set before;
+	__u8 sha256[32], primary[32];
+	size_t der_sz = 0;
+	__u8 *der = NULL;
+	int rc;
+
+	rc = keys_read_der(SHIRUDO_CERT_PATH, &der, &der_sz);
+	if (rc)
+		return rc;
+	rc = keys_digest_der(der, der_sz, sha256, primary);
+	xfree(der, der_sz);
+	if (rc || memcmp(primary, fp, 32))
+		return rc;
+	if (!heir_fp) {
+		pr_err("keys revoke: the revoked certificate is still %s; "
+		       "name its heir with --promote <fingerprint>",
+		       SHIRUDO_CERT_PATH);
+		return -EINVAL;
+	}
+	rc = keys_load(SHIRUDO_KEYS_DIR, SHIRUDO_KEYS_DIR "/revoked.none",
+		       true, &before);
+	if (rc)
+		return rc;
+	heir = set_find(&before, heir_fp);
+	if (!heir || heir->primary) {
+		pr_err("keys revoke: the heir is not a trusted certificate");
+		return -ENOKEY;
+	}
+	rc = promote(heir);
+	if (rc)
+		pr_err("keys revoke: promote: %s", strerror(-rc));
+	return rc;
+}
+
 static int keys_revoke(int argc, const char **argv)
 {
 	const struct shirudo_trusted_cert *victim, *heir = NULL;
@@ -1024,6 +1067,9 @@ static int keys_revoke(int argc, const char **argv)
 			fp_hex);
 		victim = &gone;
 		resume = true;
+		rc = finish_promotion(fp, promote_arg ? promote_fp : NULL);
+		if (rc)
+			goto out;
 		goto finish;
 	}
 	if (set.n == 1 && !force) {

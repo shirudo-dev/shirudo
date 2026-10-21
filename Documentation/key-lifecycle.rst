@@ -266,7 +266,8 @@ A key
     keyring; a target in the staging configuration holds the primary
     alone and rotates instead.  And the primary leaves only with an
     heir: ``--promote <fingerprint>`` makes another member
-    ``cert.der``.  Members the revoked key vouched for stay enrolled
+    ``cert.der``; a revocation stopped before the promotion is
+    finished by running it again with the same ``--promote``.  Members the revoked key vouched for stay enrolled
     for the rest of the boot, since that trust was established when
     the boot enrolled them, but they are unvouched from then on and
     need a new vouch under a remaining member (``keys add`` again)
