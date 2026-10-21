@@ -196,6 +196,56 @@ static int keyring_holds_set(key_serial_t ring,
  * certificate until the target reboots into the production
  * configuration); sealed around anything else, it is refused.
  */
+_Static_assert(SHIRUDO_IDENTITY_KEYS_MAX == SHIRUDO_KEYS_MAX,
+	       "the identity map holds one serial per trusted certificate");
+
+struct anchor_keys {
+	__s32	serials[SHIRUDO_IDENTITY_KEYS_MAX];
+	size_t	n;
+	bool	overflow;
+};
+
+static void collect_asymmetric(key_serial_t serial, const char *type,
+			       const char *description, void *ud)
+{
+	struct anchor_keys *k = ud;
+
+	(void)description;
+	if (strcmp(type, "asymmetric"))
+		return;
+	if (k->n >= ARRAY_SIZE(k->serials)) {
+		k->overflow = true;
+		return;
+	}
+	k->serials[k->n++] = (__s32)serial;
+}
+
+/*
+ * The keyring the initrd sealed is the one the frozen identity names,
+ * holding exactly the keys it froze: that, not the root's copy of the
+ * set, which may have changed since the initrd was built, is what the
+ * root run checks.
+ */
+static bool anchor_unchanged(key_serial_t ring,
+			     const struct shirudo_identity *id)
+{
+	struct anchor_keys keys = {};
+	size_t i, j;
+
+	if (keyring_list(ring, collect_asymmetric, &keys) || keys.overflow ||
+	    keys.n != id->n_keys)
+		return false;
+	for (i = 0; i < keys.n; i++) {
+		for (j = 0; j < id->n_keys; j++) {
+			if (id->key_serials[j] == keys.serials[i])
+				break;
+		}
+		if (j == id->n_keys)
+			return false;
+	}
+	return true;
+}
+
 static int init_bpf_keyring(key_serial_t ring,
 			    const struct shirudo_trusted_set *set)
 {
@@ -300,6 +350,24 @@ static int init_keyring(void)
 	frozen = identity_read(&id) == 0;
 
 	ring = keyring_bpf_serial();
+	if (ring > 0 && frozen && id.keyring_type == SHIRUDO_SIG_KEYRING_BPF &&
+	    id.keyring_serial == ring) {
+		if (!anchor_unchanged(ring, &id)) {
+			pr_err("bpf keyring serial=%d no longer holds the keys "
+			       "frozen this boot (tampered)", (int)ring);
+			return -EKEYREJECTED;
+		}
+		if (keyring_holds_set(ring, &set) != (int)set.n ||
+		    id.n_keys != set.n)
+			pr_warn("bpf keyring serial=%d holds the %u keys "
+				"enrolled this boot, which are not the %zu "
+				"trusted certificates under %s; regenerate the "
+				"initrd", (int)ring, id.n_keys, set.n,
+				shirudo_keys_dir());
+		bpf_keyring_mode = true;
+		enrolled = set;
+		return 0;
+	}
 	if (ring > 0) {
 		rc = init_bpf_keyring(ring, &set);
 		if (rc == 0 || rc == -EEXIST) {
@@ -762,30 +830,6 @@ static void drop_link(struct bpf_link *link, bool unpin)
 	if (link && unpin)
 		bpf_link__unpin(link);
 	bpf_link__destroy(link);
-}
-
-_Static_assert(SHIRUDO_IDENTITY_KEYS_MAX == SHIRUDO_KEYS_MAX,
-	       "the identity map holds one serial per trusted certificate");
-
-struct anchor_keys {
-	__s32	serials[SHIRUDO_IDENTITY_KEYS_MAX];
-	size_t	n;
-	bool	overflow;
-};
-
-static void collect_asymmetric(key_serial_t serial, const char *type,
-			       const char *description, void *ud)
-{
-	struct anchor_keys *k = ud;
-
-	(void)description;
-	if (strcmp(type, "asymmetric"))
-		return;
-	if (k->n >= ARRAY_SIZE(k->serials)) {
-		k->overflow = true;
-		return;
-	}
-	k->serials[k->n++] = (__s32)serial;
 }
 
 static int init_lsm(bool attach_filesystem_seal)
