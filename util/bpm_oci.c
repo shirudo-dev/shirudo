@@ -71,20 +71,27 @@ bool bpm_version_ok(const char *s)
 	return bpm_component_ok(s, true);
 }
 
+/*
+ * What a registry answers into memory is a JSON document or a detached
+ * signature, never more than the JSON parser takes; packages go to a
+ * file. A larger answer is refused before it is buffered.
+ */
+#define BPM_MAX_MEMORY_BODY	SHIRUDO_JSON_MAX_BYTES
+
 static int bpm_buffer_append(struct bpm_buffer *b, const void *data, size_t len)
 {
 	size_t want;
 	__u8 *p;
 
-	if (len >= BPM_MAX_HTTP_BODY - b->len)
+	if (len >= BPM_MAX_MEMORY_BODY - b->len)
 		return -E2BIG;
 	want = b->len + len;
 	if (want + 1 > b->cap) {
 		size_t cap = b->cap ? b->cap : 4096;
 
 		while (cap <= want) {
-			if (cap > BPM_MAX_HTTP_BODY / 2) {
-				cap = BPM_MAX_HTTP_BODY;
+			if (cap > BPM_MAX_MEMORY_BODY / 2) {
+				cap = BPM_MAX_MEMORY_BODY;
 				break;
 			}
 			cap *= 2;
