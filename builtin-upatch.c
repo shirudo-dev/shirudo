@@ -1145,6 +1145,30 @@ static int mkdir_if_absent(const char *path, mode_t mode, bool *made)
 	return errno == EEXIST ? 0 : -errno;
 }
 
+/*
+ * A pin follows symlinks and needs only some bpffs directory at the end,
+ * so a symlink or a mount planted where the upatches directory belongs
+ * would carry every later pin out of the private bpffs.
+ */
+static int upatches_pin_dir(void)
+{
+	struct stat st, root;
+
+	if (stat(SHIRUDO_BPFFS_DIR, &root) != 0)
+		return -errno;
+	if (lstat(SHIRUDO_BPFFS_UPATCHES_DIR, &st) == 0) {
+		if (S_ISDIR(st.st_mode))
+			return st.st_dev == root.st_dev ? 0 : -EXDEV;
+		if (unlink(SHIRUDO_BPFFS_UPATCHES_DIR) != 0)
+			return -errno;
+	} else if (errno != ENOENT) {
+		return -errno;
+	}
+	if (mkdir(SHIRUDO_BPFFS_UPATCHES_DIR, 0700) != 0)
+		return -errno;
+	return 0;
+}
+
 static void count_attach_progs(const struct shirudo_prog_spec *specs,
 			       __u32 nr_progs, __u32 *out)
 {
@@ -1201,7 +1225,7 @@ static int attach_and_pin_progs(const struct shirudo_loader_ctx *cx,
 	if (upatch_bpffs_name(bpffs_name, sizeof(bpffs_name), name))
 		return -ENAMETOOLONG;
 
-	rc = mkdir_if_absent(SHIRUDO_BPFFS_UPATCHES_DIR, 0700, NULL);
+	rc = upatches_pin_dir();
 	if (rc) {
 		pr_err("mkdir %s: %s", SHIRUDO_BPFFS_UPATCHES_DIR,
 		       strerror(-rc));
@@ -1446,7 +1470,7 @@ static int get_pin_payload(const char *name, __u8 out[32])
 	if (strsprintf(dir, sizeof(dir), "%s/%s", SHIRUDO_BPFFS_UPATCHES_DIR,
 		       bpffs_name) < 0)
 		return -ENAMETOOLONG;
-	n = getxattr(dir, SHIRUDO_XATTR_PAYLOAD, out, 32);
+	n = lgetxattr(dir, SHIRUDO_XATTR_PAYLOAD, out, 32);
 	if (n < 0)
 		return -errno;
 	if (n != 32)
@@ -2332,8 +2356,10 @@ static int remove_pin_dir(const char *name)
 	if (strsprintf(serializers_dir, sizeof(serializers_dir),
 		       "%s/serializers", dir) < 0)
 		return -ENAMETOOLONG;
-	if (stat(dir, &st) != 0)
+	if (lstat(dir, &st) != 0)
 		return -errno;
+	if (!S_ISDIR(st.st_mode))
+		return unlink(dir) != 0 ? -errno : -ENOENT;
 	if (stat(maps_dir, &st) == 0) {
 		rc = wipe_dir_flat(maps_dir);
 		if (rc)
