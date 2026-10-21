@@ -28,6 +28,11 @@ mkdir -p "$WORK/decoders"
 
 cat > "$WORK/decoders/t0005.lua" <<'EOF'
 function decode(input)
+	if input.data.serialized_bytes == 996 then
+		while true do
+			pcall(function() while true do end end)
+		end
+	end
 	if input.data.serialized_bytes == 997 then
 		return string.rep("x", 64 * 1024 * 1024)
 	end
@@ -146,6 +151,12 @@ assert record[\"ids\"] == {\"arrayValue\": {\"values\": [
 test_expect_success 'Lua decoder enforces instruction and memory limits' '
 	if ./helper/test-upatch-decode loop "$WORK/u.upatch"; then false; fi &&
 	if ./helper/test-upatch-decode memory "$WORK/u.upatch"; then false; fi
+'
+
+test_expect_success 'Lua decoder cannot catch the budget, and stops' '
+	timeout 30 ./helper/test-upatch-decode catch "$WORK/u.upatch" \
+		>/dev/null 2>"$WORK/catch.err"
+	[ $? -eq 1 ] && grep -q "pcall" "$WORK/catch.err"
 '
 
 test_expect_success 'Lua decoder output replaces invalid UTF-8' '

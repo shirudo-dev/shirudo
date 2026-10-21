@@ -94,8 +94,15 @@ a decoder is covered by the same ML-DSA signature as the program whose
 data it interprets.  A target runs only decoders that arrived this way;
 there is no decoder search path and nothing to drop in.
 
-The decoder runs under LuaJIT with the standard library and an
-instruction budget.  Its entry point receives one table::
+The decoder runs under LuaJIT's interpreter with an instruction budget
+and a memory limit, from source only, never bytecode.  It has the
+standard library less what could reach the host, catch the budget's
+error or run outside it: ``io``, ``os``, ``package``, ``require``,
+``debug``, ``jit``, ``ffi``, the loaders, ``collectgarbage``,
+``pcall``, ``xpcall``, ``coroutine``, ``newproxy``, ``print``,
+``getfenv``, ``setfenv`` and ``string.find``, ``match``, ``gmatch``,
+``gsub`` and ``dump`` are absent.  Its entry point receives one
+table::
 
     input.schema, input.upatch, input.map
     input.startTimeUnixNano, input.timeUnixNano

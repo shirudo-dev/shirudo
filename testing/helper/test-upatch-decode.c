@@ -23,10 +23,11 @@ int main(int argc, char **argv)
 			  strcmp(argv[1], "otel") != 0 &&
 			  strcmp(argv[1], "loop") != 0 &&
 			  strcmp(argv[1], "memory") != 0 &&
-			  strcmp(argv[1], "utf8") != 0)) {
+			  strcmp(argv[1], "utf8") != 0 &&
+			  strcmp(argv[1], "catch") != 0)) {
 		fprintf(stderr,
-			"usage: %s <json|otel|loop|memory|utf8> <file.upatch>\n",
-			argv[0]);
+			"usage: %s <json|otel|loop|memory|utf8|catch> "
+			"<file.upatch>\n", argv[0]);
 		return 2;
 	}
 	snprintf(view.upatch, sizeof(view.upatch), "%s", "t0005");
@@ -37,6 +38,8 @@ int main(int argc, char **argv)
 		view.serial_bytes_total = 998;
 	else if (strcmp(argv[1], "loop") == 0)
 		view.serial_bytes_total = 999;
+	else if (strcmp(argv[1], "catch") == 0)
+		view.serial_bytes_total = 996;
 	if (strcmp(argv[1], "otel") == 0)
 		rc = upatch_decode_map_file_otel(argv[2], &view,
 						 &out, &out_len);

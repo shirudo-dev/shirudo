@@ -982,12 +982,22 @@ static void lua_install_host_api(lua_State *L)
 	lua_setglobal(L, "shirudo");
 }
 
+/*
+ * pcall, xpcall and coroutines would catch the budget's error and carry
+ * on, a newproxy finalizer runs at lua_close() with no hook at all, the
+ * pattern functions backtrack in C where the hook never looks, and
+ * print writes into the NDJSON on stdout.
+ */
 static void lua_disable_globals(lua_State *L)
 {
 	static const char *const deny[] = {
 		"io", "os", "package", "require", "debug", "jit", "ffi",
 		"dofile", "loadfile", "load", "loadstring", "module",
-		"collectgarbage",
+		"collectgarbage", "pcall", "xpcall", "coroutine", "newproxy",
+		"print", "getfenv", "setfenv",
+	};
+	static const char *const deny_string[] = {
+		"find", "match", "gmatch", "gsub", "dump",
 	};
 	size_t i;
 
@@ -995,6 +1005,12 @@ static void lua_disable_globals(lua_State *L)
 		lua_pushnil(L);
 		lua_setglobal(L, deny[i]);
 	}
+	lua_getglobal(L, "string");
+	for (i = 0; i < ARRAY_SIZE(deny_string); i++) {
+		lua_pushnil(L);
+		lua_setfield(L, -2, deny_string[i]);
+	}
+	lua_pop(L, 1);
 }
 
 static void lua_budget_hook(lua_State *L, lua_Debug *ar)
@@ -1151,19 +1167,58 @@ static int lua_get_decoder_entrypoint(lua_State *L, const char *entrypoint)
 	return lua_isfunction(L, -1) ? 0 : -ENOENT;
 }
 
-struct lua_decoder_call {
-	const struct shirudo_map_view *view;
+struct lua_decoder_run {
+	const struct upatch_decoder_view	*d;
+	const struct shirudo_map_view		*view;
+	struct json_out				*jo;
+	bool					otel;
+	bool					no_entry;
+	const char				*stage;
+	int					rc;
 };
 
 static int lua_call_decoder(lua_State *L)
 {
-	const struct lua_decoder_call *call =
+	const struct lua_decoder_run *run =
 		lua_touserdata(L, lua_upvalueindex(1));
 
 	lua_pushvalue(L, lua_upvalueindex(2));
-	lua_push_map_input(L, call->view);
+	lua_push_map_input(L, run->view);
 	lua_call(L, 1, 1);
 	return 1;
+}
+
+/*
+ * Everything that touches the Lua state runs under lua_cpcall(): an
+ * error outside a protected call, from a metamethod on the entry point
+ * lookup or from an allocation the emitter makes at the memory limit,
+ * would otherwise reach LuaJIT's panic handler, which exits.
+ */
+static int lua_decoder_main(lua_State *L)
+{
+	struct lua_decoder_run *run = lua_touserdata(L, 1);
+	const struct upatch_decoder_view *d = run->d;
+
+	lua_settop(L, 0);
+	run->stage = "load";
+	if (luaL_loadbufferx(L, d->source, d->source_len, d->source_name,
+			     "t"))
+		return lua_error(L);
+	lua_call(L, 0, 1);
+	if (lua_get_decoder_entrypoint(L, d->entrypoint)) {
+		run->no_entry = true;
+		return 0;
+	}
+	run->stage = "run";
+	lua_pushlightuserdata(L, run);
+	lua_pushvalue(L, -2);
+	lua_pushcclosure(L, lua_call_decoder, 2);
+	lua_remove(L, -2);
+	lua_call(L, 0, 1);
+	run->stage = "encode";
+	run->rc = run->otel ? lua_otel_emit_value(L, -1, run->jo, 0) :
+		  lua_json_emit_value(L, -1, run->jo, 0);
+	return 0;
 }
 
 static const char *lua_error_message(lua_State *L)
@@ -1184,10 +1239,10 @@ static int run_lua_decoder(const struct upatch_decoder_view *d,
 	struct lua_memory memory = {
 		.limit = SHIRUDO_LUA_MEMORY_LIMIT,
 	};
-	struct lua_decoder_call call = {
-		.view = v,
-	};
 	struct json_out jo = {};
+	struct lua_decoder_run run = {
+		.d = d, .view = v, .jo = &jo, .otel = otel, .stage = "open",
+	};
 	lua_State *L;
 	int rc = 0;
 
@@ -1205,31 +1260,19 @@ static int run_lua_decoder(const struct upatch_decoder_view *d,
 	lua_install_host_api(L);
 	lua_install_budget(L, &budget);
 
-	if (luaL_loadbuffer(L, d->source, d->source_len, d->source_name) ||
-	    lua_pcall(L, 0, 1, 0)) {
-		fprintf(stderr, "upatch map: decoder load failed: %s\n",
-			lua_error_message(L));
+	if (lua_cpcall(L, lua_decoder_main, &run)) {
+		fprintf(stderr, "upatch map: decoder %s failed: %s\n",
+			run.stage, lua_error_message(L));
 		rc = -EINVAL;
 		goto out_close;
 	}
-	rc = lua_get_decoder_entrypoint(L, d->entrypoint);
-	if (rc) {
+	if (run.no_entry) {
 		fprintf(stderr, "upatch map: decoder entrypoint '%s' not found\n",
 			d->entrypoint);
+		rc = -ENOENT;
 		goto out_close;
 	}
-	lua_pushlightuserdata(L, &call);
-	lua_pushvalue(L, -2);
-	lua_pushcclosure(L, lua_call_decoder, 2);
-	lua_remove(L, -2);
-	if (lua_pcall(L, 0, 1, 0)) {
-		fprintf(stderr, "upatch map: decoder failed: %s\n",
-			lua_error_message(L));
-		rc = -EINVAL;
-		goto out_close;
-	}
-	rc = otel ? lua_otel_emit_value(L, -1, &jo, 0) :
-		lua_json_emit_value(L, -1, &jo, 0);
+	rc = run.rc;
 	if (rc) {
 		fprintf(stderr, "upatch map: decoder encode failed: %s\n",
 			strerror(-rc));
