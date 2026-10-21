@@ -9,5 +9,6 @@ RequiresMountsFor=/etc/shirudo/bpm /var/lib/shirudo
 
 [Service]
 Type=oneshot
+TimeoutStartSec=30min
 EnvironmentFile=-/etc/shirudo/bpm/environment
 ExecStart=@bindir@/shirudo bpm tree sync

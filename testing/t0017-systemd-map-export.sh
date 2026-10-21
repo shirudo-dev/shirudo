@@ -68,6 +68,13 @@ test_expect_success 'BPM repository refresh service runs update before upgrade' 
 		"$(cat "$WORK/bpm-upgrade-line")"
 '
 
+test_expect_success 'every timer-driven service has a start timeout' '
+	for u in map-export keepalive bpm-repo-update bpm-tree-sync; do
+		grep -q "^TimeoutStartSec=" ../systemd/shirudo-$u.service.in ||
+			return 1
+	done
+'
+
 test_expect_success 'BPM repository refresh timer runs at boot and every minute' '
 	grep -q "^OnBootSec=0s$" \
 		../systemd/shirudo-bpm-repo-update.timer &&
@@ -99,7 +106,7 @@ test_expect_success 'target install resolves and stages both exporter units' '
 		"$GENERATED" &&
 	grep -q "^ExecStart=/opt/shirudo/bin/shirudo status --otel --include-system$" \
 		"$GENERATED_KEEPALIVE" &&
-	grep -q "^ExecStart=/opt/shirudo/bin/shirudo bpm repo update$" \
+	grep -q "^ExecStart=-/opt/shirudo/bin/shirudo bpm repo update$" \
 		"$GENERATED_BPM" &&
 	grep -q "^ExecStart=/opt/shirudo/bin/shirudo bpm upgrade$" \
 		"$GENERATED_BPM" &&

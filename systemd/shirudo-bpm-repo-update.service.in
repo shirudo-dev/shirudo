@@ -9,6 +9,9 @@ RequiresMountsFor=/etc/shirudo/bpm /var/lib/shirudo
 
 [Service]
 Type=oneshot
+TimeoutStartSec=30min
 EnvironmentFile=-/etc/shirudo/bpm/environment
-ExecStart=@bindir@/shirudo bpm repo update
+# One unreachable registry fails the update; the upgrade still runs
+# from what the others refreshed.
+ExecStart=-@bindir@/shirudo bpm repo update
 ExecStart=@bindir@/shirudo bpm upgrade
