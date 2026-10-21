@@ -24,13 +24,13 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The BPF objects embedded in the binary need the BTF of a signed-BPF
       # capable bpf-next kernel, so the build runs in the same LVH VM as the
       # package build. The host-side suite itself needs no root, LSM or TPM.
       - name: Build with sanitizers and run the host-side suite in LVH VM
-        uses: cilium/little-vm-helper@v0.0.30
+        uses: cilium/little-vm-helper@f86d344aca812dda5aef167867a9a0a90ca6cca5 # v0.0.31
         with:
           test-name: shirudo-sanitizers-${{ matrix.compiler }}
           image: kind

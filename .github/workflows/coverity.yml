@@ -19,7 +19,7 @@ jobs:
     steps:
       - name: Check out repository
         if: env.COVERITY_SCAN_TOKEN != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -36,7 +36,7 @@ jobs:
       # the host mount because the guest disk is small.
       - name: Build under cov-build in LVH VM and upload the result
         if: env.COVERITY_SCAN_TOKEN != ''
-        uses: cilium/little-vm-helper@v0.0.30
+        uses: cilium/little-vm-helper@f86d344aca812dda5aef167867a9a0a90ca6cca5 # v0.0.31
         with:
           test-name: shirudo-coverity
           image: kind

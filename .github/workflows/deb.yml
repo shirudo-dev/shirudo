@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -35,7 +35,7 @@ jobs:
           printf '%s\n' "$version" > build/ci-version
 
       - name: Build the tarball, deb and target rpm packages and run shirudo in LVH VM
-        uses: cilium/little-vm-helper@v0.0.30
+        uses: cilium/little-vm-helper@f86d344aca812dda5aef167867a9a0a90ca6cca5 # v0.0.31
         with:
           test-name: shirudo-apt
           image: kind
@@ -256,7 +256,7 @@ jobs:
             apt-get remove -y shirudo-operator
 
       - name: Upload deb package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: shirudo-deb
           path: |
@@ -265,7 +265,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload target rpm package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: shirudo-rpm-target
           path: |
@@ -274,7 +274,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload installer tarballs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: shirudo-tar
           path: |
@@ -285,7 +285,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload the bpf-next vmlinux.h
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bpf-next-vmlinux-h
           path: vmlinux.h
@@ -304,18 +304,18 @@ jobs:
             elfutils-libelf-devel zlib-ng-compat-devel luajit-devel jq
 
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Download the target rpm package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: shirudo-rpm-target
           path: target-rpm
 
       - name: Download the bpf-next vmlinux.h
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: bpf-next-vmlinux-h
           path: bpf-next
@@ -370,7 +370,7 @@ jobs:
           ! command -v shirudo
 
       - name: Upload operator rpm package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: shirudo-rpm-operator
           path: |
@@ -387,7 +387,7 @@ jobs:
 
     steps:
       - name: Download deb, rpm and tarball packages and their SBOMs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: shirudo-*
           merge-multiple: true
