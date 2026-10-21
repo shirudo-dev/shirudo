@@ -633,6 +633,19 @@ static int get_bearer_token(struct bpm_oci_client *c, const char *challenge)
 		}
 	}
 	curl_easy_setopt(curl, CURLOPT_URL, url);
+	/*
+	 * The realm is the registry's word and may name any URL; the
+	 * credentials go no further than to the registry's own scheme.
+	 */
+#if LIBCURL_VERSION_NUM >= 0x075500
+	curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR,
+			 !strncmp(c->base_url, "https://", 8) ? "https" :
+			 "http,https");
+#else
+	curl_easy_setopt(curl, CURLOPT_PROTOCOLS,
+			 !strncmp(c->base_url, "https://", 8) ? CURLPROTO_HTTPS :
+			 CURLPROTO_HTTP | CURLPROTO_HTTPS);
+#endif
 	curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 	bpm_curl_deadlines(curl);
