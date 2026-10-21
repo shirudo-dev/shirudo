@@ -164,16 +164,33 @@ static int tp_skip(struct tree_parser *p)
 
 static int tp_int(struct tree_parser *p, __s64 *out)
 {
-	char *end;
-	__s64 v;
+	const char *start, *scan;
+	__u64 value = 0, limit;
+	__u8 digit;
+	bool negative = false;
 
 	tp_ws(p);
-	errno = 0;
-	v = strtoll(p->p, &end, 10);
-	if (end == p->p || end > p->end || errno == ERANGE)
+	start = p->p;
+	scan = start;
+	if (scan < p->end && *scan == '-') {
+		negative = true;
+		scan++;
+	}
+	if (scan >= p->end || !isdigit((__u8)*scan))
 		return -EINVAL;
-	p->p = end;
-	*out = (__s64)v;
+	limit = negative ? (__u64)INT64_MAX + 1 : INT64_MAX;
+	while (scan < p->end && isdigit((__u8)*scan)) {
+		digit = (__u8)*scan - '0';
+		if (value > (limit - digit) / 10)
+			return -EINVAL;
+		value = value * 10 + digit;
+		scan++;
+	}
+	p->p = scan;
+	if (negative && value == (__u64)INT64_MAX + 1)
+		*out = INT64_MIN;
+	else
+		*out = negative ? -(__s64)value : (__s64)value;
 	return 0;
 }
 
