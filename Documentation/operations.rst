@@ -399,14 +399,20 @@ success, ``1`` on any refusal or failure and ``2`` on a usage error;
      - A CO-RE relocation found no match.
      - Regenerate ``vmlinux.h`` from the target kernel.
    * - ``payload_mismatch``
-     - The unload directive's expected payload is not the pin's.
-     - Build the directive for the loaded artifact.
+     - The unload directive's expected payload is not the pin's, or a
+       load names an upatch loaded with another payload.
+     - Build the directive for the loaded artifact; unload before
+       loading another payload under the name.
+   * - ``already_loaded``
+     - The upatch was loaded with this payload; the load archived and
+       measured it where an earlier run had not.
+     - None.
    * - ``already_unloaded``
      - Nothing to unload.
      - None.
    * - ``detach_failed``
-     - The link could not be detached.
-     - Inspect the journal; the pin is intact.
+     - The link could not be detached after the unload was measured.
+     - Inspect the journal; the pin is intact and a retry detaches it.
    * - ``tpm_error``
      - The register could not be extended or bound.
      - ``/dev/tpmrm0``, ``tpm.tcti``, ``tpm.owner_auth``; section 7.

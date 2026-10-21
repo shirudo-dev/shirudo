@@ -607,9 +607,10 @@ kernel release, and the NV index and chain value after the operation.
 The categories are ``ok``, ``tampered``, ``keyring_missing``,
 ``lsm_denied``, ``signature_rejected``, ``signature_unsupported``,
 ``verifier_rejected``, ``parser_rejected``, ``btf_mismatch``,
-``payload_mismatch``, ``already_unloaded``, ``detach_failed``,
-``tpm_error``, ``eventlog_full``, ``kernel_abi_unsupported``,
-``init_prereqs_missing``, ``version_mismatch`` and ``unknown``.
+``payload_mismatch``, ``already_loaded``, ``already_unloaded``,
+``detach_failed``, ``tpm_error``, ``eventlog_full``,
+``kernel_abi_unsupported``, ``init_prereqs_missing``,
+``version_mismatch`` and ``unknown``.
 Automation treats ``tampered`` as "refresh state, then decide", never
 as "retry the same input": a concurrent legitimate operator produces
 it too.

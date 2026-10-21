@@ -221,9 +221,11 @@ Without ``--payload-sha256`` the builder reads the digest from
 locally, and otherwise emits an all-zero digest that makes the target
 skip the payload check.  The target loads the directive through the
 same signature check as a load, compares the live pin's payload against
-the directive, detaches, removes the persisted artifact and extends the
-chain.  Unloading something that is not loaded is ``already_unloaded``
-and extends nothing.
+the directive, extends the chain, detaches and removes the persisted
+artifact.  Unloading something that is not loaded is
+``already_unloaded`` and extends nothing; loading what is loaded
+already is ``already_loaded`` and only archives and measures it where
+an earlier run did not.
 
 6) Packages and registries
 --------------------------

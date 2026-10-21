@@ -2097,6 +2097,67 @@ static int append_upatch_event(const char *type, const char *name,
 	return eventlog_append(buf);
 }
 
+struct logged_load {
+	const char	*name;
+	char		payload_hex[2 * SHIRUDO_UPATCH_PAYLOAD_HASH_LEN + 1];
+	bool		loaded, in_set;
+	char		type[32];
+	char		up_name[SHIRUDO_UPATCH_NAME_MAX + 1];
+	char		up_payload[2 * SHIRUDO_UPATCH_PAYLOAD_HASH_LEN + 1];
+};
+
+static int logged_set_elem(void *ctx)
+{
+	struct logged_load *l = ctx;
+
+	if (strcmp(l->up_name, l->name) == 0)
+		l->in_set = strcmp(l->up_payload, l->payload_hex) == 0;
+	return 0;
+}
+
+static int logged_line(const char *line, size_t len, void *ctx)
+{
+	struct logged_load *l = ctx;
+	struct shirudo_json_field up[] = {
+		{ "name", SHIRUDO_JSON_T_STRING, l->up_name,
+		  sizeof(l->up_name), 0, NULL, 0 },
+		{ "payload_sha256", SHIRUDO_JSON_T_STRING, l->up_payload,
+		  sizeof(l->up_payload), 0, NULL, 0 },
+	};
+	struct shirudo_json_array set = { logged_set_elem, l };
+	struct shirudo_json_field f[] = {
+		{ "type", SHIRUDO_JSON_T_STRING, l->type, sizeof(l->type), 0,
+		  NULL, 0 },
+		{ "upatch", SHIRUDO_JSON_T_OBJECT, NULL, 0, 0, up, 2 },
+		{ "set", SHIRUDO_JSON_T_ARRAY, &set, 0, 0, up, 2 },
+	};
+
+	l->type[0] = '\0';
+	l->up_name[0] = '\0';
+	l->up_payload[0] = '\0';
+	l->in_set = false;
+	if (json_parse(line, len, f, ARRAY_SIZE(f)))
+		return -EINVAL;
+	if (strcmp(l->type, "init") == 0)
+		l->loaded = l->in_set;
+	else if (f[1].seen && strcmp(l->up_name, l->name) == 0 &&
+		 strcmp(l->type, "upatch_load") == 0)
+		l->loaded = strcmp(l->up_payload, l->payload_hex) == 0;
+	else if (f[1].seen && strcmp(l->up_name, l->name) == 0 &&
+		 strcmp(l->type, "upatch_unload") == 0)
+		l->loaded = false;
+	return 0;
+}
+
+/* Whether this boot's records leave the upatch loaded with this payload. */
+static bool logged_loaded(const char *name, const __u8 payload[32])
+{
+	struct logged_load l = { .name = name };
+
+	hex_encode(payload, SHIRUDO_UPATCH_PAYLOAD_HASH_LEN, l.payload_hex);
+	return eventlog_boot_lines(logged_line, &l) == 0 && l.loaded;
+}
+
 static int register_ready(struct shirudo_op_report *rep, const char *op)
 {
 	int rc = chain_ready();
@@ -2453,6 +2514,7 @@ static int cmd_upatch_load(int argc, const char **argv)
 	char name[SHIRUDO_UPATCH_NAME_MAX + 1] = {};
 	char staged[PATH_MAX] = {};
 	__u8 payload[SHIRUDO_UPATCH_PAYLOAD_HASH_LEN];
+	__u8 live[SHIRUDO_UPATCH_PAYLOAD_HASH_LEN];
 	struct shirudo_upatch u;
 	struct shirudo_op_report rep = { .op = "upatch_load", .phase = "done" };
 	bool no_precheck, no_version_check, have_id = false;
@@ -2518,6 +2580,44 @@ static int cmd_upatch_load(int argc, const char **argv)
 	}
 	if (register_ready(&rep, "load") != 0)
 		goto done;
+
+	/*
+	 * Loaded already with this payload, by an earlier run that failed
+	 * to archive or measure it or by one that succeeded: finish what is
+	 * missing, so a retry converges instead of tripping over the pins.
+	 */
+	rc = get_pin_payload(name, live);
+	if (rc == 0 && !ct_eq(live, payload, sizeof(payload))) {
+		pr_err("upatch load: '%s' is loaded with another payload; "
+		       "unload it first", name);
+		rep_fail(&rep, "pin", "payload_mismatch", EEXIST,
+			 "loaded with another payload");
+		goto done;
+	}
+	if (rc == 0) {
+		rc = persist_upatch(file, name);
+		if (rc) {
+			pr_err("upatch load: failed to persist to %s: %s",
+			       SHIRUDO_UPATCHES_DIR, strerror(-rc));
+			rep_fail(&rep, "persist", "unknown", -rc,
+				 "persist failed");
+			goto done;
+		}
+		if (!logged_loaded(name, payload) &&
+		    upatch_chain_event("shirudo-upatch", "upatch_load", "load",
+				       name, payload, NULL,
+				       rep.chain_after) != 0) {
+			rep_fail(&rep, "tpm_extend", "tpm_error", EIO,
+				 "chain extend failed");
+			goto done;
+		}
+		pr_info("upatch load: %s already loaded", name);
+		rep.ok = true;
+		rep.category = "already_loaded";
+		rep.tpm_present = rep.chain_after[0] != '\0';
+		ret = 0;
+		goto done;
+	}
 
 	if (upatch_apply(file, false, &rep) != 0)
 		goto done;
