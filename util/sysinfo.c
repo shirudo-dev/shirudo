@@ -161,7 +161,7 @@ static int kernel_config_entry_cmp(const void *a, const void *b)
 }
 
 static void kernel_config_entries_free(struct kernel_config_entry *entries,
-				       size_t n)
+				       size_t n, size_t cap)
 {
 	size_t i;
 
@@ -169,7 +169,7 @@ static void kernel_config_entries_free(struct kernel_config_entry *entries,
 		xstrfree(entries[i].key);
 		xstrfree(entries[i].value);
 	}
-	xfree(entries, n * sizeof(*entries));
+	xfree(entries, cap * sizeof(*entries));
 }
 
 int sysinfo_kernel_config_foreach(const char *kernel_release,
@@ -179,8 +179,8 @@ int sysinfo_kernel_config_foreach(const char *kernel_release,
 	char path[PATH_MAX];
 	char line[8192];
 	struct kernel_config_entry *entries = NULL;
+	size_t n = 0, cap = 0;
 	FILE *f;
-	size_t n = 0;
 	size_t i;
 
 	if (!kernel_release || !kernel_release[0] || !cb ||
@@ -224,28 +224,30 @@ int sysinfo_kernel_config_foreach(const char *kernel_release,
 		}
 		if (strncmp(key, "CONFIG_", 7) != 0 || !key[7])
 			continue;
-		{
+		if (n == cap) {
 			struct kernel_config_entry *next;
+			size_t grown = cap ? 2 * cap : 256;
 
-			next = xreallocarray(entries, n, n + 1,
+			next = xreallocarray(entries, cap, grown,
 					     sizeof(*entries));
 			if (!next) {
 				fclose(f);
-				kernel_config_entries_free(entries, n);
+				kernel_config_entries_free(entries, n, cap);
 				return -1;
 			}
 			entries = next;
-			entries[n].key = xstrdup(key);
-			entries[n].value = xstrdup(value);
-			if (!entries[n].key || !entries[n].value) {
-				xstrfree(entries[n].key);
-				xstrfree(entries[n].value);
-				entries[n].key = NULL;
-				entries[n].value = NULL;
-				fclose(f);
-				kernel_config_entries_free(entries, n + 1);
-				return -1;
-			}
+			cap = grown;
+		}
+		entries[n].key = xstrdup(key);
+		entries[n].value = xstrdup(value);
+		if (!entries[n].key || !entries[n].value) {
+			xstrfree(entries[n].key);
+			xstrfree(entries[n].value);
+			entries[n].key = NULL;
+			entries[n].value = NULL;
+			fclose(f);
+			kernel_config_entries_free(entries, n + 1, cap);
+			return -1;
 		}
 		n++;
 	}
@@ -255,7 +257,7 @@ int sysinfo_kernel_config_foreach(const char *kernel_release,
 		qsort(entries, n, sizeof(*entries), kernel_config_entry_cmp);
 	for (i = 0; i < n; i++)
 		cb(ctx, entries[i].key, entries[i].value);
-	kernel_config_entries_free(entries, n);
+	kernel_config_entries_free(entries, n, cap);
 	return (int)n;
 }
 
