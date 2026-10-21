@@ -36,14 +36,6 @@ static long sys_bpf(int cmd, union bpf_attr *a)
 	return syscall(__NR_bpf, cmd, a, sizeof(*a));
 }
 
-static uint32_t rd_le32(const void *p)
-{
-	uint32_t v;
-
-	memcpy(&v, p, sizeof(v));
-	return v;
-}
-
 int main(int argc, char **argv)
 {
 	const struct shirudo_upatch_header *h;
