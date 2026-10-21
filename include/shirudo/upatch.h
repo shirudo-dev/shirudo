@@ -30,6 +30,11 @@ enum shirudo_upatch_type {
 };
 
 #define SHIRUDO_UPATCH_NAME_MAX		256
+/*
+ * The longest name a target takes: files named after it get suffixes up
+ * to ".unload.upatch.tmp", and each must stay within NAME_MAX.
+ */
+#define SHIRUDO_UPATCH_NAME_LEN_MAX	224
 #define SHIRUDO_UPATCH_BPFFS_NAME_MAX	(2 * SHIRUDO_UPATCH_NAME_MAX)
 #define SHIRUDO_UPATCH_PAYLOAD_HASH_LEN	32	/* SHA-256 */
 

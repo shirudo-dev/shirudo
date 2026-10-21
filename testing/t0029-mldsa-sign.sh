@@ -122,6 +122,16 @@ test_expect_success 'a one-bit change in the signed bytes is rejected' '
 		-CAfile "$WORK/cert.pem" -purpose any -out /dev/null 2>/dev/null
 '
 
+test_expect_success 'shirudo-build refuses a name too long for the target' '
+	long=$(printf "a%.0s" $(seq 225)) &&
+	! "$B" --keys-dir "$WORK/keys" --unload "$long" \
+		-o "$WORK/long.upatch" >"$WORK/long.out" 2>&1 &&
+	grep -q "refuses the upatch name" "$WORK/long.out" &&
+	test ! -e "$WORK/long.upatch" &&
+	"$B" --keys-dir "$WORK/keys" --unload "${long%a}" \
+		-o "$WORK/long.upatch" >/dev/null 2>&1
+'
+
 test_expect_success 'upatch info --json reports the artifact and signature length' '
 	"$S" upatch info "$WORK/u.upatch" --json 2>/dev/null | python3 -c "
 import sys, json

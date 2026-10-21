@@ -290,6 +290,12 @@ int main(int argc, char **argv)
 			pr_err("--unload takes no positional input");
 			return 2;
 		}
+		if (!upatch_name_valid(unload_name)) {
+			pr_err("a target refuses the upatch name '%s': up to %d "
+			       "of [A-Za-z0-9._-], not starting with '.'",
+			       unload_name, SHIRUDO_UPATCH_NAME_LEN_MAX);
+			return 2;
+		}
 		if (payload_sha256_hex) {
 			if (hex_decode(payload_sha256_hex,
 				       payload_sha256, 32)) {
@@ -414,8 +420,15 @@ int main(int argc, char **argv)
 	if (!name)
 		name = derive_name(input, name_buf, sizeof(name_buf));
 
-	rc = shirudo_build_package_load(bpf_o, src_path, output, name,
-					pkey, cert);
+	if (!upatch_name_valid(name)) {
+		pr_err("a target refuses the upatch name '%s': up to %d of "
+		       "[A-Za-z0-9._-], not starting with '.'", name,
+		       SHIRUDO_UPATCH_NAME_LEN_MAX);
+		rc = 2;
+	} else {
+		rc = shirudo_build_package_load(bpf_o, src_path, output,
+						name, pkey, cert);
+	}
 
 	if (temp_bpf_o) {
 		unlink(temp_bpf_o);

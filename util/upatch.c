@@ -334,6 +334,8 @@ bool upatch_name_valid(const char *name)
 	for (i = 0; name[i]; i++) {
 		char c = name[i];
 
+		if (i == SHIRUDO_UPATCH_NAME_LEN_MAX)
+			return false;
 		if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
 		      (c >= '0' && c <= '9') || c == '.' || c == '_' ||
 		      c == '-'))
