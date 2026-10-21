@@ -720,6 +720,50 @@ static int attach_seal(struct bpf_object **obj_out, struct bpf_link **links,
 	return 0;
 }
 
+/*
+ * What a run that failed or was killed before the gate went live leaves
+ * pinned: the links behind these pins stay attached, and the next run
+ * could not pin its own over them.
+ */
+static int unpin_stale(void)
+{
+	static const char *const pins[] = {
+		SHIRUDO_IDENTITY_PIN,
+		SHIRUDO_TAMPER_PIN,
+		SHIRUDO_TASK_PRCTL_LINK_PIN,
+		SHIRUDO_INODE_UNLINK_LINK_PIN,
+		SHIRUDO_INODE_RENAME_LINK_PIN,
+		SHIRUDO_INODE_SETXATTR_LINK_PIN,
+		SHIRUDO_INODE_RMXATTR_LINK_PIN,
+		SHIRUDO_KEY_PERMISSION_LINK_PIN,
+		SHIRUDO_SB_UMOUNT_LINK_PIN,
+		SHIRUDO_MOVE_MOUNT_LINK_PIN,
+		SHIRUDO_SB_MOUNT_LINK_PIN,
+		SHIRUDO_SB_REMOUNT_LINK_PIN,
+		SHIRUDO_LSM_BPF_MAP_LINK_PIN,
+		SHIRUDO_LSM_PROG_LOAD_LINK_PIN,
+	};
+	const char *pin;
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(pins) + ARRAY_SIZE(seal_hooks); i++) {
+		pin = i < ARRAY_SIZE(pins) ? pins[i] :
+		      seal_hooks[i - ARRAY_SIZE(pins)].pin;
+		if (unlink(pin) != 0 && errno != ENOENT) {
+			pr_err("unlink stale %s: %s", pin, strerror(errno));
+			return -errno;
+		}
+	}
+	return 0;
+}
+
+static void drop_link(struct bpf_link *link, bool unpin)
+{
+	if (link && unpin)
+		bpf_link__unpin(link);
+	bpf_link__destroy(link);
+}
+
 _Static_assert(SHIRUDO_IDENTITY_KEYS_MAX == SHIRUDO_KEYS_MAX,
 	       "the identity map holds one serial per trusted certificate");
 
@@ -786,17 +830,9 @@ static int init_lsm(bool attach_filesystem_seal)
 			SHIRUDO_LSM_LINK_PIN);
 		return 0;
 	}
-	/* A pin without the links behind it is what a failed attempt leaves. */
-	if (unlink(SHIRUDO_IDENTITY_PIN) != 0 && errno != ENOENT) {
-		pr_err("unlink stale %s: %s", SHIRUDO_IDENTITY_PIN,
-		       strerror(errno));
-		return -errno;
-	}
-	if (unlink(SHIRUDO_TAMPER_PIN) != 0 && errno != ENOENT) {
-		pr_err("unlink stale %s: %s", SHIRUDO_TAMPER_PIN,
-		       strerror(errno));
-		return -errno;
-	}
+	err = unpin_stale();
+	if (err)
+		return err;
 
 	if (!blob || !blob->data || !blob->size) {
 		pr_err("embedded bpf2 blob missing");
@@ -1053,24 +1089,21 @@ static int init_lsm(bool attach_filesystem_seal)
 		", filesystem seal unavailable on this kernel");
 	err = 0;
 out:
-	for (i = 0; i < (int)ARRAY_SIZE(prctl_links); i++) {
-		if (err && prctl_links[i])
-			bpf_link__unpin(prctl_links[i]);
-		bpf_link__destroy(prctl_links[i]);
-	}
+	for (i = 0; i < (int)ARRAY_SIZE(prctl_links); i++)
+		drop_link(prctl_links[i], err);
 	for (i = 0; i < (int)ARRAY_SIZE(seal_links); i++)
-		bpf_link__destroy(seal_links[i]);
+		drop_link(seal_links[i], err);
 	for (i = 0; i < (int)ARRAY_SIZE(mount_links); i++)
-		bpf_link__destroy(mount_links[i]);
+		drop_link(mount_links[i], err);
 	bpf_object__close(seal_obj);
-	bpf_link__destroy(link_bpf);
-	bpf_link__destroy(link_bpf_map);
-	bpf_link__destroy(link_pload);
-	bpf_link__destroy(link_keyperm);
-	bpf_link__destroy(link_rmx);
-	bpf_link__destroy(link_setx);
-	bpf_link__destroy(link_rename);
-	bpf_link__destroy(link_unlink);
+	drop_link(link_bpf, err);
+	drop_link(link_bpf_map, err);
+	drop_link(link_pload, err);
+	drop_link(link_keyperm, err);
+	drop_link(link_rmx, err);
+	drop_link(link_setx, err);
+	drop_link(link_rename, err);
+	drop_link(link_unlink, err);
 	bpf_object__close(obj);
 	return err;
 }
