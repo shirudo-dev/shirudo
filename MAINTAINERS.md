@@ -7,8 +7,10 @@ of the shirudo project:
  * [John Fastabend] (Isovalent)
  * [KP Singh]
  * [Michi Mutsuzaki] (Isovalent)
+ * [Puranjay Mohan]
 
 [John Fastabend]: https://github.com/jrfastab
 [Daniel Borkmann]: https://github.com/borkmann
 [KP Singh]: https://github.com/sinkap
 [Michi Mutsuzaki]: https://github.com/michi-covalent
+[Puranjay Mohan]: https://github.com/puranjaymohan
