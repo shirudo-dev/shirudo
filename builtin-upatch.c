@@ -202,7 +202,7 @@ static const struct shirudo_help_item upatch_map_options[] = {
 	{ "--json[=<path>]", "print JSON or append it to path" },
 	{ "--show-full",  "lift the per-map 256-entry truncation cap" },
 	{ "--peek", "read serializer-backed maps without draining them" },
-	{ "--otel", "export through OTLP using each decoder's signed signal" },
+	{ "--otel", "export maps through signed decoders or automatic classification" },
 	{ "--otel-endpoint=<url>", "OTLP base URL (signal path is appended)" },
 	{ "--tenant-id=<id>", "add X-Tenant-ID to OTLP requests" },
 	{ "--otel-insecure", "allow cleartext remote OTLP or disable HTTPS verification" },
@@ -2878,7 +2878,10 @@ static int export_one_map(const char *upatch, const char *map,
 		__u32 decoder_signal;
 
 		rc = upatch_decode_map_signal(&v, &decoder_signal);
-		if (!rc)
+		if (rc == -ENODATA)
+			rc = shirudo_upatch_maps_otel_send(&v, SHIRUDO_OTEL_AUTO,
+							   otel_opts);
+		else if (!rc)
 			rc = shirudo_upatch_maps_otel_send_decoded(&v, decoder_signal,
 								   otel_opts);
 		if (rc) {

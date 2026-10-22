@@ -453,13 +453,13 @@ check_diff() {
 # Every type checkpatch knows, less the ignored ones.
 list_types() {
 	perl "$checkpatch" --list-types | awk 'NR > 2 && NF >= 2 { print $2 }' |
-		sort >"$work/all"
-	ignored_types | grep -v '^#' | sort >"$work/ignored"
+		LC_ALL=C sort >"$work/all"
+	ignored_types | grep -v '^#' | LC_ALL=C sort >"$work/ignored"
 	{
-		comm -23 "$work/all" "$work/ignored"
+		LC_ALL=C comm -23 "$work/all" "$work/ignored"
 		printf '%s\n' KERNEL_INT_TYPES NETDEV_BLOCK_COMMENT NUMBER_PARSING \
 			STRING_COPY
-	} | sort
+	} | LC_ALL=C sort
 }
 
 check_files() {

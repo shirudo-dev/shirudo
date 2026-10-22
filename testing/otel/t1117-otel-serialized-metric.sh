@@ -69,11 +69,36 @@ while len(bodies) < 4:
     server.handle_request()
 PY
 
+cat >"$WORK/service.py" <<'PY'
+import http.server, json, pathlib, sys, time
+port_file, body_file = map(pathlib.Path, sys.argv[1:3])
+requests = []
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        payload = self.rfile.read(int(self.headers["Content-Length"]))
+        requests.append((self.path, json.loads(payload)))
+        body_file.write_text(json.dumps(requests))
+        payload = b"{}"
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+    def log_message(self, *args): pass
+server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+server.timeout = 1
+port_file.write_text(str(server.server_port))
+deadline = time.monotonic() + 30
+while len(requests) < 2 and time.monotonic() < deadline:
+    server.handle_request()
+if len(requests) != 2:
+    raise SystemExit("expected OTLP log and metric requests")
+PY
+
 cat >"$WORK/check-service.py" <<'PY'
 import json, sys
-meta = json.load(open(sys.argv[1], encoding="utf-8"))
-doc = json.load(open(sys.argv[2], encoding="utf-8"))
-assert meta["path"] == "/v1/metrics"
+requests = json.load(open(sys.argv[1], encoding="utf-8"))
+assert sorted(path for path, _ in requests) == ["/v1/logs", "/v1/metrics"]
+doc = next(body for path, body in requests if path == "/v1/metrics")
 metrics = {m["name"]: m for m in doc["resourceMetrics"][0]["scopeMetrics"][0]["metrics"]}
 assert metrics["shirudo.serialized.packets"]["sum"]["dataPoints"][0]["asInt"] == "10"
 assert metrics["shirudo.serialized.bytes"]["sum"]["dataPoints"][0]["asInt"] == "150"
@@ -90,23 +115,25 @@ test_expect_success 'serialized multi-page metrics preserve peek and drain inter
 	"$SHIRUDO_BIN" upatch map "$NAME" counters --otel --otel-endpoint="http://127.0.0.1:$port" --peek &&
 	"$SHIRUDO_BIN" upatch map "$NAME" counters --otel --otel-endpoint="http://127.0.0.1:$port" &&
 	"$SHIRUDO_BIN" upatch map "$NAME" counters --otel --otel-endpoint="http://127.0.0.1:$port" &&
-	wait "$SERVER"; SERVER="";
+	wait "$SERVER" || return 1;
+	SERVER="";
 	python3 "$WORK/check-batch.py" "$WORK/bodies.json" &&
 	"$SHIRUDO_BIN" upatch unload "$UNLOAD" --no-precheck >/dev/null 2>&1 &&
-	"$SHIRUDO_BIN" upatch load "$LOAD" --no-precheck >/dev/null 2>&1;
-	python3 ../helper/otel-mock.py success "$WORK/service.port" "$WORK/service.body" "$WORK/service.meta" &
+	"$SHIRUDO_BIN" upatch load "$LOAD" --no-precheck >/dev/null 2>&1 || return 1;
+	python3 "$WORK/service.py" "$WORK/service.port" "$WORK/service.body" &
 	SERVER=$!;
 	i=0; while test ! -s "$WORK/service.port" && test "$i" -lt 100; do i=$((i+1)); sleep .1; done;
 	test -s "$WORK/service.port" &&
 	port=$(cat "$WORK/service.port") &&
 	printf "%s\n" "map_export.otel_endpoint = http://127.0.0.1:$port" "map_export.otel_insecure = true" "map_export.otel_retries = 0" >"$CONFIG" &&
 	if ! systemctl start shirudo-map-export.service; then
-		systemctl status shirudo-map-export.service --no-pager || true
-		journalctl -u shirudo-map-export.service --no-pager -n 100 || true
+		systemctl status shirudo-map-export.service --no-pager >&2 || true
+		journalctl -u shirudo-map-export.service --no-pager -n 100 >&2 || true
 		return 1
-	fi && wait "$SERVER"; SERVER="";
+	fi && wait "$SERVER" || return 1;
+	SERVER="";
 	systemctl show shirudo-map-export.service -p ExecMainStatus --value | grep -qx 0 &&
-	python3 "$WORK/check-service.py" "$WORK/service.meta" "$WORK/service.body"
+	python3 "$WORK/check-service.py" "$WORK/service.body"
 '
 
 test_done

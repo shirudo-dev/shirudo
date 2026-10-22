@@ -619,8 +619,8 @@ static void u64_decimal(__u64 value, char out[32])
 	snprintf(out, 32, "%llu", value);
 }
 
-static __attribute__((unused)) void emit_log_map_data(struct shirudo_json_emit *e,
-						      const struct shirudo_map_view *v)
+static void emit_log_map_data(struct shirudo_json_emit *e,
+			      const struct shirudo_map_view *v)
 {
 	__u32 i, j;
 
@@ -746,7 +746,7 @@ static int build_log_payload(const char *path,
 	json_arr_open(&e, "resourceLogs");
 	json_obj_open(&e);
 	json_obj_open_key(&e, "resource");
-			  emit_resource_attributes(&e);
+	emit_resource_attributes(&e);
 	json_obj_close(&e);
 	json_arr_open(&e, "scopeLogs");
 	json_obj_open(&e);
@@ -761,15 +761,23 @@ static int build_log_payload(const char *path,
 	json_kv_int(&e, "severityNumber", 9);
 	json_kv_string(&e, "severityText", "INFO");
 	json_kv_string(&e, "eventName", "shirudo.bpf.map.snapshot");
-		       decode_rc = path ? upatch_decode_map_file_otel(path, v,
-		       &decoded, &decoded_len) :
-		       upatch_decode_map_otel(v, &decoded, &decoded_len);
+	decode_rc = path ? upatch_decode_map_file_otel(path, v,
+							      &decoded, &decoded_len) :
+			upatch_decode_map_otel(v, &decoded, &decoded_len);
 	if (!decode_rc && record_max && decoded_len > record_max) {
 		xfree(decoded, decoded_len + 1);
 		decode_rc = -E2BIG;
 	}
 	if (decode_rc == 0) {
 		json_kv_raw(&e, "body", decoded, decoded_len);
+	} else if (decode_rc == -ENODATA) {
+		json_obj_open_key(&e, "body");
+		json_obj_open_key(&e, "kvlistValue");
+		json_arr_open(&e, "values");
+		emit_log_map_data(&e, v);
+		json_arr_close(&e);
+		json_obj_close(&e);
+		json_obj_close(&e);
 	} else {
 		xfree(buf, SHIRUDO_JSON_MAX_BYTES);
 		return decode_rc;

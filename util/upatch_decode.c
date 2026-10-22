@@ -1267,7 +1267,7 @@ static int decode_map_file(const char *path, const struct shirudo_map_view *v,
 	rc = upatch_open(path, &u);
 	if (rc)
 		return rc == -ENOENT ? -ENOENT : rc;
-	rc = -ENOENT;
+	rc = -ENODATA;
 	for (i = 0; i < u.nr_decoders; i++) {
 		struct upatch_decoder_view d;
 
@@ -1298,7 +1298,7 @@ int upatch_decode_map_signal(const struct shirudo_map_view *v,
 	rc = upatch_open(path, &u);
 	if (rc)
 		return rc == -ENOENT ? -ENOENT : rc;
-	rc = -ENOENT;
+	rc = -ENODATA;
 	for (i = 0; i < u.nr_decoders; i++) {
 		struct upatch_decoder_view d;
 
