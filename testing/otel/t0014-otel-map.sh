@@ -62,7 +62,23 @@ test_expect_success 'structured OTLP log preserves aligned per-CPU values' '
 	"$H" log | python3 -c '\''
 import json,sys
 d=json.load(sys.stdin)
-r=d["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0]
+assert set(d) == {"resourceLogs"}
+rl=d["resourceLogs"][0]
+assert set(rl) == {"resource", "scopeLogs"}
+resource={x["key"]:x["value"] for x in rl["resource"]["attributes"]}
+assert set(resource) == {"service.name", "service.version", "host.name"}
+assert resource["service.name"]["stringValue"] == "shirudo"
+sl=rl["scopeLogs"][0]
+assert set(sl) == {"scope", "logRecords"}
+assert sl["scope"]["name"] == "shirudo.upatch.maps"
+assert set(sl["scope"]) == {"name", "version"}
+r=sl["logRecords"][0]
+assert set(r) == {"timeUnixNano", "observedTimeUnixNano", "severityNumber", "severityText", "eventName", "body", "attributes"}
+assert r["timeUnixNano"].isdigit() and r["observedTimeUnixNano"].isdigit()
+assert r["severityNumber"] == 9 and r["severityText"] == "INFO"
+assert r["eventName"] == "shirudo.bpf.map.snapshot"
+attrs={x["key"]:x["value"] for x in r["attributes"]}
+assert set(attrs) == {"shirudo.upatch.name", "shirudo.upatch.location", "shirudo.map.name", "shirudo.map.type", "shirudo.map.max_entries", "shirudo.map.n_entries", "shirudo.map.n_cpus", "shirudo.map.serialized", "shirudo.map.truncated"}
 vals=r["body"]["kvlistValue"]["values"]
 root={x["key"]:x["value"] for x in vals}
 data={x["key"]:x["value"] for x in root["data"]["kvlistValue"]["values"]}
@@ -109,6 +125,16 @@ p=s["dataPoints"][0]
 assert p["asInt"] == "12"
 assert p["startTimeUnixNano"] == "1544712660300000000"
 '\''
+'
+
+test_expect_success 'Retry-After accepts delta seconds and HTTP dates, capped at 30 seconds' '
+	test "$("$H" retry-after 20 1735689600)" = 20 &&
+	test "$("$H" retry-after 60 1735689600)" = 30 &&
+	test "$("$H" retry-after "Wed, 01 Jan 2025 00:00:20 GMT" 1735689600)" = 20 &&
+	test "$("$H" retry-after "Wednesday, 01-Jan-25 00:00:45 GMT" 1735689600)" = 30 &&
+	test "$("$H" retry-after "Wed Jan  1 00:00:10 2025" 1735689600)" = 10 &&
+	test "$("$H" retry-after "Wed, 31 Dec 2024 23:59:59 GMT" 1735689600)" = 0 &&
+	! "$H" retry-after invalid 1735689600 >/dev/null 2>&1
 '
 
 test_expect_success 'OTLP base URL always appends the selected signal path' '
@@ -174,7 +200,10 @@ test_expect_success 'OTLP HTTP sends JSON, auth headers, gzip, and retries' '
 import json
 json.load(open("otel.body"))
 m=json.load(open("otel.meta"))
-assert m == {"attempts":3,"path":"/v1/logs","authorization":"Bearer secret","content_encoding":"gzip"}
+assert m["attempts"] == 3 and m["path"] == "/v1/logs"
+assert m["authorization"] == "Bearer secret"
+assert m["content_encoding"] == "gzip"
+assert m["content_type"] == "application/json" and m["raw_bytes"] > 0
 '\''
 '
 
@@ -191,6 +220,119 @@ import json
 m=json.load(open("otel.meta"))
 assert m["attempts"] == 1
 '\''
+'
+
+test_expect_success 'OTLP retryable statuses retry, permanent errors do not, and exhaustion fails' '
+	for status in 429 502 503 504
+	do
+		rm -f otel.port otel.body otel.meta
+		python3 ../helper/otel-mock.py "retry-$status" otel.port otel.body otel.meta &
+		server=$!
+		i=0; while test ! -s otel.port && test "$i" -lt 50; do i=$((i+1)); sleep .02; done
+		port=$(cat otel.port) &&
+		"$H" send-log "http://127.0.0.1:$port" 1 && wait "$server" &&
+		python3 -c '\''import json; assert json.load(open("otel.meta"))["attempts"] == 2'\'' || return 1
+	done &&
+	for status in 400 500
+	do
+		rm -f otel.port otel.body otel.meta
+		python3 ../helper/otel-mock.py "fatal-$status" otel.port otel.body otel.meta &
+		server=$!
+		i=0; while test ! -s otel.port && test "$i" -lt 50; do i=$((i+1)); sleep .02; done
+		port=$(cat otel.port) && ! "$H" send-log "http://127.0.0.1:$port" 3 && wait "$server" &&
+		python3 -c '\''import json; assert json.load(open("otel.meta"))["attempts"] == 1'\'' || return 1
+	done &&
+	rm -f otel.port otel.body otel.meta
+	python3 ../helper/otel-mock.py retry-exhaust-503 otel.port otel.body otel.meta &
+	server=$!
+	i=0; while test ! -s otel.port && test "$i" -lt 50; do i=$((i+1)); sleep .02; done
+	port=$(cat otel.port) && ! "$H" send-log "http://127.0.0.1:$port" 2 && wait "$server" &&
+	python3 -c '\''import json; assert json.load(open("otel.meta"))["attempts"] == 3'\''
+'
+
+test_expect_success 'OTLP handles partial success, malformed responses, disconnects, timeouts, and Retry-After' '
+	for mode in partial-zero malformed disconnect timeout
+	do
+		rm -f otel.port otel.body otel.meta
+		python3 ../helper/otel-mock.py "$mode" otel.port otel.body otel.meta &
+		server=$!
+		i=0; while test ! -s otel.port && test "$i" -lt 50; do i=$((i+1)); sleep .02; done
+		port=$(cat otel.port)
+		if test "$mode" = partial-zero; then
+			"$H" send-log "http://127.0.0.1:$port" 0 || return 1
+		else
+			if test "$mode" = timeout; then
+				! OTEL_EXPORTER_OTLP_LOGS_TIMEOUT=100 "$H" send-log "http://127.0.0.1:$port" 0 || return 1
+			else
+				! "$H" send-log "http://127.0.0.1:$port" 0 || return 1
+			fi
+		fi
+		wait "$server" || return 1
+	done &&
+	rm -f otel.port otel.body otel.meta
+	python3 ../helper/otel-mock.py retry-after otel.port otel.body otel.meta &
+	server=$!
+	i=0; while test ! -s otel.port && test "$i" -lt 50; do i=$((i+1)); sleep .02; done
+	port=$(cat otel.port) && "$H" send-log "http://127.0.0.1:$port" 1 && wait "$server" &&
+	python3 -c '\''import json; m=json.load(open("otel.meta")); assert m["attempts"] == 2 and 850 <= m["interval_ms"] <= 3000'\''
+'
+
+test_expect_success 'signal-specific OTEL endpoint and settings override generic environment values' '
+	rm -f otel.port otel.body otel.meta
+	python3 ../helper/otel-mock.py success otel.port otel.body otel.meta & specific=$!
+	i=0; while test ! -s otel.port && test "$i" -lt 50; do i=$((i+1)); sleep .02; done
+	port=$(cat otel.port) &&
+	OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:1/base \
+	OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="http://127.0.0.1:$port/v1/logs" \
+	OTEL_EXPORTER_OTLP_PROTOCOL=grpc \
+	OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=http/json \
+	OTEL_EXPORTER_OTLP_COMPRESSION=none \
+	OTEL_EXPORTER_OTLP_LOGS_COMPRESSION=gzip \
+	OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer%20generic" \
+	OTEL_EXPORTER_OTLP_LOGS_HEADERS="Authorization=Bearer%20specific" \
+		"$H" send-log-env 0 && wait "$specific" &&
+	python3 -c '\''import json; m=json.load(open("otel.meta")); assert m["path"] == "/v1/logs" and m["authorization"] == "Bearer specific" and m["content_encoding"] == "gzip" and m["content_type"] == "application/json"'\''
+'
+
+test_expect_success 'explicit OTEL endpoint overrides signal and generic endpoint environment' '
+	rm -f otel.port otel.body otel.meta
+	python3 ../helper/otel-mock.py success otel.port otel.body otel.meta & server=$!
+	i=0; while test ! -s otel.port && test "$i" -lt 50; do i=$((i+1)); sleep .02; done
+	port=$(cat otel.port) &&
+	OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:1/generic \
+	OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://127.0.0.1:1/signal \
+		"$H" send-log "http://127.0.0.1:$port" 0 && wait "$server" &&
+	python3 -c '\''import json; assert json.load(open("otel.meta"))["path"] == "/v1/logs"'\''
+'
+
+test_expect_success 'OTLP request and decoded-record limits reject only oversized payloads' '
+	bytes=$("$H" record-size) &&
+	for max in "$bytes" "$((bytes + 1))"
+	do
+		rm -f otel.port otel.body otel.meta
+		python3 ../helper/otel-mock.py success otel.port otel.body otel.meta & server=$!
+		i=0; while test ! -s otel.port && test "$i" -lt 50; do i=$((i+1)); sleep .02; done
+		port=$(cat otel.port) && "$H" send-log-limits "http://127.0.0.1:$port" 0 "$max" 0 && wait "$server" || return 1
+	done &&
+	rm -f otel.port otel.body otel.meta
+	python3 ../helper/otel-mock.py no-request otel.port otel.body otel.meta & server=$!
+	i=0; while test ! -s otel.port && test "$i" -lt 50; do i=$((i+1)); sleep .02; done
+	port=$(cat otel.port) && ! "$H" send-log-limits "http://127.0.0.1:$port" 0 "$((bytes - 1))" 0 && wait "$server" &&
+	python3 -c '\''import json; assert json.load(open("otel.meta"))["attempts"] == 0'\'' &&
+	rm -f otel.port otel.body otel.meta
+	python3 ../helper/otel-mock.py success otel.port otel.body otel.meta & server=$!
+	i=0; while test ! -s otel.port && test "$i" -lt 50; do i=$((i+1)); sleep .02; done
+	port=$(cat otel.port) && "$H" send-log "http://127.0.0.1:$port" 0 && wait "$server" &&
+	request=$(python3 -c '\''import json; print(json.load(open("otel.meta"))["raw_bytes"])'\'') &&
+	rm -f otel.port otel.body otel.meta
+	python3 ../helper/otel-mock.py success otel.port otel.body otel.meta & server=$!
+	i=0; while test ! -s otel.port && test "$i" -lt 50; do i=$((i+1)); sleep .02; done
+	port=$(cat otel.port) && "$H" send-log-limits "http://127.0.0.1:$port" 0 0 "$request" && wait "$server" &&
+	rm -f otel.port otel.body otel.meta
+	python3 ../helper/otel-mock.py no-request otel.port otel.body otel.meta & server=$!
+	i=0; while test ! -s otel.port && test "$i" -lt 50; do i=$((i+1)); sleep .02; done
+	port=$(cat otel.port) && ! "$H" send-log-limits "http://127.0.0.1:$port" 0 0 "$((request - 1))" && wait "$server" &&
+	python3 -c '\''import json; assert json.load(open("otel.meta"))["attempts"] == 0'\''
 '
 
 test_expect_success 'HTTPS verifies by default and --otel-insecure disables verification noisily' '
