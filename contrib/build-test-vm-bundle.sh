@@ -200,6 +200,10 @@ for dependency in \
 	IFS=: read -r command_name deb_package rpm_package <<<"$dependency"
 	require_command "$command_name" "$deb_package" "$rpm_package"
 done
+# The Debian libguestfs appliance brings up its network with dhclient,
+# which Ubuntu 24.04 no longer installs; without it apt in the appliance
+# reaches nothing.
+[[ "$TEST_VM_HOST_PKG" != apt ]] || require_command dhclient isc-dhcp-client
 check_libguestfs_host
 
 resolve_rootfs()

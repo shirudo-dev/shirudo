@@ -188,6 +188,22 @@ test_expect_success 'the bundle and runtime scripts print hints for the host pac
 		"$WORK/runtime-dnf.out"
 '
 
+test_expect_success 'the bundle wants a DHCP client for the appliance on a Debian host' '
+	mkdir "$WORK/dhcp-bin" &&
+	ln -s /usr/bin/dirname "$WORK/dhcp-bin/dirname" &&
+	ln -s /usr/bin/uname "$WORK/dhcp-bin/uname" &&
+	for command_name in flock curl sha256sum awk qemu-img virt-customize \
+		openssl gzip depmod
+	do
+		ln -s /bin/true "$WORK/dhcp-bin/$command_name" || return 1
+	done &&
+	! PATH="$WORK/dhcp-bin" TEST_VM_HOST_PKG=apt \
+		TEST_VM_WORK_DIR="$WORK/bundle-dhcp" /bin/bash \
+		../contrib/build-test-vm-bundle.sh >"$WORK/bundle-dhcp.out" 2>&1 &&
+	grep -q "missing host command: dhclient (install with: sudo apt-get install -y --no-install-recommends isc-dhcp-client)" \
+		"$WORK/bundle-dhcp.out"
+'
+
 test_expect_success 'the runtime image is built with the direct libguestfs backend and the VM emulator' '
 	mkdir -p "$WORK/gf-bin" &&
 	printf "%s\n" "#!/bin/sh" "exit 0" >"$WORK/gf-bin/emulator" &&
