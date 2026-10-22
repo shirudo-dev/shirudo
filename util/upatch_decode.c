@@ -122,12 +122,20 @@ struct lua_budget {
 };
 
 struct lua_memory {
-	size_t	used;
-	size_t	limit;
+	lua_Alloc	inner;
+	void		*inner_ud;
+	size_t		used;
+	size_t		limit;
 };
 
 static struct lua_budget *current_lua_budget;
 
+/*
+ * Wraps LuaJIT's own allocator rather than xmalloc(): a GC64 state must
+ * live below 2^47, which LuaJIT's allocator guarantees and a PIE's heap
+ * on arm64 does not meet. What is freed is scrubbed first, as xfree()
+ * would.
+ */
 static void *lua_limited_alloc(void *ud, void *ptr, size_t old_size,
 			       size_t new_size)
 {
@@ -139,7 +147,8 @@ static void *lua_limited_alloc(void *ud, void *ptr, size_t old_size,
 
 	if (new_size == 0) {
 		if (ptr) {
-			xfree(ptr, old_size);
+			memzero_explicit(ptr, old_size);
+			memory->inner(memory->inner_ud, ptr, old_size, 0);
 			memory->used = base;
 		}
 		return NULL;
@@ -147,15 +156,26 @@ static void *lua_limited_alloc(void *ud, void *ptr, size_t old_size,
 	if (check_add_overflow(base, new_size, &total) ||
 	    total > memory->limit)
 		return NULL;
-	next = xmalloc(new_size);
+	next = memory->inner(memory->inner_ud, NULL, 0, new_size);
 	if (!next)
 		return NULL;
 	if (ptr) {
 		memcpy(next, ptr, min(old_size, new_size));
-		xfree(ptr, old_size);
+		memzero_explicit(ptr, old_size);
+		memory->inner(memory->inner_ud, ptr, old_size, 0);
 	}
 	memory->used = total;
 	return next;
+}
+
+/*
+ * lua_close() releases LuaJIT's arenas only while its own allocator is
+ * the state's, so hand it back first.
+ */
+static void lua_close_limited(lua_State *L, struct lua_memory *memory)
+{
+	lua_setallocf(L, memory->inner, memory->inner_ud);
+	lua_close(L);
 }
 
 static int json_out_reserve(struct json_out *out, size_t need)
@@ -1209,15 +1229,19 @@ static int run_lua_decoder(const struct upatch_decoder_view *d,
 	lua_State *L;
 	int ret = 0;
 
-	L = lua_newstate(lua_limited_alloc, &memory);
+	L = luaL_newstate();
 	if (!L)
 		return -ENOMEM;
+	memory.inner = lua_getallocf(L, &memory.inner_ud);
+	memory.used = (size_t)lua_gc(L, LUA_GCCOUNT, 0) * 1024 +
+		      (size_t)lua_gc(L, LUA_GCCOUNTB, 0);
+	lua_setallocf(L, lua_limited_alloc, &memory);
 	jo.max_bytes = max_bytes;
 	luaL_openlibs(L);
 	lua_disable_globals(L);
 	/* Instruction hooks must observe every instruction; do not run traces. */
 	if (!luaJIT_setmode(L, 0, LUAJIT_MODE_ENGINE | LUAJIT_MODE_OFF)) {
-		lua_close(L);
+		lua_close_limited(L, &memory);
 		return -EINVAL;
 	}
 	lua_install_host_api(L);
@@ -1269,7 +1293,7 @@ out_close:
 	xfree(jo.buf, jo.cap);
 	lua_sethook(L, NULL, 0, 0);
 	current_lua_budget = NULL;
-	lua_close(L);
+	lua_close_limited(L, &memory);
 	return ret;
 }
 

@@ -158,8 +158,12 @@ assert record[\"ids\"] == {\"arrayValue\": {\"values\": [
 '
 
 test_expect_success 'Lua decoder enforces instruction and memory limits' '
-	if ./helper/test-upatch-decode loop "$WORK/u.upatch"; then false; fi &&
-	if ./helper/test-upatch-decode memory "$WORK/u.upatch"; then false; fi
+	if ./helper/test-upatch-decode loop "$WORK/u.upatch" \
+		2>"$WORK/loop.err"; then false; fi &&
+	grep -q "instruction limit exceeded" "$WORK/loop.err" &&
+	if ./helper/test-upatch-decode memory "$WORK/u.upatch" \
+		2>"$WORK/memory.err"; then false; fi &&
+	grep -q "not enough memory" "$WORK/memory.err"
 '
 
 test_expect_success 'Lua decoder output replaces invalid UTF-8' '
