@@ -32,7 +32,6 @@
 #include "builtin.h"
 #include "util/bpm_tree.h"
 #include "util/chain.h"
-#include "util/elf_target.h"
 #include "util/config.h"
 #include "util/eventlog.h"
 #include "util/help.h"
@@ -130,45 +129,9 @@ static int keyring_asymmetric_count(key_serial_t ring)
 	return (int)n;
 }
 
-static bool bpf_keyring_mode;
-
 static struct shirudo_trusted_set enrolled;
 
 static bool initrd_mode;
-static bool image_mode;
-
-/*
- * The initrd enrols its own, measured copies of the keys. The root's
- * copies are what every later command reads, so the two differing
- * means an initrd that was not regenerated after the keys changed:
- * worth a warning, not a refusal, since the measured copies are the
- * ones a verifier pins through PCR 11.
- */
-static void warn_root_keys_differ(const struct shirudo_trusted_set *set)
-{
-	struct shirudo_trusted_set root;
-	bool differ;
-	size_t i;
-	int rc;
-
-	rc = keys_load(SHIRUDO_KEYS_DIR, NULL, true, &root);
-	if (rc) {
-		pr_warn("initrd: the root file system has no certificate "
-			"under %s (%s); the copies under %s are the anchor",
-			SHIRUDO_KEYS_DIR, strerror(-rc),
-			SHIRUDO_INITRD_KEYS_DIR);
-		return;
-	}
-	differ = root.n != set->n;
-	for (i = 0; !differ && i < set->n; i++)
-		differ = memcmp(root.certs[i].sha256, set->certs[i].sha256,
-				32) != 0;
-	if (differ)
-		pr_warn("initrd: the keys under %s differ from the root "
-			"file system's under %s; the initrd's copies are the "
-			"anchor, regenerate the initrd after changing the keys",
-			SHIRUDO_INITRD_KEYS_DIR, SHIRUDO_KEYS_DIR);
-}
 
 static int keyring_holds_set(key_serial_t ring,
 			     const struct shirudo_trusted_set *set)
@@ -198,9 +161,8 @@ static int keyring_holds_set(key_serial_t ring,
  * takes keys until the first seal, which is init's job from the initrd:
  * enrol every trusted certificate and seal. Found sealed, it either
  * holds exactly that set (-EEXIST: use it) or was sealed empty by the
- * kernel at boot (-ENOKEY: the user keyring stages the primary
- * certificate until the target reboots into the production
- * configuration); sealed around anything else, it is refused.
+ * kernel at boot (-ENOKEY: initialization refuses until reboot with the
+ * enrollment parameter); sealed around anything else, it is refused.
  */
 static int init_bpf_keyring(key_serial_t ring,
 			    const struct shirudo_trusted_set *set)
@@ -281,173 +243,28 @@ static int init_bpf_keyring(key_serial_t ring,
 
 static int init_keyring(void)
 {
-	const struct shirudo_trusted_cert *primary = NULL;
 	struct shirudo_trusted_set set;
 	struct shirudo_identity id;
-	key_serial_t ring, key;
-	size_t der_sz = 0, i;
-	__u8 *der = NULL;
-	bool frozen;
+	key_serial_t ring;
 	int rc;
 
-	if (image_mode && identity_read(&id) == 0) {
-		ring = keyring_bpf_serial();
-		if (!id.runtime_mode ||
-		    id.keyring_type != SHIRUDO_SIG_KEYRING_BPF ||
-		    ring <= 0 || id.keyring_serial != ring ||
+	ring = keyring_bpf_serial();
+	if (ring <= 0)
+		return ring ? ring : -ENOKEY;
+	if (!identity_read(&id)) {
+		if (id.keyring_type != SHIRUDO_SIG_KEYRING_BPF ||
+		    id.keyring_serial != ring ||
 		    memcmp(id.runtime_root, shirudo_image_runtime_root(), 32))
 			return -EKEYREJECTED;
-		bpf_keyring_mode = true;
 		return 0;
 	}
-	if (image_mode)
-		rc = shirudo_image_boot_keys(&set);
-	else
-		rc = keys_load(shirudo_keys_dir(),
-			       SHIRUDO_KEYS_REVOKED_DIR, true, &set);
-	if (rc) {
-		pr_err("read the keys under %s: %s", shirudo_keys_dir(),
-		       strerror(-rc));
-		return rc;
-	}
-	if (set.n_revoked && !image_mode)
-		pr_warn("%zu revoked certificate%s under %s left out; "
-			"regenerate the initrd", set.n_revoked,
-			set.n_revoked == 1 ? "" : "s", shirudo_keys_dir());
-	if (initrd_mode && !image_mode)
-		warn_root_keys_differ(&set);
-	frozen = identity_read(&id) == 0;
-
-	ring = keyring_bpf_serial();
-	if (ring > 0) {
-		rc = init_bpf_keyring(ring, &set);
-		if (rc == 0 || rc == -EEXIST) {
-			if (frozen &&
-			    (id.keyring_type != SHIRUDO_SIG_KEYRING_BPF ||
-			     id.keyring_serial != ring)) {
-				pr_err("bpf keyring serial=%d holds the "
-				       "certificates, but the anchor frozen "
-				       "this boot is another keyring "
-				       "(tampered)", (int)ring);
-				return -EKEYREJECTED;
-			}
-			bpf_keyring_mode = true;
-			enrolled = set;
-			return 0;
-		}
-		if (rc != -ENOKEY || image_mode)
-			return rc;
-		pr_warn("bpf keyring serial=%d is sealed empty; staging the "
-			"primary certificate in the user keyring. Boot with "
-			"bpf.keyring_unsealed=1 and run init from the initrd "
-			"for the production trust anchor", (int)ring);
-	} else {
-		if (image_mode)
-			return ring;
-		pr_warn("kernel has no bpf keyring (%s); staging the "
-			"primary certificate in the user keyring",
-			strerror(-ring));
-	}
-
-	/*
-	 * Staging holds the primary certificate alone: the user keyring
-	 * is a stopgap until the reboot, not a place for a set. The
-	 * keyring found by name must be the one whose serial init froze
-	 * this boot, if it froze one: a substitute or a missing keyring
-	 * cannot be repaired before the next boot, because the frozen
-	 * identity is what lsm/bpf_prog_load enforces.
-	 */
-	for (i = 0; i < set.n; i++) {
-		if (set.certs[i].primary)
-			primary = &set.certs[i];
-	}
-	if (!primary) {
-		pr_err("no primary certificate at %s", shirudo_cert_path());
-		return -ENOENT;
-	}
-	rc = read_der(primary->path, &der, &der_sz);
-	if (rc) {
-		pr_err("read %s: %s", primary->path, strerror(-rc));
-		return rc;
-	}
-	memset(&enrolled, 0, sizeof(enrolled));
-	enrolled.certs[0] = *primary;
-	enrolled.n = 1;
-
-	ring = keyring_find(SHIRUDO_KEYRING_NAME);
-	if (frozen && id.keyring_type == SHIRUDO_SIG_KEYRING_USER &&
-	    ring != id.keyring_serial) {
-		pr_err("keyring \"%s\" is %s; the anchor frozen this boot is "
-		       "serial %d, which only a reboot can replace (tampered)",
-		       SHIRUDO_KEYRING_NAME, ring < 0 ? "gone" :
-		       "not the one init sealed", (int)id.keyring_serial);
-		xfree(der, der_sz);
-		return -EKEYREJECTED;
-	}
-	if (ring >= 0) {
-		rc = keyring_holds_cert(ring, der, der_sz);
-		if (rc > 0) {
-			xfree(der, der_sz);
-			rc = keyring_seal(ring);
-			if (rc && rc != -EACCES)
-				pr_warn("keyring \"%s\": could not seal (mutable): %s",
-					SHIRUDO_KEYRING_NAME, strerror(-rc));
-			pr_info("keyring \"%s\" already present (serial=%d), sealed",
-				SHIRUDO_KEYRING_NAME, (int)ring);
-			return 0;
-		}
-		pr_warn("keyring \"%s\" serial=%d %s; recreating",
-			SHIRUDO_KEYRING_NAME, (int)ring,
-			rc == 0 ? "does not hold the certificate" :
-			strerror(-rc));
-		rc = keyring_unlink_from_user(ring);
-		if (rc) {
-			pr_err("unlink stale keyring \"%s\": %s",
-			       SHIRUDO_KEYRING_NAME, strerror(-rc));
-			xfree(der, der_sz);
-			return rc;
-		}
-	} else if (ring != -ENOKEY) {
-		pr_err("lookup keyring \"%s\": %s",
-		       SHIRUDO_KEYRING_NAME, strerror(-ring));
-		xfree(der, der_sz);
-		return ring;
-	}
-
-	ring = keyring_open_or_create(SHIRUDO_KEYRING_NAME);
-	if (ring < 0) {
-		pr_err("open/create keyring \"%s\": %s",
-		       SHIRUDO_KEYRING_NAME, strerror(-ring));
-		xfree(der, der_sz);
-		return ring;
-	}
-
-	key = keyring_add_cert(ring, der, der_sz);
-	xfree(der, der_sz);
-	if (key < 0) {
-		pr_err("add cert to keyring: %s", strerror(-key));
-		if (key == -ENOENT || key == -ENOPKG)
-			pr_err("kernel cannot verify this cert's public-key "
-			       "algorithm (ML-DSA needs CONFIG_CRYPTO_MLDSA=y "
-			       "and CONFIG_CRYPTO_SHA512=y; see "
-			       "Documentation/requirements.rst)");
-		return key;
-	}
-
-	/*
-	 * Freeze the keyring so no further key can be linked into it this
-	 * boot -- a root attacker cannot drop in a second cert to make the
-	 * kernel accept BPF they signed. Not fatal if it fails: the LSM
-	 * still enforces; the keyring is just left mutable.
-	 */
-	rc = keyring_seal(ring);
+	rc = shirudo_image_boot_keys(&set);
 	if (rc)
-		pr_warn("keyring \"%s\": could not seal (mutable): %s",
-			SHIRUDO_KEYRING_NAME, strerror(-rc));
-
-	pr_info("keyring \"%s\" serial=%d%s, cert key serial=%d",
-		SHIRUDO_KEYRING_NAME, (int)ring, rc ? "" : " sealed",
-		(int)key);
+		return rc;
+	rc = init_bpf_keyring(ring, &set);
+	if (rc && rc != -EEXIST)
+		return rc;
+	enrolled = set;
 	return 0;
 }
 
@@ -476,6 +293,7 @@ static int is_bpffs_mounted(const char *path)
 
 static int init_bpffs(void)
 {
+	struct stat parent, run;
 	int rc;
 
 	rc = seal_mkdir_p(SHIRUDO_VAR_LIB, 0700);
@@ -488,36 +306,30 @@ static int init_bpffs(void)
 		pr_err("mkdir %s: %s", SHIRUDO_RUN_DIR, strerror(-rc));
 		return rc;
 	}
-	if (image_mode) {
-		struct stat parent, run;
-
-		rc = is_bpffs_mounted(SHIRUDO_BPFFS_DIR);
-		if (rc < 0)
-			return rc;
+	rc = is_bpffs_mounted(SHIRUDO_BPFFS_DIR);
+	if (rc < 0)
+		return rc;
+	if (rc)
+		return 0;
+	if (stat(SHIRUDO_RUN_DIR, &parent) || stat("/run", &run))
+		return -errno;
+	if (parent.st_dev == run.st_dev) {
+		rc = seal_label(SHIRUDO_RUN_DIR);
 		if (rc)
-			return 0;
-		if (stat(SHIRUDO_RUN_DIR, &parent) || stat("/run", &run))
-			return -errno;
-		if (parent.st_dev == run.st_dev) {
-			rc = seal_label(SHIRUDO_RUN_DIR);
-			if (rc)
-				return rc;
-			if (mount("tmpfs", SHIRUDO_RUN_DIR, "tmpfs",
-				  MS_NOSUID | MS_NODEV | MS_NOEXEC,
-				  "mode=0700,size=16M"))
-				return -errno;
-		}
-		if (mount(NULL, SHIRUDO_RUN_DIR, NULL,
-			  MS_PRIVATE | MS_REC, NULL))
+			return rc;
+		if (mount("tmpfs", SHIRUDO_RUN_DIR, "tmpfs",
+			  MS_NOSUID | MS_NODEV | MS_NOEXEC,
+			  "mode=0700,size=16M"))
 			return -errno;
 	}
+	if (mount(NULL, SHIRUDO_RUN_DIR, NULL,
+		  MS_PRIVATE | MS_REC, NULL))
+		return -errno;
+
 	/* So that the init record left here is sealed from its creation. */
 	rc = seal_label(SHIRUDO_RUN_DIR);
-	if (rc) {
-		if (image_mode)
-			return rc;
-		pr_warn("seal: label %s: %s", SHIRUDO_RUN_DIR, strerror(-rc));
-	}
+	if (rc)
+		return rc;
 	rc = seal_mkdir_p(SHIRUDO_BPFFS_DIR, 0700);
 	if (rc) {
 		pr_err("mkdir %s: %s",
@@ -551,102 +363,6 @@ static int init_bpffs(void)
 static __u32 kernel_dev_t(dev_t st_dev)
 {
 	return ((__u32)major(st_dev) << 20) | (minor(st_dev) & 0xfffffu);
-}
-
-/*
- * Whether two shirudo binaries come from different builds: by GNU
- * build ID, which survives the stripping an initrd generator applies,
- * and by content only when one of them carries no ID.
- */
-static bool binaries_differ(const char *a, const char *b)
-{
-	__u8 ida[SHIRUDO_UPATCH_BUILD_ID_MAX], idb[SHIRUDO_UPATCH_BUILD_ID_MAX];
-	__u8 ba[65536], bb[65536];
-	__u32 lena = 0, lenb = 0;
-	bool differ = true;
-	ssize_t na, nb;
-	int fa, fb;
-
-	fa = open(a, O_RDONLY | O_CLOEXEC);
-	fb = open(b, O_RDONLY | O_CLOEXEC);
-	if (fa < 0 || fb < 0)
-		goto out;
-	if (elf_build_id_fd(fa, ida, &lena) == 0 && lena &&
-	    elf_build_id_fd(fb, idb, &lenb) == 0 && lenb) {
-		differ = lena != lenb || memcmp(ida, idb, lena) != 0;
-		goto out;
-	}
-	if (lseek(fa, 0, SEEK_SET) < 0 || lseek(fb, 0, SEEK_SET) < 0)
-		goto out;
-	do {
-		na = read(fa, ba, sizeof(ba));
-		nb = read(fb, bb, sizeof(bb));
-		if (na < 0 || nb < 0 || na != nb || memcmp(ba, bb, (size_t)na))
-			goto out;
-	} while (na > 0);
-	differ = false;
-out:
-	if (fa >= 0)
-		close(fa);
-	if (fb >= 0)
-		close(fb);
-	return differ;
-}
-
-/*
- * The executables the bpffs guards admit. Normally the running binary
- * alone: /proc/self/exe resolves to it, and it is what later runs
- * `upatch unload` and sets the payload xattr on a pin. From the initrd
- * the running binary is the initrd's copy, which is gone after the
- * switch to the root file system; the identity that lasts is the
- * root's binary at the same path, and the initrd's copy is recorded
- * beside it only for the rest of this init. Image mode records no executable
- * inode: its successful-exec mark is bound to the authenticated runtime root.
- */
-static int identity_executables(struct shirudo_identity *id)
-{
-	char self[PATH_MAX], root_exe[PATH_MAX];
-	struct stat st;
-	ssize_t n;
-
-	if (image_mode) {
-		id->runtime_mode = 1;
-		memcpy(id->runtime_root, shirudo_image_runtime_root(), 32);
-		return 0;
-	}
-	if (stat("/proc/self/exe", &st) != 0) {
-		pr_err("stat /proc/self/exe: %s", strerror(errno));
-		return -errno;
-	}
-	if (!initrd_mode) {
-		id->exe_dev = kernel_dev_t(st.st_dev);
-		id->exe_ino = (__u64)st.st_ino;
-		return 0;
-	}
-	id->alt_exe_dev = kernel_dev_t(st.st_dev);
-	id->alt_exe_ino = (__u64)st.st_ino;
-
-	n = readlink("/proc/self/exe", self, sizeof(self) - 1);
-	if (n < 0) {
-		pr_err("readlink /proc/self/exe: %s", strerror(errno));
-		return -errno;
-	}
-	self[n] = '\0';
-	if (strsprintf(root_exe, sizeof(root_exe), "%s%s", sysroot(),
-		       self) < 0)
-		return -ENAMETOOLONG;
-	if (stat(root_exe, &st) != 0) {
-		pr_err("initrd: %s: %s; the root file system needs shirudo "
-		       "installed at the path the initrd runs it from",
-		       root_exe, strerror(errno));
-		return -errno;
-	}
-	id->exe_dev = kernel_dev_t(st.st_dev);
-	id->exe_ino = (__u64)st.st_ino;
-	if (binaries_differ("/proc/self/exe", root_exe))
-		pr_warn("initrd: %s differs from the initrd's copy of shirudo; "
-			"regenerate the initrd after upgrading", root_exe);
-	return 0;
 }
 
 static int attach_pin(struct bpf_program *p, const char *pin,
@@ -683,7 +399,7 @@ static int attach_guard(struct bpf_program *program,
 	return attach_pin(program, shirudo_gate_guards[guard].pin, link);
 }
 
-/* The chosen object pair shares identity, task marks and refusal counters. */
+/* The admission and seal objects share bootstrap state and task marks. */
 static int share_policy_maps(struct bpf_object *source,
 			     struct bpf_object *destination)
 {
@@ -692,9 +408,6 @@ static int share_policy_maps(struct bpf_object *source,
 	int rc;
 
 	for (i = 0; i < ARRAY_SIZE(shirudo_guard_maps); i++) {
-		if (!image_mode && (i == SHIRUDO_GUARD_DEVICES ||
-				    i == SHIRUDO_GUARD_ROOTS))
-			continue;
 		from = bpf_object__find_map_by_name(source,
 						    shirudo_guard_maps[i].name);
 		to = bpf_object__find_map_by_name(destination,
@@ -732,11 +445,11 @@ static int attach_guard_group(struct bpf_object *obj,
 	return 0;
 }
 
-/* Both mode objects retain the same writable-state xattr protection. */
+/* Writable state and runtime processes always get the full seal. */
 static int attach_seal(struct bpf_object *policy, struct bpf_object **obj_out,
 		       struct bpf_link **links, struct bpf_link **image_links)
 {
-	const struct shirudo_embedded_bpf *blob = seal_blob(image_mode);
+	const struct shirudo_embedded_bpf *blob = seal_blob();
 	struct bpf_object *obj;
 	int err;
 
@@ -767,7 +480,7 @@ static int attach_seal(struct bpf_object *policy, struct bpf_object **obj_out,
 	}
 	err = attach_guard_group(obj, shirudo_seal_guards,
 				 ARRAY_SIZE(shirudo_seal_guards), links);
-	if (!err && image_mode)
+	if (!err)
 		err = attach_guard_group(obj, shirudo_image_seal_guards,
 					 ARRAY_SIZE(shirudo_image_seal_guards),
 					 image_links);
@@ -820,9 +533,6 @@ static int freeze_task_maps(struct bpf_object *obj)
 		const struct shirudo_guard_map *expected =
 			&shirudo_guard_maps[i];
 
-		if (!image_mode && (i == SHIRUDO_GUARD_DEVICES ||
-				    i == SHIRUDO_GUARD_ROOTS))
-			continue;
 		map = bpf_object__find_map_by_name(obj, expected->name);
 		if (!map) {
 			rc = -ENOENT;
@@ -845,7 +555,7 @@ static int freeze_task_maps(struct bpf_object *obj)
 	return rc;
 }
 
-static int init_lsm(bool attach_filesystem_seal)
+static int init_lsm(void)
 {
 	struct bpf_link *image_links[SHIRUDO_IMAGE_OBSERVER_HOOK_COUNT] = {};
 	struct bpf_link *image_seal[SHIRUDO_IMAGE_SEAL_HOOK_COUNT] = {};
@@ -853,7 +563,7 @@ static int init_lsm(bool attach_filesystem_seal)
 	struct bpf_link *identity_links[ARRAY_SIZE(shirudo_observer_guards)] = {};
 	struct bpf_link *mount_links[ARRAY_SIZE(shirudo_mount_guards)] = {};
 	struct bpf_program *p_bpf, *p_bpf_map, *p_unlink, *p_setx, *p_rmx;
-	const struct shirudo_embedded_bpf *blob = bpf2_blob(image_mode);
+	const struct shirudo_embedded_bpf *blob = bpf2_blob();
 	struct bpf_link *seal_links[SHIRUDO_SEAL_HOOK_COUNT] = {};
 	struct bpf_link *link_bpf = NULL, *link_bpf_map = NULL;
 	struct bpf_object *obj = NULL, *seal_obj = NULL;
@@ -910,22 +620,13 @@ static int init_lsm(bool attach_filesystem_seal)
 		goto out;
 	}
 	id.sb_dev = kernel_dev_t(st.st_dev);
-	if (image_mode) {
-		if (stat(SHIRUDO_RUN_DIR, &st)) {
-			err = -errno;
-			goto out;
-		}
-		id.run_dev = kernel_dev_t(st.st_dev);
-	}
-
-	/*
-	 * Ordinary mode records executable device/inode identities. Image mode
-	 * instead records the authenticated runtime root for exec task marks.
-	 * Both distinguish authorized `upatch unload` from an attacker's `rm`.
-	 */
-	err = identity_executables(&id);
-	if (err)
+	if (stat(SHIRUDO_RUN_DIR, &st)) {
+		err = -errno;
 		goto out;
+	}
+	id.run_dev = kernel_dev_t(st.st_dev);
+
+	memcpy(id.runtime_root, shirudo_image_runtime_root(), 32);
 
 	/*
 	 * The trust anchor lsm/bpf_prog_load enforces: only a load the
@@ -934,18 +635,11 @@ static int init_lsm(bool attach_filesystem_seal)
 	 * enrolled the cert and sealed the keyring, so this resolves the
 	 * serial the kernel records for a load that names it as keyring_id.
 	 */
-	if (bpf_keyring_mode) {
-		keyring = keyring_bpf_serial();
-		id.keyring_type = SHIRUDO_SIG_KEYRING_BPF;
-	} else {
-		keyring = keyring_find(SHIRUDO_KEYRING_NAME);
-		id.keyring_type = SHIRUDO_SIG_KEYRING_USER;
-	}
-	if (keyring < 0) {
-		err = keyring;
-		pr_err("resolve the %s keyring serial: %s",
-		       bpf_keyring_mode ? "bpf" : "\"shirudo\"",
-		       strerror(-err));
+	keyring = keyring_bpf_serial();
+	id.keyring_type = SHIRUDO_SIG_KEYRING_BPF;
+	if (keyring <= 0) {
+		err = keyring ? keyring : -ENOKEY;
+		pr_err("resolve the bpf keyring serial: %s", strerror(-err));
 		goto out;
 	}
 	id.keyring_serial = (__s32)keyring;
@@ -1006,7 +700,7 @@ static int init_lsm(bool attach_filesystem_seal)
 	err = attach_guard_group(obj, shirudo_observer_guards,
 				 ARRAY_SIZE(shirudo_observer_guards),
 				 identity_links);
-	if (!err && image_mode)
+	if (!err)
 		err = attach_guard_group(obj, shirudo_image_observer_guards,
 					 SHIRUDO_IMAGE_OBSERVER_HOOK_COUNT,
 					 image_links);
@@ -1066,11 +760,9 @@ static int init_lsm(bool attach_filesystem_seal)
 	if (err)
 		goto out;
 
-	if (attach_filesystem_seal) {
-		err = attach_seal(obj, &seal_obj, seal_links, image_seal);
-		if (err)
-			goto out;
-	}
+	err = attach_seal(obj, &seal_obj, seal_links, image_seal);
+	if (err)
+		goto out;
 
 	err = attach_guard(p_bpf_map, SHIRUDO_GUARD_BPF_MAP, &link_bpf_map);
 	if (err) {
@@ -1090,11 +782,8 @@ static int init_lsm(bool attach_filesystem_seal)
 		goto out;
 	}
 
-	pr_info("%s%s attached: lsm/bpf gate live%s",
-		blob->name,
-		attach_filesystem_seal ? " + seal" : "",
-		attach_filesystem_seal ? ", bpffs and /var/lib/shirudo sealed" :
-		", filesystem seal unavailable on this kernel");
+	pr_info("%s + seal attached: lsm/bpf gate live, writable state sealed",
+		blob->name);
 	err = 0;
 out:
 	for (i = 0; i < (int)ARRAY_SIZE(image_seal); i++) {
@@ -1469,8 +1158,6 @@ static int chain_extend_init(struct shirudo_measured_upatch *set, size_t n)
 
 static const struct shirudo_help_item init_options[] = {
 	{ "--check-only", "run the pre-flight only; never touch kernel state" },
-	{ "--no-seal",
-	  "skip filesystem sealing when target LSM hooks are not sleepable" },
 };
 
 static const struct shirudo_help_section init_help_sections[] = {
@@ -1479,7 +1166,7 @@ static const struct shirudo_help_section init_help_sections[] = {
 };
 
 static const struct shirudo_help init_help = {
-	.usage      = "shirudo init [--check-only] [--no-seal]",
+	.usage      = "shirudo init [--check-only]",
 	.summary    = "Bootstrap enforcement on this target. Idempotent; safe "
 		      "to re-run.\nThe pinned link survives the process exit.",
 	.sections   = init_help_sections,
@@ -1495,14 +1182,14 @@ static void usage(void)
 /*
  * The initrd phase reads the root's state tree: the archived upatches
  * to restore, the eventlog to continue, the keys to compare. A
- * recursive bind of <sysroot>/var/lib/shirudo at its usual path keeps
- * every path the same; it is read-only, so nothing is written there
- * before the root file system is up, and it is detached when init
- * leaves. The private bpffs is under /run, which systemd carries
+ * recursive writable bind of <sysroot>/var/lib/shirudo keeps every path
+ * the same and lets config recovery record its selection durably. The
+ * bind is detached when init leaves. The private bpffs is under /run, which systemd carries
  * across the switch.
  */
 static int initrd_enter(void)
 {
+	struct statvfs state;
 	char src[PATH_MAX];
 	struct stat st;
 	int rc;
@@ -1526,29 +1213,16 @@ static int initrd_enter(void)
 		       strerror(errno));
 		return -errno;
 	}
-	if (image_mode) {
-		struct statvfs state;
-
-		rc = statvfs(SHIRUDO_VAR_LIB, &state) ? -errno :
-			(state.f_flag & ST_RDONLY ? -EROFS : 0);
-		if (rc) {
-			umount2(SHIRUDO_VAR_LIB, MNT_DETACH);
-			return rc;
-		}
-		pr_info("initrd: %s bound writable at %s for config recovery",
-			src, SHIRUDO_VAR_LIB);
-		return 0;
-	}
-	if (mount(NULL, SHIRUDO_VAR_LIB, NULL,
-		  MS_BIND | MS_REMOUNT | MS_RDONLY, NULL) != 0) {
-		rc = -errno;
-		pr_err("initrd: make %s read-only: %s", SHIRUDO_VAR_LIB,
-		       strerror(errno));
+	rc = statvfs(SHIRUDO_VAR_LIB, &state) ? -errno :
+		(state.f_flag & ST_RDONLY ? -EROFS : 0);
+	if (rc) {
 		umount2(SHIRUDO_VAR_LIB, MNT_DETACH);
 		return rc;
 	}
-	pr_info("initrd: %s bound read-only at %s", src, SHIRUDO_VAR_LIB);
+	pr_info("initrd: %s bound writable at %s for config recovery",
+		src, SHIRUDO_VAR_LIB);
 	return 0;
+
 }
 
 static void initrd_leave(void)
@@ -1558,7 +1232,7 @@ static void initrd_leave(void)
 			strerror(errno));
 }
 
-static int run_init(bool no_seal)
+static int run_init(void)
 {
 	struct shirudo_measured_upatch *set = NULL;
 	size_t n = 0;
@@ -1569,65 +1243,39 @@ static int run_init(bool no_seal)
 		return rc;
 
 	rc = init_keyring();
-	if (!rc && image_mode)
+	if (!rc)
 		rc = shirudo_image_boot_keys_close();
 	if (rc)
 		return rc;
 
-	/*
-	 * Label the binary + the /var/lib/shirudo tree BEFORE init_lsm
-	 * attaches seal, so the bulk setxattr is not gated by seal's own
-	 * inode_setxattr hook, and fold in the record an initrd phase left
-	 * for this boot. The initrd itself writes nothing to the tree: its
-	 * root is read-only, and the root's init does both on its re-run.
-	 */
-	if (initrd_mode && !image_mode) {
-		pr_info("initrd: labels and the eventlog are left to the root "
-			"file system's init");
-	} else {
-		rc = seal_label_tree();
-		if (rc) {
-			pr_warn("init: seal label-walk incomplete: %s "
-				"(some files may be unsealed)", strerror(-rc));
-			if (image_mode)
-				return rc;
-		}
-		rc = eventlog_adopt_pending();
-		if (rc) {
-			pr_err("init: the initrd's record in %s could not be "
-			       "adopted: %s", eventlog_pending_path(),
-			       strerror(-rc));
-			return rc;
-		}
-	}
-
-	rc = init_lsm(!no_seal);
+	/* Seal writable state before the hooks attach, then adopt the initrd log. */
+	rc = seal_label_tree();
+	if (rc)
+		return rc;
+	rc = eventlog_adopt_pending();
 	if (rc)
 		return rc;
 
-	if (image_mode) {
-		rc = seal_label_tree();
-		if (rc)
-			return rc;
-		rc = shirudo_image_runtime_mount();
-		if (!rc)
-			rc = shirudo_image_boot();
-		if (!rc)
-			rc = keys_load(SHIRUDO_RUNTIME_DIR "/keys",
-				       SHIRUDO_KEYS_REVOKED_DIR,
-					       true, &enrolled);
-		if (rc)
-			return rc;
-	}
+	rc = init_lsm();
+	if (rc)
+		return rc;
+
+	rc = seal_label_tree();
+	if (rc)
+		return rc;
+	rc = shirudo_image_runtime_mount();
+	if (!rc)
+		rc = shirudo_image_boot();
+	if (!rc)
+		rc = keys_load(SHIRUDO_RUNTIME_DIR "/keys",
+			       SHIRUDO_KEYS_REVOKED_DIR, true, &enrolled);
+	if (rc)
+		return rc;
+
 	rc = boot_restore(&set, &n);
 	if (rc) {
-		if (image_mode)
-			pr_err("init: boot-restore failed; further changes "
-			       "and attestation remain blocked");
-		else
-			pr_err("init: incomplete -- LSM active, but boot-restore "
-			       "failed; re-run `shirudo init` after fixing the "
-			       "upatch");
+		pr_err("init: boot-restore failed; further changes "
+		       "and attestation remain blocked");
 		xfree(set, n * sizeof(*set));
 		return rc;
 	}
@@ -1640,24 +1288,18 @@ static int run_init(bool no_seal)
 		return rc;
 	}
 
-	if (image_mode) {
-		rc = shirudo_image_boot_complete();
-		if (rc)
-			return rc;
-	}
+	rc = shirudo_image_boot_complete();
+	if (rc)
+		return rc;
 
-	pr_info("init: complete (LSM active%s%s)",
-		no_seal ? ", filesystem seal skipped" :
-		", bpffs sealed against VFS unlink",
-		initrd_mode ? "; initrd phase, the root file system's init "
-		"adopts the record" : "");
+	pr_info("init: complete (LSM active, writable state sealed)");
 	return 0;
 }
 
 int cmd_init(int argc, const char **argv)
 {
 	struct shirudo_preflight_result res;
-	bool check_only = false, no_seal = false;
+	bool check_only = false;
 	int i, rc;
 
 	for (i = 1; i < argc; i++) {
@@ -1665,10 +1307,6 @@ int cmd_init(int argc, const char **argv)
 
 		if (strcmp(a, "--check-only") == 0) {
 			check_only = true;
-			continue;
-		}
-		if (strcmp(a, "--no-seal") == 0) {
-			no_seal = true;
 			continue;
 		}
 		if (is_help(a)) {
@@ -1686,11 +1324,6 @@ int cmd_init(int argc, const char **argv)
 		pr_err("init: authenticated image settings: %s", strerror(-rc));
 		return 1;
 	}
-	image_mode = rc > 0;
-	if (image_mode && no_seal) {
-		pr_err("init: image mode requires all filesystem and exec guards");
-		return 1;
-	}
 	preflight_run(&res);
 	print_preflight(&res);
 
@@ -1705,7 +1338,7 @@ int cmd_init(int argc, const char **argv)
 
 	if (initrd_mode && initrd_enter())
 		return 1;
-	rc = run_init(no_seal);
+	rc = run_init();
 	shirudo_image_leave();
 	if (initrd_mode)
 		initrd_leave();

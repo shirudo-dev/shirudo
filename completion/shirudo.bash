@@ -126,7 +126,7 @@ _shirudo()
 		fi
 		;;
 	init)
-		COMPREPLY=( $(compgen -W "--check-only --no-seal" -- "$cur") )
+		COMPREPLY=( $(compgen -W "--check-only" -- "$cur") )
 		;;
 	status)
 		COMPREPLY=( $(compgen -W "--json \

@@ -28,17 +28,13 @@ size_t conditions(const struct shirudo_conditions_input *in,
 		n++;
 	}
 	if (n < cap) {
-		const char *kind = in->keyring_mode &&
-				   !strcmp(in->keyring_mode, "bpf") ?
-				   "bpf" : "user";
-
 		c[n].type = "KeyringSealed";
 		if (!in->keyring_present && in->ksp_seen) {
 			c[n].status = "ALERT";
 			snprintf(c[n].detail, sizeof(c[n].detail),
-				 "pin serial=%lld, the %s keyring is gone "
+				 "pin serial=%lld, the BPF keyring is gone "
 				 "(removed?)",
-				 (__s64)in->keyring_serial_pinned, kind);
+				 (__s64)in->keyring_serial_pinned);
 		} else if (!in->keyring_present) {
 			c[n].status = "WARN";
 			snprintf(c[n].detail, sizeof(c[n].detail),
@@ -49,18 +45,11 @@ size_t conditions(const struct shirudo_conditions_input *in,
 				 "pin serial=%lld != live serial=%lld (swapped?)",
 				 (__s64)in->keyring_serial_pinned,
 				 (__s64)in->keyring_serial);
-		} else if (in->staging) {
-			c[n].status = "WARN";
-			snprintf(c[n].detail, sizeof(c[n].detail),
-				 "staging mode: serial=%lld in the user "
-				 "keyring; boot with bpf.keyring_unsealed=1 "
-				 "and run init from the initrd",
-				 (__s64)in->keyring_serial);
 		} else {
 			c[n].status = "OK";
 			snprintf(c[n].detail, sizeof(c[n].detail),
-				 "serial=%lld in the %s keyring, %s",
-				 (__s64)in->keyring_serial, kind,
+				 "serial=%lld in the BPF keyring, %s",
+				 (__s64)in->keyring_serial,
 				 in->ksp_seen ? "pin matches"
 					      : "no pin recorded");
 		}

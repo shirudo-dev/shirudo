@@ -47,7 +47,7 @@ say()
 	printf 'shirudo-gen-initrd: %s\n' "$*"
 }
 
-CMDLINE_PARAM=bpf.keyring_unsealed=1
+CMDLINE_PARAM="bpf.keyring_unsealed=1 dm_verity.keyring_unsealed=1"
 MODULE_DIR_INSTALLED=/usr/lib/dracut/modules.d/90shirudo
 UNIT_INSTALLED=/usr/lib/systemd/system/shirudo-initrd.service
 
@@ -93,12 +93,6 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
-bootstrap_settings=${bootstrap_conf:-/etc/shirudo/shirudo.conf}
-if [ -r "$bootstrap_settings" ] &&
-   grep -Eq '^[[:space:]]*runtime\.(image|root_hash)[[:space:]]*=' "$bootstrap_settings"; then
-	CMDLINE_PARAM+=" dm_verity.keyring_unsealed=1"
-fi
-
 if [ "$print_cmdline" = 1 ]; then
 	printf '%s\n' "$CMDLINE_PARAM"
 	exit 0
@@ -126,6 +120,7 @@ check_initrd()
 	[ -s "$img" ] || die "no initrd at $img"
 	listing=$(lsinitrd "$img" 2>/dev/null) || die "lsinitrd cannot read $img"
 	for want in "etc/shirudo/keys/cert.der" \
+		    "etc/shirudo/shirudo.conf" \
 		    "usr/lib/systemd/system/shirudo-initrd.service" \
 		    "initrd.target.wants/shirudo-initrd.service" \
 		    "systemd-pcrphase-initrd.service" \

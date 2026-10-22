@@ -579,7 +579,7 @@ static int keys_add(int argc, const char **argv)
 		return 2;
 	}
 	if (shirudo_image_config_active()) {
-		pr_err("image mode: add vouched BPF signers to the signed "
+		pr_err("target: add vouched BPF signers to the signed "
 		       "config selected for boot and reboot to enroll them");
 		return 1;
 	}
@@ -672,26 +672,10 @@ out:
 	return rc ? 1 : 0;
 }
 
-static const struct shirudo_help_item keys_revoke_options[] = {
-	{ "--promote <fingerprint>",
-	  "the member that becomes the primary when the primary goes" },
-	{ "--force",
-	  "revoke the last certificate; nothing verifies until a reboot with a new one" },
-};
-
-static const struct shirudo_help_section keys_revoke_sections[] = {
-	{ "options:", keys_revoke_options, ARRAY_SIZE(keys_revoke_options) },
-};
-
 static const struct shirudo_help keys_revoke_help = {
-	.usage   = "shirudo keys revoke <fingerprint> [--promote <fingerprint>] [--force]",
-	.summary = "Stop trusting a certificate: unlink its key from the bpf "
-		   "keyring so the kernel\naccepts nothing it signed from now "
-		   "on, unload and purge every archived upatch\nit signed, "
-		   "and keep it out of the set for good. Measured into the "
-		   "register.",
-	.sections   = keys_revoke_sections,
-	.n_sections = ARRAY_SIZE(keys_revoke_sections),
+	.usage = "shirudo keys revoke",
+	.summary = "Local revocation is disabled. Publish revocation records "
+		   "in a signed config image and activate it with image update.",
 };
 
 static int append_key_event(const char *type, const char *fp_hex,
@@ -857,321 +841,17 @@ int shirudo_keys_revoke_image(const __u8 *der, size_t size, bool boot)
 	return rc < 0 ? rc : 0;
 }
 
-/* Replace the primary with a member: its file becomes cert.der. */
-static int promote(const struct shirudo_trusted_cert *c)
-{
-	char vouch[PATH_MAX];
-	size_t der_sz = 0;
-	__u8 *der = NULL;
-	int rc;
-
-	rc = keys_read_der(c->path, &der, &der_sz);
-	if (rc)
-		return rc;
-	rc = keys_write_file(SHIRUDO_CERT_PATH, der, der_sz);
-	xfree(der, der_sz);
-	if (rc)
-		return rc;
-	if (strsprintf(vouch, sizeof(vouch), "%.*s.vouch",
-		       (int)(strlen(c->path) - 4), c->path) >= 0)
-		unlink(vouch);
-	unlink(c->path);
-	return 0;
-}
-
-static const struct shirudo_trusted_cert *
-set_find(const struct shirudo_trusted_set *set, const __u8 fp[32])
-{
-	size_t i;
-
-	for (i = 0; i < set->n; i++) {
-		if (memcmp(set->certs[i].fingerprint, fp, 32) == 0)
-			return &set->certs[i];
-	}
-	return NULL;
-}
-
-struct revoke_seen {
-	const char	*fp_hex;
-	bool		found;
-};
-
-static int revoke_logged(const char *line, size_t len, void *ctx)
-{
-	struct revoke_seen *r = ctx;
-	char type[32] = {}, fp[65] = {};
-	struct shirudo_json_field key[] = {
-		{ "fingerprint", SHIRUDO_JSON_T_STRING, fp, sizeof(fp), 0,
-		  NULL, 0 },
-	};
-	struct shirudo_json_field f[] = {
-		{ "type", SHIRUDO_JSON_T_STRING, type, sizeof(type), 0, NULL,
-		  0 },
-		{ "key", SHIRUDO_JSON_T_OBJECT, NULL, 0, 0, key,
-		  ARRAY_SIZE(key) },
-	};
-
-	if (!json_parse(line, len, f, ARRAY_SIZE(f)) &&
-	    !strcmp(type, "key_revoke") && !strcmp(fp, r->fp_hex))
-		r->found = true;
-	return 0;
-}
-
-/*
- * A revocation left unmeasured: its marker is from this boot and this
- * boot's log does not hold it. One from an earlier boot never had its
- * key enrolled in this one, so there is nothing to measure.
- */
-static bool revoke_unmeasured(const char *marker, const char *fp_hex)
-{
-	struct revoke_seen r = { .fp_hex = fp_hex };
-	struct timespec up;
-	struct stat st;
-
-	if (stat(marker, &st) || clock_gettime(CLOCK_BOOTTIME, &up))
-		return true;
-	if (st.st_mtime < time(NULL) - up.tv_sec)
-		return false;
-	return eventlog_boot_lines(revoke_logged, &r) || !r.found;
-}
-
-/* The certificate a revoked marker holds, as a member it once was. */
-static int revoked_cert(const __u8 fp[32], const char *marker,
-			struct shirudo_trusted_cert *c, __u8 **der,
-			size_t *der_sz)
-{
-	char trusted[PATH_MAX];
-	int rc;
-
-	rc = keys_read_der(marker, der, der_sz);
-	if (rc)
-		return rc;
-	memset(c, 0, sizeof(*c));
-	rc = keys_digest_der(*der, *der_sz, c->sha256, c->fingerprint);
-	if (!rc && memcmp(c->fingerprint, fp, 32))
-		rc = -EKEYREJECTED;
-	if (!rc)
-		rc = keys_path_for(SHIRUDO_KEYS_DIR "/trusted", fp,
-				   ".der", trusted, sizeof(trusted));
-	if (rc) {
-		xfree(*der, *der_sz);
-		*der = NULL;
-		return rc;
-	}
-	strscpy(c->path, trusted, sizeof(c->path));
-	return 0;
-}
-
 static int keys_revoke(int argc, const char **argv)
 {
-	const struct shirudo_trusted_cert *victim, *heir = NULL;
-	const char *fp_arg = NULL, *promote_arg = NULL;
-	struct shirudo_trusted_cert gone;
-	__u8 fp[32], promote_fp[32];
-	struct shirudo_trusted_set set;
-	__u8 *der = NULL;
-	struct shirudo_identity id;
-	char revoked[PATH_MAX];
-	key_serial_t ring, key;
-	size_t der_sz = 0, n_unloaded = 0;
-	bool force = false, resume = false;
-	char fp_hex[65];
-	int rc, purged;
-
-	for (int a = 1; a < argc; a++) {
-		if (!strcmp(argv[a], "--force")) {
-			force = true;
-		} else if (!strcmp(argv[a], "--promote") && a + 1 < argc) {
-			promote_arg = argv[++a];
-		} else if (!strncmp(argv[a], "--promote=", 10)) {
-			promote_arg = argv[a] + 10;
-		} else if (is_help(argv[a])) {
-			print_help(&keys_revoke_help);
-			return 0;
-		} else if (argv[a][0] == '-') {
-			pr_err("keys revoke: unknown option '%s'", argv[a]);
-			return 2;
-		} else if (!fp_arg) {
-			fp_arg = argv[a];
-		} else {
-			pr_err("keys revoke: unexpected argument '%s'",
-			       argv[a]);
-			return 2;
-		}
-	}
-	if (!fp_arg) {
+	if (argc == 2 && is_help(argv[1])) {
 		print_help(&keys_revoke_help);
-		return 2;
+		return 0;
 	}
-	if (strlen(fp_arg) != 64 || hex_decode(fp_arg, fp, 32)) {
-		pr_err("keys revoke: a fingerprint is 64 hex digits (see "
-		       "`shirudo keys`)");
-		return 2;
-	}
-	if (promote_arg && (strlen(promote_arg) != 64 ||
-			    hex_decode(promote_arg, promote_fp, 32))) {
-		pr_err("keys revoke: --promote takes a fingerprint");
-		return 2;
-	}
-	if (shirudo_image_config_active()) {
-		pr_err("image mode: put revocation records in a signed config "
-		       "image, then run `shirudo image update`");
-		return 1;
-	}
-	hex_encode(fp, 32, fp_hex);
-
-	/*
-	 * Only the bpf keyring can lose one key and keep the others; the
-	 * staging keyring holds the primary alone and the rotation guide
-	 * is the way out of it.
-	 */
-	if (identity_read(&id) ||
-	    id.keyring_type != SHIRUDO_SIG_KEYRING_BPF) {
-		pr_err("keys revoke: the certificates are not enrolled in the "
-		       "bpf keyring this boot; rotate the key instead");
-		return 1;
-	}
-	ring = keyring_bpf_serial();
-	if (ring <= 0) {
-		pr_err("keys revoke: no bpf keyring: %s", strerror(-ring));
-		return 1;
-	}
-	rc = keys_load(SHIRUDO_KEYS_DIR, NULL, true, &set);
-	if (rc) {
-		pr_err("keys revoke: read the trusted set: %s", strerror(-rc));
-		return 1;
-	}
-	victim = set_find(&set, fp);
-	if (!victim && !keys_is_revoked(SHIRUDO_KEYS_REVOKED_DIR, fp)) {
-		pr_err("keys revoke: %s is not a trusted certificate", fp_hex);
-		return 1;
-	}
-	if (!victim) {
-		/*
-		 * Revoked before: a run that failed after the marker left
-		 * the unlink, the measurement or the purge to this one.
-		 */
-		rc = keys_path_for(SHIRUDO_KEYS_REVOKED_DIR, fp,
-				   ".der", revoked, sizeof(revoked));
-		if (!rc)
-			rc = revoked_cert(fp, revoked, &gone, &der, &der_sz);
-		if (rc) {
-			pr_err("keys revoke: read the revoked certificate: %s",
-			       strerror(-rc));
-			return 1;
-		}
-		pr_info("keys revoke: %s is already revoked; finishing it",
-			fp_hex);
-		victim = &gone;
-		resume = true;
-		goto finish;
-	}
-	if (set.n == 1 && !force) {
-		pr_err("keys revoke: %s is the only certificate; revoking it "
-		       "leaves nothing to verify against until a reboot with a "
-		       "new one (--force to do it anyway)", fp_hex);
-		return 1;
-	}
-	if (victim->primary && set.n > 1) {
-		heir = promote_arg ? set_find(&set, promote_fp) : NULL;
-		if (!heir || heir == victim) {
-			pr_err("keys revoke: %s is the primary certificate; "
-			       "name another member to take its place with "
-			       "--promote <fingerprint>", fp_hex);
-			return 1;
-		}
-	}
-	rc = keys_read_der(victim->path, &der, &der_sz);
-	if (rc) {
-		pr_err("keys revoke: read %s: %s", victim->path, strerror(-rc));
-		return 1;
-	}
-
-	/* The marker first: whatever happens next, no boot enrols it again. */
-	rc = seal_mkdir_p(SHIRUDO_KEYS_REVOKED_DIR, 0700);
-	if (rc) {
-		pr_err("keys revoke: mkdir %s: %s", SHIRUDO_KEYS_REVOKED_DIR,
-		       strerror(-rc));
-		goto out;
-	}
-	rc = keys_path_for(SHIRUDO_KEYS_REVOKED_DIR, fp, ".der",
-			   revoked, sizeof(revoked));
-	if (!rc)
-		rc = keys_write_file(revoked, der, der_sz);
-	if (rc) {
-		pr_err("keys revoke: write %s: %s", revoked, strerror(-rc));
-		goto out;
-	}
-	if (heir) {
-		rc = promote(heir);
-		if (rc) {
-			pr_err("keys revoke: promote: %s", strerror(-rc));
-			goto out;
-		}
-	}
-
-finish:
-	/* The kernel: from this moment nothing it signed verifies. */
-	key = keyring_find_cert(ring, der, der_sz);
-	if (key == -ENOKEY) {
-		pr_warn("keys revoke: %s is not in the bpf keyring this boot",
-			fp_hex);
-	} else if (key < 0) {
-		pr_err("keys revoke: find the key in the bpf keyring: %s",
-		       strerror(-key));
-		rc = key;
-		goto out;
-	} else {
-		rc = keyring_unlink_key(ring, key);
-		if (rc) {
-			pr_err("keys revoke: unlink key %d from the bpf "
-			       "keyring %d: %s; the key is marked revoked and "
-			       "leaves at the next boot", (int)key, (int)ring,
-			       strerror(-rc));
-			goto out;
-		}
-		pr_info("keys revoke: key %d unlinked from the bpf keyring",
-			(int)key);
-	}
-
-	if (!resume || revoke_unmeasured(revoked, fp_hex)) {
-		rc = measure_revoke(victim, fp_hex);
-		if (rc)
-			goto out;
-	}
-
-	/* The archive, then the files the set was read from. */
-	purged = purge_signed_by(der, der_sz, &n_unloaded);
-	if (purged < 0) {
-		rc = purged;
-		pr_err("keys revoke: not every upatch it signed could be "
-		       "purged; run `shirudo upatch list`");
-	}
-	if (!victim->primary) {
-		char vouch[PATH_MAX];
-
-		if (strsprintf(vouch, sizeof(vouch), "%.*s.vouch",
-			       (int)(strlen(victim->path) - 4), victim->path) >= 0)
-			unlink(vouch);
-		unlink(victim->path);
-	}
-	pr_audit("keys revoke: fingerprint=%s unloaded=%zu purged=%d "
-		 "promoted=%s", fp_hex, n_unloaded, purged < 0 ? -1 : purged,
-		 heir ? promote_arg : "-");
-	printf("revoked %s\n", fp_hex);
-	if (purged > 0)
-		printf("purged %d upatch%s it signed, %zu of them loaded\n",
-		       purged, purged == 1 ? "" : "es", n_unloaded);
-	if (heir)
-		printf("primary is now %s\n", promote_arg);
-	pr_info("keys revoke: regenerate the initrd (shirudo-gen-initrd) so "
-		"the next boot enrols the set without it");
-out:
-	xfree(der, der_sz);
-	return rc ? 1 : 0;
+	pr_err("keys revoke: put revocation records in a signed config image, "
+	       "then run `shirudo image update`");
+	return 1;
 }
 
-/* Signing needs the private key, so the operator helper does it. */
 static int keys_vouch(int argc, const char **argv)
 {
 	const char **helper_argv;
@@ -1293,13 +973,8 @@ static int keys_show(int argc, const char **argv)
 	}
 
 	id_rc = identity_read(&id);
-	if (id_rc == 0 && id.keyring_type == SHIRUDO_SIG_KEYRING_BPF) {
-		label = ".bpf";
-		ring = keyring_bpf_serial();
-	} else {
-		label = SHIRUDO_KEYRING_NAME;
-		ring = keyring_find(SHIRUDO_KEYRING_NAME);
-	}
+	label = ".bpf";
+	ring = id_rc ? -ENOKEY : keyring_bpf_serial();
 	if (ring >= 0) {
 		if (shown)
 			printf("\n");
@@ -1323,7 +998,7 @@ static int keys_show(int argc, const char **argv)
 		pr_err("no shirudo key material on this host: no %s and no "
 		       "\"%s\" kernel keyring -- run `shirudo genkey` "
 		       "(operator) or `shirudo init` (target)",
-		       cert_path, SHIRUDO_KEYRING_NAME);
+		       cert_path, ".bpf");
 		rc = 1;
 	}
 	return rc;

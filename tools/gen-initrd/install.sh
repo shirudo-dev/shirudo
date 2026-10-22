@@ -6,7 +6,7 @@
 # place the operator's certificate, put the kernel parameter the bpf
 # keyring needs on the boot command line and rebuild the initrd with
 # shirudo inside, so that the next reboot comes up in the production
-# configuration (Documentation/initrd.rst). With --now, enforcement
+# configuration (Documentation/initrd.rst). Runtime and signed config
 # starts right away in the staging configuration until that reboot.
 #
 #   curl -fsSL https://raw.githubusercontent.com/shirudo-dev/shirudo/main/tools/gen-initrd/install.sh |
@@ -23,7 +23,6 @@ usage: install.sh [options]
   --version <tag>        release to install (default: latest); also SHIRUDO_VERSION
   --package <file>       install this package instead of downloading one;
                          also SHIRUDO_PACKAGE
-  --now                  start enforcement now, staged until the reboot
   --no-cmdline           leave the boot command line alone
   --no-initrd            do not rebuild the initrd
   --switch-to-dracut     on a system using initramfs-tools, install dracut
@@ -34,13 +33,12 @@ EOF
 }
 
 REPO=${SHIRUDO_REPO:-shirudo-dev/shirudo}
-CMDLINE_PARAM=bpf.keyring_unsealed=1
+CMDLINE_PARAM="bpf.keyring_unsealed=1 dm_verity.keyring_unsealed=1"
 CERT_DST=/var/lib/shirudo/keys/cert.der
 
 cert=${SHIRUDO_CERT:-}
 version=${SHIRUDO_VERSION:-}
 package=${SHIRUDO_PACKAGE:-}
-now=0
 do_cmdline=1
 do_initrd=1
 switch_to_dracut=0
@@ -51,7 +49,6 @@ while [ $# -gt 0 ]; do
 	--cert) cert=${2:?}; shift 2 ;;
 	--version) version=${2:?}; shift 2 ;;
 	--package) package=${2:?}; shift 2 ;;
-	--now) now=1; shift ;;
 	--no-cmdline) do_cmdline=0; shift ;;
 	--no-initrd) do_initrd=0; shift ;;
 	--switch-to-dracut) switch_to_dracut=1; shift ;;
@@ -205,8 +202,7 @@ if [ -n "$cert" ]; then
 elif [ ! -s "$CERT_DST" ]; then
 	say "no certificate given and none at $CERT_DST; the initrd cannot be built without one"
 	do_initrd=0
-	now=0
-fi
+	fi
 
 # ---- the boot command line -----------------------------------------------
 
@@ -287,17 +283,10 @@ if [ "$do_initrd" = 1 ]; then
 	build_initrd || initrd_ok=0
 fi
 
-# ---- now -----------------------------------------------------------------
-
-if [ "$now" = 1 ]; then
-	say "starting enforcement now; the certificate is staged in the user keyring until the reboot"
-	run systemctl start shirudo.service
-fi
-
 # ---- summary -------------------------------------------------------------
 
 if [ "$initrd_ok" = 1 ] && [ "$do_initrd" = 1 ] && [ "$do_cmdline" = 1 ]; then
-	say "done; reboot to bring shirudo up in the production configuration"
+	say "done; provision runtime and signed config images before rebuilding the UKI and rebooting"
 else
 	say "done; the production configuration needs the initrd rebuilt and $CMDLINE_PARAM on the command line"
 fi

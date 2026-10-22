@@ -433,7 +433,7 @@ static size_t build_upatches_table(struct dirent **ups, int n_ups,
 /* Status runs on the host, so reachable and parsed are trivially true. */
 static void local_cond_input(struct shirudo_conditions_input *in,
 			     int lsm_attached, int keyring_present,
-			     const char *keyring_mode, int staging,
+			     const char *keyring_mode,
 			     __s64 keyring_serial,
 			     __s64 keyring_serial_pinned,
 			     int ks_seen, int ksp_seen, int ksm_seen,
@@ -447,7 +447,6 @@ static void local_cond_input(struct shirudo_conditions_input *in,
 		.lsm_attached		= lsm_attached,
 		.keyring_present	= keyring_present,
 		.keyring_mode		= keyring_mode,
-		.staging		= staging,
 		.keyring_serial		= keyring_serial,
 		.keyring_serial_pinned	= keyring_serial_pinned,
 		.keyring_serial_matches	= ks_matches,
@@ -624,20 +623,10 @@ int cmd_status(int argc, const char **argv)
 	 * of that kind is what a load would name, and the two must agree.
 	 */
 	keyring_pinned = identity_read(&ident);
-	if (keyring_pinned == 0) {
+	if (!keyring_pinned)
 		keyring_pinned = ident.keyring_serial;
-		if (ident.keyring_type == SHIRUDO_SIG_KEYRING_BPF) {
-			keyring_serial = keyring_bpf_serial();
-			keyring_mode = "bpf";
-		} else {
-			keyring_serial =
-				keyring_find(SHIRUDO_KEYRING_NAME);
-			keyring_mode = "user";
-		}
-	} else {
-		keyring_serial = keyring_find(SHIRUDO_KEYRING_NAME);
-		keyring_mode = keyring_serial >= 0 ? "user" : "none";
-	}
+	keyring_serial = keyring_pinned >= 1 ? keyring_bpf_serial() : -ENOKEY;
+	keyring_mode = keyring_serial >= 0 ? "bpf" : "none";
 	keyring_present = keyring_serial >= 0;
 	/*
 	 * The certificates the keyring of that kind would have been given,
@@ -653,13 +642,7 @@ int cmd_status(int argc, const char **argv)
 				 &n) == 0)
 			certs_enrolled = (int)n;
 	}
-	/*
-	 * Enforcing with the certificate in the user keyring is staging:
-	 * the kernel's bpf keyring was sealed empty at boot, so the trust
-	 * anchor is what init could seal from the root file system.
-	 */
-	mode = !lsm_attached ? "inactive" :
-	       !strcmp(keyring_mode, "bpf") ? "production" : "staging";
+	mode = lsm_attached ? "production" : "inactive";
 	is_operator = access(SHIRUDO_SIGNING_KEY_PATH, F_OK) == 0;
 	cert_present = access(shirudo_cert_path(), F_OK) == 0;
 	is_target = cert_present || lsm_attached || keyring_present;
@@ -749,7 +732,6 @@ int cmd_status(int argc, const char **argv)
 
 			local_cond_input(&cin, lsm_attached, keyring_present,
 					 keyring_mode,
-					 lsm_attached && strcmp(keyring_mode, "bpf") != 0,
 					 keyring_serial,
 					 keyring_pinned >= 1 ? keyring_pinned : 0,
 					 keyring_present, keyring_pinned >= 1,
@@ -1040,7 +1022,6 @@ int cmd_status(int argc, const char **argv)
 
 		local_cond_input(&cin, lsm_attached, keyring_present,
 				 keyring_mode,
-				 lsm_attached && strcmp(keyring_mode, "bpf") != 0,
 				 keyring_serial,
 				 keyring_pinned >= 1 ? keyring_pinned : 0,
 				 keyring_present, keyring_pinned >= 1,
@@ -1060,12 +1041,7 @@ int cmd_status(int argc, const char **argv)
 		printf("Host:              %s\n", hostname);
 		printf("Roles:             %s\n",
 		       roles_str(is_target, is_operator));
-		if (!strcmp(mode, "staging"))
-			printf("Mode:              STAGING (certificate in the "
-			       "user keyring; boot with bpf.keyring_unsealed=1 "
-			       "and run init from the initrd)\n");
-		else
-			printf("Mode:              %s\n", mode);
+		printf("Mode:              %s\n", mode);
 		if (reason[0])
 			printf("Status:            %s  (%s)\n", verdict,
 			       reason);
@@ -1092,8 +1068,7 @@ int cmd_status(int argc, const char **argv)
 				       tamper_meaning(i));
 		}
 
-		printf("\nKeyring (%s):\n", !strcmp(keyring_mode, "bpf") ?
-		       ".bpf" : SHIRUDO_KEYRING_NAME);
+		printf("\nKeyring (.bpf):\n");
 		if (keyring_present)
 			printf("  %-22s %lld\n", "Serial:",
 			       (__s64)keyring_serial);

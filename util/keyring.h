@@ -19,31 +19,6 @@ typedef void (*shirudo_keyring_cb)(key_serial_t serial,
 				   const char *description,
 				   void *ud);
 
-/* -ENOKEY if absent. */
-key_serial_t keyring_find(const char *name);
-
-/*
- * As above, but adds the keyring to @u if absent.
- */
-key_serial_t keyring_open_or_create(const char *name);
-
-/*
- * Unlink a keyring from @u so init can replace an incomplete stale keyring.
- */
-int keyring_unlink_from_user(key_serial_t keyring);
-
-key_serial_t keyring_add_cert(key_serial_t keyring,
-			      const void *cert, size_t cert_len);
-
-/*
- * Freeze a keyring for the rest of the boot: drop write/link/setattr
- * (keeping view/read/search) so no key can be added or unlinked and the
- * permissions cannot be relaxed again -- dropping SETATTR makes it a
- * one-way change. The kernel can still find the cert at BPF_PROG_LOAD.
- * Returns 0 or -errno.
- */
-int keyring_seal(key_serial_t keyring);
-
 /*
  * Whether <keyring> holds the certificate <der>: 1 when one of its
  * keys is that certificate, 0 when none is, -errno otherwise. The

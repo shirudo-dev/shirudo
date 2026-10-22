@@ -5,8 +5,8 @@
 #define SHIRUDO_BPF_ADMISSION_H
 
 /*
- * Both modes use the same BPF command allowlist. The selected policy authorizes
- * the frozen executable in ordinary mode, or a committed task in image mode.
+ * BPF mutations require a task marked by successful exec from the runtime
+ * image. Verified signed loaders perform their own calls in kernel context.
  */
 static __always_inline int shirudo_self_or_deny(enum shirudo_tamper_point point)
 {
@@ -48,7 +48,7 @@ int BPF_PROG(shirudo_lsm_bpf, int cmd, union bpf_attr *attr,
 	/*
 	 * Vetted mutating cmds the signed-loader data-map + attach/pin
 	 * pattern needs from userspace, each left to a caller authorized by
-	 * the selected policy. Signed-loader mutations run in kernel context.
+	 * successful runtime exec. Signed-loader mutations run in kernel context.
 	 * A prog_fd is only obtainable via the signature-gated
 	 * BPF_PROG_LOAD above or GET_FD_BY_ID of an already-vetted prog.
 	 * gen_loader emits no link-create and bpf_sys_bpf() cannot
@@ -189,24 +189,12 @@ int BPF_PROG(shirudo_lsm_bpf_prog_load, struct bpf_prog *prog,
 	if (verdict != BPF_SIG_VERIFIED)
 		return shirudo_tamper_deny(SHIRUDO_TAMPER_LOAD_UNVERIFIED,
 					   -EACCES);
-	if (ktype != id->keyring_type)
+	if (ktype != BPF_SIG_KEYRING_BPF)
 		return shirudo_tamper_deny(SHIRUDO_TAMPER_LOAD_KEYRING_KIND,
 					   -EACCES);
-	/*
-	 * The bpf keyring is the kernel's own singleton, resolved by the
-	 * kernel and recorded without a serial (0) because it is held
-	 * without a reference, so the kind alone names it. A staged user
-	 * keyring is named by the serial init froze, which a same-named
-	 * substitute cannot match.
-	 */
-	if (ktype == BPF_SIG_KEYRING_BPF) {
-		if (serial && serial != id->keyring_serial)
-			return shirudo_tamper_deny(SHIRUDO_TAMPER_LOAD_KEYRING,
-						   -EACCES);
-	} else if (serial != id->keyring_serial) {
-		return shirudo_tamper_deny(SHIRUDO_TAMPER_LOAD_KEYRING,
-					   -EACCES);
-	}
+	/* The kernel singleton is recorded without a serial on some loads. */
+	if (serial && serial != id->keyring_serial)
+		return shirudo_tamper_deny(SHIRUDO_TAMPER_LOAD_KEYRING, -EACCES);
 
 	return 0;
 }
@@ -224,11 +212,11 @@ int BPF_PROG(shirudo_lsm_task_prctl, int option, unsigned long arg2,
 	(void)arg5;
 	if (ret && ret != -ENOSYS)
 		return ret;
-	if (option == SHIRUDO_PR_GET_MODE) {
+	if (option == SHIRUDO_PR_GET_ENFORCEMENT) {
 		id = bpf_map_lookup_elem(&shirudo_bpffs_sb, &zero);
 		if (!id)
 			return -EACCES;
-		return -SHIRUDO_MODE_ERROR;
+		return -SHIRUDO_PR_ENFORCING_ERR;
 	}
 	if (option != PR_SET_MM ||
 	    (arg2 != PR_SET_MM_EXE_FILE && arg2 != PR_SET_MM_MAP))
@@ -241,12 +229,7 @@ int BPF_PROG(shirudo_lsm_task_prctl, int option, unsigned long arg2,
 	return -ENOSYS;
 }
 
-/*
- * Verdict for an operation targeting an inode in superblock target_dev:
- * Ordinary mode protects the bpffs; image mode also protects the /run
- * filesystem holding its mountpoints. Only an authorized caller may mutate
- * these inodes. Count bpffs refusals at `point`. Unrelated filesystems pass.
- */
+/* Runtime executables always get secure-exec and refuse tracing at exec. */
 SEC("lsm/bprm_check_security")
 int BPF_PROG(shirudo_lsm_bprm_check_security, struct linux_binprm *bprm,
 	     int ret)
@@ -257,7 +240,7 @@ int BPF_PROG(shirudo_lsm_bprm_check_security, struct linux_binprm *bprm,
 	if (ret)
 		return ret;
 	id = bpf_map_lookup_elem(&shirudo_bpffs_sb, &zero);
-	if (!id || !shirudo_file_is_self(id, bprm->file))
+	if (!id || !shirudo_file_runtime(bprm->file))
 		return 0;
 	if (BPF_CORE_READ(bprm, unsafe) & LSM_UNSAFE_PTRACE)
 		return shirudo_tamper_deny(SHIRUDO_TAMPER_EXEC_TRACED, -EPERM);
@@ -265,6 +248,10 @@ int BPF_PROG(shirudo_lsm_bprm_check_security, struct linux_binprm *bprm,
 	return 0;
 }
 
+/*
+ * Protect bpffs and the filesystem holding image mountpoints. Only a trusted
+ * runtime task may change their inodes. Count bpffs refusals at `point`.
+ */
 static __always_inline int shirudo_bpffs_guard(__u32 target_dev,
 					       enum shirudo_tamper_point point)
 {

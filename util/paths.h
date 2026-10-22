@@ -125,8 +125,6 @@
  */
 #define SHIRUDO_XATTR_PAYLOAD		"security.bpf.shirudo.payload"
 
-#define SHIRUDO_KEYRING_NAME		"shirudo"
-
 /*
  * TPM2 NV index of the measurement register (owner-defined range).
  * Override at build time if it collides with site policy. An NV

@@ -65,11 +65,7 @@ depends() {
 
 installkernel() {
 	hostonly='' instmods tpm tpm_tis_core tpm_tis tpm_crb
-	local conf=${shirudo_conf:-$dracutsysrootdir/etc/shirudo/shirudo.conf}
-
-	if [[ -r $conf ]] && grep -Eq '^[[:space:]]*runtime[.]image[[:space:]]*=' "$conf"; then
-		hostonly='' instmods dm_mod dm_verity loop ext4
-	fi
+	hostonly='' instmods dm_mod dm_verity loop ext4
 }
 
 install() {
@@ -81,8 +77,8 @@ install() {
 	conf=${shirudo_conf:-$dracutsysrootdir/etc/shirudo/shirudo.conf}
 	unit=${shirudo_unit:-$dracutsysrootdir$systemdsystemunitdir/shirudo-initrd.service}
 
-	# The root's copy of this binary, at this path, is the identity init
-	# records for the bpffs guards; the initrd must run it from there.
+	# This authenticated initrd binary bootstraps the runtime image. Later
+	# invocations use only executables and libraries from that image.
 	inst_binary "$bin" "$path" || return 1
 	# bpm key keeps cert.der as a symlink into keys/; the initrd gets
 	# the file, not a link into a tree it does not have.
@@ -99,9 +95,8 @@ install() {
 				"/etc/shirudo/keys/trusted/${f##*/}" || return 1
 		done
 	fi
-	if [[ -r $conf ]]; then
-		inst_simple "$conf" /etc/shirudo/shirudo.conf || return 1
-	fi
+	[[ -r $conf ]] || return 1
+	inst_simple "$conf" /etc/shirudo/shirudo.conf || return 1
 	# dracut keeps the owner of what it copies, and init refuses keys
 	# and configuration another user could change.
 	chown -R 0:0 "$initdir/etc/shirudo" || return 1

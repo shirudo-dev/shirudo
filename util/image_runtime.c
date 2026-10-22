@@ -44,7 +44,7 @@
 #include "macros.h"
 #include "paths.h"
 #include "seal.h"
-#include "shirudo_mode.h"
+#include "shirudo_enforcement.h"
 #include "tpm.h"
 
 struct image_context {
@@ -94,7 +94,7 @@ static int reject_overrides(void)
 
 	for (i = 0; i < ARRAY_SIZE(names); i++) {
 		if (getenv(names[i])) {
-			pr_err("image mode: bootstrap override %s is forbidden",
+			pr_err("bootstrap override %s is forbidden",
 			       names[i]);
 			return -EPERM;
 		}
@@ -109,27 +109,21 @@ int shirudo_image_bootstrap_load(void)
 
 	if (image.loaded)
 		return 1;
-	mode = shirudo_identity_mode();
+	mode = shirudo_enforcement_active();
 	if (mode < 0)
 		return mode;
 	rc = identity_read(&identity);
-	if (mode != SHIRUDO_MODE_NONE && rc)
+	if (mode && rc)
 		return rc;
-	if (!rc && mode != (identity.runtime_mode ?
-		SHIRUDO_MODE_IMAGE : SHIRUDO_MODE_LEGACY))
+	if (!rc && !mode)
 		return -EPROTO;
-	if (!rc && identity.runtime_mode) {
+	if (!rc) {
 		memcpy(image.bootstrap.runtime_root, identity.runtime_root, 32);
 		image.bootstrap.have_root = true;
 		rc = load_runtime_config(false);
 	} else {
 		rc = shirudo_image_bootstrap_read(SHIRUDO_CONF_PATH,
 						  &image.bootstrap, true);
-		if (rc == -ENOENT)
-			return 0;
-		if (!rc && !image.bootstrap.runtime[0] &&
-		    !image.bootstrap.have_root)
-			return 0;
 		if (!rc &&
 		    (!image.bootstrap.runtime[0] || !image.bootstrap.have_root))
 			rc = -EINVAL;
@@ -884,19 +878,16 @@ int shirudo_image_enter(const char *command, int argc, const char **argv)
 	    !strcmp(command, "build") || !strcmp(command, "help") ||
 	    !strcmp(command, "version"))
 		return 0;
-	mode = shirudo_identity_mode();
+	mode = shirudo_enforcement_active();
 	if (mode < 0)
 		return mode;
 	rc = identity_read(&identity);
-	if (mode != SHIRUDO_MODE_NONE && rc)
+	if (mode && rc)
 		return rc;
 	if (rc)
 		return rc == -ENOENT || rc == -EPERM || rc == -EACCES ? 0 : rc;
-	if (mode != (identity.runtime_mode ?
-		SHIRUDO_MODE_IMAGE : SHIRUDO_MODE_LEGACY))
+	if (!mode)
 		return -EPROTO;
-	if (!identity.runtime_mode)
-		return 0;
 	rc = shirudo_image_bootstrap_load();
 	if (rc < 0)
 		return rc;

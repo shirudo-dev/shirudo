@@ -8,20 +8,10 @@
 # runs `shirudo init` as early as a filesystem-dependent service can,
 # inside the sysinit phase.
 #
-# After an initrd that ran shirudo-initrd.service the keyring is sealed,
-# the LSM is attached with its pins under /run and the register is
-# bound; this run finds all of that, labels the state tree, adopts the
-# record the initrd left under /run into the eventlog and stops. That
-# is the production configuration. Without such an initrd this run does
-# everything itself: the bpf keyring was sealed empty at boot, so the
-# certificate is staged in the user keyring until the next reboot, and
-# the register binds after the initrd, which `status` and the evidence
-# both say.
-#
-# Install: `make install` drops this file; enable with
-#   systemctl enable shirudo.service
-# Extra init options go in /etc/shirudo/init.env, for example:
-#   SHIRUDO_INIT_ARGS=--no-seal
+# The initrd loads the authenticated runtime and signed config before
+# switch-root. Install the runtime-service.conf drop-in generated with the
+# runtime image; it starts the trusted loader and executable for this phase.
+# This run adopts the initrd eventlog record and checks the existing state.
 
 [Unit]
 Description=shirudo: bring up the BPF LSM and re-apply signed upatches
@@ -31,15 +21,11 @@ After=systemd-pcrnvdone.service
 Before=sysinit.target shutdown.target
 Conflicts=shutdown.target
 RequiresMountsFor=/var/lib/shirudo
+ConditionPathIsMountPoint=/run/shirudo/runtime
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-# Use the normal per-uid kernel keyring, not a service-private one: when
-# the cert is staged in the user keyring, `shirudo init` links it under
-# KEY_SPEC_USER_KEYRING and later target-side commands search it from
-# other processes. systemd's default KeyringMode=private isolates that
-# keyring and the cert add fails with EACCES (no possession).
 KeyringMode=inherit
 EnvironmentFile=-/etc/shirudo/init.env
 ExecStart=@bindir@/shirudo init $SHIRUDO_INIT_ARGS

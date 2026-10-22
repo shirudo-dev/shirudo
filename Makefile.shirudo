@@ -256,9 +256,7 @@ BPF_LIB_HEADERS    := bpf/lib/shirudo_misc.h \
 # .incbin into util/loader.o. bpf/lib/ is include-only.
 BPF_SRCS := \
     bpf/bpf2.c \
-    bpf/bpf2_verity.c \
     bpf/seal.c \
-    bpf/seal_verity.c \
     bpf/unload.c
 
 # shirudo-build is operator-only and links util/sign.c (CMS signer)

@@ -22,18 +22,6 @@ asm(".section .rodata, \"a\"\n"
 	".previous\n");
 
 asm(".section .rodata, \"a\"\n"
-	".global shirudo_bpf2_verity_o; shirudo_bpf2_verity_o:\n"
-	".incbin \"bpf/bpf2_verity.bpf.o\"\n"
-	".global shirudo_bpf2_verity_o_end; shirudo_bpf2_verity_o_end:\n"
-	".previous\n");
-
-asm(".section .rodata, \"a\"\n"
-	".global shirudo_seal_verity_o; shirudo_seal_verity_o:\n"
-	".incbin \"bpf/seal_verity.bpf.o\"\n"
-	".global shirudo_seal_verity_o_end; shirudo_seal_verity_o_end:\n"
-	".previous\n");
-
-asm(".section .rodata, \"a\"\n"
 	".global shirudo_unload_bpf_o; shirudo_unload_bpf_o:\n"
 	".incbin \"bpf/unload.bpf.o\"\n"
 	".global shirudo_unload_bpf_o_end; shirudo_unload_bpf_o_end:\n"
@@ -59,35 +47,21 @@ static const struct shirudo_embedded_bpf unload = {
 	.data = shirudo_unload_bpf_o,
 };
 
-const struct shirudo_embedded_bpf *bpf2_blob(bool image_mode)
+const struct shirudo_embedded_bpf *bpf2_blob(void)
 {
 	static struct shirudo_embedded_bpf b;
 
-	if (image_mode) {
-		b.name = "bpf2_verity";
-		b.data = shirudo_bpf2_verity_o;
-		b.size = (size_t)(shirudo_bpf2_verity_o_end -
-				 shirudo_bpf2_verity_o);
-	} else {
-		b = bpf2;
-		b.size = (size_t)(shirudo_bpf2_o_end - shirudo_bpf2_o);
-	}
+	b = bpf2;
+	b.size = (size_t)(shirudo_bpf2_o_end - shirudo_bpf2_o);
 	return &b;
 }
 
-const struct shirudo_embedded_bpf *seal_blob(bool image_mode)
+const struct shirudo_embedded_bpf *seal_blob(void)
 {
 	static struct shirudo_embedded_bpf b;
 
-	if (image_mode) {
-		b.name = "seal_verity";
-		b.data = shirudo_seal_verity_o;
-		b.size = (size_t)(shirudo_seal_verity_o_end -
-				 shirudo_seal_verity_o);
-	} else {
-		b = seal;
-		b.size = (size_t)(shirudo_seal_o_end - shirudo_seal_o);
-	}
+	b = seal;
+	b.size = (size_t)(shirudo_seal_o_end - shirudo_seal_o);
 	return &b;
 }
 

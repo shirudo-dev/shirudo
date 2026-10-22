@@ -21,7 +21,7 @@
 #include "log.h"
 #include "macros.h"
 #include "paths.h"
-#include "shirudo_mode.h"
+#include "shirudo_enforcement.h"
 #include "tamper.h"
 
 const struct shirudo_image_guard
@@ -150,11 +150,11 @@ int shirudo_config_root_begin(const __u8 root[32],
 		.map_fd = -1,
 		.task_fd = -1,
 	};
-	mode = shirudo_identity_mode();
-	if (mode == SHIRUDO_MODE_NONE)
+	mode = shirudo_enforcement_active();
+	if (!mode)
 		return 0;
-	if (mode != SHIRUDO_MODE_IMAGE)
-		return mode < 0 ? mode : -EPERM;
+	if (mode < 0)
+		return mode;
 	guard->map_fd = bpf_obj_get(map->pin);
 	if (guard->map_fd < 0)
 		return -errno;

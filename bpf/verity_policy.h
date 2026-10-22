@@ -6,9 +6,6 @@
 
 #include "lsm.h"
 
-#define SHIRUDO_MODE_ERROR SHIRUDO_PR_MODE_IMAGE_ERR
-#define SHIRUDO_TASK_STORAGE_REQUIRED true
-
 #define SHIRUDO_DEVICE_RUNTIME		1
 #define SHIRUDO_DEVICE_CONFIG		2
 
@@ -69,12 +66,6 @@ static __always_inline bool shirudo_private_map(struct bpf_map *map)
 
 	bpf_probe_read_kernel_str(name, sizeof(name), map->name);
 	return !__builtin_memcmp(name, "shirudo_devices", sizeof(name));
-}
-
-/* Runtime files are immutable; writable state gets no executable exception. */
-static __always_inline bool shirudo_replaceable_executable(struct inode *inode)
-{
-	return false;
 }
 
 /* Device pointers can be reused even when the free hook did not run. */

@@ -183,12 +183,12 @@ int BPF_PROG(shirudo_seal_task_alloc, struct task_struct *child,
 	authority = bpf_task_storage_get(&shirudo_tasks, child, NULL,
 					 BPF_LOCAL_STORAGE_GET_F_CREATE);
 	if (!authority)
-		return SHIRUDO_TASK_STORAGE_REQUIRED ? -ENOMEM : 0;
+		return -ENOMEM;
 	authority->trusted = parent_authority->trusted;
 	return 0;
 }
 
-/* Protect tasks marked by labelled exec (ordinary) or runtime exec (image). */
+/* Protect tasks marked by successful exec from the runtime image. */
 SEC("lsm/perf_event_alloc")
 int BPF_PROG(shirudo_seal_perf_event_alloc,
 	     struct perf_event *event, int ret)
@@ -208,7 +208,7 @@ int BPF_PROG(shirudo_seal_perf_event_alloc,
 	return 0;
 }
 
-/* Both modes keep ptrace away from processes with committed exec marks. */
+/* Keep ptrace away from processes with committed exec marks. */
 SEC("lsm/ptrace_access_check")
 int BPF_PROG(shirudo_seal_ptrace_access_check,
 	     struct task_struct *child, unsigned int mode, int ret)
@@ -342,12 +342,7 @@ int BPF_PROG(shirudo_seal_inode_unlink, struct inode *dir,
 	return ret ? ret : seal_dentry(dentry, SHIRUDO_TAMPER_SEAL_UNLINK);
 }
 
-/*
- * Protect both ends of a rename: moving a labelled inode out and
- * replacing one. Ordinary mode allows replacement of its recorded binary
- * for upgrades, without giving the replacement authority. Image mode never
- * makes that exception: executable files are on the read-only runtime.
- */
+/* Protect both the source and an existing destination of a rename. */
 SEC("lsm.s/inode_rename")
 int BPF_PROG(shirudo_seal_inode_rename, struct inode *old_dir,
 	     struct dentry *old_dentry, struct inode *new_dir,
@@ -361,7 +356,7 @@ int BPF_PROG(shirudo_seal_inode_rename, struct inode *old_dir,
 	err = seal_dentry(old_dentry, SHIRUDO_TAMPER_SEAL_RENAME);
 	if (err)
 		return err;
-	if (!target || shirudo_replaceable_executable(target))
+	if (!target)
 		return 0;
 	return seal_dentry(new_dentry, SHIRUDO_TAMPER_SEAL_RENAME);
 }

@@ -17,20 +17,18 @@
 #include <shirudo/misc.h>
 
 #include "identity.h"
-#include "shirudo_mode.h"
+#include "shirudo_enforcement.h"
 #include "paths.h"
 
-int shirudo_identity_mode(void)
+int shirudo_enforcement_active(void)
 {
-	int mode = prctl(SHIRUDO_PR_GET_MODE, 0, 0, 0, 0);
+	int rc = prctl(SHIRUDO_PR_GET_ENFORCEMENT, 0, 0, 0, 0);
 
-	if (mode >= 0)
+	if (rc >= 0)
 		return -EPROTO;
-	if (errno == SHIRUDO_PR_MODE_LEGACY_ERR)
-		return SHIRUDO_MODE_LEGACY;
-	if (errno == SHIRUDO_PR_MODE_IMAGE_ERR)
-		return SHIRUDO_MODE_IMAGE;
-	return errno == EINVAL || errno == ENOSYS ? SHIRUDO_MODE_NONE : -errno;
+	if (errno == SHIRUDO_PR_ENFORCING_ERR)
+		return 1;
+	return errno == EINVAL || errno == ENOSYS ? 0 : -errno;
 }
 
 int identity_read(struct shirudo_identity *out)

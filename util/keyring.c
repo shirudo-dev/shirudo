@@ -24,25 +24,6 @@
 #include "malloc.h"
 #include "paths.h"
 
-#ifndef KEY_SPEC_USER_KEYRING
-#define KEY_SPEC_USER_KEYRING	(-4)
-#endif
-
-#define KEY_POS_VIEW	0x01000000
-#define KEY_POS_READ	0x02000000
-#define KEY_POS_WRITE	0x04000000
-#define KEY_POS_SEARCH	0x08000000
-#define KEY_POS_LINK	0x10000000
-#define KEY_POS_SETATTR	0x20000000
-#define KEY_USR_VIEW	0x00010000
-#define KEY_USR_READ	0x00020000
-#define KEY_USR_WRITE	0x00040000
-#define KEY_USR_SEARCH	0x00080000
-#define KEY_USR_SETATTR	0x00200000
-
-#ifndef KEY_SPEC_SESSION_KEYRING
-#define KEY_SPEC_SESSION_KEYRING (-3)
-#endif
 #ifndef KEYCTL_RESTRICT_KEYRING
 #define KEYCTL_RESTRICT_KEYRING	29
 #endif
@@ -56,88 +37,6 @@ static long sys_add_key(const char *type, const char *desc,
 static long sys_keyctl(int cmd, long a, long b, long c, long d)
 {
 	return syscall(__NR_keyctl, cmd, a, b, c, d);
-}
-
-key_serial_t keyring_find(const char *name)
-{
-	long ret = sys_keyctl(KEYCTL_SEARCH, KEY_SPEC_USER_KEYRING,
-			      (long)"keyring", (long)name, 0);
-	if (ret < 0)
-		return (key_serial_t)-errno;
-	return (key_serial_t)ret;
-}
-
-static int keyring_make_mutable(key_serial_t keyring)
-{
-	/*
-	 * A named keyring linked only from @u is not necessarily possessed by
-	 * a systemd service process. Give root enough owner permission to
-	 * populate it; init drops write/setattr again when sealing succeeds.
-	 */
-	long perm = KEY_POS_VIEW | KEY_POS_READ | KEY_POS_WRITE |
-		    KEY_POS_SEARCH | KEY_POS_LINK | KEY_POS_SETATTR |
-		    KEY_USR_VIEW | KEY_USR_READ | KEY_USR_WRITE |
-		    KEY_USR_SEARCH | KEY_USR_SETATTR;
-
-	if (sys_keyctl(KEYCTL_SETPERM, keyring, perm, 0, 0) < 0)
-		return -errno;
-	return 0;
-}
-
-key_serial_t keyring_open_or_create(const char *name)
-{
-	key_serial_t s = keyring_find(name);
-	long ret;
-	int rc;
-
-	if (s != -ENOKEY)
-		return s;	/* success, or some other error */
-
-	ret = sys_add_key("keyring", name, NULL, 0,
-			  KEY_SPEC_SESSION_KEYRING);
-	if (ret < 0)
-		return (key_serial_t)-errno;
-
-	rc = keyring_make_mutable((key_serial_t)ret);
-	if (rc)
-		return (key_serial_t)rc;
-
-	if (sys_keyctl(KEYCTL_LINK, ret, KEY_SPEC_USER_KEYRING, 0, 0) < 0)
-		return (key_serial_t)-errno;
-
-	return (key_serial_t)ret;
-}
-
-int keyring_unlink_from_user(key_serial_t keyring)
-{
-	if (sys_keyctl(KEYCTL_UNLINK, keyring, KEY_SPEC_USER_KEYRING, 0, 0) < 0)
-		return -errno;
-	return 0;
-}
-
-key_serial_t keyring_add_cert(key_serial_t keyring,
-			      const void *cert, size_t cert_len)
-{
-	long ret = sys_add_key("asymmetric", NULL, cert, cert_len, keyring);
-
-	if (ret < 0)
-		return (key_serial_t)-errno;
-	return (key_serial_t)ret;
-}
-
-int keyring_seal(key_serial_t keyring)
-{
-	/*
-	 * Possessor + user keep view/read/search (so any root process can
-	 * still search the cert at load); nobody keeps write/link/setattr.
-	 * Once SETATTR is gone the perms are locked for the boot.
-	 */
-	long perm = KEY_POS_VIEW | KEY_POS_READ | KEY_POS_SEARCH |
-		    KEY_USR_VIEW | KEY_USR_READ | KEY_USR_SEARCH;
-
-	if (sys_keyctl(KEYCTL_SETPERM, keyring, perm, 0, 0) < 0)
-		return -errno;
-	return 0;
 }
 
 static int describe_key(key_serial_t serial,

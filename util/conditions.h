@@ -25,8 +25,7 @@ struct shirudo_conditions_input {
 
 	int		lsm_attached;	/* 0/1 */
 	int		keyring_present;
-	const char	*keyring_mode;	/* "bpf", "user" or "none" */
-	int		staging;	/* enforcing with the cert in the user keyring */
+	const char	*keyring_mode;	/* "bpf" or "none" */
 	__s64		keyring_serial;
 	__s64		keyring_serial_pinned;
 	int		keyring_serial_matches;	/* 0/1 if ksm_seen */

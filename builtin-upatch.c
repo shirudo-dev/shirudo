@@ -1457,14 +1457,7 @@ static int get_pin_payload(const char *name, __u8 out[32])
 	return 0;
 }
 
-/*
- * The anchor init froze into the identity map: the kernel's bpf keyring
- * by its spec, or a staged user keyring by its own serial rather than
- * KEY_SPEC_USER_KEYRING, whose search recurses through all of _uid.0,
- * where root can link a certificate of their own. The frozen serial
- * also catches a same-named keyring substituted for the sealed one;
- * *serial is the keyring's own serial either way, for the logs.
- */
+/* Resolve the kernel BPF keyring and compare it with the frozen record. */
 static int trust_anchor_keyring(key_serial_t *keyring, key_serial_t *serial,
 				struct shirudo_op_report *rep)
 {
@@ -1480,38 +1473,15 @@ static int trust_anchor_keyring(key_serial_t *keyring, key_serial_t *serial,
 			 "no trust anchor frozen this boot");
 		return -1;
 	}
-	if (id.keyring_type == SHIRUDO_SIG_KEYRING_BPF) {
-		ring = keyring_bpf_serial();
-		if (ring != id.keyring_serial) {
-			pr_err("the kernel's bpf keyring (%d) is not the one "
-			       "init sealed (%d)", (int)ring,
-			       (int)id.keyring_serial);
-			rep_fail(rep, "pre_flight", "tampered", 0,
-				 "bpf keyring is not the frozen anchor");
-			return -1;
-		}
-		*keyring = KEY_SPEC_BPF_KEYRING;
-		*serial = ring;
-		return 0;
-	}
-	ring = keyring_find(SHIRUDO_KEYRING_NAME);
-	if (ring < 0) {
-		pr_err("keyring \"%s\" not found: %s; the anchor frozen this "
-		       "boot was serial %d", SHIRUDO_KEYRING_NAME,
-		       strerror(-ring), (int)id.keyring_serial);
-		rep_fail(rep, "pre_flight", "tampered", -ring,
-			 "the sealed keyring is gone");
-		return -1;
-	}
-	if (ring != id.keyring_serial) {
-		pr_err("keyring \"%s\" serial %d != frozen %d -- a same-named "
-		       "keyring was substituted", SHIRUDO_KEYRING_NAME,
-		       (int)ring, (int)id.keyring_serial);
+	ring = keyring_bpf_serial();
+	if (id.keyring_type != SHIRUDO_SIG_KEYRING_BPF ||
+	    ring <= 0 || ring != id.keyring_serial) {
+		pr_err("the kernel BPF keyring differs from the frozen anchor");
 		rep_fail(rep, "pre_flight", "tampered", 0,
-			 "keyring serial mismatch (substituted keyring)");
+			 "BPF keyring is not the frozen anchor");
 		return -1;
 	}
-	*keyring = ring;
+	*keyring = KEY_SPEC_BPF_KEYRING;
 	*serial = ring;
 	return 0;
 }

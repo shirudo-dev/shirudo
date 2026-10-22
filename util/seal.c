@@ -19,7 +19,6 @@
 
 #include <shirudo/string.h>
 
-#include "image_config.h"
 #include "io.h"
 #include "log.h"
 #include "paths.h"
@@ -58,35 +57,21 @@ static int seal_label_cb(const char *path, const struct stat *sb,
 	 */
 	if (sb->st_dev != seal_root_dev)
 		return 0;
-	if (shirudo_image_config_active() &&
-	    !S_ISREG(sb->st_mode) && !S_ISDIR(sb->st_mode))
+	if (!S_ISREG(sb->st_mode) && !S_ISDIR(sb->st_mode))
 		rc = -EINVAL;
 	else
 		rc = seal_label(path);
 	if (rc) {
-		pr_warn("seal: label %s: %s", path, strerror(-rc));
-		if (shirudo_image_config_active()) {
-			seal_walk_error = rc;
-			return 1;
-		}
+		pr_err("seal: label %s: %s", path, strerror(-rc));
+		seal_walk_error = rc;
+		return 1;
 	}
 	return 0;
 }
 
 int seal_label_tree(void)
 {
-	char self[PATH_MAX];
 	struct stat st;
-	ssize_t n;
-
-	/* The ordinary-mode label protects the binary and marks its tasks. */
-	n = shirudo_image_config_active() ? -1 :
-		readlink("/proc/self/exe", self, sizeof(self) - 1);
-	if (n > 0) {
-		self[n] = '\0';
-		if (seal_label(self) != 0)
-			pr_warn("seal: label %s: %s", self, strerror(errno));
-	}
 
 	if (stat(SHIRUDO_VAR_LIB, &st) != 0)
 		return -errno;
