@@ -728,6 +728,8 @@ testing/fuzz/fuzz-prog-metadata: testing/fuzz/fuzz-prog-metadata.c \
                                  $(FUZZ_BASE) util/upatch.c
 testing/fuzz/fuzz-bpm-tar: testing/fuzz/fuzz-bpm-tar.c $(FUZZ_BASE) \
                            $(FUZZ_PACKAGE)
+testing/fuzz/fuzz-bpm-extract: testing/fuzz/fuzz-bpm-extract.c $(FUZZ_BASE) \
+                               $(FUZZ_PACKAGE)
 testing/fuzz/fuzz-bpm-package: testing/fuzz/fuzz-bpm-package.c $(FUZZ_BASE) \
                                $(FUZZ_PACKAGE)
 testing/fuzz/fuzz-tpm-wire: testing/fuzz/fuzz-tpm-wire.c $(FUZZ_BASE) \
