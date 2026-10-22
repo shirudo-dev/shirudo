@@ -49,7 +49,6 @@ int main(int argc, char **argv)
 	in.lsm_attached = lsm != 0;
 	in.keyring_present = serial >= 0;
 	in.keyring_mode = mode;
-	in.staging = in.lsm_attached && strcmp(mode, "bpf") != 0;
 	in.keyring_serial = serial;
 	in.keyring_serial_pinned = pinned;
 	in.ks_seen = in.keyring_present;

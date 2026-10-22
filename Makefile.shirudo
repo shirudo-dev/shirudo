@@ -589,7 +589,6 @@ verity-test-helpers: $(VERITY_TEST_HELPERS) build/verity-tests/shirudo-image-fau
 TEST_HELPERS := $(VERITY_TEST_HELPERS) \
                 testing/helper/test-image-cli \
                 testing/helper/test-image-cleanup \
-                testing/helper/test-mode-objects \
                 testing/helper/test-image-config \
                 testing/helper/test-config-image \
                 testing/helper/test-config-update \
@@ -820,10 +819,6 @@ testing/helper/test-image-cleanup: testing/helper/test-image-cleanup.c \
 		-Wl,--wrap=shirudo_dm_verity_remove,--wrap=usleep \
 		$(STATIC_LIBS) $(DYNAMIC_LIBS)
 
-testing/helper/test-mode-objects: testing/helper/test-mode-objects.c \
-		$(call obj,util/loader.o) $(LIBBPF_A)
-	@printf '  CC      $@\n'
-	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ -lelf -lz
 
 test-helpers: $(TEST_HELPERS)
 
