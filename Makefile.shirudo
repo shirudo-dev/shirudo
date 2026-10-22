@@ -841,7 +841,9 @@ FUZZ_CFLAGS := -O1 -g -std=gnu11 -fno-omit-frame-pointer \
 FUZZ_LIBS := $(LIBCRYPTO_LIBS) $(LIBSSL_LIBS) $(LIBCURL_LIBS) $(ZLIB_LIBS)
 FUZZ_BASE := util/json.c util/string.c util/hex.c util/malloc.c \
              testing/fuzz/log.c
-FUZZ_OCI := util/bpm_oci.c util/io.c util/seal.c util/crypto_openssl.c \
+FUZZ_CONFIG := util/config.c util/image_config.c
+FUZZ_SEAL := util/seal.c $(FUZZ_CONFIG)
+FUZZ_OCI := util/bpm_oci.c util/io.c $(FUZZ_SEAL) util/crypto_openssl.c \
             util/tls_openssl.c
 FUZZ_PACKAGE := util/bpm_package.c util/bpm_tree.c $(FUZZ_OCI)
 
@@ -867,12 +869,13 @@ testing/fuzz/fuzz-tpm-wire: testing/fuzz/fuzz-tpm-wire.c $(FUZZ_BASE) \
 testing/fuzz/fuzz-attest: testing/fuzz/fuzz-attest.c $(FUZZ_BASE) \
                           util/attest.c util/chain.c util/tpm.c \
                           util/tpm_wire.c util/eventlog.c util/timefmt.c \
-                          util/crypto_openssl.c util/io.c util/seal.c \
-                          util/config.c util/initrd.c util/version_id.c
+                          util/crypto_openssl.c util/io.c $(FUZZ_SEAL) \
+                          util/config_attest.c util/config_update.c \
+                          util/config_measure.c util/initrd.c util/version_id.c
 testing/fuzz/fuzz-attest: FUZZ_CFLAGS += $(TSS2_CFLAGS)
 testing/fuzz/fuzz-attest: FUZZ_LIBS += $(TSS2_LIBS)
 testing/fuzz/fuzz-eventlog: testing/fuzz/fuzz-eventlog.c $(FUZZ_BASE) \
-                            util/eventlog.c util/timefmt.c util/seal.c \
+                            util/eventlog.c util/timefmt.c $(FUZZ_SEAL) \
                             util/io.c util/crypto_openssl.c testing/fuzz/chain.c
 testing/fuzz/fuzz-kernel: testing/fuzz/fuzz-kernel.c $(FUZZ_BASE) \
                           util/kmsg.c util/kmodules.c util/kernel_build_id.c \
@@ -883,12 +886,12 @@ testing/fuzz/fuzz-elf: FUZZ_CFLAGS += $(LIBELF_CFLAGS)
 testing/fuzz/fuzz-elf: FUZZ_LIBS += $(LIBBPF_A) $(LIBELF_LIBS)
 testing/fuzz/fuzz-serializer: testing/fuzz/fuzz-serializer.c $(FUZZ_BASE) \
                               util/upatch_maps.c util/upatch_resolve.c \
-                              util/serializer.c util/seal.c util/io.c \
+                              util/serializer.c $(FUZZ_SEAL) util/io.c \
                               util/timefmt.c $(LIBBPF_A)
 testing/fuzz/fuzz-serializer: FUZZ_CFLAGS += $(LIBELF_CFLAGS)
 testing/fuzz/fuzz-serializer: FUZZ_LIBS += $(LIBBPF_A) $(LIBELF_LIBS)
 testing/fuzz/fuzz-cms: testing/fuzz/fuzz-cms.c $(FUZZ_BASE) util/keys.c \
-                       util/crypto_openssl.c util/io.c util/seal.c
+                       util/crypto_openssl.c util/io.c $(FUZZ_SEAL)
 testing/fuzz/fuzz-decoder: testing/fuzz/fuzz-decoder.c $(FUZZ_BASE) \
                            util/upatch_decode.c util/upatch.c util/io.c
 testing/fuzz/fuzz-decoder: FUZZ_CFLAGS += $(LUAJIT_CFLAGS) -DSHIRUDO_HAVE_LUAJIT
@@ -907,8 +910,8 @@ testing/fuzz/fuzz-oci-ref: testing/fuzz/fuzz-oci-ref.c $(FUZZ_BASE) \
 testing/fuzz/fuzz-registry-auth: testing/fuzz/fuzz-registry-auth.c \
                                  $(FUZZ_BASE) $(FUZZ_OCI)
 testing/fuzz/fuzz-config: testing/fuzz/fuzz-config.c $(FUZZ_BASE) \
-                          util/config.c util/io.c util/bpm_source_config.c
-FUZZ_TREE_STATE := util/bpm_tree_state.c util/io.c util/seal.c \
+                          $(FUZZ_CONFIG) util/io.c util/bpm_source_config.c
+FUZZ_TREE_STATE := util/bpm_tree_state.c util/io.c $(FUZZ_SEAL) \
                    util/kernel_build_id.c util/kernel_release.c \
                    util/crypto_openssl.c testing/fuzz/chain.c
 testing/fuzz/fuzz-tree-state: testing/fuzz/fuzz-tree-state.c $(FUZZ_BASE) \
