@@ -2325,8 +2325,12 @@ static int parse_s3_spec(struct otel_s3_state *st, const char *spec)
 		if ((__u8)prefix[i] < 0x20 || prefix[i] == '?' ||
 		    prefix[i] == '#')
 			return -EINVAL;
-		if (prefix[i] == '.' && (i == 0 || prefix[i - 1] == '/') &&
-		    (i + 1 == prefix_len || prefix[i + 1] == '/'))
+		if ((prefix[i] == '.' && (i == 0 || prefix[i - 1] == '/') &&
+		     (i + 1 == prefix_len || prefix[i + 1] == '/')) ||
+		    (prefix[i] == '.' && i + 1 < prefix_len &&
+		     prefix[i + 1] == '.' &&
+		     (i == 0 || prefix[i - 1] == '/') &&
+		     (i + 2 == prefix_len || prefix[i + 2] == '/')))
 			return -EINVAL;
 	}
 	memcpy(st->prefix, prefix, prefix_len);

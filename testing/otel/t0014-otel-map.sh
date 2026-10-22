@@ -458,6 +458,78 @@ assert m["put_attempts"] == 2 and puts[0]["path"] == puts[1]["path"]
 	wait $server && test -s s3.log
 '
 
+test_expect_success '--otel=s3 encodes prefixes and falls back to AWS_DEFAULT_REGION' '
+	rm -f s3.port s3.snapshot s3.log s3.meta;
+	python3 ../helper/otel-s3-mock.py success s3.port s3.snapshot s3.log s3.meta &
+	server=$!;
+	i=0; while test ! -s s3.port && test $i -lt 50; do i=$((i+1)); sleep .02; done &&
+	port=$(cat s3.port) &&
+	AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=secret AWS_REGION= \
+	AWS_DEFAULT_REGION=us-west-2 \
+	SHIRUDO_TEST_S3_URI="s3://test-bucket/prefix with space" \
+	OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="http://127.0.0.1:$port/v1/logs" \
+		"$H" send-s3 "http://127.0.0.1:$port" 0 &&
+	wait $server &&
+	python3 -c '\''
+import json
+m=json.load(open("s3.meta")); put,post=m["requests"]
+assert put["sigv4_valid"] and put["region"] == "us-west-2"
+assert "/prefix%20with%20space/" in put["path"]
+assert post["path"] == "/v1/logs"
+'\''
+'
+
+test_expect_success '--otel=s3 retries each retryable PUT response' '
+	for status in 408 409 500 502 503 504
+	do
+		rm -f s3.port s3.snapshot s3.log s3.meta
+		python3 ../helper/otel-s3-mock.py "s3-retry-$status" s3.port s3.snapshot s3.log s3.meta &
+		server=$!
+		i=0; while test ! -s s3.port && test "$i" -lt 50; do i=$((i+1)); sleep .02; done
+		port=$(cat s3.port) &&
+		AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=secret AWS_REGION=us-east-1 \
+		OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="http://127.0.0.1:$port/v1/logs" \
+			"$H" send-s3 "http://127.0.0.1:$port" 1 && wait "$server" &&
+		python3 -c '\''import json; assert json.load(open("s3.meta"))["put_attempts"] == 2'\'' || return 1
+	done
+'
+
+test_expect_success '--otel=s3 exhausts PUT retries without posting a reference' '
+	rm -f s3.port s3.snapshot s3.log s3.meta;
+	python3 ../helper/otel-s3-mock.py s3-exhaust s3.port s3.snapshot s3.log s3.meta &
+	server=$!;
+	i=0; while test ! -s s3.port && test $i -lt 50; do i=$((i+1)); sleep .02; done &&
+	port=$(cat s3.port) &&
+	! AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=secret AWS_REGION=us-east-1 \
+	OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="http://127.0.0.1:$port/v1/logs" \
+		"$H" send-s3 "http://127.0.0.1:$port" 1 &&
+	wait $server &&
+	python3 -c '\''
+import json
+m=json.load(open("s3.meta"))
+assert m["put_attempts"] == 2
+assert all(r["method"] == "PUT" for r in m["requests"])
+'\''
+'
+
+test_expect_success '--otel=s3 retries collector reference without uploading twice' '
+	rm -f s3.port s3.snapshot s3.log s3.meta;
+	python3 ../helper/otel-s3-mock.py otel-retry s3.port s3.snapshot s3.log s3.meta &
+	server=$!;
+	i=0; while test ! -s s3.port && test $i -lt 50; do i=$((i+1)); sleep .02; done &&
+	port=$(cat s3.port) &&
+	AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=secret AWS_REGION=us-east-1 \
+	OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="http://127.0.0.1:$port/v1/logs" \
+		"$H" send-s3 "http://127.0.0.1:$port" 1 &&
+	wait $server &&
+	python3 -c '\''
+import json
+m=json.load(open("s3.meta"))
+assert m["put_attempts"] == 1
+assert sum(r["method"] == "POST" for r in m["requests"]) == 2
+'\''
+'
+
 test_expect_success '--otel=s3 preserves upload-before-reference failure ordering' '
 	rm -f s3.port s3.snapshot s3.log s3.meta;
 	python3 ../helper/otel-s3-mock.py s3-fail s3.port s3.snapshot s3.log s3.meta &
