@@ -7,6 +7,19 @@
 
 char _license[] SEC("license") = "Dual BSD/GPL";
 
+struct seccomp___shirudo {
+	int mode;
+} __attribute__((preserve_access_index));
+
+/* CONFIG_SECCOMP=n leaves struct seccomp empty in the kernel BTF. */
+static __always_inline bool shirudo_task_has_seccomp(struct task_struct *task)
+{
+	struct seccomp___shirudo *seccomp = (void *)&task->seccomp;
+
+	return bpf_core_field_exists(seccomp->mode) &&
+	       BPF_CORE_READ(seccomp, mode);
+}
+
 /*
  * Image mode grants authority only to a direct file on the verified runtime.
  * Overlay copies cannot qualify. Ptrace or seccomp supplied before exec must
@@ -29,7 +42,7 @@ int BPF_PROG(shirudo_seal_bprm_check_security,
 	trusted = real_inode == BPF_CORE_READ(bprm, file, f_inode) &&
 		  shirudo_file_runtime(bprm->file);
 	if (trusted && (BPF_CORE_READ(task, ptrace) ||
-			BPF_CORE_READ(task, seccomp.mode)))
+			shirudo_task_has_seccomp(task)))
 		return -EACCES;
 	authority = bpf_task_storage_get(&shirudo_tasks, task, NULL,
 					 BPF_LOCAL_STORAGE_GET_F_CREATE);
