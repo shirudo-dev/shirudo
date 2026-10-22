@@ -14,7 +14,8 @@
 /*
  * The label value: SHA-256 of the xattr name, 64 hex characters, the
  * same for every build. bpf/seal.c takes the label, whatever its value,
- * as marking a protected inode; the identity map says who may touch it.
+ * as marking a protected inode. A runtime task mark authorizes the caller;
+ * copying this public label never grants authority.
  */
 #define SHIRUDO_SEAL_LABEL \
 	"94442b45cfcdc59aabc2a91364ed2ae129418e05a5c1985231b9c032e673f469"
@@ -23,8 +24,8 @@
 int seal_label(const char *path);
 
 /*
- * Before the seal attaches, so the bulk setxattr is not gated; best
- * effort per entry.
+ * Label writable state before attaching the seal. Refuse non-file entries
+ * and stop on the first failed label; partial sealing is an init failure.
  */
 int seal_label_tree(void);
 

@@ -40,7 +40,7 @@ struct shirudo_device_authority {
 	__u64	diskseq;
 };
 
-/* Image-only task storage for one config mapping preparation. */
+/* Task storage for one config mapping preparation. */
 struct shirudo_expected_root {
 	__u8	root[32];
 	__u32 valid;

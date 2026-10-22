@@ -196,33 +196,14 @@ one usually still compiles and passes tests.
   userspace calls are filtered.
 - **The operator never touches the kernel keyring or the TPM; the
   target never touches the private key.**
-- **The bpf keyring is the trust anchor.** In ordinary mode, the user
-  keyring provides staging. `init` enrols the trusted set in the kernel's
-  `.bpf` keyring and seals it, which needs the kernel booted with `bpf.keyring_unsealed=1`
-  and `init` run from the initrd; a kernel that sealed it empty at boot
-  makes `init` stage the primary certificate alone in a sealed
-  `shirudo` user keyring until the next reboot. The set (`util/keys.c`)
-  is `cert.der` plus every `trusted/<fingerprint>.der` with a vouch
-  beside it that verifies under a member, less what `revoked/` names;
-  a file without a vouch is not a member, so the set extends itself
-  only on the word of a key already in it (`keys vouch` on the
-  operator, `keys add` on the target). The kind and serial of the
-  keyring `init` sealed, and the serials of its keys, live in the
-  identity map it freezes and pins in the bpffs; a load names the
-  keyring that record says, `lsm/bpf_prog_load` admits only that kind,
-  and for a staged user keyring only that serial (the kernel records
-  none for its own bpf keyring), and `lsm/key_permission` lets shirudo
-  alone write, unlink or revoke the keyring and its keys. Staging has a
-  reproduced invalidation exception through possessed `KEY_NEED_SEARCH`
-  references.
-  `keys revoke` is the ordinary authorized revocation path: marker in
-  `revoked/` first, then the unlink, the measured `key_revoke` event
-  and the purge of everything the key signed. There is no file pin to
-  forge or lose. Image mode requires the `.bpf` keyring and refuses
-  staging. It enrols the verified config's signer set at boot. Live
-  signed config activation can revoke an enrolled signer and purge its
-  upatches, but cannot enrol a new signer. Local `keys add` and
-  `keys revoke` are refused in image mode.
+- **The bpf keyring is the trust anchor.** Every target requires the kernel
+  `.bpf` keyring. Boot with `bpf.keyring_unsealed=1`; init verifies the runtime
+  and signed config, enrolls the initial certificate and vouched boot signer
+  set, then seals the ring. No user-keyring staging is supported. The frozen
+  record and BPF admission checks enforce that ring. Live signed config can
+  revoke an enrolled key and purge its upatches, but cannot enroll a new key.
+  Target-local key changes are refused. BPF upatches always require signed
+  loaders; a signed config does not authorize unsigned BPF.
 - **The operator is stateless.** It writes only the keypair (`genkey`)
   and the artifacts or reports the caller names. No hidden caches,
   state files, logs or staging directories; `--expect-chain` comes
@@ -256,33 +237,20 @@ one usually still compiles and passes tests.
   value the target wrote about itself is not a check.
 - **Pin the bpf_link before anything else fallible** in `shirudo init`,
   or a crash leaves an attached, unowned link that the kernel detaches.
-- **init runs twice in production.** In ordinary mode, the
-  initrd run (`shirudo-initrd.service`, detected by `/etc/initrd-release`
-  with the root at `/sysroot`) enrols the initrd's own
-  `/etc/shirudo/keys/cert.der`, attaches the LSM with its pins under
-  `/run/shirudo/bpffs`, records the root's binary as the lasting
-  identity beside its own, restores the archived upatches read through
-  a read-only bind of `/sysroot/var/lib/shirudo`, binds the register
-  and leaves the init record at `/run/shirudo/eventlog.pending`. The
-  root run labels the tree and adopts that record. Anything else the
-  initrd would write to the root is wrong: the root is read-only there,
-  and `/run` is the only thing systemd carries across switch-root
-  besides the API file systems. Image mode instead requires writable
-  persistent state during initrd startup, binds it writable and labels
-  it before attaching enforcement. Config activation writes its durable
-  image cache and pending selection there. The initrd enrolls the config
-  certificate into the kernel's .dm-verity keyring and seals it; built-in
-  dm-verity trust remains accepted. Executable authority comes from a task
-  mark committed after successful exec from the trusted runtime image;
-  the authenticated bootstrap task has temporary authority to complete
-  initialization. Non-systemd initrds are unsupported.
-- **Seal labels mark targets, not caller authority.** Ordinary mode
-  authorizes the frozen executable device/inode or its initrd copy; image
-  mode authorizes the committed task mark. A copied label grants neither.
-  Only an authorized caller may set the exact seal xattr. The seal checks
-  labelled targets on write open, unlink, both rename endpoints, setattr
-  and xattr changes. Ordinary mode allows replacing the recorded primary
-  executable for upgrades without granting its replacement authority.
+- **init runs twice in production.** The authenticated systemd initrd binds
+  persistent state writable, verifies runtime and config, enrolls and seals the
+  `.bpf` and `.dm-verity` keyrings, labels state, attaches all guards, restores
+  signed upatches and binds the register. Mounts and pins live under `/run`
+  across switch-root. The root service uses the verified runtime and adopts
+  the pending initrd event. Missing images or settings are errors. No mode
+  selector, executable inode identity or unsealed fallback may be added.
+- **Seal labels mark targets, not caller authority.** Only successful exec
+  from the authenticated runtime grants the committed task mark. Fork inherits
+  it, successful exec re-evaluates it and failed exec preserves it. Writable
+  state retains its seal xattrs; runtime and config files use dm-verity. Only
+  an authorized caller may set the exact seal xattr. Both rename endpoints,
+  write open, unlink, setattr and xattr changes are checked. There is no
+  executable replacement exception.
   Label read errors require authority except ENODATA, EOPNOTSUPP, EACCES
   and EPERM; scratch allocation failure also requires authority. The seal
   labels new inodes during creation when the parent has a cached directory
@@ -362,11 +330,9 @@ one usually still compiles and passes tests.
   `make -C testing SANITIZE=address,undefined test-op` runs it under ASan and
   UBSan (CI does too); `make -C testing test-tgt` runs the target suite in the
   QEMU/swtpm VM (`make -C testing help` lists the VM target groups).
-- `make -C testing test-tgt TEST_VM_INITRD=1` boots the guest from a dracut initrd
-  that runs `shirudo-initrd.service`; CI runs `test-tgt` both ways through
-  `.github/scripts/target-tests.sh`. `make -C testing test-installer` runs
-  `testing/t1300-installer-e2e.sh`, the installer end to end in a QEMU
-  guest with a vTPM, two reboots included.
+- `sudo make -C testing test-tgt` always boots the dm-verity runtime and signed
+  config from a dracut initrd. CI runs that same required suite through
+  `.github/scripts/target-tests.sh`; the old root-only installer suite is gone.
 - `make -C testing fuzz [FUZZ_SECONDS=60]` runs the libFuzzer targets in
   `testing/fuzz/` for the parsers of input from outside the host, under
   ASan and UBSan, on their seed corpora; CI runs them too. A parser that

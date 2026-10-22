@@ -161,16 +161,14 @@ parameterised with the target name and the expected payload digest.
 Load.  ``shirudo upatch load fix.upatch`` on the target:
 
 1. runs the pre-flight: the kernel exposes the signed-loader ABI, the
-   keyring ``init`` pinned is there (the bpf keyring, or while staging
-   the ``shirudo`` keyring whose serial equals the pin), the
+   kernel BPF keyring matches the serial ``init`` froze, the
    enforcement link is pinned, the eventlog has room, the binary's
    version identity matches ``--expect-version-id`` when given, and
    the register is the one ``init`` bound and equals ``--expect-chain``
    when given;
 2. parses and bounds-checks the container;
 3. loads the signed loader with ``BPF_PROG_LOAD``, naming that keyring
-   as ``attr.keyring_id`` (``KEY_SPEC_BPF_KEYRING``, or the staged
-   keyring's serial); the kernel verifies the CMS signature here;
+   as ``attr.keyring_id`` (``KEY_SPEC_BPF_KEYRING``); the kernel verifies the CMS signature here;
 4. runs the loader under ``BPF_PROG_TEST_RUN``; it creates the maps and
    loads the payload program, which the kernel checks against the
    loader's ``excl_prog_hash``;
@@ -208,20 +206,17 @@ target ELF's GNU build ID.  The format specification has the encoding.
 6) Enforcement in the kernel
 ----------------------------
 
-The ordinary installation uses the executable identities and seal described
-below. The opt-in dm-verity mode uses an authenticated executable image
-and committed task authority instead; its differences follow at the end of
-this section and in `config-images <config-images.rst>`__.
+The target requires an authenticated runtime image and a signed config image.
+The runtime is mounted at ``/run/shirudo/runtime`` and the config at
+``/run/shirudo/config`` with ``noexec``. Neither replaces the host root.
+Every runtime executable is eligible for task authority after successful exec.
 
-The binary embeds a pair of BPF objects for each mode. Ordinary mode uses
-``bpf/bpf2.c`` for BPF admission and bpffs protection, and ``bpf/seal.c`` for
-file labels and process protection. Image mode uses ``bpf/bpf2_verity.c``
-and ``bpf/seal_verity.c`` instead. Its objects add verified-device tracking,
-DM ioctl restrictions, runtime exec authority and executable-mapping checks.
-``shirudo init`` opens and loads only the selected pair. The common admission
-and seal programs live in ``bpf/admission.h`` and ``bpf/seal.h``; each mode
-supplies its own caller check through its policy header. Writable state keeps
-the same xattr protection in both modes.
+The binary embeds ``bpf/bpf2.c`` for admission, device and mount protection,
+and ``bpf/seal.c`` for writable-state labels and process protection.
+``bpf/admission.h`` and ``bpf/seal.h`` contain the checks shared by their
+programs; ``bpf/verity_policy.h`` supplies runtime-device and task lookups.
+Initialization always loads this pair and all its hooks. There is no mode
+selector, executable inode identity or user-keyring staging path.
 
 These are bootstrap objects, not signed upatch-loader artifacts. In the
 production boot flow their provenance comes from the authenticated initrd.
@@ -238,16 +233,12 @@ kernel context and false for userspace.  Kernel-context calls are
 allowed; they come from a loader the kernel has already verified.
 Userspace ``BPF_PROG_LOAD`` is allowed only for ``BPF_PROG_TYPE_SYSCALL``
 with a non-zero ``signature_size``. Userspace ``BPF_PROG_TEST_RUN`` is
-restricted to the executable recorded at ``init``; kernel-context calls
-from verified loaders remain allowed. This lets shirudo run loaders and
-serializers while preventing root from invoking a serializer to drain
-its maps. Allowed without a signature are the commands
-that cannot introduce code: map create only from the executable
-``init`` recorded as shirudo (signed-loader map creation runs in kernel
-context and is already allowed), map update and freeze only from
-shirudo's executable, and object pin, link create and raw tracepoint open
-only from shirudo's executable. In image mode these operations require
-committed task authority instead. The read-only commands (``*_GET_FD_BY_ID``,
+restricted to tasks authorized by successful exec from the runtime image;
+kernel-context calls from verified loaders remain allowed. This lets Shirudo
+run loaders and serializers while preventing root from invoking a serializer
+to drain its maps. Map creation, update and freeze, object pin, link creation
+and raw tracepoint open also require that task authority.
+The read-only commands (``*_GET_FD_BY_ID``,
 ``*_GET_NEXT_ID``, ``OBJ_GET_INFO_BY_FD``,
 ``MAP_LOOKUP_ELEM``, ``MAP_LOOKUP_BATCH``, ``MAP_GET_NEXT_KEY``,
 ``PROG_QUERY``, ``TASK_FD_QUERY``) keep
@@ -257,20 +248,15 @@ Everything else, including
 ``LINK_DETACH``, ``LINK_UPDATE``, ``PROG_ATTACH``/``PROG_DETACH``,
 ``BTF_LOAD`` and every map delete variant, is denied with ``-EACCES``.
 
-``lsm/bpf_map`` denies writable map file descriptors when the caller's
-executable identity is not shirudo. Root can retrieve read-only map fds
-for observation, but direct map updates and writable mappings of arena
-maps are denied. The ``task_prctl`` hook denies
-``PR_SET_MM_EXE_FILE`` and ``PR_SET_MM_MAP`` to callers whose executable
-identity is not the frozen Shirudo executable or its initrd copy. This
-also denies these two operations to checkpoint and restore tools. A
-process that directly executes the recorded Shirudo binary is still
-identified as Shirudo; its command interface is the authorization
-boundary for those operations.
+``lsm/bpf_map`` denies writable map descriptors to tasks without authority.
+Root can retrieve read-only map descriptors for observation, but direct map
+updates and writable arena mappings require an authorized task. Device records
+are private because they contain kernel pointers. ``task_prctl`` denies
+``PR_SET_MM_EXE_FILE`` and ``PR_SET_MM_MAP`` to untrusted tasks. Rewriting
+``mm->exe_file`` never creates task authority.
 
 ``lsm/bprm_check_security`` keeps that boundary from being stepped
-around through the environment: every exec of the recorded executable
-or its initrd copy runs in secure-exec mode (``AT_SECURE``), as a
+around through the environment: every exec from the runtime image runs in secure-exec mode (``AT_SECURE``), as a
 set-user-ID program does.  The dynamic loader then ignores
 ``LD_PRELOAD``, ``LD_AUDIT``, ``LD_LIBRARY_PATH`` and the other
 variables glibc treats as unsafe, and libraries ignore what they read
@@ -285,24 +271,21 @@ on every binary handler pass, so a script that names shirudo as its
 interpreter gets the same.
 
 ``lsm/bpf_prog_load`` runs after the kernel's signature check and admits
-a program only when the verdict is ``BPF_SIG_VERIFIED`` and the
-signature was resolved from the keyring whose kind shirudo froze into
-its identity map at init: the kernel's own bpf keyring, which the kernel
-resolves itself and records without a serial, or in staging mode the
-user keyring whose serial was frozen alongside.  A certificate planted
-anywhere else in the caller's keyrings does not count.
+a program only when the verdict is ``BPF_SIG_VERIFIED`` and the signature
+was resolved from the kernel's BPF keyring. The kernel normally records no
+serial for this singleton; a nonzero serial must match the frozen record.
+A certificate in another caller keyring cannot authorize a load.
 
-bpffs and keyring guards.  The identity map (the bpffs ``s_dev``,
-shirudo's executable ``(dev, ino)``, the keyring kind and serial, and
-the serials of the keys the keyring holds) is written and
-``BPF_MAP_FREEZE``'d before any link is created, so userspace cannot
-change it for the rest of the boot. Writable map fds, map updates,
-link creation, raw tracepoint opens and pins are restricted by the
-same executable-identity gate.
+bpffs and keyring guards. The identity map contains the bpffs and run-device
+numbers, runtime root hash, BPF keyring kind and serial, and enrolled key
+serials. It is written and frozen before the admission gates attach.
+The task map is seeded with the authenticated bootstrap task, then frozen
+against userspace writes. Runtime exec and fork hooks maintain its marks.
+Expected config roots remain writable only by trusted tasks preparing a
+mapping. Other device records are maintained by the kernel hooks.
 ``lsm/inode_unlink``, ``lsm/inode_rename``,
 ``lsm/inode_setxattr`` and ``lsm/inode_removexattr`` on shirudo's bpffs
-allow the operation only when the calling task's ``mm->exe_file`` is
-shirudo's binary: root ``rm`` cannot drop a pin, ``mv`` cannot replace
+allow the operation only for a task with runtime authority: root ``rm`` cannot drop a pin, ``mv`` cannot replace
 one (the VFS unlinks a rename's victim without ``inode_unlink``), and
 nobody else can forge the payload xattr.  ``lsm/key_permission`` applies the same test
 to the trust anchor in the kernel's keyrings: write, setattr and unlink
@@ -311,7 +294,7 @@ search ``keyctl invalidate`` uses to reach a key by serial, are denied
 to every task but shirudo, while viewing, listing and the possessed
 search the kernel verifies signatures with stay open.  Sealing stops
 keys from being added; this stops root from taking them away, so that
-unlinking a key is ``shirudo keys revoke`` and nothing else.
+signer removal happens through signed config activation.
 ``lsm/sb_umount``, ``lsm/move_mount``,
 ``lsm/sb_mount`` and ``lsm/sb_remount`` deny unconditionally, for every
 caller including shirudo, direct unmount, relocation, mount-over and
@@ -322,18 +305,16 @@ The pins are the only thing
 keeping the enforcement programs alive, and one ``umount`` would
 otherwise detach everything. Named refusal points increment counters in
 a frozen map pinned beside the identity map
-(``bpf/lib/shirudo_tamper.h``); ``shirudo status`` reads it back. Image-only
-device, parent-mount and process checks do not yet have counters. A refusal
+(``bpf/lib/shirudo_tamper.h``); ``shirudo status`` reads it back. Device, parent-mount and process checks do not yet have counters. A refusal
 at an earlier image check therefore need not increment a shared counter.
 
 Filesystem seal. Initialization labels existing state under
-``/var/lib/shirudo/`` and, in ordinary mode, the installed binary with
-``security.bpf.shirudo``. The fixed 64-byte label marks a protected target;
-its public value does not identify an authorized caller. The ``file_open``
-(for write), ``inode_unlink``, ``inode_rename``, ``inode_setattr``,
-``inode_setxattr`` and ``inode_removexattr`` hooks require the ordinary
-caller's executable to match the frozen ``(dev, ino)`` identity or its
-initrd copy. Image mode instead requires committed task authority.
+``/var/lib/shirudo/`` with ``security.bpf.shirudo``. The fixed 64-byte label
+marks a protected target; its public value does not authorize a caller.
+The ``file_open`` (for write), ``inode_unlink``, ``inode_rename``,
+``inode_setattr``, ``inode_setxattr`` and ``inode_removexattr`` hooks require
+the caller's committed task authority. Runtime and config files use dm-verity
+and receive no seal writes.
 Only an authorized caller may set the exact seal xattr, including on an
 unlabelled inode. A binary carrying a copied label gains no authority.
 
@@ -342,9 +323,7 @@ except for ``ENODATA``, ``EOPNOTSUPP``, ``EACCES`` and ``EPERM``. The latter
 two exceptions preserve write-only opens and unlinking unreadable files:
 the xattr kfunc checks the caller's read permission. Failure to allocate
 scratch storage also requires caller authority. Rename checks both the
-source and an existing destination. Ordinary mode permits replacement of
-the recorded primary executable for package upgrades; its replacement has
-no authority until a later initialization records it. ``inode_setattr``
+source and an existing destination. ``inode_setattr``
 covers truncate, chmod, chown and timestamp changes to labelled targets.
 
 ``inode_init_security`` uses ``bpf_inode_init_xattr()`` to give a new inode
@@ -358,14 +337,10 @@ link or rename can introduce an existing unlabelled inode. This does not
 authorize every directory-entry change against the parent or revoke
 existing writable descriptors and mappings.
 
-In ordinary mode, ``bprm_check_security`` and ``bprm_committed_creds`` mark
-tasks that successfully exec a labelled binary, and ``task_alloc`` inherits
-the mark. These marks protect processes from observation and do not grant
-filesystem mutation authority. ``ptrace_access_check`` and
-``perf_event_alloc`` deny against tasks already marked when those hooks
-run. The perf allocation check is not serialized with the exec transition;
-the separate `perf/exec race investigation <https://github.com/shirudo-dev/shirudo/issues/11>`__
-records the source-derived limitation.
+``ptrace_access_check`` and ``perf_event_alloc`` deny against tasks already
+marked when those hooks run. The perf allocation check is not serialized with
+exec; the separate `perf/exec race investigation
+<https://github.com/shirudo-dev/shirudo/issues/11>`__ records this limitation.
 
 Process hardening.  ``util/harden.c`` runs at startup on the target:
 ``PR_SET_DUMPABLE`` off, ``PR_SET_NO_NEW_PRIVS``, ``PR_SET_PTRACER`` to
@@ -378,7 +353,7 @@ either; ``/etc/hosts`` and ``/etc/resolv.conf``, a local resolver stub
 included, still apply.  The zeroing allocator in ``util/malloc.c``
 wipes freed memory; the libc allocators are poisoned project-wide.
 
-Image-mode enforcement. The UKI authenticates a runtime image mounted at
+Runtime and config enforcement. The UKI authenticates a runtime image mounted at
 ``/run/shirudo/runtime``; signed configuration is mounted separately at
 ``/run/shirudo/config`` with ``noexec``. Neither is the host root filesystem.
 Every executable on the runtime image is equally eligible for authority.
@@ -396,7 +371,7 @@ for that mapping. ``bdev_free_security`` attempts cleanup, but upstream
 can omit the notification.
 The ``file_ioctl`` hook denies untrusted
 callers mutating device-mapper control operations, including through old or
-inherited FDs. This restriction applies to all DM devices in image mode.
+inherited FDs. This restriction applies to all DM devices on the target.
 Trusted image tasks retain control access. These checks use existing LSM
 hooks. Direct keyring access additionally requires the upstream
 ``KEY_SPEC_DM_VERITY_KEYRING`` API described in the requirements.
@@ -406,7 +381,7 @@ protection remains unestablished. ``mmap_file`` and
 executable pages. Existing ptrace and process-memory checks still apply.
 
 Writable state keeps its seal xattrs, while neither image receives seal
-writes. Image mode uses the task mark for writable-state and bpffs access.
+writes. The task mark authorizes writable-state and bpffs access.
 The authorized BPF signing keys are enrolled at boot and the ``.bpf``
 keyring then receives the existing reject-all restriction. A live config
 update refuses a candidate requiring a signer absent from that sealed
@@ -440,69 +415,34 @@ deferred TPM writer limitation.
 7) Target state
 ---------------
 
-The sequence below describes the ordinary installation. Image mode first
-verifies and measures the selected config, uses the runtime image's initial
-BPF certificate and the config image's vouched keys, and keeps the state
-filesystem writable in the initrd for its durable activation journal.
+The authenticated initrd runs ``shirudo init`` before untrusted workloads.
+The root service runs it again using the packaged runtime interpreter and
+libraries. Both runs use the same enforcement and records; no fallback mode
+exists. Initialization performs these steps:
 
-``shirudo init`` is idempotent and runs on every boot from
-``systemd/shirudo.service`` (``Type=oneshot``, ``KeyringMode=inherit``,
-extra arguments from ``/etc/shirudo/init.env``), from the initrd in
-the production configuration: after the ``enter-initrd`` phase is
-measured, before the switch to the root file system, with
-``/etc/shirudo`` and ``/var/lib/shirudo`` at their usual paths.
-Installed in the root file system it runs before ``sysinit.target``
-instead, and the target stays in staging.  It does, in order:
-
-1. the pre-flight: root, BPF LSM active, bpffs mountable, the
-   signed-loader kernel ABI, ``cert.der`` present and ML-DSA-87, the
-   kernel able to parse that certificate (``CONFIG_CRYPTO_MLDSA``),
-   the kernel's bpf keyring present, embedded loaders present, TPM 2.0
-   reachable.  Every
-   check is hard; all failures are reported together as
-   ``init_prereqs_missing`` and nothing is touched.  ``shirudo init
-   --check-only`` stops here.  In the initrd, told by
-   ``/etc/initrd-release``, ``init`` also binds the root's
-   ``/var/lib/shirudo`` read-only at its usual path and reads the
-   trusted set from the initrd's own ``/etc/shirudo/keys``;
-2. mounts the private bpffs at ``/run/shirudo/bpffs`` with
-   ``mode=0700,nosuid,nodev,noexec``;
-3. removes state left behind by features that no longer exist;
-4. enrols the trusted set in the kernel's bpf keyring and seals it
-   with ``KEYCTL_RESTRICT_KEYRING`` so nothing can be linked into it
-   for the rest of the boot.  The set is ``cert.der`` plus every
-   ``trusted/<fingerprint>.der`` with a vouch beside it that verifies
-   under the primary or under a member admitted before it, less the
-   fingerprints the ``revoked/`` directory names (the `key-lifecycle
-   <key-lifecycle.rst>`__ guide).  A keyring found sealed is reused
-   when it holds exactly that set, which ``init`` tells by the
-   descriptions the kernel gives the certificates, and refused when it
-   holds anything else.  That needs the kernel booted with
-   ``bpf.keyring_unsealed=1`` and ``init`` run from the initrd.  A
-   kernel that sealed the bpf keyring empty at boot makes ``init``
-   stage the primary certificate alone instead: a ``shirudo`` keyring
-   in the user keyring, sealed with ``KEYCTL_SETPERM`` to view, read
-   and search only, until the next reboot;
-5. labels ``/var/lib/shirudo/`` with ``security.bpf.shirudo`` and
-   appends the record an initrd run left under ``/run`` to the
-   eventlog; the initrd run itself skips both, its root being
-   read-only;
-6. loads the embedded bpf2 object and, unless ``--no-seal``, seal during
-   trusted bootstrap, before attaching the BPF admission gates;
-   freezes and pins the identity map (the bpffs, the executable that
-   keeps running the target, from the initrd also the initrd's own
-   copy for that run, the keyring kind and serial, and the serials of
-   the keys it holds), creates the links and pins each one before
-   doing anything else fallible;
-7. re-applies every ``.upatch`` under ``/var/lib/shirudo/upatches/`` in
-   sorted name order, all or nothing;
-8. binds this boot's measurement register and extends it once with
-   ``SHA256("shirudo-init\0" || cert_sha256 || set_digest ||
-   tree_root)``, where ``cert_sha256`` covers the enrolled
-   certificates (one digest, or the SHA-256 over the sorted digests of
-   several), ``set_digest`` is the SHA-256 of the sorted listing of the
-   restored set and ``tree_root`` the upatch tree's projection root
-   (zeros without a tree), and appends the event.
+1. Load authenticated bootstrap settings, including the runtime image root,
+   then run prerequisite checks. Missing image settings are an error.
+   ``--check-only`` stops before changing kernel state.
+2. Bind ``/sysroot/var/lib/shirudo`` writable at its usual path in the initrd,
+   so config selection and recovery can be recorded durably. Mount the private
+   bpffs under ``/run/shirudo``.
+3. Verify the runtime and selected config, enroll the config verification
+   certificate in ``.dm-verity``, and seal it. Enroll the initial BPF certificate
+   plus vouched config signers, less config revocations, in ``.bpf`` and seal it.
+   Both enrollment boot parameters are required. A sealed empty BPF ring is an
+   error, rather than a reason to stage keys in a user keyring.
+4. Label writable state. Load both bootstrap BPF objects, populate and freeze
+   their shared maps, seed bootstrap authority, attach device, mount and seal
+   hooks, then attach the map-access and BPF admission gates last.
+5. Mount the runtime under those guards, verify and measure the config
+   selection, apply its revocations, and label state again to populate the
+   inode protection cache. All image files stay read-only.
+6. Restore the archived signed upatches in sorted order. Any failure leaves
+   config completion pending and blocks changes and config attestation.
+7. Bind this boot's upatch register and extend it once with
+   ``SHA256("shirudo-init\0" || cert_sha256 || set_digest || tree_root)``.
+   Append its event and mark config startup complete. The root service later
+   adopts the pending initrd eventlog record without another extension.
 
 Boot-restore extends the register by exactly one event however many
 upatches it restores.  The register starts from zero at every boot, so
@@ -580,22 +520,13 @@ the tree root, or an ``--expect-chain`` the operator computed from
 those plus the events since boot.  ``attest`` touches only the
 target's TPM; ``verify`` and ``predict`` touch no TPM at all.
 
-Files.  Under ``/var/lib/shirudo/``: ``keys/cert.der`` (and
-``keys/signing_key.pem`` on an operator), ``keys/trusted/`` (the
-further certificates with their vouches), ``keys/revoked/``,
-``eventlog``, ``upatches/`` (installed artifacts), ``incoming/``
-(staging), ``locks/`` and ``bpm/`` (registry indexes, packages, tree
-state).  Under ``/run/shirudo/``, per boot: the ``bpffs/`` mount with
-``lsm_link``, the ``bpf2_*_link`` and ``seal_*_link`` pins, the frozen
-``identity`` map and ``upatches/<name>/``, and ``eventlog.pending``
-between the initrd run and the root's; it lives under ``/run``
-because that is what
-systemd carries from the initrd into the root file system, so pins
-made before the switch keep their links.  Under
-``/etc/shirudo/``: ``shirudo.conf``, ``init.env``, ``map-export.env``,
-``node.labels`` and ``bpm/`` (``registries.d/``, ``keys/``,
-``upatch-tree.conf``, ``environment``).  ``shirudo config`` prints the
-effective configuration with a comment on every key.
+Files. Writable state under ``/var/lib/shirudo`` includes archived upatches,
+eventlogs, locks, downloaded packages, tree state, cached images and the config
+activation record. Initial BPF keys and bootstrap settings live in the runtime;
+repository definitions, node labels, export settings, additional signer vouches
+and revocations live in config. The operator keeps its private signing key
+outside both images. Per-boot mounts and pins live under ``/run/shirudo``;
+``eventlog.pending`` bridges the initrd and root service runs.
 
 8) Packages and registries
 --------------------------
@@ -612,9 +543,8 @@ the registry's detached-CMS-signed index at
 ``shirudo/bpm-index:stable``.  Published versions are immutable; an
 index that already lists a version with other digests is refused.
 
-In the ordinary installation, ``shirudo bpm config register add <name> oci://host
---key-file cert.der`` records the registry and the certificate that
-must sign its index.  ``shirudo bpm repo update`` fetches and verifies
+Repository definitions and index verification certificates are prepared on the
+operator and shipped in the signed config image.  ``shirudo bpm repo update`` fetches and verifies
 the index; ``shirudo bpm install <name>/<pkg>[@ver]`` (or an ``oci://``
 reference) pulls, verifies, unpacks and loads; ``upgrade`` moves
 installed packages to the newest indexed version; ``uninstall`` loads
@@ -624,7 +554,7 @@ to a different one while a key is active.  The ``repo update`` and
 ``tree sync`` timers (60 s) and the map-export and keepalive timers
 (5 s) are the only always-on infrastructure.
 
-In image mode, repository definitions and verification certificates come
+Repository definitions and verification certificates come
 from the signed config. Local repository and key mutations refuse with
 instructions for config activation or boot-time signer enrollment. The
 package and tree update commands remain available. Repository ``key_file``

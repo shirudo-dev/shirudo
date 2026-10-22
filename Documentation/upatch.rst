@@ -15,15 +15,13 @@ load path and the registry formats, and the `telemetry
 <telemetry.rst>`__ document covers decoders and the export pipeline in
 depth.  This guide is the workflow that ties them together.
 
-Operator build, sign and publish commands are the same for both target
-policy modes. The writable repository-registration examples below describe
-the ordinary installation. Image-mode targets instead receive repository
-definitions, public verification certificates, the tree subscription and node
-labels in a signed config image. Local ``bpm config register`` mutations and
-``bpm key add`` are refused there. Package installation, upgrades and tree
-sync still run on the target; they read the selected authenticated config.
-New BPF signers require boot enrollment, while signed revocation configs and
-upatch updates remain live. See `config-images <config-images.rst>`__.
+Operator build, sign and publish commands prepare artifacts on the operator.
+Targets receive repository definitions, public verification certificates, tree
+subscriptions and node labels in a signed config image. Local repository and
+key mutations are refused. Examples that prepare these files belong on the
+operator before image generation; target package and tree commands read the
+selected config. BPF programs still require signed loaders and vouched boot
+enrollment. See `config-images <config-images.rst>`__.
 
 1) What an upatch is
 --------------------

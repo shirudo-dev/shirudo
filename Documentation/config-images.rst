@@ -5,10 +5,11 @@
 Executable and configuration images
 ===================================
 
-Image mode puts Shirudo's executable and configuration on two separate
-read-only dm-verity filesystems. It keeps the host root filesystem and
-retains live signed upatch updates. Authenticated bootstrap settings
-explicitly select this mode; the ordinary installation remains available.
+Shirudo puts its executable and configuration on separate read-only dm-verity
+filesystems. The host root filesystem stays in place. Writable Shirudo state
+keeps its xattr protection. BPF upatches still use signed loaders verified by
+the kernel BPF keyring, including when config itself has a valid signature.
+There is one target policy; authenticated bootstrap settings are required.
 
 The executable image is fixed for the boot. Configuration updates install
 another signed immutable image while the system runs. They do not write
@@ -215,8 +216,7 @@ Image mode needs writable ``/var/lib/shirudo`` available during the initrd
 run: the image cache and pending activation record must be durable before a
 PCR extension. If that directory resides on a separate filesystem, mount
 it under the initrd's system root before Shirudo starts. A separate state
-filesystem is not required. The ordinary installation's read-only state
-bind is unchanged.
+filesystem is not required.
 The mounts under ``/run`` survive switch-root.
 
 Boot verifies the selected cached config, validates its mapping and
@@ -293,7 +293,7 @@ and attestation remain target operations under the active image policy.
 Operator build, publish and vouch commands remain operator operations.
 
 Signed upatch load and unload checks continue to apply. Signed config
-revocations reuse the ordinary key unlink, measured key-revoke and live
+revocations reuse the existing key unlink, measured key-revoke and live
 upatch unload operations. Startup removes archives signed by revoked keys
 before restoring upatches. There is no separate purge journal or same-boot
 purge recovery.
@@ -356,37 +356,17 @@ config evidence. This remains subject to the direct-writer limitation.
 6) Enforcement and tests
 ------------------------
 
-The binary embeds a separate BPF object pair for each mode. Initialization
-loads only the selected pair; ordinary installations do not load image
-metadata hooks, DM ioctl restrictions or executable-mapping restrictions.
+The binary embeds one BPF object pair: ``bpf/bpf2.c`` and ``bpf/seal.c``.
+Initialization always loads both. ``bpf/admission.h`` supplies BPF command,
+signature, keyring and bpffs checks. ``bpf/seal.h`` supplies writable-state
+xattr checks, label inheritance and ptrace/perf checks. The device and task
+helpers live in ``bpf/verity_policy.h``.
 
-.. list-table:: BPF objects selected at initialization
-   :header-rows: 1
-   :widths: 20 35 45
+The seal label marks a protected writable target. It never grants the caller
+write access. Runtime and config files use dm-verity, while writable state
+continues to use seal xattrs. Caller authority comes from runtime exec.
 
-   * - Mode
-     - Objects
-     - Caller authority
-   * - Ordinary
-     - ``bpf/bpf2.c`` and ``bpf/seal.c``
-     - The executable device/inode recorded at init, or its initrd copy.
-   * - dm-verity
-     - ``bpf/bpf2_verity.c`` and ``bpf/seal_verity.c``
-     - A task mark committed after successful exec from the runtime image.
-
-``bpf/admission.h`` supplies the shared BPF command, signature, keyring and
-bpffs checks. ``bpf/seal.h`` supplies writable-state xattr checks, label
-inheritance, and ptrace/perf checks. The selected policy header determines
-caller authority. Both modes share the same checks without testing the mode
-inside each running BPF program.
-
-The seal label marks a protected target. It never grants the caller write
-access. Ordinary mode labels its executable and state; image mode uses
-dm-verity for executable/config files and labels writable state only.
-Ordinary-mode exec marks protect labelled processes from observation but do
-not authorize BPF operations or file writes.
-
-Image mode marks tasks after successful exec from the approved runtime
+Shirudo marks tasks after successful exec from the approved runtime
 device, inherits the mark on fork and re-evaluates it on every successful
 exec. Exec outside the runtime clears authority. Failed exec preserves
 the running image's mark. Changing ``mm->exe_file`` cannot grant authority.
@@ -398,7 +378,7 @@ of an earlier proposed exec-time snapshot check. Neither has a runtime
 reproduction in this work.
 Do not add a systemd syscall filter to the runtime
 invocation: caller-controlled seccomp could otherwise spoof the kernel
-mode query used to keep commands inside image policy.
+enforcement query used to detect hidden bpffs pins.
 
 The LSM observes dm-verity metadata through the existing
 ``bdev_setintegrity`` hook. Lookup checks the block-device pointer, device
@@ -407,7 +387,7 @@ bootstrap value. A config root must match the expected root staged by the
 trusted task creating that mapping. An unrelated mapping made by a trusted
 task is not a config device.
 
-Expected roots live in image-only task storage. The hook reads the preparing
+Expected roots live in task storage. The hook reads the preparing
 task's entry and consumes it when the kernel reports the matching root.
 Creation clears it on every exit and reports an error if cleanup fails. A
 remaining valid entry blocks another preparation until cleared or task exit.
@@ -477,61 +457,34 @@ The target tamperproof tests exercise executable authority, fork and exec,
 executable mappings, direct and inherited DM controls, mount namespaces,
 ptrace, ``/proc/<pid>/mem``, ``process_vm_writev`` and perf observers.
 Observer tests do not establish that concurrent perf attachment is excluded.
-Run the existing target suite on an ordinary installation and the
-image-mode fixtures on an image installation. The final interruption case
-leaves pending state and ends the VM run; it does not automate a reboot. A skipped fixture is not evidence that its protection
-passed.
+The target suite runs against an image-backed installation. The final
+interruption case leaves pending state and ends the VM run; it does not
+initiate a reboot. A skipped required fixture fails the run.
 
 
-7) Run both policy modes
--------------------------
+7) Run the target suite
+-----------------------
 
 The standard harness builds and signs fixtures on the operator and deploys
-only public artifacts. Run the complete target suites separately::
+only public artifacts. Run the suite with::
 
-    make -C testing test-tgt TEST_VM_MODE=legacy
-    sudo make -C testing test-tgt TEST_VM_MODE=verity
+    sudo make -C testing test-tgt
 
-Image mode defaults to ``TEST_VM_INITRD=1`` and requires dracut and root on
-the host. It refuses disabled sealing and partial suite selections. The
-legacy initrd path can also be tested explicitly::
+The harness requires dracut, initrd boot and all seal hooks. It rejects
+``TEST_VM_INITRD=0`` and ``TEST_VM_SKIP_SEAL=1``. The only accepted value of
+the old ``TEST_VM_MODE`` setting is ``verity``; no selection is needed.
+CI uses this same required suite and reports its failures.
 
-    sudo make -C testing test-tgt TEST_VM_MODE=legacy TEST_VM_INITRD=1
+The guest boots with ``config-boot-keys``. The runtime fixture includes an
+authority probe and an interrupted-activation helper; these test executables
+have full authority and must never ship in a deployment runtime.
 
-The two modes use separate host bundle caches. Image mode seeds all signed
-images into the disposable guest and selects ``config-boot-keys`` for its
-initial boot. The runtime test image contains the authority probe and a test-only
-interrupted-activation executable. Do not ship these helpers in a deployment
-runtime: every runtime executable is eligible for authority.
-
-.. list-table::
-   :header-rows: 1
-   :widths: 27 36 37
-
-   * - Coverage
-     - Legacy mode
-     - Image mode
-   * - Upatch lifecycle, version and payload checks, TPM replay, uprobes,
-       maps and keyring controls
-     - Existing target suites
-     - Shared target suites using the runtime command
-   * - Tree selection, sequential sync, delete and restore
-     - Writable fixture configuration
-     - Signed tree config activation between publications
-   * - OTLP maps, timer service and serializer output
-     - Writable fixture configuration
-     - Signed telemetry config and runtime service invocation
-   * - Local key and repository mutations
-     - Existing mutation suites
-     - Explicit refusal and guidance; boot enrollment and signed revocation
-   * - Executable and config integrity
-     - Existing seal and executable-identity suites
-     - Task authority, executable mappings, device controls, observers,
-       hidden bpffs, signed A/B activation and measured revocation/purge
-   * - Interrupted activation
-     - Existing host journal tests
-     - One exit after PCR measurement; further mutations and attestation
-       refuse, then the VM run ends
+The suite checks signed upatch load and unload, foreign signature rejection,
+TPM replay, uprobes, map and arena serialization, tree updates, OTLP services,
+keyring controls, runtime exec authority, executable mappings, device controls,
+process observers, hidden bpffs, signed config updates and measured revocation.
+After the final interrupted update it checks that changes and attestation
+refuse while the node continues running.
 
 Required image fixtures and helpers are failures when absent. A whole suite
 that skips in image mode fails the runner. Test ordering matters:
@@ -544,7 +497,6 @@ For an already provisioned disposable image-mode VM, install the complete
 public fixture set and cache every config bundle under
 ``/var/lib/shirudo/images``, then run::
 
-    export SHIRUDO_TEST_MODE=verity
     export SHIRUDO_BIN="$PWD/testing/helper/image-shirudo"
     export SHIRUDO_TEST_FIXTURES_DIR=/path/to/public-upatch-fixtures
     export SHIRUDO_TEST_KEY_FIXTURES=/path/to/public-image-fixtures

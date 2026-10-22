@@ -139,7 +139,7 @@ A detached CMS/PKCS#7 signature over ``loader_insns || data``, produced
 by the vendored ``util/sign.c`` on the operator.  On the target, the
 kernel's ``bpf_prog_verify_signature()`` checks it against the
 certificate in the sealed bpf keyring, named as ``attr.keyring_id``
-(while staging, the sealed ``shirudo`` keyring's serial), before the
+(``KEY_SPEC_BPF_KEYRING``), before the
 verifier and the LSM hooks run.
 
 The container is algorithm-agnostic: the SignerInfo names the key

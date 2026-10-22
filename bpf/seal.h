@@ -69,8 +69,8 @@ int bpf_inode_init_xattr(struct xattr *xattrs, int *xattr_count__ctx_out,
 			 const struct bpf_dynptr *value_p) __ksym;
 
 /*
- * Labels identify protected targets in both modes. Caller authority comes from
- * the selected executable policy, never from a label on the caller's binary.
+ * Labels identify protected writable targets. Caller authority comes from
+ * successful runtime exec, never from a label on the caller's binary.
  */
 static __always_inline int seal_caller(enum shirudo_tamper_point point)
 {

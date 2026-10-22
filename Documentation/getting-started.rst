@@ -15,13 +15,11 @@ development-tree commit with the signed-loader ABI, BPF LSM, BTF and ML-DSA
 support. A release number alone is not enough. For local development one
 host can play both roles.
 
-The target setup and writable configuration examples below describe the
-ordinary installation. For image mode, use `config-images
-<config-images.rst>`__: authenticated bootstrap selects runtime and config
-images, and services and commands invoke the packaged runtime interpreter.
-Target-local signer and repository mutations are refused in that mode;
-configuration changes arrive as signed images. Signed upatch load/unload,
-package updates, tree sync, export and attestation remain available.
+Targets require runtime and signed config images. Follow
+`config-images <config-images.rst>`__ for generation and authenticated boot.
+Writable state keeps its xattr protection and all BPF upatches remain signed.
+The target commands below denote the generated runtime loader invocation;
+operator commands use the ordinary host executable.
 
 1) Build
 --------
@@ -90,15 +88,11 @@ is no other key type.  ``keys`` prints the algorithm and fingerprints
 of the material on disk and, on a target, the state of the kernel
 keyring.
 
-Copy ``cert.der`` to the target through the organisation's normal
-provisioning path, into ``/var/lib/shirudo/keys/cert.der``.  Never
-copy ``signing_key.pem`` to a target; nothing on the target can use
-it, and the threat model assumes it is not there.  A target can trust
-several keys: a further certificate joins the set with ``shirudo keys
-add <cert.der> --vouch <file>``, the vouch coming from ``shirudo keys
-vouch`` on an operator the target already trusts, and leaves it with
-``shirudo keys revoke <fingerprint>``.  The `key-lifecycle
-<key-lifecycle.rst>`__ guide covers both.
+Put the initial public certificate in the runtime image. Never put
+``signing_key.pem`` on a target or in either image. Additional BPF signers
+need vouches in the signed config selected for boot; enrolling them requires
+a reboot. Signed config can revoke an already enrolled signer at runtime.
+See `key-lifecycle <key-lifecycle.rst>`__.
 
 3) Build a signed upatch
 ------------------------
@@ -135,75 +129,28 @@ upatch, decoders, serializers and the release workflow.
 4) Initialise a target
 ----------------------
 
-On a target with network access the installer under
-``tools/gen-initrd`` does the whole setup in one go: it installs the
-release package, places the certificate, puts the kernel parameter the
-bpf keyring needs on the boot command line and rebuilds the initrd with
-shirudo inside, so that the next reboot comes up in the production
-configuration::
+Build and provision runtime and config images, install the generated runtime
+service drop-in, and build an authenticated UKI as described in
+`config-images <config-images.rst>`__ and `initrd <initrd.rst>`__.
+Bootstrap settings name the expected runtime root and the reserved config PCR.
+Boot with ``bpf.keyring_unsealed=1 dm_verity.keyring_unsealed=1`` and make
+writable state available in the initrd. Missing settings or images stop init;
+there is no root-only staging configuration.
 
-    curl -fsSL https://raw.githubusercontent.com/shirudo-dev/shirudo/main/tools/gen-initrd/install.sh |
-        sudo bash -s -- --cert https://example.com/shirudo/cert.der --now
+The initrd verifies the images, seals the keyrings, labels writable state,
+attaches every enforcement hook, restores signed upatches and measures startup.
+The root service uses the verified runtime to check that state and adopt the
+initrd eventlog record. After boot, using the runtime invocation::
 
-``--now`` starts enforcement right away, staged until that reboot; the
-``initrd`` document describes the installer's parts and what it needs
-from the system.  By hand instead: install the target package, place
-``cert.der``, then::
-
-    sudo shirudo init --check-only
-    sudo shirudo init
-    sudo shirudo status
-
-``--check-only`` runs the pre-flight and reports every missing
-prerequisite at once without touching the kernel: root, BPF LSM active,
-bpffs mountable, the signed-loader kernel ABI, the certificate present
-and ML-DSA-87, the kernel able to parse it, the kernel's bpf keyring
-present, the embedded enforcement programs present, a TPM 2.0
-reachable.  All of
-them are hard; there is no unmeasured mode.  A machine without a TPM
-can use a software one for development::
-
-    contrib/swtpm.sh start      # prints the SHIRUDO_TPM_TCTI line
-    contrib/swtpm.sh env
-
-Either export that variable or set ``tpm.tcti`` in
-``/etc/shirudo/shirudo.conf``.  A TPM whose owner hierarchy has a
-password needs ``tpm.owner_auth`` (or ``SHIRUDO_TPM_OWNER_AUTH``) to
-define the measurement register, once and again whenever the PCR 9 or
-PCR 11 value at binding changes.
-
-``init`` mounts the private bpffs, enrols the certificate in the
-kernel's bpf keyring and seals it, labels ``/var/lib/shirudo`` with the
-sealing xattr, attaches the enforcement programs, re-applies any
-installed upatches, binds this boot's measurement register and extends
-it once.  It is idempotent and safe to re-run.
-
-The production configuration runs it from the initrd first.  Boot the
-kernel with ``bpf.keyring_unsealed=1``, which leaves the bpf keyring
-open until ``init`` seals it, and give the initrd the target binary,
-``shirudo-initrd.service`` and a copy of the certificate at
-``/etc/shirudo/keys/cert.der``; the ``initrd`` document describes that run,
-what ``shirudo.service`` then finishes from the root file system, and
-the dracut module and installer under ``tools/gen-initrd`` that set a
-target up that way.  The register then binds while PCR 11 holds a
-value no later process can bring back, and the keyring is the kernel's
-own.  Started from the root file system alone, ``init`` finds the bpf
-keyring sealed empty, stages the certificate in a sealed ``shirudo``
-user keyring until the next reboot, and binds the register with the
-post-initrd PCR 11 value; ``status`` reports ``mode: staging`` and
-``bound_in: root``, and the verifier can refuse both.  Extra arguments
-go in
-``/etc/shirudo/init.env`` as ``SHIRUDO_INIT_ARGS``.  Enable the unit
-and the timers you want::
-
-    sudo systemctl enable --now shirudo.service
+    sudo shirudo status --json
+    sudo shirudo image status
     sudo systemctl enable --now shirudo-bpm-repo-update.timer
     sudo systemctl enable --now shirudo-keepalive.timer shirudo-map-export.timer
 
-``status`` shows the roles, the four conditions, the keyring serial
-against its pin, the register against this boot's eventlog replay and
-its anchor, and the assets on disk; ``--json`` emits the same as a
-document.
+Check ``mode: production``, ``keyring_mode: bpf``, ``tpm.bound_in: initrd``,
+consistent config state and an upatch register matching its eventlog. A TPM is
+mandatory. For a development software TPM, put ``tpm.tcti`` in authenticated
+runtime configuration; target environment overrides are refused.
 
 5) Load and unload a local artifact
 -----------------------------------
@@ -277,12 +224,9 @@ material, adds the version to the registry's signed index at
 or ``DOCKER_CONFIG``; ``BPM_OCI_CA_FILE`` adds a CA and
 ``BPM_OCI_SCHEME=http`` allows a cleartext local registry.
 
-On the target, register the repository once with the operator's
-certificate, then install by hand or let the timer refresh and
-upgrade::
+Put repository definitions and their index certificates in the signed config
+image. After activation, install packages or let the timer refresh them::
 
-    sudo shirudo bpm config register add example oci://quay.io \
-        --key-file cert.der
     sudo shirudo bpm repo update
     sudo shirudo bpm install example/kernel-obs
     sudo shirudo bpm list
@@ -304,7 +248,8 @@ selectors, so a fleet of mixed kernels pulls only what applies::
     shirudo bpm tree append ./kernel-obs-1.0.0.bee \
         oci://quay.io/example/tree --keys-dir /var/lib/shirudo/keys --op delete
 
-A target follows a tree when ``/etc/shirudo/bpm/upatch-tree.conf``
+A target follows a tree when its signed config's
+``etc/shirudo/bpm/upatch-tree.conf``
 names it (``endpoint=`` and ``reference=``); ``shirudo bpm tree sync
 [--dry-run]`` applies the matching operations, and
 ``shirudo-bpm-tree-sync.timer`` runs it every minute.  Node labels for
@@ -321,7 +266,8 @@ logs and metrics::
         --otel-endpoint=https://collector.example:4318
     sudo shirudo status --otel --include-system
 
-Set ``map_export.otel_endpoint`` in ``/etc/shirudo/shirudo.conf`` and
+Set ``map_export.otel_endpoint`` in the signed config's
+``etc/shirudo/shirudo.conf`` and
 enable ``shirudo-map-export.timer`` and ``shirudo-keepalive.timer`` to
 push map snapshots and a status keepalive every five seconds.
 `telemetry <telemetry.rst>`__ describes the records, the decoders and

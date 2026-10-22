@@ -74,9 +74,9 @@ fixture.
        and sealed it.  The kernel is booted with
        ``bpf.keyring_unsealed=1`` so that the keyring takes the
        certificate from the initrd; booted without, it is sealed
-       empty. Ordinary installations then stage the certificate in a
-       ``shirudo`` user keyring until the next reboot. Image mode
-       refuses initialization instead of staging.
+       empty. Shirudo refuses initialization until reboot with the
+       enrollment parameter; it has no user-keyring fallback.
+
    * - ``CONFIG_X509_CERTIFICATE_PARSER``,
        ``CONFIG_PKCS7_MESSAGE_PARSER``,
        ``CONFIG_SYSTEM_DATA_VERIFICATION``
@@ -122,7 +122,7 @@ Image mode supports 64-bit userspace only. Disable 32-bit compatibility
 ``CONFIG_X86_X32_ABI``. Device-mapper restrictions use the native
 ``file_ioctl`` hook and do not cover compat ioctls.
 
-The opt-in dm-verity mode additionally requires ``CONFIG_BLK_DEV_DM``,
+Every target also requires ``CONFIG_BLK_DEV_DM``,
 ``CONFIG_DM_VERITY``, ``CONFIG_BLK_DEV_LOOP`` and ``CONFIG_EXT4_FS``. Runtime
 and config mappings use verity format 1, SHA-256, 4096-byte blocks and a
 standard verity superblock. ``CONFIG_DM_VERITY_VERIFY_ROOTHASH_SIG`` is
@@ -139,8 +139,7 @@ UKI-authenticated root; config-signing trust does not authorize executables.
 Image enforcement uses existing upstream LSM hooks. Existing hooks do not establish every desired protection against
 hostile device-mapper controls or mount-tree changes; see the limitations in
 `config-images <config-images.rst>`__. BPF signing keys are enrolled at boot
-before reject-all keyring sealing. Ordinary installations do not enable
-image mode implicitly.
+before reject-all keyring sealing. Missing image settings stop initialization.
 
 Production image mode requires authenticated measured UKI boot, the
 runtime root hash in authenticated bootstrap settings, a reserved static

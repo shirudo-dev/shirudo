@@ -7,7 +7,7 @@
 # keyring needs on the boot command line and rebuild the initrd with
 # shirudo inside, so that the next reboot comes up in the production
 # configuration (Documentation/initrd.rst). Runtime and signed config
-# starts right away in the staging configuration until that reboot.
+# images must be provisioned separately before the authenticated UKI is rebuilt.
 #
 #   curl -fsSL https://raw.githubusercontent.com/shirudo-dev/shirudo/main/tools/gen-initrd/install.sh |
 #       bash -s -- --cert https://example.com/shirudo/cert.der

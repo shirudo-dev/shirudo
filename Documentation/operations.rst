@@ -13,9 +13,10 @@ The `getting-started <getting-started.rst>`__ document brings a target
 up; the `initrd <initrd.rst>`__ document describes the production
 configuration; this one is about the time after that.
 
-For the opt-in image mode, see `config-images <config-images.rst>`__
-and section 8 below. The ordinary installation's paths and executable-upgrade
-procedure remain as documented here.
+Every target uses runtime and signed config images. See
+`config-images <config-images.rst>`__ for generation, boot and activation.
+Writable state keeps its seal xattrs; BPF upatches still require signed loaders.
+Commands here denote the configured runtime interpreter and binary invocation.
 
 1) The moving parts
 -------------------
@@ -36,8 +37,8 @@ systemd:
        module built.
    * - ``shirudo.service``
      - ``shirudo init`` from the root file system, before
-       ``sysinit.target``: finishes the initrd run (labels, eventlog
-       record) or does everything itself in the staging configuration.
+       ``sysinit.target``: checks the image-backed initialization and
+       adopts its pending eventlog record.
    * - ``shirudo-keepalive.timer``
      - ``shirudo status --otel --include-system`` every 5 seconds: the
        conditions below and the system facts as an OTLP keepalive.
@@ -52,7 +53,9 @@ systemd:
      - ``shirudo bpm tree sync`` every 60 seconds when
        ``/etc/shirudo/bpm/upatch-tree.conf`` exists.
 
-The keepalive and map-export units read ``/etc/shirudo/map-export.env``
+Persistent export settings and tree/repository inputs come from the signed
+config image. Host paths below describe their layout; editing a host copy
+does not change the selected config. The keepalive and map-export units read ``/etc/shirudo/map-export.env``
 and the ``map_export.*`` keys of ``/etc/shirudo/shirudo.conf``; the
 `telemetry <telemetry.rst>`__ document covers what they send and how
 to receive it.  ``shirudo config`` prints every effective setting with
@@ -80,8 +83,7 @@ machine-readable one.  The fields that matter day to day:
 
 ``mode``
     ``production`` (certificate in the kernel's bpf keyring, enforcement
-    up), ``staging`` (enforcement up, certificate in the user keyring
-    until the next reboot) or ``inactive`` (``init`` has not run).
+    up) or ``inactive`` (enforcement has not been initialized).
 
 ``tpm.reachable``
     Whether a TPM answered on the TCTI, which the human report names on
@@ -104,10 +106,10 @@ Conditions
          - ``ALERT``: the ``lsm/bpf`` link is not pinned; enforcement
            is off and the target has not been initialised this boot.
        * - ``KeyringSealed``
-         - ``WARN`` while staging or before ``init``; ``ALERT`` when
+         - ``WARN`` before ``init``; ``ALERT`` when
            the live keyring is not the one ``init`` froze into the
            identity map or is gone (every load refuses ``tampered``).
-           The detail names the kind of keyring, ``bpf`` or ``user``.
+           The only supported trust anchor is the kernel BPF keyring.
        * - ``ChainIntact``
          - ``ALERT`` when replaying this boot's eventlog does not
            reproduce the live register: something extended it that
@@ -174,27 +176,17 @@ means.
 3) Upgrading shirudo
 --------------------
 
-The bpffs guards admit the executable whose inode ``init`` recorded at
-boot.  A package upgrade replaces the binary with a new inode, so until
-the next boot the new binary can run read-only commands but cannot
-load, unload or set the payload xattr on a pin: those report
-``tampered`` or a permission error from the LSM.  An upgrade is
-therefore::
+Build a new runtime image containing the new binary and its complete library
+closure. Update the runtime root in authenticated bootstrap configuration,
+install the generated service drop-in and rebuild the UKI with its initrd.
+Reboot when the operator chooses. The old runtime remains authorized for its
+boot; replacing a host-root binary does not replace the trusted executable.
 
-    sudo apt install ./shirudo-target_<version>_amd64.deb   # or dnf, or the tarball
-    sudo shirudo-gen-initrd
-    sudo reboot
-
-The second step matters: the initrd carries its own copy of the binary,
-and ``init`` warns at boot when the root's binary differs from it.
-Kernel package updates rebuild the initrd through dracut's hooks, so
-the module's copy follows the binary installed at that time; a shirudo
-upgrade alone does not trigger a rebuild.  The pending eventlog record
-and the seal label are the same across versions, so an upgrade needs no
-state conversion.  When shirudo is installed on a target for the first
-time, the package enables ``shirudo.service`` for the next boot and
-nothing more; ``systemctl start shirudo.service`` brings enforcement up
-immediately, in the staging configuration until the reboot.
+A new runtime or config verification certificate requires this boot rollout.
+Config and signed upatch updates remain live. Missing runtime files or an
+incorrect authenticated root stop initialization rather than choosing a
+host-root fallback. Installing a target package alone does not provision the
+images or start enforcement.
 
 4) Kernel updates
 -----------------
@@ -202,7 +194,7 @@ immediately, in the staging configuration until the reboot.
 A new kernel package makes dracut build an initrd for it, and the
 shirudo module includes itself whenever a certificate is installed, so
 the production configuration carries over without action.  The kernel
-parameter ``bpf.keyring_unsealed=1`` lives in the boot loader's
+parameters ``bpf.keyring_unsealed=1 dm_verity.keyring_unsealed=1`` live in the boot loader's
 configuration, which the installer wrote once.
 
 The upatches do not carry over by themselves.  ``init`` restores the
@@ -311,34 +303,23 @@ The register is gone before the next reboot
     the reset count on the record lets ``init`` tell apart.  Reboot,
     and read the eventlog of the boot it happened in.
 
-``KeyringSealed`` warns ``staging``
-    The kernel sealed the bpf keyring empty at boot, so ``init`` staged
-    the certificate in the user keyring.  The kernel parameter is
-    missing, the initrd has no shirudo in it, or ``shirudo-initrd.service``
-    failed; ``journalctl -b -u shirudo-initrd.service`` and the
-    `initrd <initrd.rst>`__ document say what to check.  Enforcement
-    is up either way.
-
-The initrd copy differs
-    ``init`` warns when the root's binary or trusted set differs from
-    the initrd's: the initrd was not rebuilt after an upgrade, a
-    ``keys add`` or a ``keys revoke``.  Run ``shirudo-gen-initrd`` and
-    reboot at the next opportunity.
+Initialization cannot enroll the BPF keys
+    Check both enrollment boot parameters, authenticated runtime settings and
+    selected image files. A sealed empty BPF keyring is an error. Read the
+    journal of ``shirudo-initrd.service`` and verify the UKI was regenerated.
+    Shirudo cannot open an already sealed keyring at runtime.
 
 ``certs_unvouched`` is not zero
-    A file under ``keys/trusted`` has no vouch that verifies under a
-    member, so it is not enrolled: something other than ``shirudo keys
-    add`` put it there, or the key that vouched for it was revoked.
-    Remove it, or re-vouch it from an operator holding a remaining key
-    and run ``keys add`` again.
+    A config signer certificate lacks a valid vouch. Prepare the certificate
+    and vouch on the operator and deliver them in the intended signed config.
+    Invalid config trust material is refused before activation. New signer
+    enrollment requires reboot; see `key-lifecycle <key-lifecycle.rst>`__.
 
 A key is compromised
-    ``shirudo keys revoke <fingerprint>`` on every target the key is
-    enrolled on, then ``shirudo-gen-initrd``; the `key-lifecycle
-    <key-lifecycle.rst>`__ guide gives the order and what the command
-    does to the archive.  A target that cannot be reached keeps
-    trusting the key until it is; the evidence of the ones that have
-    revoked carries the ``key_revoke`` event.
+    Deliver a signed config containing its revocation record. Activation
+    removes the live key and purges its upatches. A node that has not received
+    the config still trusts the key. Require the intended config root in
+    attestation. Local ``keys revoke`` is disabled.
 
 A pending record lingers
     ``/run/shirudo/eventlog.pending`` is the initrd run's record until
@@ -422,8 +403,8 @@ success, ``1`` on any refusal or failure and ``2`` on a usage error;
      - An error without a closer category; errno is in the report.
      - Read the report.
 
-8) Operating image mode
------------------------
+9) Config updates
+------------------
 
 Use ``shirudo image status`` to inspect the active config root hash, PCR,
 TPM reset and restart counts, event sequence and pending state. Ordinary target commands

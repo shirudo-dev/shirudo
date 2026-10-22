@@ -91,8 +91,7 @@ this bootstrap file carries `runtime.image` and `runtime.root_hash`, while
 the file inside the runtime image carries config verification settings.
 The initrd's first invocation still uses its authenticated bootstrap binary.
 The state filesystem at `/sysroot/var/lib/shirudo` must be mounted writable
-in the initrd for durable pending config selection; the legacy mode keeps
-its existing read-only bind. Image mode is bootstrapped exclusively by the
+in the initrd for durable pending config selection. Shirudo is bootstrapped by the
 trusted initrd before untrusted workloads start. It does not migrate a
 running unprotected system: pre-existing writable mappings and held file
 descriptors would fall outside that bootstrap guarantee. State entries must

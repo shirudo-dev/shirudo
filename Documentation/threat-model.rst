@@ -30,7 +30,7 @@ The assets, in the order an attacker would want them:
 
 - the private signing key on the operator;
 - the certificate on the target and the sealed bpf keyring it is
-  enrolled in, or the sealed ``shirudo`` user keyring that stages it;
+  enrolled in;
 - the enforcement links and the identity map pinned in the private
   bpffs: losing them means losing enforcement;
 - the loaded upatches, their pins and the payload xattrs that bind a
@@ -51,23 +51,13 @@ which the measured boot records in PCRs 9 and 11.  Every other process
 on the target, including root with every capability, is outside the
 TCB and constrained by it.
 
-Ordinary installations have two configurations and ``status`` names them.
-In production the
-kernel is booted with ``bpf.keyring_unsealed=1`` and ``init`` runs from
-the initrd: the certificate goes into the kernel's bpf keyring, which
-``init`` seals and nothing can replace, and the register binds while
-PCR 11 holds the ``enter-initrd`` phase, which nothing that runs later
-can bring back.  Staging is what a target gets when ``init`` runs from
-the root file system on a kernel that sealed the bpf keyring empty at
-boot: the certificate sits in a ``shirudo`` keyring under the user
-keyring, sealed, and the register binds under the post-initrd phase
-value. The mechanisms below apply to both; the residual risks describe
-staging weaknesses, including certificate invalidation, and the
-verifier can refuse staged evidence outright.
+Every target boots with authenticated runtime and config images. The initrd
+initializes enforcement before untrusted workloads, enrolls its trust anchors
+and seals the kernel BPF and dm-verity keyrings. Missing image settings or a
+sealed empty BPF keyring stop initialization. There is no user-keyring staging
+or executable-inode fallback.
 
-The opt-in image mode requires production initialization and refuses
-user-keyring staging. It adds authenticated runtime and config images to
-this boundary. The UKI supplies the runtime root hash, and the runtime image
+Authenticated images are part of this boundary. The UKI supplies the runtime root hash, and the runtime image
 supplies the config verification certificate, initial BPF anchors and TPM
 settings. The config signature authorizes that image's contents; it does not
 replace BPF signatures or vouch requirements. Every executable on the runtime
@@ -118,14 +108,9 @@ T1  Loading unsigned BPF
     ``lsm/bpf`` admits a userspace ``BPF_PROG_LOAD`` only for a
     ``BPF_PROG_TYPE_SYSCALL`` program that carries a signature.  The
     kernel verifies that signature against the sealed bpf keyring
-    named as ``attr.keyring_id`` (or, while the certificate is staged,
-    the sealed ``shirudo`` keyring's serial), before the verifier runs,
-    and ``lsm/bpf_prog_load`` then requires the verdict
-    ``BPF_SIG_VERIFIED`` from exactly that keyring kind and, while
-    staging, that serial (the kernel records none for its own bpf
-    keyring).  Userspace ``BPF_MAP_CREATE`` is restricted to the
-    executable ``init`` recorded as shirudo in ordinary mode, or a
-    trusted task in image mode. Image task authority is committed after
+    named as ``attr.keyring_id = KEY_SPEC_BPF_KEYRING`` before the verifier
+    runs. ``lsm/bpf_prog_load`` requires ``BPF_SIG_VERIFIED`` from that kernel
+    keyring. Userspace map creation requires task authority committed after
     successful exec from the runtime device; the authenticated bootstrap
     task has temporary authority during initialization. Signed loader map
     creation runs in kernel context.  The payload is hash-locked to the loader by
@@ -137,8 +122,7 @@ T2  Detaching or replacing enforcement
     ``lsm/bpf`` denies ``LINK_DETACH``, ``LINK_UPDATE``,
     ``PROG_ATTACH``, ``PROG_DETACH`` and ``BTF_LOAD`` from userspace,
     and leaves ``LINK_CREATE``, ``RAW_TRACEPOINT_OPEN`` and ``OBJ_PIN``
-    to Shirudo authority: the recorded executable in ordinary mode or a
-    trusted task in image mode. Root cannot re-attach a vetted program
+    to a task authorized by successful runtime exec. Root cannot re-attach a vetted program
     at a site its signer never meant it for, nor pin objects of its own.
     The links are kept alive by pins in the private bpffs;
     ``inode_unlink`` and ``inode_rename`` there require that authority.
@@ -154,26 +138,19 @@ T2  Detaching or replacing enforcement
     authority too; kernel-context loader calls remain allowed. Root therefore cannot invoke a signed
     serializer to drain or clear map state. Root may inspect pinned maps
     but cannot alter serializer arrays or writable-mmap arena state
-    through the syscall interface. In ordinary mode, the initrd records
-    the root's binary as the executable that lasts and the initrd's
-    own copy beside it for that one run; the copy is gone with the
-    initrd, and its inode is on a file system nothing can reach after
-    the switch.
+    through the syscall interface.
 
 T3  Tampering with shirudo's files and process
     Initialization labels existing files under ``/var/lib/shirudo`` with
     ``security.bpf.shirudo``. For labelled targets, the seal checks write
     open, unlink, both ends of rename, attribute and xattr changes.
-    Ordinary mode authorizes the frozen executable identity or its initrd
-    copy, by device and inode; image mode uses the trusted task mark.
+    The trusted task mark authorizes the caller.
     Only an authorized caller may set the exact label, including on an
     unlabelled inode. A copied label marks a target, not caller authority.
     Any label size or read error requires authority except ``ENODATA``,
     ``EOPNOTSUPP``, ``EACCES`` and ``EPERM``; the permission exceptions
     preserve operations on files the caller cannot read. Scratch allocation
-    failure also requires authority. Ordinary mode permits replacing the
-    recorded primary executable, but its replacement gains no authority
-    until a later initialization records it.
+    failure also requires authority.
     New inodes inherit their parent's label in the creation transaction
     when the parent has a cached seal mark. Shirudo's writers hold the
     parent directory open to populate and retain that mark. Directory
@@ -182,21 +159,16 @@ T3  Tampering with shirudo's files and process
     Ptrace and perf allocation checks deny against tasks already marked
     when those hooks run. Concurrent perf attachment and exec remain a
     separate, untested `race investigation <https://github.com/shirudo-dev/shirudo/issues/11>`__.
-    Recorded Shirudo executables reject traced callers and run in
+    Runtime executables reject traced callers and run in
     secure-exec mode, so the loader ignores unsafe environment variables.
     The process drops dumpability, forbids new privileges and locks
     sensitive buffers. The bpf keyring is sealed with
     ``KEYCTL_RESTRICT_KEYRING`` so no key can be linked into it for the
     rest of the boot, ``lsm/key_permission`` leaves writing, unlinking,
     revoking, invalidating and re-permissioning it and the keys it
-    holds to shirudo's own executable, and the kernel then refuses
-    every caller-supplied
-    keyring for signature verification; a staged ``shirudo`` keyring is
-    sealed with ``KEYCTL_SETPERM``.  The kind and serial of the keyring
-    ``init`` sealed are frozen into the identity map, pinned in the
-    bpffs and read back by every later command, so a swapped same-name
-    keyring makes every load refuse ``tampered``. Staged certificates have
-    a separate invalidation exception described in residual risk 6.
+    holds to tasks with runtime authority. The kernel refuses caller-supplied
+    keyrings for signature verification. The BPF ring serial and enrolled key
+    serials are frozen into the pinned identity map and checked by later loads.
 
 T4  Substituting artifacts
     The signature covers the loader instructions and data, so the kernel
@@ -375,22 +347,14 @@ Each of these is known, documented and bounded; none is silent.
     honest substitution; closing this fully needs an in-kernel detach so
     the compare runs against signed ``.rodata``.
 
-2.  ``CAP_SYS_RESOURCE`` can rewrite ``mm->exe_file``.  Shirudo's
-    ``task_prctl`` LSM hook denies ``PR_SET_MM_EXE_FILE`` and
-    ``PR_SET_MM_MAP`` to every caller outside the frozen Shirudo
-    executable identity, preventing a root process from impersonating
-    Shirudo through these operations.  This also denies those two
-    operations to checkpoint and restore tools.  A process that directly
-    executes the recorded Shirudo binary is still identified as Shirudo,
-    so its command interface remains the authorization boundary.  That
-    process runs in secure-exec mode, so ``LD_PRELOAD``, ``LD_AUDIT``
-    and the like cannot put the caller's code into it, and a traced
-    task cannot start it at all.  The loader still reads
-    ``/etc/ld.so.preload`` and the shared libraries the binary names,
-    which root controls; a statically linked executable would close
-    that.  Bound
-    ``CAP_SYS_RESOURCE`` out of untrusted contexts with
-    ``CapabilityBoundingSet=`` and container capability profiles.
+2.  ``CAP_SYS_RESOURCE`` can rewrite ``mm->exe_file``. The task mark is
+    independent of that field, and ``task_prctl`` denies those operations to
+    untrusted callers. Successful runtime exec grants authority; failed exec
+    preserves the old mark and outside-image exec clears it. Runtime programs
+    run with secure-exec, reject tracing and existing seccomp, and cannot map
+    executable host or anonymous pages. Their command interface remains the
+    authorization boundary. The authenticated initrd bootstrap binary and
+    trusted runtime process memory remain in the TCB.
 
 3.  A lazy unmount of a mount above ``/run/shirudo/bpffs``, such as
     ``umount -l /run``, can detach the bpffs with it. The kernel calls
@@ -423,25 +387,13 @@ Each of these is known, documented and bounded; none is silent.
     Restricting measurement writers and handling operation/measurement
     ordering remain separate work; no IMA integration is added.
 
-5.  In the ordinary installation, executable integrity before init belongs
-    to the distribution and authenticated boot. Image mode authenticates
-    and verifies runtime files, including their loader and libraries, but
-    still trusts the UKI, kernel and its own trusted process memory.
-    ``SHIRUDO_VERSION_ID`` remains a skew guard, not authentication.
+5.  Authenticated boot must verify the expected runtime root. dm-verity
+    verifies runtime files but still trusts the UKI, kernel and trusted process
+    memory. ``SHIRUDO_VERSION_ID`` is a skew guard, not authentication.
 
-6.  While the certificate is staged in the user keyring, a keyring
-    swap degrades to denial of service.  Root can unlink the sealed
-    ``shirudo`` keyring and create a fake one with the same name; the
-    serial frozen in the identity map turns that into a fail-closed
-    refusal, for the rest of the boot, instead of a
-    bypass.  The bpf keyring, the production anchor, can be neither
-    unlinked nor substituted, and the kernel refuses every other
-    keyring once it is sealed. A fresh upstream VM also reproduced root
-    invalidating its possessed staged certificate through ``keyctl``.
-    The key-permission hook permits possessed ``KEY_NEED_SEARCH``
-    references, which the kernel also uses for invalidation. This removes
-    the certificate despite the mutation guards. Image mode refuses
-    user-keyring staging.
+6.  There is no user-keyring staging fallback. Boot without the required
+    enrollment parameters, authenticated settings or valid images fails
+    initialization. A failed init does not create a protected target.
 
 7.  The boot window before ``init`` has run.  Run from the initrd it
     is the initrd itself, which the measured boot records in PCRs 9 and
@@ -494,22 +446,13 @@ Each of these is known, documented and bounded; none is silent.
     7, and the binding then carries a PCR 11 value the verifier can
     reject.
 
-13. Revocation reaches a target only when run there.  ``shirudo keys
-    revoke`` unlinks the key from the running kernel and keeps it out
-    of every later boot, but a target the operator cannot reach keeps
-    verifying against the revoked key until it is reached; shirudo has
-    no push channel by design.  Evidence tells the two apart: a
-    revoked node's register carries the ``key_revoke`` event, and
-    ``attest predict --event=revoke:...`` names the value to expect.
-    The production set is guarded by ``key_permission`` checks against
-    unlink, clear, revoke and invalidate. User-keyring staging has the
-    reproduced invalidation exception in residual risk 6.
-    Image mode instead receives revocations through a signed config. Its
-    config PCR records the selection, and purged upatches have their unload
-    events in the NV register. It has no local ``keys revoke`` override and
-    still depends on delivery and activation of the intended config.
+13. Revocation reaches a target only when its signed config is delivered
+    and activated. A node that has not received it can still verify BPF signed
+    by the old key. The config PCR records activation, and revoked signers'
+    upatches receive unload events in the NV register. There is no local
+    ``keys revoke`` override or push channel.
 
-14. Image mode accepts an older config when its signature is valid. A
+14. Shirudo accepts an older config when its signature is valid. A
     config PCR extension records the selection but does not enforce
     freshness. Replaying an older config can restore its older trust and
     revocation settings. Rollback prevention is deferred. The config
@@ -563,11 +506,10 @@ directory the moment its dentry is bound (residual risk 15).
 
 Keep the signing key on a host with the controls of a certificate
 authority and never on a target.  Boot targets with
-``bpf.keyring_unsealed=1`` and run ``init`` from the initrd; a target
-whose ``status`` says ``staging`` has its trust anchor in a user
-keyring and its register bound after the initrd, and a fleet check
-that passes ``--require-initrd`` and ``--expect-bind-pcr=11`` with the
-UKI's ``enter-initrd`` value does not accept it.  Give ``challenge``
+``bpf.keyring_unsealed=1 dm_verity.keyring_unsealed=1`` and run ``init``
+from the authenticated initrd with valid runtime and config images. Check
+``--require-initrd`` and ``--expect-bind-pcr=11`` against the UKI's measured
+``enter-initrd`` value.  Give ``challenge``
 the manufacturer's issuers with ``--ek-ca`` wherever the TPM has a
 certificate.  Treat ``tampered`` as an incident to understand, not a
 condition to retry.  Verify ``shirudo status`` after

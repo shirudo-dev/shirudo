@@ -42,8 +42,8 @@ Deploying shirudo
     and publishing packages to a registry.
 
 Using executable and config images
-    `config-images <config-images.rst>`__ describes the opt-in dm-verity
-    mode: separate runtime and config images, operator generation,
+    `config-images <config-images.rst>`__ describes the required dm-verity
+    layout: separate runtime and config images, operator generation,
     bootstrap trust, live config and key updates, static-PCR measurements,
     interrupted activation, manual reboot, enforcement and current limitations.
 

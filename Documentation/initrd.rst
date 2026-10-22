@@ -5,262 +5,133 @@
 Bringing shirudo up from the initrd
 ===================================
 
-The production configuration of a target brings enforcement up before
-the root file system runs anything: ``shirudo init`` runs inside the
-initrd.  This document describes what that run does, what the root
-file system's run finishes afterwards, what an initrd needs to contain
-and how the pieces survive the switch from one to the other.  The
-``threat-model`` document says why it matters; ``tpm`` describes the
-register the initrd binds.
+Every target starts enforcement from an authenticated systemd initrd before
+untrusted workloads. The initrd verifies a runtime image and a separate signed
+config image. The host root filesystem stays in place; there is no root pivot.
+See `config-images <config-images.rst>`__ for the image contents and generation
+commands, `architecture <architecture.rst>`__ for the LSM flow and
+`tpm <tpm.rst>`__ for measurement and attestation.
 
-The opt-in dm-verity mode keeps the same systemd handoff, with two
-additional image mounts under ``/run/shirudo``. It requires the runtime image
-hash and startup settings in authenticated boot, and writable state available
-inside the initrd for the config activation journal. See
-`config-images <config-images.rst>`__ for image generation and activation.
-The read-only state bind and inode identities below describe the ordinary
-installation.
-
-1) Two runs of init
+1) What boot needs
 -------------------
 
-``shirudo init`` is one command that runs twice per boot in production:
+* An authenticated UKI containing the bootstrap binary and configuration.
+  ``runtime.image`` names the cached runtime bundle and ``runtime.root_hash``
+  gives its exact expected SHA-256 root. Missing image settings are an error.
+* The runtime image contains Shirudo, its ELF interpreter and libraries,
+  initial BPF certificate, config-verification certificate and bootstrap TPM
+  settings. The initial config bundle is signed by an accepted config key.
+* Boot parameters ``bpf.keyring_unsealed=1 dm_verity.keyring_unsealed=1``.
+  The initrd enrolls the trust anchors and seals both kernel keyrings. There
+  is no fallback to a user keyring when the BPF ring is sealed empty.
+* A TPM 2.0, the required BPF and dm-verity kernel interfaces, and a reserved
+  static SHA-256 PCR for config measurements. See
+  `requirements <requirements.rst>`__ for the exact kernel requirements,
+  including disabled 32-bit compatibility.
+* ``/sysroot/var/lib/shirudo`` mounted writable before Shirudo starts. If
+  state is on a separate filesystem, mount it in the initrd too. Config
+  selections and cached bundles must be durable before PCR extension.
+* ``systemd-pcrphase-initrd.service`` and its ``enter-initrd`` measurement
+  before Shirudo binds its upatch register. A direct QEMU kernel/initrd boot
+  tests the handoff but does not establish a measured UKI or the PCR 11 phase
+  distinction. Non-systemd initrds are unsupported.
 
-The initrd run
-    Starts from ``shirudo-initrd.service`` after the root file system is
-    mounted at ``/sysroot`` and after ``systemd-pcrphase-initrd.service``
-    has measured ``enter-initrd`` into PCR 11, and finishes before the
-    switch to the root file system.  It enrols the initrd's own copy of
-    the certificate, ``/etc/shirudo/keys/cert.der``, in the kernel's bpf
-    keyring and seals it, which needs the kernel booted with
-    ``bpf.keyring_unsealed=1``; mounts the private bpffs at
-    ``/run/shirudo/bpffs`` and attaches the enforcement programs with
-    their pins in it; re-applies the upatches archived under
-    ``/sysroot/var/lib/shirudo/upatches``; binds the measurement
-    register under PCRs 9 and 11 and extends it by the init event; and
-    writes the ``init`` record to ``/run/shirudo/eventlog.pending``.
+2) The initrd run
+-----------------
 
-The root file system's run
-    Starts from ``shirudo.service`` inside the sysinit phase.  It finds
-    the keyring sealed around the certificate, the LSM attached, the
-    upatches loaded and the register bound, and does what the initrd
-    could not do on a root file system that was still read-only: it
-    labels the state tree and the binary with the sealing xattr and
-    appends the pending record to ``/var/lib/shirudo/eventlog``, exactly
-    once.  Then it stops.  ``status`` reports ``mode: production`` and
-    ``bound_in: initrd``.
+``shirudo-initrd.service`` runs after the root filesystem is available at
+``/sysroot`` and before switch-root. Shirudo binds writable state at
+``/var/lib/shirudo``, verifies the images and determines the boot signer set.
+The initial BPF certificate comes from the runtime; additional certificates
+need valid vouches from the selected config. Config revocations exclude keys
+from enrollment. The config verification certificate is enrolled in
+``.dm-verity`` and the BPF trust set in ``.bpf``; both keyrings are sealed.
 
-Without an initrd that runs the first half, the root file system's run
-does everything itself.  The kernel sealed the bpf keyring empty at
-boot, so the certificate is staged in a ``shirudo`` keyring under the
-user keyring until the next reboot, and the register binds after
-``leave-initrd`` moved PCR 11.  That is the staging configuration:
-``status`` says ``mode: staging`` and ``bound_in: root``, the keepalive
-condition warns, and a verifier can refuse the evidence with
-``--require-initrd`` or by pinning PCR 11.
+Initialization labels writable state, loads the two embedded bootstrap BPF
+objects and freezes their shared state before attaching admission gates.
+The authenticated bootstrap task has temporary authority to finish startup.
+It mounts the runtime under the device and mount guards, measures config,
+applies revocations before restoring signed upatches, and binds the upatch
+measurement register. Runtime and config files receive no seal xattrs;
+writable state keeps them. All BPF upatches still require signed loaders.
 
-2) What survives the switch to the root file system
----------------------------------------------------
+The mounts live below ``/run/shirudo`` so systemd carries them through
+switch-root: ``runtime`` is ``ro,nodev,nosuid``, ``config`` is
+``ro,nodev,nosuid,noexec``, and ``bpffs`` holds the links and maps. Kernel
+keyrings and TPM state survive independently. The initrd eventlog record
+waits in ``/run/shirudo/eventlog.pending`` for the root service to adopt.
 
-systemd's switch-root carries ``/dev``, ``/sys``, ``/proc`` and ``/run``
-from the initrd into the root file system and lazily detaches every
-other mount of the initrd.  A BPF link stays attached only while
-something holds it, and in an agentless design the only holders are
-the pins in the bpffs; a bpffs mounted anywhere the switch detaches
-dies with the old root and takes enforcement with it.  That is why the
-private bpffs lives at ``/run/shirudo/bpffs``: a mount under ``/run``
-is carried across, is never shadowed by a later mount of ``/var``, and
-needs nothing from the root file system.
+3) The root service
+--------------------
 
-The kernel keyring is kernel state and survives by itself; so do the
-TPM's NV index and PCRs.  The init record cannot be written to the
-root's eventlog while the root is read-only, so it waits under ``/run``
-in the same tmpfs, in ``/run/shirudo``, which ``init`` labels with the
-sealing xattr so that the record is sealed from the instant it is
-created, and the eventlog readers treat it as part of this boot's log
-until the root file system's run appends it and removes the file.
+Generate a systemd drop-in with ``shirudo-gen-runtime --unit-output`` and
+install it at ``/etc/systemd/system/shirudo.service.d/verity.conf``. It invokes
+the runtime's ELF interpreter with its host cache disabled and library paths
+inside the image, then starts the runtime binary. The loader and executable
+both come from the verified runtime, not from the host root filesystem.
 
-The bpffs guards admit the executable recorded at init.  From the
-initrd the running binary is the initrd's copy, which is gone after
-the switch; the identity that lasts is the root's binary at the same
-path, ``/sysroot`` plus the path the initrd ran shirudo from, and the
-initrd's copy is recorded beside it for the rest of that one run.  The
-root file system therefore needs shirudo installed at the path the
-initrd runs it from, which the dracut module guarantees by copying the
-installed binary.
-
-3) What the initrd needs
-------------------------
-
-* The target binary at its installed path.  It is fully static PIE,
-  including the C library, and needs no ELF interpreter or shared
-  libraries to start.
-* ``/etc/shirudo/keys/cert.der``, a copy of ``/var/lib/shirudo/keys/cert.der``,
-  and ``/etc/shirudo/keys/trusted/`` with the further certificates and
-  their vouches.  These copies are measured with the initrd, so a
-  verifier that pins PCR 11 knows which certificates were enrolled.
-  ``init`` warns when the root's set differs, which means an initrd
-  that was not regenerated after a certificate was added or revoked;
-  the initrd's copies are the anchor either way, less the certificates
-  the root's ``keys/revoked`` names, which ``init`` reads through its
-  bind.
-* ``/etc/shirudo/shirudo.conf`` when the TPM has an owner password
-  (``tpm.owner_auth``).
-* ``shirudo-initrd.service``, enabled in ``initrd.target``.
-* A TPM 2.0 reachable as ``/dev/tpmrm0``: the TPM driver and the
-  device node.  dracut's ``tpm2-tss`` module provides both.
-* ``systemd-pcrphase-initrd.service``, so that PCR 11 holds the
-  ``enter-initrd`` value when the register binds and moves at
-  ``leave-initrd``.  dracut's ``systemd-pcrextend`` module (called
-  ``systemd-pcrphase`` before dracut 103) provides it.  systemd runs
-  the unit only for a measured UKI boot (``ConditionSecurity=
-  measured-uki``); a kernel and initrd loaded by grub or passed to QEMU
-  directly leave PCR 11 at its boot value, ``init`` warns that no phase
-  was measured, and the binding then has the PCR 9 anchor but not the
-  PCR 11 distinction between an initrd and a later binding.  The
-  production configuration is therefore a UKI boot; the rest of the
-  design holds without it.
-* The root file system mounted at ``/sysroot`` with
-  ``/var/lib/shirudo`` on it.  When ``/var`` is a separate file system
-  it must be mounted in the initrd (``x-initrd.mount`` in fstab), or
-  the initrd run refuses with a message that says so and the root's
-  run falls back to the staging configuration.
-* The kernel booted with ``bpf.keyring_unsealed=1``.  The parameter is
-  read-only after boot, so the only way to open the keyring is the
-  measured command line.
-
-The ``tools/gen-initrd`` directory holds the dracut module that
-installs all of this, a generator that drives dracut and verifies the
-result, and the installer; the ``getting-started`` document shows how
-they are used.  Non-systemd initrds (initramfs-tools, busybox) are
-not supported: without the phase measurements an initrd binding is no
-stronger than a late one.
+The service re-runs ``init``, checks the existing guards and measurements,
+and adopts the initrd eventlog record without another extension. Successful
+exec from the runtime grants the task mark needed for these operations.
+There are no lasting executable inode identities or root-only bootstrap
+fallback. Do not apply caller-controlled seccomp to this invocation.
 
 4) Building the initrd
 ----------------------
 
-``tools/gen-initrd`` holds three pieces; the target package installs
-the first two.
+The target package installs ``tools/gen-initrd/module-setup.sh`` as dracut
+module ``90shirudo`` and installs ``shirudo-gen-initrd``. The module includes
+the bootstrap binary, a preflight certificate copy, authenticated
+``/etc/shirudo/shirudo.conf``, the enabled initrd service, TPM support and the
+image drivers. Actual BPF enrollment uses the verified image's trust set.
 
-The dracut module
-    ``module-setup.sh``, installed as
-    ``/usr/lib/dracut/modules.d/90shirudo``, copies the installed
-    binary at its own path, the certificate as ``/etc/shirudo/keys/cert.der``
-    with the trusted set and its vouches beside it,
-    ``shirudo.conf`` when there is one and ``shirudo-initrd.service``,
-    enables the unit in ``initrd.target`` and depends on dracut's
-    ``tpm2-tss`` and ``systemd-pcrphase`` modules.  It includes itself
-    whenever a certificate is installed, so once shirudo is set up
-    every initrd dracut builds, for a kernel update or by hand, carries
-    it.  A ``dracut.conf(5)`` file can point it at other files
-    (``shirudo_binary``, ``shirudo_binary_path``, ``shirudo_cert``,
-    ``shirudo_trusted_dir``, ``shirudo_conf``, ``shirudo_unit``), which
-    is how the test VM
-    builds an initrd from a bundle.
+After building and provisioning the images, generate an initrd with::
 
-The generator
-    ``shirudo-gen-initrd`` drives dracut for one kernel and checks the
-    result::
+    sudo shirudo-gen-initrd --bootstrap-conf bootstrap.conf \
+        --kver <kernel-release> --output /boot/initrd-shirudo.img
+    shirudo-gen-initrd --check /boot/initrd-shirudo.img
+    shirudo-gen-initrd --print-cmdline
 
-        sudo shirudo-gen-initrd                    # the running kernel
-        sudo shirudo-gen-initrd --kver <kernel-release> --output /boot/initrd-shirudo.img
-        shirudo-gen-initrd --check /boot/initrd-shirudo.img
-        shirudo-gen-initrd --print-cmdline         # bpf.keyring_unsealed=1
+``--binary`` and ``--binary-path`` select the authenticated bootstrap copy;
+``--cert``, ``--trusted-dir`` and ``--unit`` select preflight material and the
+service. Arguments after ``--`` go to dracut. The archive check requires the
+binary, bootstrap config, certificate, service, enablement and phase unit.
+A dracut configuration can provide the same inputs through ``shirudo_binary``,
+``shirudo_binary_path``, ``shirudo_cert``, ``shirudo_trusted_dir``,
+``shirudo_conf`` and ``shirudo_unit``.
 
-    Run from a checkout it installs the module into dracut's directory
-    first.  ``--binary``, ``--binary-path``, ``--cert`` and ``--unit``
-    build from files other than the installed ones; everything after
-    ``--`` goes to dracut.  The check reads the initrd with
-    ``lsinitrd`` and refuses one that lacks the binary, the
-    certificate, the unit, its enablement or the phase measurement.
+Build and authenticate the UKI with this initrd and both enrollment boot
+parameters. Do not start an unprotected target from the host filesystem and
+expect image setup to repair earlier writable references. The package
+installer can install files and prepare dracut; it does not provision the
+images or authorize their runtime hash, and its old ``--now`` mode is removed.
 
-The installer
-    ``install.sh`` does the whole setup of a target in one go, as
-    ``curl ... | bash -s -- <options>``: it fetches the release package
-    for the host's package format and architecture from the GitHub
-    release assets, verifying ``SHA256SUMS`` when the release publishes
-    one, installs it, places the certificate given with ``--cert`` (a
-    file or a URL), adds ``bpf.keyring_unsealed=1`` to the boot
-    command line through ``grubby``, ``update-grub`` or
-    ``/etc/kernel/cmdline`` and the loader entries, and rebuilds the
-    initrd of the running kernel through the generator.  ``--now``
-    starts enforcement right away, staged until the reboot; ``--dry-run``
-    prints the plan; ``--package`` installs a local package instead of
-    downloading one.  On a system that builds its initrd with
-    initramfs-tools the installer stops before the initrd unless told
-    ``--switch-to-dracut``, because an initrd without systemd has no
-    phase measurements for the binding to lean on.
+5) Checks, updates and recovery
+-------------------------------
 
-Unified kernel images take the command line from their ``.cmdline``
-section and the initrd from their build; on such systems the module
-does its work when ``kernel-install`` or ``ukify`` runs dracut, and the
-parameter goes into ``/etc/kernel/cmdline`` before the image is
-rebuilt.
+Using the configured runtime invocation, check::
 
-5) Checking a target
---------------------
+    shirudo status --json
+    shirudo image status
 
-On the target::
+The status must report ``mode: production``, ``keyring_mode: bpf`` and
+``tpm.bound_in: initrd``. The config status must be consistent with no pending
+activation, and the upatch register must match this boot's eventlog.
+Attestation verification should require the approved UKI measurements,
+``--require-initrd`` and the expected config root and PCR.
 
-    shirudo status --json | python3 -c \
-        'import json,sys; d=json.load(sys.stdin); print(d["mode"], d["bound_in"])'
+Live config updates activate another signed immutable image. BPF upatches
+continue to use their signed-loader path. A new runtime, config verification
+key or BPF signer requires the appropriate authenticated boot rollout and
+reboot. The existing activation record takes precedence over the initial
+``config.image`` default; the CLI has no separate next-boot selection command.
 
-prints ``production initrd`` when both runs did their part.  The
-eventlog's ``init`` record carries ``bound_in: initrd`` and the PCR 11
-value the register was bound under; ``shirudo attest verify
---require-initrd --expect-bind-pcr=11=<enter-initrd value>`` checks
-both against the evidence, with the value computed from the UKI or
-initrd by ``systemd-measure`` or ``systemd-pcrlock``.  No pending
-record remains under ``/run/shirudo`` once the root's run has adopted
-it; a target where it lingers is one whose ``shirudo.service`` has not
-run.
+If activation is interrupted after pending state is recorded, further changes
+and config attestation refuse. The node continues running and Shirudo never
+reboots automatically. The operator chooses when to reboot; trusted startup
+re-verifies the selected image, records a fresh BOOT event and finishes init.
+It does not retry the previous boot's PCR extension.
 
-The test VM exercises the whole path: ``make -C testing test-tgt TEST_VM_INITRD=1``
-builds an initrd from the bundle with the generator, boots the guest
-from it and runs the target suite, where ``t1122`` checks the
-configuration above and the rest of the suite runs against enforcement
-the initrd brought up.  It needs dracut and root on the host.
-``make -C testing test-installer`` goes one step further and runs
-``testing/t1300-installer-e2e.sh``: a stock cloud image booted in QEMU
-with a vTPM gets the bpf-next kernel packages, reboots into them, runs
-``install.sh`` with a local target package and certificate, reboots
-again and must come up in the production configuration, with ``t1122``
-passing on the installed system.
-
-6) Image-mode boot
-------------------
-
-The authenticated initrd first verifies the runtime root and selected
-config to determine the authorized boot signer set. It enrolls and seals that
-set, attaches device and task protection, mounts the runtime under those
-guards and completes measured config activation and upatch restore. The root
-filesystem's service invokes the image binary through its packaged ELF
-interpreter and libraries; ``shirudo-gen-runtime --unit-output`` writes that
-invocation. The config is mounted ``ro,nodev,nosuid,noexec``; runtime
-is ``ro,nodev,nosuid``. The host root filesystem is not replaced.
-
-Image mode must be able to persist the config bundle and activation record
-before extending the PCR. Make ``/var/lib/shirudo`` writable and available
-in the initrd, including a separate state filesystem when used. The ordinary
-installation continues to use its read-only state bind. Config and runtime
-mounts live under ``/run`` to survive switch-root, as bpffs does.
-
-The selected config is checked again at every boot. After a TPM reset it
-receives a fresh BOOT measurement. A same-boot repeat of init does not add
-another config event. An interrupted activation is completed from its saved
-record; the target cannot silently use an invalid candidate and report
-success. Updating the runtime image or config verification certificate
-requires rebuilding authenticated boot and rebooting.
-
-An existing activation journal selects its cached config prefix before the
-runtime's initial ``config.image`` default. A live update requiring a new
-BPF signer is refused before measurement; it is not queued for reboot.
-Provision the signed boot selection through the authenticated boot rollout.
-The current CLI has no separate next-boot staging command; changing only the
-bootstrap default cannot replace a journaled selection. See the operational
-limitation in `config-images <config-images.rst>`__.
-
-The standard image-mode integration run is ``sudo make -C testing test-tgt
-TEST_VM_MODE=verity``. It requires the initrd and seeds a disposable target
-with public fixtures. A direct QEMU kernel/initrd boot tests the handoff but
-does not establish a measured UKI boot or its PCR 11 phase distinction.
+The standard disposable VM run is ``sudo make -C testing test-tgt``. It
+exercises this initrd handoff, signed config and upatch updates, task and
+writable-state protection, TPM checks and interrupted activation.
