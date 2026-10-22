@@ -51,6 +51,7 @@
 !/testing/helper/otel-s3-mock.py
 !/testing/helper/test-bpm-key.py
 !/testing/helper/test-bpm-info.py
+!/testing/helper/test-seal-seccomp.py
 
 # libFuzzer targets and the inputs that crashed them
 /testing/fuzz/fuzz-*
