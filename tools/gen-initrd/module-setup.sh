@@ -97,6 +97,9 @@ install() {
 	if [[ -r $conf ]]; then
 		inst_simple "$conf" /etc/shirudo/shirudo.conf || return 1
 	fi
+	# dracut keeps the owner of what it copies, and init refuses keys
+	# and configuration another user could change.
+	chown -R 0:0 "$initdir/etc/shirudo" || return 1
 	inst_simple "$unit" "$systemdsystemunitdir/shirudo-initrd.service" ||
 		return 1
 	$SYSTEMCTL -q --root "$initdir" enable shirudo-initrd.service ||
