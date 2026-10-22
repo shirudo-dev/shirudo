@@ -2,7 +2,8 @@
 -- Copyright (c) 2026 Authors of shirudo
 
 function decode(input)
-	if not input.data.serialized or input.data.serialized_bytes ~= 48 then
+	if not input.data.serialized or input.data.serialized_pages ~= 2 or
+	   input.data.serialized_bytes ~= 48 then
 		error("unexpected serialized counter payload")
 	end
 	local records = shirudo.fixed_records(input.data.pages, 24)

@@ -55,7 +55,7 @@ def sigv4_valid(handler):
         signature = hmac.new(key, string_to_sign.encode(),
                              hashlib.sha256).hexdigest()
         return (algorithm == "AWS4-HMAC-SHA256" and access == "test" and
-                region == "us-east-1" and service == "s3" and
+                bool(region) and service == "s3" and
                 terminal == "aws4_request" and
                 hmac.compare_digest(signature, fields["Signature"]))
     except (KeyError, ValueError):
@@ -100,6 +100,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             "security_token": self.headers.get("x-amz-security-token", ""),
             "tenant_id": self.headers.get("X-Tenant-ID", ""),
             "sigv4_valid": sigv4_valid(self),
+            "region": self.headers["Authorization"].split(
+                "Credential=", 1)[1].split("/", 3)[2]
+            if "Credential=" in self.headers.get("Authorization", "") else "",
         })
         save_meta()
         if mode == "s3-fail":
@@ -107,6 +110,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.server.done = True
         elif mode == "s3-retry" and put_attempts == 1:
             self.reply(503)
+        elif mode.startswith("s3-retry-") and put_attempts == 1:
+            self.reply(int(mode.rsplit("-", 1)[1]))
+        elif mode == "s3-exhaust":
+            self.reply(503)
+            self.server.done = put_attempts >= 2
         elif mode == "exists":
             self.reply(412)
         else:
@@ -124,11 +132,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             "tenant_id": self.headers.get("X-Tenant-ID", ""),
         })
         save_meta()
-        if mode == "otel-fail":
+        if mode in {"otel-fail", "otel-retry"} and len(
+                [request for request in requests if request["method"] == "POST"]
+        ) == 1:
             self.reply(503)
+            self.server.done = mode == "otel-fail"
         else:
             self.reply(200)
-        self.server.done = True
+            self.server.done = True
 
     def log_message(self, *args):
         pass

@@ -472,21 +472,6 @@ static const char *roles_str(int is_target, int is_operator)
 	return "none";
 }
 
-static int status_otel_severity(const char *status, const char **text)
-{
-	if (strcmp(status, "ok") == 0) {
-		*text = "INFO";
-		return 9;
-	}
-	if (strcmp(status, "degraded") == 0 ||
-	    strcmp(status, "init-pending") == 0) {
-		*text = "WARN";
-		return 13;
-	}
-	*text = "ERROR";
-	return 17;
-}
-
 /*
  * Unlike the general OTLP exporter, the periodic status keepalive must not
  * silently turn an absent configuration into a request to localhost. Keep
@@ -1021,15 +1006,16 @@ int cmd_status(int argc, const char **argv)
 				int severity_number;
 				int rc;
 
-				severity_number = status_otel_severity(otel_status,
-								       &severity_text);
-				rc = otel_send_log_json(&otel_opts,
-							"shirudo.keepalive",
-							"shirudo.keepalive",
-							severity_number,
-							severity_text,
-							otel_status,
-							shirudo_version_id,
+				severity_number =
+					shirudo_status_otel_severity(otel_status,
+								     &severity_text);
+				rc = shirudo_otel_send_log_json(&otel_opts,
+								"shirudo.keepalive",
+								"shirudo.keepalive",
+								severity_number,
+								severity_text,
+								otel_status,
+								shirudo_version_id,
 							refused, json_buf,
 							strlen(json_buf));
 				if (rc) {

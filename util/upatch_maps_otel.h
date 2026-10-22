@@ -6,6 +6,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <time.h>
 
 #include <shirudo/misc.h>
 
@@ -44,42 +45,44 @@ struct shirudo_otel_opts {
 	const char	*metric_description;
 };
 
-int upatch_maps_otel_classify(const struct shirudo_map_view *v,
-			      enum shirudo_otel_signal *signal,
-			      char *reason, size_t reason_sz);
-int upatch_maps_otel_build_log_file(const char *path,
-				    const struct shirudo_map_view *v,
-				    char **out, size_t *out_len);
-int upatch_maps_otel_build_metric_file(const char *path,
+int shirudo_upatch_maps_otel_classify(const struct shirudo_map_view *v,
+				      enum shirudo_otel_signal *signal,
+				      char *reason, size_t reason_sz);
+int shirudo_upatch_maps_otel_build_log_file(const char *path,
+					    const struct shirudo_map_view *v,
+					    char **out, size_t *out_len);
+int shirudo_upatch_maps_otel_build_metric_file(const char *path,
+					       const struct shirudo_map_view *v,
+					       const struct shirudo_otel_opts *opts,
+					       char **out, size_t *out_len);
+int shirudo_upatch_maps_otel_send(const struct shirudo_map_view *v,
+				  enum shirudo_otel_mode mode,
+				  const struct shirudo_otel_opts *opts);
+int shirudo_upatch_maps_otel_send_file(const char *path,
 				       const struct shirudo_map_view *v,
-				       const struct shirudo_otel_opts *opts,
-				       char **out, size_t *out_len);
-int upatch_maps_otel_send(const struct shirudo_map_view *v,
-			  enum shirudo_otel_mode mode,
-			  const struct shirudo_otel_opts *opts);
-int upatch_maps_otel_send_file(const char *path,
-			       const struct shirudo_map_view *v,
-			       enum shirudo_otel_mode mode,
-			       const struct shirudo_otel_opts *opts);
+				       enum shirudo_otel_mode mode,
+				       const struct shirudo_otel_opts *opts);
 
 /* Export using the matching decoder's signed, static signal selection. */
-int upatch_maps_otel_send_decoded(const struct shirudo_map_view *v,
-				  enum shirudo_otel_signal signal,
-				  const struct shirudo_otel_opts *opts);
+int shirudo_upatch_maps_otel_send_decoded(const struct shirudo_map_view *v,
+					  enum shirudo_otel_signal signal,
+					  const struct shirudo_otel_opts *opts);
 
 /*
  * Send an already-built JSON object as the structured body of one OTLP
  * log. A tamper_attempts of 0 or more rides along as an attribute; a
  * negative one leaves it out.
  */
-int otel_send_log_json(const struct shirudo_otel_opts *opts,
-		       const char *scope_name,
-		       const char *event_name,
-		       int severity_number,
-		       const char *severity_text,
-		       const char *status,
-		       const char *version_id,
-		       __s64 tamper_attempts,
-		       const char *body_json, size_t body_len);
+int shirudo_otel_send_log_json(const struct shirudo_otel_opts *opts,
+			       const char *scope_name,
+			       const char *event_name,
+			       int severity_number,
+			       const char *severity_text,
+			       const char *status,
+			       const char *version_id,
+			       __s64 tamper_attempts,
+			       const char *body_json, size_t body_len);
+int shirudo_otel_retry_after(const char *value, time_t now, __u64 *seconds);
+int shirudo_status_otel_severity(const char *status, const char **text);
 
 #endif /* SHIRUDO_UTIL_UPATCH_MAPS_OTEL_H */
