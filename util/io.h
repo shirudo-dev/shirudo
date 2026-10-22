@@ -7,7 +7,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-int write_all(int fd, const void *buf, size_t len);
+int write_complete(int fd, const void *buf, size_t len);
 
 /*
  * A regular file of at most max bytes, into *out xmalloc'd to *len + 1

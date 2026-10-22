@@ -677,8 +677,8 @@ static int cmd_attest_challenge(int argc, const char **argv)
 		int fd = open(out_path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC,
 			      0600);
 
-		if (fd < 0 || write_all(fd, doc, len) ||
-		    write_all(fd, "\n", 1) || close(fd)) {
+		if (fd < 0 || write_complete(fd, doc, len) ||
+		    write_complete(fd, "\n", 1) || close(fd)) {
 			pr_err("attest challenge: write %s: %s", out_path,
 			       strerror(errno));
 			if (fd >= 0)
@@ -770,8 +770,8 @@ static int cmd_attest_evidence(int argc, const char **argv)
 		int fd = open(out_path,
 			      O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
 
-		if (fd < 0 || write_all(fd, doc, len) ||
-		    write_all(fd, "\n", 1) || close(fd)) {
+		if (fd < 0 || write_complete(fd, doc, len) ||
+		    write_complete(fd, "\n", 1) || close(fd)) {
 			pr_err("attest: write %s: %s", out_path,
 			       strerror(errno));
 			if (fd >= 0)

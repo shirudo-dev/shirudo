@@ -546,7 +546,7 @@ static int tree_push_artifact(struct bpm_oci_client *c, const char *repository,
 	fd = mkstemp(temporary);
 	if (fd < 0)
 		return -errno;
-	rc = write_all(fd, body, len);
+	rc = write_complete(fd, body, len);
 	close(fd);
 	if (!rc)
 		rc = upatch_open(temporary, &u);

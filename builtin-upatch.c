@@ -2135,12 +2135,12 @@ static int append_json_record(const char *path, const char *json, size_t len)
 			goto out_unlock;
 		}
 		if (last != '\n')
-			rc = write_all(fd, "\n", 1);
+			rc = write_complete(fd, "\n", 1);
 	}
 	if (!rc)
-		rc = write_all(fd, json, len);
+		rc = write_complete(fd, json, len);
 	if (!rc)
-		rc = write_all(fd, "\n", 1);
+		rc = write_complete(fd, "\n", 1);
 	if (!rc && fsync(fd) != 0)
 		rc = -errno;
 	if (rc && ftruncate(fd, original_size) != 0)
@@ -2158,9 +2158,9 @@ static int print_json_record(const char *json, size_t len)
 {
 	int rc;
 
-	rc = write_all(STDOUT_FILENO, json, len);
+	rc = write_complete(STDOUT_FILENO, json, len);
 	if (!rc)
-		rc = write_all(STDOUT_FILENO, "\n", 1);
+		rc = write_complete(STDOUT_FILENO, "\n", 1);
 	return rc;
 }
 
@@ -2187,7 +2187,7 @@ static int copy_file_atomic(const char *src, const char *dst)
 		return out;
 	}
 	while ((r = read(in, buf, sizeof(buf))) > 0) {
-		rc = write_all(out, buf, (size_t)r);
+		rc = write_complete(out, buf, (size_t)r);
 		if (rc)
 			break;
 	}

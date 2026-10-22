@@ -240,7 +240,7 @@ static int copy_file_ex(const char *src, const char *dst, mode_t mode,
 		return out;
 	}
 	while ((n = read(in, buf, sizeof(buf))) > 0) {
-		rc = write_all(out, buf, (size_t)n);
+		rc = write_complete(out, buf, (size_t)n);
 		if (rc)
 			break;
 	}
@@ -414,7 +414,7 @@ static int print_package_readme(const char *source)
 			pr_err("bpm info: package %s does not include README.md", source);
 		goto out;
 	}
-	rc = write_all(STDOUT_FILENO, readme, readme_len);
+	rc = write_complete(STDOUT_FILENO, readme, readme_len);
 out:
 	xfree(beefile, beefile_len + 1);
 	xfree(readme, readme_len + 1);
@@ -520,7 +520,7 @@ static int extract_package_cert(const char *archive, char *out, size_t out_sz)
 		xfree(body, len + 1);
 		return -errno;
 	}
-	rc = write_all(fd, body, len);
+	rc = write_complete(fd, body, len);
 	if (close(fd) && !rc)
 		rc = -errno;
 	xfree(body, len + 1);

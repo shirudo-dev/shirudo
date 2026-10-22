@@ -17,7 +17,7 @@
 #include "malloc.h"
 #include "paths.h"
 
-int write_all(int fd, const void *buf, size_t len)
+int write_complete(int fd, const void *buf, size_t len)
 {
 	const __u8 *p = buf;
 

@@ -24,7 +24,7 @@ static int append(const char *path, const char *text)
 	fd = seal_open(path, O_WRONLY | O_CREAT | O_APPEND, 0600);
 	if (fd < 0)
 		return fd;
-	rc = write_all(fd, text, strlen(text));
+	rc = write_complete(fd, text, strlen(text));
 	if (close(fd) && !rc)
 		rc = -errno;
 	return rc;

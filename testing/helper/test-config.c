@@ -23,7 +23,7 @@ static int write_config(const char *path, const char *contents)
 	fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
 	if (fd < 0)
 		return -errno;
-	rc = write_all(fd, contents, strlen(contents));
+	rc = write_complete(fd, contents, strlen(contents));
 	if (rc) {
 		close(fd);
 		return rc;

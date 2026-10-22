@@ -566,9 +566,9 @@ int tree_event_append(__s64 seq, const char *operation_digest,
 		rc = -errno;
 		goto out;
 	}
-	rc = write_all(fd, buf, e.len);
+	rc = write_complete(fd, buf, e.len);
 	if (!rc)
-		rc = write_all(fd, "\n", 1);
+		rc = write_complete(fd, "\n", 1);
 	if (!rc && fsync(fd))
 		rc = -errno;
 	if (rc && ftruncate(fd, st.st_size))

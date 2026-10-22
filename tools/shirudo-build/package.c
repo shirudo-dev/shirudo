@@ -1200,15 +1200,15 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 		pr_err("open %s: %s", out_path, strerror(errno));
 		goto out;
 	}
-	err = write_all(fd, &hdr, sizeof(hdr));
+	err = write_complete(fd, &hdr, sizeof(hdr));
 	if (!err)
-		err = write_all(fd, opts.insns, opts.insns_sz);
+		err = write_complete(fd, opts.insns, opts.insns_sz);
 	if (!err)
-		err = write_all(fd, sig_buf, sio.signature_sz);
+		err = write_complete(fd, sig_buf, sio.signature_sz);
 	if (!err && data_len)
-		err = write_all(fd, signed_data, data_len);
+		err = write_complete(fd, signed_data, data_len);
 	if (!err && write_meta_len)
-		err = write_all(fd, write_meta, write_meta_len);
+		err = write_complete(fd, write_meta, write_meta_len);
 	if (!err && fsync(fd) != 0)
 		err = -errno;
 	close(fd);

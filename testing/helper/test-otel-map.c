@@ -137,7 +137,7 @@ static int make_decoder(bool metric, bool counter, bool snapshot,
 	trailer.decoder_len = htole32(decoder_len);
 	memcpy(file + data_off + decoder_len, &trailer, sizeof(trailer));
 
-	rc = write_all(fd, file, file_len);
+	rc = write_complete(fd, file, file_len);
 	if (close(fd) != 0 && rc == 0)
 		rc = -errno;
 	xfree(file, file_len);

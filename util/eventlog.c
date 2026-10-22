@@ -86,9 +86,9 @@ int eventlog_append_to(const char *path, const char *json_line)
 		goto out;
 	}
 
-	rc = write_all(fd, json_line, len);
+	rc = write_complete(fd, json_line, len);
 	if (!rc && (len == 0 || json_line[len - 1] != '\n'))
-		rc = write_all(fd, "\n", 1);
+		rc = write_complete(fd, "\n", 1);
 	if (!rc && fsync(fd) != 0)
 		rc = -errno;
 	if (rc && ftruncate(fd, st.st_size) != 0)

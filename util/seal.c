@@ -257,7 +257,7 @@ int seal_write_file(const char *path, const void *data, size_t len,
 	}
 	rc = seal_inherit(dfd, fd);
 	if (!rc)
-		rc = write_all(fd, data, len);
+		rc = write_complete(fd, data, len);
 	if (!rc && fsync(fd))
 		rc = -errno;
 	if (close(fd) && !rc)

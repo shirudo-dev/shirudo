@@ -69,7 +69,7 @@ static int write_file(const char *path, const void *data, size_t len)
 	fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
 	if (fd < 0)
 		return -errno;
-	rc = write_all(fd, data, len);
+	rc = write_complete(fd, data, len);
 	if (close(fd) && !rc)
 		rc = -errno;
 	if (rc)
