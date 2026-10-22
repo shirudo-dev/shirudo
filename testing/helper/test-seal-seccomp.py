@@ -26,6 +26,6 @@ with tempfile.TemporaryDirectory(prefix="shirudo-seal-seccomp-") as directory:
                 "-I" + str(root / "bpf/lib"),
                 "-I" + str(root / "vendor/libbpf"),
                 "-I" + str(root / "vendor/libbpf/include/uapi"),
-                "-c", str(root / "bpf/seal_verity.c"),
+                "-c", str(root / "bpf/seal.c"),
                 "-o", str(work / "seal_verity.bpf.o")]
     subprocess.run(command, check=True)

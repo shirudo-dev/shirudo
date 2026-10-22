@@ -28,7 +28,7 @@ refused() {
 	if "$H" "$ROOT" "$@" >"$WORK/output" 2>"$WORK/error"; then
 		return 1
 	fi
-	grep -q "image mode:" "$WORK/error" &&
+	grep -Eq "image mode:|target:|keys revoke:" "$WORK/error" &&
 	grep -q "signed.*config" "$WORK/error"
 }
 

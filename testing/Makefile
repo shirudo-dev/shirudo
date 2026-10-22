@@ -19,7 +19,7 @@ test-vm-arch = $(shell TEST_VM_ARCH='$(TEST_VM_ARCH)'; \
 	. $(ROOT)/contrib/test-vm-arch.sh && printf '%s' "$$$(1)")
 
 .DEFAULT_GOAL := help
-.PHONY: help clean test-helpers test-op fuzz test test-installer bundle test-vm-bundle kernel \
+.PHONY: help clean test-helpers test-op fuzz test bundle test-vm-bundle kernel \
 	bpf-next vm vm-console vm-ssh vm-stop vm-clean test-tgt test-tgt-obs \
 	test-vm test-vm-clean
 
@@ -27,11 +27,11 @@ KERNEL_PATCHES ?= $(if $(wildcard $(ROOT)/kernel/*.patch),$(ROOT)/kernel/,)
 override KERNEL_PATCHES := $(if $(strip $(KERNEL_PATCHES)),$(call root-path,$(KERNEL_PATCHES)),)
 PACKAGE_FORMAT ?= $(call test-vm-arch,TEST_VM_HOST_PKG_FORMAT)
 
-TEST_VM_MODE ?= legacy
-ifneq ($(filter $(TEST_VM_MODE),legacy verity),$(TEST_VM_MODE))
-  $(error TEST_VM_MODE must be legacy or verity)
+TEST_VM_MODE ?= verity
+ifneq ($(TEST_VM_MODE),verity)
+  $(error TEST_VM_MODE must be verity)
 endif
-TEST_VM_INITRD ?= $(if $(filter verity,$(TEST_VM_MODE)),1,0)
+TEST_VM_INITRD ?= 1
 TEST_VM_WORK_DIR ?= build/test-vm
 override TEST_VM_WORK_DIR := $(call root-path,$(TEST_VM_WORK_DIR))
 TEST_VM_BUNDLE_DIR ?= $(TEST_VM_WORK_DIR)/host-bundle-$(VM_KERNEL_TAG)$(KERNEL_COMMIT_SUFFIX)-$(TEST_VM_MODE)
@@ -284,12 +284,6 @@ fuzz:
 	+$(Q)$(MAKE) -C $(ROOT) -f Makefile.shirudo fuzz-targets
 	$(Q)sh $(ROOT)/testing/fuzz/run.sh $(FUZZ_SECONDS)
 
-# The installer end to end: a stock cloud image in QEMU with a vTPM, the
-# bpf-next kernel packages, tools/gen-initrd/install.sh with a local
-# target package, two reboots and the production configuration.
-test-installer:
-	$(Q)cd $(ROOT) && bash testing/t1300-installer-e2e.sh
-
 bundle: test-vm-bundle
 
 test-vm: test-tgt
@@ -306,10 +300,8 @@ help:
 	  '  make -C testing test-op' \
 	  '  make -C testing test-helpers' \
 	  '  make -C testing fuzz [FUZZ_SECONDS=60]' \
-	  '  make -C testing test-tgt TEST_VM_MODE=legacy [TEST_VM_INITRD=1]' \
-	  '  make -C testing test-tgt TEST_VM_MODE=verity (dracut initrd, root required)' \
+	  '  make -C testing test-tgt (dm-verity, dracut initrd, root required)' \
 	  '  make -C testing test-tgt-obs' \
-	  '  make -C testing test-installer' \
 	  '  make -C testing vm, vm-console, vm-ssh, vm-stop, or vm-clean' \
 	  '  make -C testing vm KERNEL=7.4' \
 	  '  make -C testing kernel KERNEL_TAG=v7.4' \

@@ -14,22 +14,15 @@ NAME=shirudo-test-otel-backend
 LOAD="$FIXTURES/$NAME.upatch"
 UNLOAD="$FIXTURES/$NAME.unload.upatch"
 PIN="/run/shirudo/bpffs/upatches/$NAME/link"
-CONFIG=/etc/shirudo/shirudo.conf
 WORK=$(mktemp -d)
 SERVER=""
-CONFIG_EXISTED=0
 TIMER_WAS_ACTIVE=0
 [ -s "$LOAD" ] || test_skip_all "missing OTEL backend fixture"
 [ -s "$UNLOAD" ] || test_skip_all "missing OTEL backend unload fixture"
 systemctl cat shirudo-map-export.service >/dev/null 2>&1 || test_skip_all "map-export service is not installed"
 systemctl cat shirudo-map-export.timer >/dev/null 2>&1 || test_skip_all "map-export timer is not installed"
-if [ "${SHIRUDO_TEST_MODE:-legacy}" = verity ]; then
-	"$SHIRUDO_BIN" image update "$SHIRUDO_TEST_KEY_FIXTURES/config-otel"
-	export SHIRUDO_TEST_OTEL_PORT=5444
-elif [ -e "$CONFIG" ]; then
-	cp "$CONFIG" "$WORK/config"
-	CONFIG_EXISTED=1
-fi
+"$SHIRUDO_BIN" image update "$SHIRUDO_TEST_KEY_FIXTURES/config-otel"
+export SHIRUDO_TEST_OTEL_PORT=5444
 if systemctl is-active --quiet shirudo-map-export.timer; then TIMER_WAS_ACTIVE=1; fi
 restore() {
 	systemctl stop shirudo-map-export.timer >/dev/null 2>&1 || true
@@ -37,9 +30,6 @@ restore() {
 	[ -n "$SERVER" ] && kill "$SERVER" >/dev/null 2>&1 || true
 	[ -n "$SERVER" ] && wait "$SERVER" 2>/dev/null || true
 	if [ -e "$PIN" ]; then "$SHIRUDO_BIN" upatch unload "$UNLOAD" --no-precheck >/dev/null 2>&1 || true; fi
-	if [ "${SHIRUDO_TEST_MODE:-legacy}" != verity ]; then
-		if [ "$CONFIG_EXISTED" -eq 1 ]; then cp "$WORK/config" "$CONFIG"; else rm -f "$CONFIG"; fi
-	fi
 	[ "$TIMER_WAS_ACTIVE" -eq 1 ] && systemctl start shirudo-map-export.timer >/dev/null 2>&1 || true
 	rm -rf "$WORK"
 }
@@ -76,8 +66,6 @@ test_expect_success 'map-export service delivers both decoder-backed maps' '
 	i=0; while { test ! -s "$WORK/otel.port" || test ! -s "$WORK/otel.meta"; } && test "$i" -lt 100; do i=$((i+1)); sleep .1; done;
 	test -s "$WORK/otel.port" &&
 	port=$(cat "$WORK/otel.port") &&
-	{ [ "${SHIRUDO_TEST_MODE:-legacy}" = verity ] ||
-	printf "%s\n" "map_export.otel_endpoint = http://127.0.0.1:$port" "map_export.otel_insecure = true" "map_export.otel_retries = 0" >"$CONFIG"; } &&
 	"$SHIRUDO_BIN" upatch load "$LOAD" --no-precheck >/dev/null 2>&1 &&
 	systemctl start shirudo-map-export.service &&
 	systemctl start shirudo-map-export.timer;
@@ -122,9 +110,7 @@ while state["completed"] < 4:
 PY
 	python3 "$WORK/slow-otel.py" "$WORK/slow.port" "$WORK/slow.meta" & SERVER=$!;
 	i=0; while test ! -s "$WORK/slow.port" && test "$i" -lt 100; do i=$((i+1)); sleep .1; done;
-	port=$(cat "$WORK/slow.port") && test -n "$port" &&
-	{ [ "${SHIRUDO_TEST_MODE:-legacy}" = verity ] ||
-	printf "%s\n" "map_export.otel_endpoint = http://127.0.0.1:$port" "map_export.otel_insecure = true" "map_export.otel_retries = 0" >"$CONFIG"; } || return 1;
+	port=$(cat "$WORK/slow.port") && test -n "$port" || return 1;
 	(systemctl start shirudo-map-export.service >/dev/null 2>&1) & service_start=$!;
 	systemctl start shirudo-map-export.timer && wait "$service_start";
 	i=0; while { test ! -s "$WORK/slow.meta" || test "$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['completed'])" "$WORK/slow.meta" 2>/dev/null || echo 0)" -lt 4; } && test "$i" -lt 300; do i=$((i+1)); sleep .1; done;

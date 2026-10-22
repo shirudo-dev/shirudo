@@ -6,10 +6,9 @@
 # make -C testing test-tgt does on a developer's host. setup makes the
 # runner the VM host: KVM, the VM's packages, the bpf-next kernel unless a
 # restored copy is current, and the OpenSSL 3.5 toolchain from
-# vm-toolchain.sh. staging runs the suite as is, production boots the
-# guest from a dracut initrd.
+# vm-toolchain.sh. The suite boots an image-backed target from a dracut initrd.
 #
-#   .github/scripts/target-tests.sh setup|staging|production
+#   .github/scripts/target-tests.sh setup|production
 #
 # Runs as a user with passwordless sudo, from the checkout.
 
@@ -66,7 +65,7 @@ setup() {
 		.github/scripts/vm-toolchain.sh \
 		autoconf autoconf-archive automake clang-20 cloud-image-utils \
 		dracut-core file isc-dhcp-client libguestfs-tools libltdl-dev \
-		libtool libzstd-dev qemu-system-x86 qemu-utils swtpm \
+		libtool libzstd-dev cryptsetup-bin e2fsprogs qemu-system-x86 qemu-utils swtpm \
 		swtpm-tools tpm2-tools
 
 	# Ubuntu 24.04's clang 18 lacks the BPF address-space casts the
@@ -95,9 +94,9 @@ setup() {
 }
 
 case "${1:-}" in
-setup|staging|production) ;;
+setup|production) ;;
 *)
-	echo "usage: $0 setup|staging|production" >&2
+	echo "usage: $0 setup|production" >&2
 	exit 2
 	;;
 esac
@@ -116,8 +115,4 @@ fi
 # emergency mode for instance, would otherwise hold the job for an hour.
 export TEST_VM_TIMEOUT=900
 
-if [ "$1" = staging ]; then
-	make -C testing test-tgt
-else
-	sudo -E env PATH="$PATH" make -C testing test-tgt TEST_VM_INITRD=1
-fi
+sudo -E env PATH="$PATH" make -C testing test-tgt

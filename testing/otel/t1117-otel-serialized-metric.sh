@@ -14,21 +14,14 @@ NAME=shirudo-test-serialized-metric
 LOAD="$FIXTURES/$NAME.upatch"
 UNLOAD="$FIXTURES/$NAME.unload.upatch"
 SERIALIZER_PIN="/run/shirudo/bpffs/upatches/$NAME/serializers/counters"
-CONFIG=/etc/shirudo/shirudo.conf
 WORK=$(mktemp -d)
 SERVER=""
-CONFIG_EXISTED=0
 TIMER_WAS_ACTIVE=0
 [ -s "$LOAD" ] || test_skip_all "missing serialized metric fixture"
 [ -s "$UNLOAD" ] || test_skip_all "missing serialized metric unload fixture"
 systemctl cat shirudo-map-export.service >/dev/null 2>&1 || test_skip_all "map-export service is not installed"
-if [ "${SHIRUDO_TEST_MODE:-legacy}" = verity ]; then
-	"$SHIRUDO_BIN" image update "$SHIRUDO_TEST_KEY_FIXTURES/config-otel"
-	export SHIRUDO_TEST_OTEL_PORT=5444
-elif [ -e "$CONFIG" ]; then
-	cp "$CONFIG" "$WORK/config"
-	CONFIG_EXISTED=1
-fi
+"$SHIRUDO_BIN" image update "$SHIRUDO_TEST_KEY_FIXTURES/config-otel"
+export SHIRUDO_TEST_OTEL_PORT=5444
 if systemctl is-active --quiet shirudo-map-export.timer; then TIMER_WAS_ACTIVE=1; fi
 restore() {
 	systemctl stop shirudo-map-export.timer >/dev/null 2>&1 || true
@@ -36,9 +29,6 @@ restore() {
 	[ -n "$SERVER" ] && kill "$SERVER" >/dev/null 2>&1 || true
 	[ -n "$SERVER" ] && wait "$SERVER" 2>/dev/null || true
 	if [ -e "$SERIALIZER_PIN" ]; then "$SHIRUDO_BIN" upatch unload "$UNLOAD" --no-precheck >/dev/null 2>&1 || true; fi
-	if [ "${SHIRUDO_TEST_MODE:-legacy}" != verity ]; then
-		if [ "$CONFIG_EXISTED" -eq 1 ]; then cp "$WORK/config" "$CONFIG"; else rm -f "$CONFIG"; fi
-	fi
 	[ "$TIMER_WAS_ACTIVE" -eq 1 ] && systemctl start shirudo-map-export.timer >/dev/null 2>&1 || true
 	rm -rf "$WORK"
 }
@@ -133,8 +123,6 @@ test_expect_success 'serialized multi-page metrics preserve peek and drain inter
 	i=0; while test ! -s "$WORK/service.port" && test "$i" -lt 100; do i=$((i+1)); sleep .1; done;
 	test -s "$WORK/service.port" &&
 	port=$(cat "$WORK/service.port") &&
-	{ [ "${SHIRUDO_TEST_MODE:-legacy}" = verity ] ||
-	printf "%s\n" "map_export.otel_endpoint = http://127.0.0.1:$port" "map_export.otel_insecure = true" "map_export.otel_retries = 0" >"$CONFIG"; } &&
 	if ! systemctl start shirudo-map-export.service; then
 		systemctl status shirudo-map-export.service --no-pager >&2 || true
 		journalctl -u shirudo-map-export.service --no-pager -n 100 >&2 || true

@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   test-tgt:
-    name: Target suite in the test VM, staging and production
+    name: Target suite in the dm-verity VM
     runs-on: ubuntu-latest
     timeout-minutes: 150
 
@@ -51,15 +51,7 @@ jobs:
       - name: Prepare the runner as the VM host
         run: .github/scripts/target-tests.sh setup
 
-      - name: Run the target suite in the staging configuration
-        run: .github/scripts/target-tests.sh staging
-
-      # Every unit with a private mount namespace fails after switch-root
-      # since d2ffd16 ("bpf: refuse unmounting any mount above the
-      # private bpffs"); the step reports without failing the job until
-      # that is fixed.
-      - name: Run the target suite in the production configuration
-        continue-on-error: true
+      - name: Run the target suite in the dm-verity VM
         run: .github/scripts/target-tests.sh production
 
       # Each part is saved once it is complete, even when a later step

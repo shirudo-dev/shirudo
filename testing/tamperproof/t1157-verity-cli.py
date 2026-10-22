@@ -31,7 +31,7 @@ def main():
         config.run(label, *arguments, success=mode == "help")
         if mode != "help":
             error = (config.RESULTS / (label + ".stderr")).read_text()
-            config.require("image mode:" in error and "signed" in error,
+            config.require(any(prefix in error for prefix in ("image mode:", "target:", "keys revoke:")) and "signed" in error,
                            "missing image-mode guidance: " + error)
             wanted = "reboot" if mode == "enrollment" else "shirudo image update"
             config.require(wanted in error, "missing recovery action: " + error)

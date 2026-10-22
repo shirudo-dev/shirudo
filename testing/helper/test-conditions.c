@@ -5,7 +5,7 @@
  * Drives util/conditions.c for t0050 with the input `shirudo status`
  * derives from what it reads off the host.
  *
- *   test-conditions <lsm 0|1> <bpf|user|none> <serial> <pinned> \
+ *   test-conditions <lsm 0|1> <bpf|none> <serial> <pinned> \
  *                   <notpm|none|match|mismatch>
  *
  * serial is the live keyring's, -1 when it is absent; pinned the one init

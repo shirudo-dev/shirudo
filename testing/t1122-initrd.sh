@@ -65,7 +65,7 @@ test_expect_success 'the pins and the identity live under /run and survived the 
 	grep -q " /run/shirudo/bpffs bpf " /proc/self/mounts
 '
 
-test_expect_success 'the root binary is an identity the bpffs guards admit' '
+test_expect_success 'the runtime command can check initialization after switch-root' '
 	"$SHIRUDO_BIN" init >/dev/null 2>&1 &&
 	"$SHIRUDO_BIN" status --json >"$STATUS" 2>/dev/null &&
 	[ "$(status_field tpm.bound_in)" = initrd ]

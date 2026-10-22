@@ -20,14 +20,10 @@ libc.prctl.restype = ctypes.c_int
 libc.syscall.restype = ctypes.c_long
 
 ctypes.set_errno(0)
-mode_result = libc.prctl(0x53520001, 0, 0, 0, 0)
-mode_errno = ctypes.get_errno()
-assert mode_result == -1 and mode_errno in (errno.EINVAL, 1001, 1002), \
-    ("Shirudo mode query", mode_result, mode_errno)
-IMAGE_MODE = mode_errno == 1002
+result = libc.prctl(0x53520001, 0, 0, 0, 0)
+assert result == -1 and ctypes.get_errno() == 1002, "enforcement missing"
 SHIRUDO = os.path.abspath(os.environ.get("SHIRUDO_TEST_RUNTIME_BIN",
-                                        RUNTIME + "/usr/bin/shirudo")) \
-    if IMAGE_MODE else SHIRUDO_COMMAND
+                                        RUNTIME + "/usr/bin/shirudo"))
 SHIRUDO_ID = os.stat(SHIRUDO).st_dev, os.stat(SHIRUDO).st_ino
 OTHER = next(os.path.realpath(path) for path in
              ("/bin/true", "/usr/bin/true", sys.executable)
@@ -73,25 +69,15 @@ class MapInfoPrefix(ctypes.Structure):
 
 class ShirudoIdentity(ctypes.Structure):
     _fields_ = [("sb_dev", ctypes.c_uint32),
-                ("exe_dev", ctypes.c_uint32),
-                ("exe_ino", ctypes.c_uint64),
+                ("run_dev", ctypes.c_uint32),
                 ("keyring_serial", ctypes.c_int32),
                 ("keyring_type", ctypes.c_uint32),
-                ("alt_exe_dev", ctypes.c_uint32),
-                ("pad", ctypes.c_uint32),
-                ("alt_exe_ino", ctypes.c_uint64),
                 ("n_keys", ctypes.c_uint32),
-                ("pad2", ctypes.c_uint32),
-                ("key_serials", ctypes.c_int32 * 16)]
-
-
-class ShirudoImageIdentity(ShirudoIdentity):
-    _fields_ = [("runtime_mode", ctypes.c_uint32),
-                ("run_dev", ctypes.c_uint32),
+                ("key_serials", ctypes.c_int32 * 16),
                 ("runtime_root", ctypes.c_uint8 * 32)]
 
 
-def assert_frozen_executable_identity():
+def assert_frozen_runtime():
     path = b"/run/shirudo/bpffs/identity\0"
     name = ctypes.create_string_buffer(path)
     get_attr = ObjGetAttr(ctypes.addressof(name), 0, BPF_F_RDONLY)
@@ -119,24 +105,12 @@ def assert_frozen_executable_identity():
     finally:
         os.close(fd)
     value = ShirudoIdentity.from_buffer_copy(buffer.raw)
-    if IMAGE_MODE:
-        assert info.value_size >= ctypes.sizeof(ShirudoImageIdentity), \
-            ("image identity extension missing", info.value_size)
-        image = ShirudoImageIdentity.from_buffer_copy(buffer.raw)
-        assert image.runtime_mode == 1 and any(image.runtime_root), \
-            ("frozen image trust mode", image.runtime_mode)
-        executable = os.path.realpath(SHIRUDO)
-        runtime = os.path.realpath(RUNTIME)
-        assert os.path.commonpath((executable, runtime)) == runtime, executable
-        assert os.stat(executable).st_dev == os.stat(runtime).st_dev, executable
-        return
-    if info.value_size >= ctypes.sizeof(ShirudoImageIdentity):
-        image = ShirudoImageIdentity.from_buffer_copy(buffer.raw)
-        assert image.runtime_mode == 0, ("legacy trust mode", image.runtime_mode)
-    st = os.stat(SHIRUDO)
-    expected_dev = (os.major(st.st_dev) << 20) | os.minor(st.st_dev)
-    assert (value.exe_dev, value.exe_ino) == (expected_dev, st.st_ino), \
-        ((value.exe_dev, value.exe_ino), (expected_dev, st.st_ino))
+    assert info.value_size == ctypes.sizeof(ShirudoIdentity), info.value_size
+    assert any(value.runtime_root), "runtime hash missing"
+    executable = os.path.realpath(SHIRUDO)
+    runtime = os.path.realpath(RUNTIME)
+    assert os.path.commonpath((executable, runtime)) == runtime, executable
+    assert os.stat(executable).st_dev == os.stat(runtime).st_dev, executable
 
 
 class PrctlMmMap(ctypes.Structure):
@@ -227,7 +201,7 @@ def mm_map_result(path):
     assert after == before, (before, after)
 
 
-assert_frozen_executable_identity()
+assert_frozen_runtime()
 
 assert child_succeeds(lambda: exe_file_result(SHIRUDO)), \
     "PR_SET_MM_EXE_FILE was allowed for a non-Shirudo caller"

@@ -15,7 +15,7 @@ mountpoint -q /run/shirudo/runtime && [ -x "$SHIRUDO_TEST_RUNTIME_BIN" ] ||
 	verity_required "requires the executable from the runtime image"
 command -v python3 >/dev/null 2>&1 || verity_required "no python3"
 
-test_expect_success 'hidden bpffs cannot make an image executable initialize legacy state' '
+test_expect_success 'hidden bpffs cannot make an image executable fall back to writable host settings' '
 	python3 tamperproof/t1153-verity-hidden.py "$SHIRUDO_TEST_RUNTIME_BIN"
 '
 

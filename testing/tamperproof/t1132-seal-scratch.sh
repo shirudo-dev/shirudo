@@ -16,10 +16,7 @@ for c in python3 mkfs.ext4 debugfs; do
 	command -v "$c" >/dev/null 2>&1 || test_skip_all "no $c"
 done
 
-case "${SHIRUDO_TEST_MODE:-legacy}" in
-verity) STATE=/var/lib/shirudo/eventlog ;;
-*) STATE=/var/lib/shirudo/keys/cert.der ;;
-esac
+STATE=/var/lib/shirudo/eventlog
 [ -e "$STATE" ] || test_skip_all "no labelled state at $STATE"
 WORK=$(mktemp -d) || test_skip_all "cannot make a scratch directory"
 MNT=$WORK/mnt

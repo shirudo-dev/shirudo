@@ -19,10 +19,8 @@ UPPER=/var/tmp/shirudo-upper
 OVERLAY_WORK=/var/tmp/shirudo-overlay-work
 WORKSPACE=/workspace/shirudo
 VM_MODE="${VM_MODE:-test}"
-TEST_MODE="${TEST_VM_MODE:-legacy}"
 SHIRUDO_BIN=/usr/local/bin/shirudo
-SKIP_SEAL="${TEST_VM_SKIP_SEAL:-0}"
-VM_INITRD="${TEST_VM_INITRD:-0}"
+VM_INITRD="${TEST_VM_INITRD:-1}"
 
 log()
 {
@@ -331,63 +329,22 @@ test -c /dev/tpm0
 test -c /dev/tpmrm0
 tpm2_getrandom 8 >/dev/null
 
-if [[ "$TEST_MODE" == verity ]]; then
-	(cd "$BUNDLE/verity" && sha256sum -c manifest)
-	mountpoint -q /run/shirudo/runtime
-	mountpoint -q /run/shirudo/config
-	install -m 0755 "$BUNDLE/verity/shirudo-runtime" /usr/local/bin/shirudo-runtime
-	SHIRUDO_BIN=/usr/local/bin/shirudo-runtime
-	for unit in "${TARGET_UNITS[@]}"; do
-		case "$unit" in *.service) ;; *) continue ;; esac
-		mkdir -p "/etc/systemd/system/$unit.d"
-		{
-			printf '[Service]\nExecStart=\n'
-			sed -n 's|^ExecStart=/usr/local/bin/shirudo |ExecStart=/usr/local/bin/shirudo-runtime |p' \
-				"/usr/lib/systemd/system/$unit"
-		} >"/etc/systemd/system/$unit.d/runtime.conf"
-	done
-	systemctl daemon-reload
-else
-log "importing operator certificate and attaching the measured Shirudo LSM"
-install -d -m 0700 /var/lib/shirudo/keys
-
-package_cert="${TEST_VM_PACKAGE_CERT:-$BUNDLE/fixtures/cert.der}"
-if [[ -n "${TEST_VM_PACKAGE_CERT:-}" ]]; then
-	[[ "$package_cert" == /mnt/shirudo-package-cert/package-cert.der &&
-	   -s "$package_cert" ]] || {
-		log "package certificate is missing from the package certificate share"
-		exit 1
-	}
-fi
-cmp -s "$package_cert" /var/lib/shirudo/keys/cert.der ||
-	install -m 0644 "$package_cert" \
-		/var/lib/shirudo/keys/cert.der
-# The own-keyring certificate is a second trusted certificate, vouched
-# for by the primary, so the enrolled set has two members for the tests
-# to work with.
-own_cert="$BUNDLE/fixtures/own.der"
-if [[ -s "$own_cert" ]]; then
-	install -d -m 0700 /var/lib/shirudo/keys/trusted
-	own_fp="$(/usr/local/bin/shirudo bpm key fingerprint "$own_cert")"
-	cmp -s "$own_cert" "/var/lib/shirudo/keys/trusted/$own_fp.der" || {
-		install -m 0644 "$BUNDLE/fixtures/own.vouch" \
-			"/var/lib/shirudo/keys/trusted/$own_fp.vouch"
-		install -m 0644 "$own_cert" \
-			"/var/lib/shirudo/keys/trusted/$own_fp.der"
-	}
-fi
-rm -f /var/lib/shirudo/keys/signing_key.pem
-init_args=()
-if [[ "$SKIP_SEAL" == 1 ]]; then
-	log "filesystem sealing disabled: target LSM hooks are not sleepable"
-	init_args+=(--no-seal)
-fi
-configure_bpm_tree
-/usr/local/bin/shirudo init "${init_args[@]}"
-fi
-if [[ "$TEST_MODE" == verity ]]; then
-	"$SHIRUDO_BIN" init
-fi
+(cd "$BUNDLE/verity" && sha256sum -c manifest)
+mountpoint -q /run/shirudo/runtime
+mountpoint -q /run/shirudo/config
+install -m 0755 "$BUNDLE/verity/shirudo-runtime" /usr/local/bin/shirudo-runtime
+SHIRUDO_BIN=/usr/local/bin/shirudo-runtime
+for unit in "${TARGET_UNITS[@]}"; do
+	case "$unit" in *.service) ;; *) continue ;; esac
+	mkdir -p "/etc/systemd/system/$unit.d"
+	{
+		printf '[Service]\nExecStart=\n'
+		sed -n 's|^ExecStart=/usr/local/bin/shirudo |ExecStart=/usr/local/bin/shirudo-runtime |p' \
+			"/usr/lib/systemd/system/$unit"
+	} >"/etc/systemd/system/$unit.d/runtime.conf"
+done
+systemctl daemon-reload
+"$SHIRUDO_BIN" init
 test -e /run/shirudo/bpffs/lsm_link
 if [[ "$VM_INITRD" == 1 ]]; then
 	log "checking that the initrd brought enforcement up"
@@ -455,7 +412,6 @@ log "running target test suite: ${TEST_VM_SUITE:-all}"
 (
 	cd testing
 	export SHIRUDO_BIN
-	export SHIRUDO_TEST_MODE="$TEST_MODE"
 	export SHIRUDO_TEST_KEY_FIXTURES="$BUNDLE/verity"
 	export SHIRUDO_TEST_RESULTS=/mnt/shirudo-out/verity
 	if [[ "${TEST_VM_SUITE:-all}" == obs ]]; then

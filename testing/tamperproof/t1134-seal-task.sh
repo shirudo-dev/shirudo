@@ -3,7 +3,7 @@
 # Copyright (c) 2026 Authors of shirudo
 #
 # t1134 -- the seal's task hooks (bpf/seal.c ptrace_access_check and
-# perf_event_alloc): a task that runs the labelled shirudo binary can
+# perf_event_alloc): a task that runs the runtime shirudo binary can
 # neither be ptrace-attached nor have a perf event bound to it, even by
 # root. The task is a shirudo blocked on opening a fifo, released at
 # the end. Non-destructive.

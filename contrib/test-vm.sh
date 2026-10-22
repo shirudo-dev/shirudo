@@ -63,9 +63,9 @@ DISK_SIZE="${TEST_VM_DISK_SIZE:-30G}"
 VM_TIMEOUT="${TEST_VM_TIMEOUT:-3600}"
 VM_MODE="${VM_MODE:-test}"
 VM_SUITE="${TEST_VM_SUITE:-all}"
-TEST_MODE="${TEST_VM_MODE:-legacy}"
+TEST_MODE="${TEST_VM_MODE:-verity}"
 SKIP_SEAL="${TEST_VM_SKIP_SEAL:-0}"
-VM_INITRD="${TEST_VM_INITRD:-0}"
+VM_INITRD="${TEST_VM_INITRD:-1}"
 VM_INITRD_MODULES="${TEST_VM_INITRD_MODULES:-base systemd systemd-initrd dracut-systemd rootfs-block fs-lib udev-rules terminfo shirudo}"
 INITRD=""
 VM_VERBOSE="${VM_VERBOSE:-0}"
@@ -155,16 +155,11 @@ valid_vm_name()
 
 validate_mode()
 {
-	case "$TEST_MODE" in
-	legacy) ;;
-	verity)
-		[[ "$VM_INITRD" == 1 && "$SKIP_SEAL" == 0 ]] ||
-			die "verity mode requires TEST_VM_INITRD=1 and TEST_VM_SKIP_SEAL=0"
-		[[ "$VM_SUITE" == all && "$VM_MODE" == test ]] ||
-			die "verity mode requires the complete test suite"
-		;;
-	*) die "TEST_VM_MODE must be legacy or verity" ;;
-	esac
+	[[ "$TEST_MODE" == verity ]] || die "TEST_VM_MODE must be verity"
+	[[ "$VM_INITRD" == 1 && "$SKIP_SEAL" == 0 ]] ||
+		die "dm-verity requires TEST_VM_INITRD=1 and TEST_VM_SKIP_SEAL=0"
+	[[ "$VM_SUITE" == all || "$VM_SUITE" == obs ]] ||
+		die "dm-verity requires the complete test suite or obs"
 	case "$VM_MODE" in
 	interactive|test) ;;
 	*) die "VM_MODE must be 'interactive' or 'test'" ;;
@@ -986,21 +981,19 @@ build_initrd()
 		die "cannot fingerprint the bundle's own certificate"
 	cp "$TEST_VM_HOST_BUNDLE/fixtures/own.der" "$trusted/$fp.der"
 	cp "$TEST_VM_HOST_BUNDLE/fixtures/own.vouch" "$trusted/$fp.vouch"
-	if [[ "$TEST_MODE" == verity ]]; then
-		[[ -s "$TEST_VM_HOST_BUNDLE/verity/manifest" ]] ||
-			die "verity fixtures missing from the host bundle"
-		(cd "$TEST_VM_HOST_BUNDLE/verity" && sha256sum -c manifest) ||
-			die "verity fixture checksum mismatch"
-		mkdir -p "$seed/shirudo-test-images"
-		cp "$TEST_VM_HOST_BUNDLE/verity/"*.{img,verity,roothash,p7s} \
-			"$seed/shirudo-test-images/"
-		cp "$TEST_VM_HOST_BUNDLE/verity/bootstrap.conf" \
-			"$seed/shirudo-test-images/bootstrap.conf"
-		cp "$REPO_ROOT/contrib/verity-vm/seed-images.sh" \
-			"$seed/shirudo-test-seed-images.sh"
-		cat "$REPO_ROOT/contrib/verity-vm/shirudo-test-seed-images.conf" \
-			>>"$seed/usr/lib/systemd/system/shirudo-test-seed.service"
-	fi
+	[[ -s "$TEST_VM_HOST_BUNDLE/verity/manifest" ]] ||
+		die "verity fixtures missing from the host bundle"
+	(cd "$TEST_VM_HOST_BUNDLE/verity" && sha256sum -c manifest) ||
+		die "verity fixture checksum mismatch"
+	mkdir -p "$seed/shirudo-test-images"
+	cp "$TEST_VM_HOST_BUNDLE/verity/"*.{img,verity,roothash,p7s} \
+		"$seed/shirudo-test-images/"
+	cp "$TEST_VM_HOST_BUNDLE/verity/bootstrap.conf" \
+		"$seed/shirudo-test-images/bootstrap.conf"
+	cp "$REPO_ROOT/contrib/verity-vm/seed-images.sh" \
+		"$seed/shirudo-test-seed-images.sh"
+	cat "$REPO_ROOT/contrib/verity-vm/shirudo-test-seed-images.conf" \
+		>>"$seed/usr/lib/systemd/system/shirudo-test-seed.service"
 	cert="$RUN_DIR/cert.der"
 	cp "$TEST_VM_HOST_BUNDLE/fixtures/cert.der" "$cert"
 	args=(--kver "$kver" --output "$RUN_DIR/initrd.img"
@@ -1009,9 +1002,7 @@ build_initrd()
 	      --cert "$cert"
 	      --trusted-dir "$trusted"
 	      --unit "$unit" --module-dir "$REPO_ROOT/tools/gen-initrd")
-	if [[ "$TEST_MODE" == verity ]]; then
-		args+=(--bootstrap-conf "$seed/shirudo-test-images/bootstrap.conf")
-	fi
+	args+=(--bootstrap-conf "$seed/shirudo-test-images/bootstrap.conf")
 	if [[ -n "$KERNEL_ARTIFACT_DIR" ]]; then
 		args+=(--kmoddir "$KERNEL_ARTIFACT_DIR/lib/modules")
 	else
@@ -1238,12 +1229,14 @@ validate_oci_ca
 validate_package_cert
 validate_bpm_tree_config
 validate_bpm_oci
+[[ -z "$BPM_TREE_CONFIG" && -z "$PACKAGE_CERT" && -z "$BPM_OCI_REPOSITORY_RAW" ]] ||
+	die "custom trust and repository inputs must be built into signed config fixtures"
 if [[ "$VM_INITRD" == 1 ]]; then
 	HOST_DEPENDENCIES+=("dracut:dracut-core:dracut" "lsinitrd:dracut-core:dracut" "file:file:file")
-	[[ "$EUID" == 0 ]] || die "TEST_VM_INITRD=1 builds the initrd with dracut, which needs root"
 fi
 check_host_dependencies
 validate_host_bundle
+[[ "$EUID" == 0 ]] || die "building the initrd with dracut needs root"
 [[ "$CPUS" =~ ^[1-9][0-9]*$ ]] || die "TEST_VM_CPUS must be a positive integer"
 [[ "$VM_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die "TEST_VM_TIMEOUT must be a positive integer"
 
@@ -1480,9 +1473,7 @@ log "booting $(basename "$KERNEL") with ${CPUS} CPUs and ${MEMORY} memory"
 # The bpf keyring is left open for init to enrol the certificate and
 # seal it, as a production initrd does.
 KERNEL_LSM_ARGS="lsm=bpf bpf.keyring_unsealed=1"
-if [ "$TEST_MODE" = verity ]; then
-	KERNEL_LSM_ARGS+=" dm_verity.keyring_unsealed=1"
-fi
+KERNEL_LSM_ARGS+=" dm_verity.keyring_unsealed=1"
 KERNEL_NET_DEVICE="virtio-net-pci,netdev=net0"
 
 # The virt machine has no if=virtio mapping, so its disks are explicit PCI

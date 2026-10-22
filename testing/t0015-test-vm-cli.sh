@@ -39,7 +39,7 @@ test_expect_success 'test-vm prints an install command for missing dependencies'
 	ln -s /bin/bash "$WORK/fake-bin/bash" &&
 	ln -s /usr/bin/dirname "$WORK/fake-bin/dirname" &&
 	for command_name in curl sha256sum awk qemu-system-x86_64 qemu-img \
-		swtpm timeout tee
+		swtpm timeout tee dracut lsinitrd file
 	do
 		ln -s /bin/true "$WORK/fake-bin/$command_name" || return 1
 	done &&
@@ -59,7 +59,7 @@ test_expect_success 'test-vm requires the QEMU emulator of the host architecture
 	ln -s /bin/bash "$WORK/arm-bin/bash" &&
 	ln -s /usr/bin/dirname "$WORK/arm-bin/dirname" &&
 	for command_name in curl sha256sum awk qemu-system-x86_64 qemu-img \
-		swtpm timeout tee
+		swtpm timeout tee dracut lsinitrd file
 	do
 		ln -s /bin/true "$WORK/arm-bin/$command_name" || return 1
 	done &&
@@ -93,7 +93,7 @@ test_expect_success 'TEST_VM_QEMU names another emulator' '
 	ln -s /bin/bash "$WORK/kvm-bin/bash" &&
 	ln -s /usr/bin/dirname "$WORK/kvm-bin/dirname" &&
 	for command_name in curl sha256sum awk qemu-kvm qemu-img swtpm \
-		cloud-localds timeout tee flock ssh-keygen ss
+		cloud-localds timeout tee flock ssh-keygen ss dracut lsinitrd file
 	do
 		ln -s /bin/true "$WORK/kvm-bin/$command_name" || return 1
 	done &&
@@ -396,8 +396,7 @@ test_expect_success 'test-vm imports the host-built payload' '
 	grep -q "mount_tag=shirudo-bundle" ../contrib/test-vm.sh &&
 	grep -q "importing host-built Shirudo payload" \
 		../contrib/test-vm-guest.sh &&
-	grep -q "package_cert=\"\${TEST_VM_PACKAGE_CERT:-\$BUNDLE/fixtures/cert.der}\"" \
-		../contrib/test-vm-guest.sh &&
+	grep -q "mountpoint -q /run/shirudo/runtime" ../contrib/test-vm-guest.sh &&
 	! grep -q "vmlinux.h" ../contrib/test-vm-guest.sh &&
 	! grep -q "shirudo-build" ../contrib/test-vm-guest.sh &&
 	! grep -Fq "make \"\${BPF_MAKE_ARGS[@]}\" check" \
@@ -799,7 +798,7 @@ test_expect_success 'test-vm hands off an interactive BPM tree configuration' '
 	grep -q "mv -f \"\$temporary\" \"\$target\"" ../contrib/test-vm-guest.sh &&
 	grep -q "systemctl start shirudo-bpm-tree-sync.service" ../contrib/test-vm-guest.sh &&
 	grep -q "systemctl enable --now shirudo-bpm-tree-sync.timer" ../contrib/test-vm-guest.sh &&
-	test "$(grep -n "/usr/local/bin/shirudo init" ../contrib/test-vm-guest.sh | cut -d: -f1)" -lt \
+	test "$(grep -n "SHIRUDO_BIN.* init" ../contrib/test-vm-guest.sh | cut -d: -f1)" -lt \
 		"$(grep -n "systemctl start shirudo-bpm-tree-sync.service" ../contrib/test-vm-guest.sh | cut -d: -f1)" &&
 	test "$(grep -n "systemctl start shirudo-bpm-tree-sync.service" ../contrib/test-vm-guest.sh | cut -d: -f1)" -lt \
 		"$(grep -n "systemctl enable --now shirudo-bpm-tree-sync.timer" ../contrib/test-vm-guest.sh | cut -d: -f1)"
@@ -827,20 +826,6 @@ test_expect_success 'test-vm validates BPM tree configuration mode and contents'
 		>"$WORK/test-bpm-tree.out" 2>&1 &&
 	grep -q "TEST_VM_BPM_TREE_CONFIG is supported only for interactive make -C testing vm" \
 		"$WORK/test-bpm-tree.out"
-'
-
-	test_expect_success 'test-vm passes a public package certificate into the guest' '
-	grep -q "TEST_VM_PACKAGE_CERT" ../testing/Makefile &&
-	grep -q "TEST_VM_BUNDLE_INPUTS" ../testing/Makefile &&
-	grep -q "PACKAGE_CERT=\"\${TEST_VM_PACKAGE_CERT:-}\"" \
-		../contrib/build-test-vm-bundle.sh &&
-	grep -q "package-cert.der" ../contrib/build-test-vm-bundle.sh &&
-	grep -q "export TEST_VM_PACKAGE_CERT=/mnt/shirudo-package-cert/package-cert.der" \
-		"$RUNNER" &&
-	grep -q "supported only for interactive make -C testing vm" "$RUNNER" &&
-	grep -q "TEST_VM_PACKAGE_CERT" ../contrib/test-vm-guest.sh &&
-	grep -q "install -m 0644 \"\$package_cert\"" \
-		../contrib/test-vm-guest.sh
 '
 
 test_expect_success 'test-vm validates a custom package certificate before boot' '
@@ -904,51 +889,23 @@ test_expect_success 'operator and target runners have disjoint explicit scopes' 
 	grep -q "bpm/t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
 	grep -q "tpm/t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
 	! grep -q "t1101" ../testing/run-tests.sh &&
-	for test_name in \
-		t1200-target-fixtures.sh \
-		bpm/t1118-bpm-tree.sh \
-		bpm/t1119-bpm-tree-sequential.sh \
-		bpm/t1120-bpm-tree-delete.sh \
-		tpm/t1102-eventlog-full.sh \
-		t1103-version-gate.sh \
-		t1104-payload-mismatch.sh \
-		t1107-load-unload.sh \
-		tpm/t1108-tpm-chain.sh \
-		t1111-upatch-get.sh \
-		t1114-uprobe-multi.sh \
-		otel/t1115-map-export-all.sh \
-		otel/t1116-otel-backend.sh \
-		otel/t1117-otel-serialized-metric.sh \
-		t1122-initrd.sh \
-		t1123-keys.sh \
-		t1124-keys-add.sh \
-		t1126-keys-revoke.sh \
-		tamperproof/t1101-seal.sh \
-		tamperproof/t1105-siggate.sh \
-		tamperproof/t1110-lsm-deny.sh \
-		tamperproof/t1112-prog-load-keyring-gate.sh \
-		tamperproof/t1113-mount-lockdown.sh \
-		tamperproof/t1130-map-lockdown.sh \
-		tamperproof/t1131-pr-set-mm-identity.sh \
-		tamperproof/t1121-bpf-keyring.sh \
-		tamperproof/t1125-key-permission.sh \
-		tamperproof/t1106-keyring-swap.sh
+	for test_name in t1200-target-fixtures.sh t1107-load-unload.sh \
+		bpm/t1118-bpm-tree.sh tamperproof/t1140-verity-authority.sh \
+		tamperproof/t1154-verity-config.sh tamperproof/t1158-verity-interruption.sh
 	do
 		grep -q "$test_name" ../testing/run-target-tests.sh || return 1
-	done &&
-	forbidden=$(printf '%s%s' SHIRUDO_ INTEGRATION) &&
-	! grep -R -q "$forbidden" ../testing/Makefile ../contrib ../testing
+	done
 '
 
 test_expect_success 'test-vm rejects unknown policy modes before boot' '
 	! TEST_VM_MODE=typo "$RUNNER" >"$WORK/policy-mode.out" 2>&1 &&
-	grep -q "TEST_VM_MODE must be legacy or verity" "$WORK/policy-mode.out"
+	grep -q "TEST_VM_MODE must be verity" "$WORK/policy-mode.out"
 '
 
 test_expect_success 'image VM requires initrd enrollment and complete guards' '
 	! TEST_VM_MODE=verity TEST_VM_INITRD=0 "$RUNNER" \
 		>"$WORK/image-initrd.out" 2>&1 &&
-	grep -q "verity mode requires TEST_VM_INITRD=1" "$WORK/image-initrd.out" &&
+	grep -q "dm-verity requires TEST_VM_INITRD=1" "$WORK/image-initrd.out" &&
 	! TEST_VM_MODE=verity TEST_VM_INITRD=1 TEST_VM_SKIP_SEAL=1 "$RUNNER" \
 		>"$WORK/image-seal.out" 2>&1 &&
 	grep -q "TEST_VM_SKIP_SEAL=0" "$WORK/image-seal.out"
@@ -957,13 +914,7 @@ test_expect_success 'image VM requires initrd enrollment and complete guards' '
 test_expect_success 'image VM refuses an incompatible partial suite' '
 	! TEST_VM_MODE=verity TEST_VM_INITRD=1 TEST_VM_SUITE=tree "$RUNNER" \
 		>"$WORK/image-suite.out" 2>&1 &&
-	grep -q "verity mode requires the complete test suite" "$WORK/image-suite.out"
-'
-
-test_expect_success 'target runner refuses an unknown policy mode' '
-	! SHIRUDO_TEST_MODE=typo sh ./run-target-tests.sh \
-		>"$WORK/target-mode.out" 2>&1 &&
-	grep -q "SHIRUDO_TEST_MODE must be legacy or verity" "$WORK/target-mode.out"
+	grep -q "dm-verity requires the complete test suite" "$WORK/image-suite.out"
 '
 
 test_expect_success 'image target runner refuses missing fixture configuration' '

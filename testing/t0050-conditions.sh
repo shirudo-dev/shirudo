@@ -15,18 +15,7 @@ H=helper/test-conditions
 test_expect_success 'the bpf keyring init froze is the production anchor' '
 	out=$(./$H 1 bpf 100 100 match) &&
 	echo "$out" | grep -qx "status=ok" &&
-	echo "$out" | grep -qx "KeyringSealed OK serial=100 in the bpf keyring, pin matches"
-'
-
-test_expect_success 'a staged user keyring warns' '
-	out=$(./$H 1 user 200 200 match) &&
-	echo "$out" | grep -qx "status=ok" &&
-	echo "$out" | grep -q "^KeyringSealed WARN staging mode: serial=200 in the user keyring;"
-'
-
-test_expect_success 'a user keyring without the LSM is not called the bpf keyring' '
-	./$H 0 user 300 0 none |
-		grep -qx "KeyringSealed OK serial=300 in the user keyring, no pin recorded"
+	echo "$out" | grep -qx "KeyringSealed OK serial=100 in the BPF keyring, pin matches"
 '
 
 test_expect_success 'before init the keyring is pending, not tampered' '
@@ -42,25 +31,18 @@ test_expect_success 'a swapped keyring is tampered' '
 	echo "$out" | grep -qx "KeyringSealed ALERT pin serial=100 != live serial=101 (swapped?)"
 '
 
-test_expect_success 'a frozen user keyring that is gone is tampered' '
-	out=$(./$H 1 user -1 200 match) &&
-	echo "$out" | grep -qx "status=tampered" &&
-	echo "$out" | grep -qx "reason=the keyring init froze is gone" &&
-	echo "$out" | grep -qx "KeyringSealed ALERT pin serial=200, the user keyring is gone (removed?)"
-'
-
 test_expect_success 'a frozen bpf keyring that is gone is tampered' '
 	out=$(./$H 1 bpf -1 100 match) &&
 	echo "$out" | grep -qx "status=tampered" &&
-	echo "$out" | grep -qx "KeyringSealed ALERT pin serial=100, the bpf keyring is gone (removed?)"
+	echo "$out" | grep -qx "KeyringSealed ALERT pin serial=100, the BPF keyring is gone (removed?)"
 '
 
 test_expect_success 'with the LSM off a gone keyring is still tampered' '
-	./$H 0 user -1 200 none | grep -qx "status=tampered"
+	./$H 0 bpf -1 200 none | grep -qx "status=tampered"
 '
 
 test_expect_success 'a register mismatch is the reason given first' '
-	./$H 1 user -1 200 mismatch |
+	./$H 1 bpf -1 200 mismatch |
 		grep -qx "reason=live register != eventlog replay"
 '
 

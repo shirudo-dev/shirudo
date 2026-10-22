@@ -11,25 +11,14 @@ NAME=shirudo-test-map-export
 LOAD="$FIXTURES/$NAME.upatch"
 UNLOAD="$FIXTURES/$NAME.unload.upatch"
 PIN="/run/shirudo/bpffs/upatches/$NAME/link"
-CONFIG=/etc/shirudo/shirudo.conf
 WORK=$(mktemp -d)
 SERVER=""
-JSON_DIR="$WORK/jsonl"
-CONFIG_EXISTED=0
-if [ "${SHIRUDO_TEST_MODE:-legacy}" = verity ]; then
-	export SHIRUDO_TEST_OTEL_PORT=5444
-	JSON_DIR=/tmp/shirudo-test-jsonl
-elif [ -e "$CONFIG" ]; then
-	cp "$CONFIG" "$WORK/config"
-	CONFIG_EXISTED=1
-fi
+JSON_DIR=/tmp/shirudo-test-jsonl
+export SHIRUDO_TEST_OTEL_PORT=5444
 restore() {
 	[ -n "$SERVER" ] && kill "$SERVER" >/dev/null 2>&1 || true
 	[ -n "$SERVER" ] && wait "$SERVER" 2>/dev/null || true
 	if [ -e "$PIN" ]; then "$SHIRUDO_BIN" upatch unload "$UNLOAD" --no-precheck >/dev/null 2>&1 || true; fi
-	if [ "${SHIRUDO_TEST_MODE:-legacy}" != verity ]; then
-		if [ "$CONFIG_EXISTED" -eq 1 ]; then cp "$WORK/config" "$CONFIG"; else rm -f "$CONFIG"; fi
-	fi
 	rm -rf "$JSON_DIR" "$WORK"
 }
 trap restore EXIT
@@ -80,11 +69,7 @@ test_expect_success '--all exports one detailed JSON record per loaded map' '
 '
 
 test_expect_success 'configured JSON-lines output appends one valid record per map' '
-	if [ "${SHIRUDO_TEST_MODE:-legacy}" = verity ]; then
-		"$SHIRUDO_BIN" image update "$SHIRUDO_TEST_KEY_FIXTURES/config-jsonl"
-	else
-		printf "map_export.json_path = %s\n" "$JSON_DIR/maps.ndjson" >"$CONFIG"
-	fi &&
+	"$SHIRUDO_BIN" image update "$SHIRUDO_TEST_KEY_FIXTURES/config-jsonl" &&
 	"$SHIRUDO_BIN" upatch map --all &&
 	"$SHIRUDO_BIN" upatch map --all &&
 	python3 - "$JSON_DIR/maps.ndjson" <<'\''PY'\''
@@ -98,11 +83,7 @@ PY
 '
 
 test_expect_success 'configured JSON-lines output reports an unwritable destination' '
-	if [ "${SHIRUDO_TEST_MODE:-legacy}" = verity ]; then
-		"$SHIRUDO_BIN" image update "$SHIRUDO_TEST_KEY_FIXTURES/config-jsonl-bad"
-	else
-		printf "map_export.json_path = %s\n" "$JSON_DIR/missing/maps.ndjson" >"$CONFIG"
-	fi &&
+	"$SHIRUDO_BIN" image update "$SHIRUDO_TEST_KEY_FIXTURES/config-jsonl-bad" &&
 	! "$SHIRUDO_BIN" upatch map --all >/dev/null 2>&1
 '
 
@@ -112,12 +93,7 @@ test_expect_success '--all auto exports mixed metric and log maps' '
 	i=0; while test ! -s "$WORK/otel.port" && test "$i" -lt 100; do i=$((i+1)); sleep .02; done;
 	test -s "$WORK/otel.port" &&
 	port=$(cat "$WORK/otel.port") &&
-	if [ "${SHIRUDO_TEST_MODE:-legacy}" = verity ]; then
-		"$SHIRUDO_BIN" image update "$SHIRUDO_TEST_KEY_FIXTURES/config-otel"
-	else
-		printf "%s\n" "map_export.tenant_id = tenant-config-0000" \
-			"map_export.otel_endpoint = http://127.0.0.1:1/ignored" >"$CONFIG"
-	fi &&
+	"$SHIRUDO_BIN" image update "$SHIRUDO_TEST_KEY_FIXTURES/config-otel" &&
 	"$SHIRUDO_BIN" upatch map --all --otel --otel-endpoint="http://127.0.0.1:$port/base" &&
 	"$SHIRUDO_BIN" upatch map --all --otel --tenant-id=tenant-uuid-1234 --otel-endpoint="http://127.0.0.1:$port/base";
 	kill "$SERVER" >/dev/null 2>&1 || true; wait "$SERVER" 2>/dev/null || true; SERVER="";

@@ -27,8 +27,6 @@ do
 	[ -s "$fixture" ] || test_skip_all "missing tree fixture: $fixture"
 done
 
-[ "${SHIRUDO_TEST_MODE:-legacy}" = verity ] || [ ! -e "$TREE_CONFIG" ] || test_skip_all "tree config already exists"
-[ "${SHIRUDO_TEST_MODE:-legacy}" = verity ] || [ ! -e "$TREE_LABELS" ] || test_skip_all "node labels already exist"
 [ "$(tree_state_field tree_id)" = shirudo-test-tree ] &&
 	[ "$(tree_state_field last_seq)" = 3 ] &&
 	[ -e "$MATCH_PIN" ] ||

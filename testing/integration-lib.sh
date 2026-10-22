@@ -72,22 +72,12 @@ tree_state_field() {
 
 # Point the target at the fixture tree at the given reference.
 tree_configure() {
-	if [ "${SHIRUDO_TEST_MODE:-legacy}" = verity ]; then
-		"$SHIRUDO_BIN" image update \
-			"$SHIRUDO_TEST_KEY_FIXTURES/config-tree-$1"
-		return
-	fi
-	mkdir -p /etc/shirudo/bpm
-	printf 'env=tree-test\n' >"$TREE_LABELS"
-	printf '%s\n' \
-		'endpoint = oci://127.0.0.1:5443/shirudo/upatch-tree' \
-		"reference = $1" >"$TREE_CONFIG"
+	"$SHIRUDO_BIN" image update \
+		"$SHIRUDO_TEST_KEY_FIXTURES/config-tree-$1"
 }
 
-tree_cleanup_config() {
-	[ "${SHIRUDO_TEST_MODE:-legacy}" != verity ] || return 0
-	rm -f "$TREE_CONFIG" "$TREE_LABELS"
-}
+# Config fixtures are immutable; later tests activate their own signed image.
+tree_cleanup_config() { :; }
 
 # Serve the fixture registry $1 on 127.0.0.1:5443, logging requests to
 # $2/requests.log, and wait for it; tree_registry_stop ends it.
@@ -115,15 +105,7 @@ tree_sync() {
 	BPM_OCI_SCHEME=http "$SHIRUDO_BIN" bpm tree sync --report "$1" >/dev/null
 }
 
-# "bpf" once init enrolled the certificate in the kernel's bpf keyring,
-# "user" while it is staged in the user keyring.
-keyring_mode() {
-	"$SHIRUDO_BIN" status --json 2>/dev/null | report_field keyring_mode
-}
-
-# What a load verified against a keyring the caller supplied gets: the
-# kernel refuses the keyring outright (EPERM) when the bpf keyring is the
-# trust anchor, the admission hook denies it (EACCES) while staging.
+# A sealed kernel BPF keyring refuses caller-supplied trust anchors.
 foreign_keyring_errno() {
-	[ "$(keyring_mode)" = bpf ] && echo 1 || echo 13
+	echo 1
 }

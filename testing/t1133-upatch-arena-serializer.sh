@@ -12,16 +12,13 @@ FIXTURES=$SHIRUDO_TEST_FIXTURES_DIR
 NAME=shirudo-test-arena-tree
 LOAD="$FIXTURES/$NAME.upatch"
 UNLOAD="$FIXTURES/$NAME.unload.upatch"
-PIN="/run/shirudo/bpffs/upatches/$NAME/link"
 SERIALIZER="/run/shirudo/bpffs/upatches/$NAME/serializers/tree_arena"
 WORK=/tmp/shirudo-upatch-arena-$$
 TREE_JSON=$WORK.txt
 CHECK=$WORK.py
 restore() {
-	if [ -e "$PIN" ]; then
-		"$SHIRUDO_BIN" upatch unload "$UNLOAD" --no-precheck \
-			>/dev/null 2>&1 || true
-	fi
+	"$SHIRUDO_BIN" upatch unload "$UNLOAD" --no-precheck \
+		>/dev/null 2>&1 || true
 	rm -f "$TREE_JSON" "$CHECK"
 }
 trap restore EXIT
@@ -65,6 +62,7 @@ test_expect_success 'loaded arena serializer returns all pages and records' '
 	{
 		if "$SHIRUDO_BIN" upatch map "$NAME" tree_error \
 			>/dev/null 2>&1; then false; fi
-	}
+	} &&
+	"$SHIRUDO_BIN" upatch unload "$UNLOAD" --no-precheck >/dev/null 2>&1
 '
 test_done
