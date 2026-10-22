@@ -136,6 +136,10 @@ if ! TMPDIR="$GUESTFS_TMP_DIR" XDG_RUNTIME_DIR="$GUESTFS_RUNTIME_DIR" \
 	if grep -q 'Attempted to kill init\|Kernel panic.*not syncing' "$CUSTOMIZE_LOG"; then
 		printf '[test-vm-runtime] check: the selected kernel booted but is not compatible with the libguestfs appliance; use a distribution host kernel via SUPERMIN_KERNEL\n' >&2
 	fi
+	if grep -q '^\(Err\|W\):' "$CUSTOMIZE_LOG"; then
+		printf '[test-vm-runtime] apt could not fetch:\n' >&2
+		grep -A1 '^\(Err\|W\):' "$CUSTOMIZE_LOG" | head -40 >&2
+	fi
 	printf '[test-vm-runtime] last diagnostics:\n' >&2
 	tail -20 "$CUSTOMIZE_LOG" >&2
 	rm -f -- "$CUSTOMIZE_LOG"

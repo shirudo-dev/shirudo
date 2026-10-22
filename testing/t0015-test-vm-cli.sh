@@ -288,6 +288,25 @@ test_expect_success 'the runtime image passes the caller proxy to apt in the app
 	grep -q "plain http" "$WORK/dns-run.out"
 '
 
+test_expect_success 'a failed runtime image shows what apt could not fetch' '
+	mkdir -p "$WORK/aptfail-bin" &&
+	printf "%s\n" "#!/bin/sh" \
+		"echo \"Err:1 http://archive.ubuntu.com/ubuntu resolute InRelease\"" \
+		"echo \"  Temporary failure resolving archive.ubuntu.com\"" \
+		"echo \"E: Unable to locate package ripgrep\"" \
+		"exit 1" >"$WORK/aptfail-bin/virt-customize" &&
+	chmod +x "$WORK/aptfail-bin/virt-customize" &&
+	! env PATH="$WORK/aptfail-bin:$WORK/dns-bin:$PATH" TMPDIR="$WORK" \
+		LIBGUESTFS_CACHEDIR="$WORK/aptfail-cache" \
+		../contrib/prepare-test-vm-runtime.sh \
+		--rootfs "$WORK/dns-rootfs" --cache-dir "$WORK/aptfail-cache/img" \
+		--package-file ../contrib/test-vm-runtime-packages \
+		--runtime-key aptfail --key-output "$WORK/aptfail-cache/key" \
+		>"$WORK/aptfail.out" 2>&1 &&
+	grep -q "apt could not fetch" "$WORK/aptfail.out" &&
+	grep -q "Temporary failure resolving archive.ubuntu.com" "$WORK/aptfail.out"
+'
+
 test_expect_success 'the kernel package format follows the host package manager' '
 	printf "print:\n\t@echo \$(PACKAGE_FORMAT)\n" >"$WORK/print.mk" &&
 	format() {
