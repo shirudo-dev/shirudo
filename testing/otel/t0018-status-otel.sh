@@ -6,6 +6,7 @@ cd "$(dirname "$0")"
 . ../test-lib.sh
 
 S=../../shirudo
+H=../helper/test-otel-map
 
 test_expect_success 'status --otel sends a structured keepalive log' '
 	work=$(mktemp -d)
@@ -51,6 +52,33 @@ attrs = {item["key"]: item["value"] for item in record["attributes"]}
 assert "shirudo.status" in attrs
 assert "shirudo.version_id" in attrs
 PY
+'
+
+test_expect_success 'keepalive status severities and structured body are deterministic' '
+	for status in ok degraded init-pending lsm-off tampered
+	do
+		rm -f otel.port otel.body otel.meta
+		python3 ../helper/otel-mock.py success otel.port otel.body otel.meta &
+		server=$!
+		i=0; while test ! -s otel.port && test "$i" -lt 100; do i=$((i+1)); sleep .02; done
+		port=$(cat otel.port) && "$H" send-status "http://127.0.0.1:$port" "$status" && wait "$server" &&
+		python3 - "$status" otel.body <<'\''PY'\'' || return 1
+import json, sys
+status = sys.argv[1]
+record = json.load(open(sys.argv[2]))["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0]
+expected = {"ok": (9, "INFO"), "degraded": (13, "WARN"),
+            "init-pending": (13, "WARN"), "lsm-off": (17, "ERROR"),
+            "tampered": (17, "ERROR")}[status]
+assert (record["severityNumber"], record["severityText"]) == expected
+assert record["eventName"] == "shirudo.keepalive"
+body = {item["key"]: item["value"] for item in record["body"]["kvlistValue"]["values"]}
+assert body["status"]["stringValue"] == status
+assert body["schema"]["intValue"] == "1"
+attrs = {item["key"]: item["value"] for item in record["attributes"]}
+assert attrs["shirudo.status"]["stringValue"] == status
+assert attrs["shirudo.tamper_attempts"]["intValue"] == "2"
+PY
+	done
 '
 
 test_expect_success 'status --json --otel keeps JSON output available' '

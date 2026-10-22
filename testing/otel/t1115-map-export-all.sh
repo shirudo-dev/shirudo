@@ -69,13 +69,33 @@ test_expect_success '--all exports one detailed JSON record per loaded map' '
 	python3 "$WORK/check-maps.py" "$WORK/maps.ndjson" "$NAME"
 '
 
+test_expect_success 'configured JSON-lines output appends one valid record per map' '
+	printf "map_export.json_path = %s\n" "$WORK/configured.ndjson" >"$CONFIG" &&
+	"$SHIRUDO_BIN" upatch map --all &&
+	"$SHIRUDO_BIN" upatch map --all &&
+	python3 - "$WORK/configured.ndjson" <<'\''PY'\''
+import json, sys
+records = [json.loads(line) for line in open(sys.argv[1], encoding="utf-8")]
+assert len(records) == 4
+assert sum(isinstance(record, dict) and record.get("map") == "first"
+           for record in records) == 2
+assert sum(isinstance(record, list) for record in records) == 2
+PY
+'
+
+test_expect_success 'configured JSON-lines output reports an unwritable destination' '
+	printf "map_export.json_path = %s\n" "$WORK/missing/maps.ndjson" >"$CONFIG" &&
+	! "$SHIRUDO_BIN" upatch map --all >/dev/null 2>&1
+'
+
 test_expect_success '--all auto exports mixed metric and log maps' '
 	python3 "$WORK/otel.py" "$WORK/otel.port" "$WORK/otel.meta" &
 	SERVER=$!;
 	i=0; while test ! -s "$WORK/otel.port" && test "$i" -lt 100; do i=$((i+1)); sleep .02; done;
 	test -s "$WORK/otel.port" &&
 	port=$(cat "$WORK/otel.port") &&
-	printf "%s\n" "map_export.tenant_id = tenant-config-0000" >"$CONFIG" &&
+	printf "%s\n" "map_export.tenant_id = tenant-config-0000" \
+		"map_export.otel_endpoint = http://127.0.0.1:1/ignored" >"$CONFIG" &&
 	"$SHIRUDO_BIN" upatch map --all --otel --otel-endpoint="http://127.0.0.1:$port/base" &&
 	"$SHIRUDO_BIN" upatch map --all --otel --tenant-id=tenant-uuid-1234 --otel-endpoint="http://127.0.0.1:$port/base";
 	kill "$SERVER" >/dev/null 2>&1 || true; wait "$SERVER" 2>/dev/null || true; SERVER="";
