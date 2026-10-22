@@ -136,7 +136,7 @@ jobs:
             make -j4
             make install
 
-            git clone --depth 1 --branch 4.1.3 \
+            git clone --depth 1 --branch 4.2.0 \
               https://github.com/tpm2-software/tpm2-tss.git \
               /tmp/shirudo-target-deps/tpm2-tss
             cd /tmp/shirudo-target-deps/tpm2-tss
