@@ -312,6 +312,13 @@ decoders and shared headers.  Build and inspect::
         --keys-dir /var/lib/shirudo/keys
     shirudo bpm info ./example-shields-1.0.0.bee
 
+``bpm build`` is an operator-only command.  ``shirudo`` exposes it only
+when it can resolve ``shirudo-build``; an installed operator package
+provides the helper.  From a checkout, set ``SHIRUDO_BUILD`` to
+``tools/shirudo-build/shirudo-build`` or put both that directory and the
+checkout root on ``PATH``.  If ``shirudo bpm --help`` shows only target
+commands, the helper was not found.
+
 ``bpm build [context] --version <v> [-f <Beefile>] [--keys-dir <dir>]``
 builds and signs every entry through ``shirudo-build`` and writes
 ``<name>-<version>.bee``: a gzip tarball with the ``Beefile``, the

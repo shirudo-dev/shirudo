@@ -123,6 +123,12 @@ exists only in the operator package.  The operator never opens the TPM
 or the kernel keyring, and persists nothing but the keypair and the
 files the caller names.
 
+The core binary exposes the operator-only BPM commands only when it can
+resolve ``shirudo-build``.  The installed operator package provides the
+helper; a checkout must set ``SHIRUDO_BUILD`` or put both the checkout
+root and ``tools/shirudo-build`` on ``PATH``.  Without the helper,
+``shirudo bpm --help`` shows the target command set and rejects ``build``.
+
 The target holds the certificate, the sealed keyring, the private bpffs
 mount, the installed upatches, the eventlog and the TPM register.  It runs
 ``init``, ``upatch load``, ``upatch unload`` and the install side of

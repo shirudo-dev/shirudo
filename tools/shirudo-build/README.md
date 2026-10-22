@@ -27,6 +27,11 @@ checkout's locally built binaries without installing them. `shirudo
 bpm build|push|tree append` hand their full argument vector to
 `shirudo-build bpm ...` the same way.
 
+The core binary includes those BPM subcommands in `shirudo bpm --help`
+only when it can resolve this helper. If help shows only target
+subcommands, set `SHIRUDO_BUILD` or add the helper directory to `PATH` as
+shown below; otherwise `shirudo bpm build` is reported as unknown.
+
 The rationale is in `Documentation/architecture.rst` (operator and
 target boundary) and `AGENTS.md` (the no-subprocess invariant).
 

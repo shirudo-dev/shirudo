@@ -51,9 +51,19 @@ configuration; the operator package adds ``shirudo-build`` and needs
 clang on the host.  Neither ``shirudo-build`` nor clang ever ships to
 a target.
 
-When working from a checkout instead of an installed package, put the
-checkout root first on ``$PATH`` so ``shirudo build`` finds the helper,
-or point ``SHIRUDO_BUILD`` at it.
+When working from a checkout instead of an installed package, the core
+binary must be able to find ``shirudo-build`` for operator commands.
+Set ``SHIRUDO_BUILD`` to the helper, or put both the helper directory
+and the checkout root on ``PATH``::
+
+    export SHIRUDO_BUILD="$PWD/tools/shirudo-build/shirudo-build"
+    # Or, instead:
+    export PATH="$PWD/tools/shirudo-build:$PWD:$PATH"
+
+The operator-only BPM commands are advertised only when the helper is
+available.  If ``shirudo bpm --help`` lists only target commands, the
+helper was not found; ``bpm build``, ``push`` and ``tree append`` will be
+reported as unknown subcommands.
 
 2) Create a signing key
 -----------------------
