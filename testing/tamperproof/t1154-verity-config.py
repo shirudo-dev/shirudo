@@ -24,7 +24,8 @@ JOURNAL = Path("/var/lib/shirudo/config-update")
 RESULTS = Path(sys.argv[2]).resolve()
 NAMES = ("config-a", "config-b", "config-boot-keys", "config-revoke",
          "config-tree-stable", "config-tree-updated", "config-tree-deleted",
-         "config-tree-restored", "config-otel", "config-interrupted", "config-builtin")
+         "config-tree-restored", "config-otel", "config-jsonl", "config-jsonl-bad",
+         "config-interrupted", "config-builtin")
 
 
 def require(condition, message):

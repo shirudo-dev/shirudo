@@ -66,7 +66,7 @@ cp "$keys_dir/cert.der" "$output/public/primary.der"
 
 for name in config-boot-keys config-live-new-key config-a config-b config-bad config-revoke \
 	config-tree-stable config-tree-updated config-tree-deleted config-tree-restored \
-	config-otel config-interrupted config-builtin; do
+	config-otel config-jsonl config-jsonl-bad config-interrupted config-builtin; do
 	[ "$name" != config-builtin ] || [ -n "$builtin_key" ] || continue
 	root="$output/source/$name"
 	mkdir -p "$root/etc/shirudo" "$root/keys/trusted" "$root/keys/revoked"
@@ -82,6 +82,9 @@ for name in config-boot-keys config-live-new-key config-a config-b config-bad co
 		;;
 	config-otel)
 		cp "$templates/otel.conf" "$root/etc/shirudo/shirudo.conf"
+		;;
+	config-jsonl|config-jsonl-bad)
+		cp "$templates/${name#config-}.conf" "$root/etc/shirudo/shirudo.conf"
 		;;
 	esac
 	cp "$output/public/boot.der" "$root/keys/trusted/$boot_fp.der"

@@ -91,7 +91,7 @@ test_expect_success 'map-export timer does not overlap a running export' '
 	systemctl stop shirudo-map-export.timer >/dev/null 2>&1 || true
 	systemctl stop shirudo-map-export.service >/dev/null 2>&1 || true
 	cat >"$WORK/slow-otel.py" <<'PY'
-import http.server, json, pathlib, sys, threading, time
+import http.server, json, os, pathlib, sys, threading, time
 port_file, meta_file = map(pathlib.Path, sys.argv[1:3])
 state = {"active": 0, "max_active": 0, "paths": [], "times": [], "completed": 0}
 lock = threading.Lock()
@@ -114,7 +114,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             state["completed"] += 1
             meta_file.write_text(json.dumps(state))
     def log_message(self, *args): pass
-server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+server = http.server.ThreadingHTTPServer(("127.0.0.1", int(os.environ.get("SHIRUDO_TEST_OTEL_PORT", "0"))), Handler)
 server.daemon_threads = True
 port_file.write_text(str(server.server_port))
 while state["completed"] < 4:

@@ -18,7 +18,7 @@ export SHIRUDO_TEST_MODE=verity
 }
 for name in config-boot-keys config-live-new-key config-a config-b config-bad config-revoke \
 	config-tree-stable config-tree-updated config-tree-deleted config-tree-restored \
-	config-otel config-interrupted; do
+	config-otel config-jsonl config-jsonl-bad config-interrupted; do
 	for suffix in img verity roothash p7s; do
 		[ -s "$SHIRUDO_TEST_KEY_FIXTURES/$name.$suffix" ] &&
 			[ -s "/var/lib/shirudo/images/$name.$suffix" ] || {

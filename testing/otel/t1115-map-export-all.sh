@@ -14,9 +14,11 @@ PIN="/run/shirudo/bpffs/upatches/$NAME/link"
 CONFIG=/etc/shirudo/shirudo.conf
 WORK=$(mktemp -d)
 SERVER=""
+JSON_DIR="$WORK/jsonl"
 CONFIG_EXISTED=0
 if [ "${SHIRUDO_TEST_MODE:-legacy}" = verity ]; then
 	export SHIRUDO_TEST_OTEL_PORT=5444
+	JSON_DIR=/tmp/shirudo-test-jsonl
 elif [ -e "$CONFIG" ]; then
 	cp "$CONFIG" "$WORK/config"
 	CONFIG_EXISTED=1
@@ -28,9 +30,10 @@ restore() {
 	if [ "${SHIRUDO_TEST_MODE:-legacy}" != verity ]; then
 		if [ "$CONFIG_EXISTED" -eq 1 ]; then cp "$WORK/config" "$CONFIG"; else rm -f "$CONFIG"; fi
 	fi
-	rm -rf "$WORK"
+	rm -rf "$JSON_DIR" "$WORK"
 }
 trap restore EXIT
+mkdir "$JSON_DIR" || exit 1
 [ -s "$LOAD" ] || test_skip_all "missing map-export fixture"
 [ -s "$UNLOAD" ] || test_skip_all "missing map-export unload fixture"
 
@@ -77,10 +80,14 @@ test_expect_success '--all exports one detailed JSON record per loaded map' '
 '
 
 test_expect_success 'configured JSON-lines output appends one valid record per map' '
-	printf "map_export.json_path = %s\n" "$WORK/configured.ndjson" >"$CONFIG" &&
+	if [ "${SHIRUDO_TEST_MODE:-legacy}" = verity ]; then
+		"$SHIRUDO_BIN" image update "$SHIRUDO_TEST_KEY_FIXTURES/config-jsonl"
+	else
+		printf "map_export.json_path = %s\n" "$JSON_DIR/maps.ndjson" >"$CONFIG"
+	fi &&
 	"$SHIRUDO_BIN" upatch map --all &&
 	"$SHIRUDO_BIN" upatch map --all &&
-	python3 - "$WORK/configured.ndjson" <<'\''PY'\''
+	python3 - "$JSON_DIR/maps.ndjson" <<'\''PY'\''
 import json, sys
 records = [json.loads(line) for line in open(sys.argv[1], encoding="utf-8")]
 assert len(records) == 4
@@ -91,7 +98,11 @@ PY
 '
 
 test_expect_success 'configured JSON-lines output reports an unwritable destination' '
-	printf "map_export.json_path = %s\n" "$WORK/missing/maps.ndjson" >"$CONFIG" &&
+	if [ "${SHIRUDO_TEST_MODE:-legacy}" = verity ]; then
+		"$SHIRUDO_BIN" image update "$SHIRUDO_TEST_KEY_FIXTURES/config-jsonl-bad"
+	else
+		printf "map_export.json_path = %s\n" "$JSON_DIR/missing/maps.ndjson" >"$CONFIG"
+	fi &&
 	! "$SHIRUDO_BIN" upatch map --all >/dev/null 2>&1
 '
 
