@@ -363,10 +363,13 @@ marked when those hooks run. The perf allocation check is not serialized with
 exec; the separate `perf/exec race investigation
 <https://github.com/shirudo-dev/shirudo/issues/11>`__ records this limitation.
 
-Process hardening.  ``util/harden.c`` runs at startup on the target:
-``PR_SET_DUMPABLE`` off, ``PR_SET_NO_NEW_PRIVS``, ``PR_SET_PTRACER`` to
-nobody, ``RLIMIT_CORE`` zero, sensitive buffers locked in memory and
-scrubbed after use.  No host file may name code for it to load:
+Process hardening.  ``util/harden.c`` runs before command dispatch in
+both the core executable and ``shirudo-build``: ``PR_SET_DUMPABLE`` off,
+``PR_SET_NO_NEW_PRIVS``, ``PR_SET_PTRACER`` cleared and ``RLIMIT_CORE`` zero.
+``mlockall(MCL_CURRENT | MCL_FUTURE)`` keeps current and future mappings
+out of swap for the process lifetime; failure is logged and refuses
+startup. Sensitive buffers are scrubbed after use.
+No host file may name code for it to load:
 OpenSSL reads no configuration file, so none can activate a provider
 module, and host names resolve through glibc's built-in ``files`` and
 ``dns`` services alone, so ``nsswitch.conf`` cannot add a module

@@ -274,5 +274,7 @@ fi
 # emergency mode for instance, would otherwise hold the job for an hour.
 export TEST_VM_TIMEOUT=900
 
+sudo prlimit --pid "$$" --memlock=unlimited:unlimited
+
 make -C testing test-vm-bundle
 sudo -E env PATH="$PATH" make -C testing test-tgt TEST_VM_INITRD=1

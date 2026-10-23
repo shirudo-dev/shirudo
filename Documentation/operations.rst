@@ -61,6 +61,15 @@ and the ``map_export.*`` keys of ``/etc/shirudo/shirudo.conf``; the
 to receive it.  ``shirudo config`` prints every effective setting with
 a comment.
 
+Every ``shirudo`` and ``shirudo-build`` invocation locks its current and future process
+mappings before command dispatch.  The shipped services set
+``LimitMEMLOCK=infinity``.  Manual invocations need ``CAP_IPC_LOCK`` or
+a sufficiently large memory-lock limit; a failure is logged and exits
+with status 1 before the command runs.  Future allocations and stack
+growth also consume the locked-memory allowance.  The locks end on
+process exit or exec; the operator helper reapplies memory locking
+before its own command dispatch.
+
 State lives in two places.  ``/var/lib/shirudo`` is persistent:
 ``keys/`` (the primary certificate, the trusted set with its vouches,
 the revoked certificates), ``eventlog``, the ``upatches/`` archive

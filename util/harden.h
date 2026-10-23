@@ -11,6 +11,6 @@
 #include <stddef.h>
 
 void harden_stdio(void);
-void harden_self(void);
+int harden_self(void);
 
 #endif /* SHIRUDO_HARDEN_H */

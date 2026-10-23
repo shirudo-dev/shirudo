@@ -208,7 +208,8 @@ int main(int argc, char **argv)
 
 	harden_stdio();
 	log_init();
-	harden_self();
+	if (harden_self())
+		return 1;
 
 	if (argc >= 2 && strcmp(argv[1], "image") == 0)
 		return shirudo_build_image(argc - 1, argv + 1);

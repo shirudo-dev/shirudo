@@ -583,6 +583,9 @@ context and the deferred mitigations the plan.
 8) Testing
 ----------
 
+``testing/t0051-harden.sh`` checks process-wide locking, fail-closed
+startup and the memory-lock limits of every shipped service.
+
 ``testing/tpm/t0033-tpm-wire.sh`` checks the policy digests, names, wire
 parsers, the key derivations, the endorsement policy and the
 credential blob against known vectors and an independent

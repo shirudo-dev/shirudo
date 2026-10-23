@@ -112,7 +112,8 @@ int main(int argc, const char **argv)
 
 	harden_stdio();
 	log_init();
-	harden_self();
+	if (harden_self())
+		return 1;
 
 	if (argc < 2) {
 		cmd_help(0, NULL);

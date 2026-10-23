@@ -338,6 +338,14 @@ since the libguestfs appliance resolves names through DNS alone.
 The operator never needs a TPM, the kernel keyring or ``CAP_BPF``; only
 the private key under ``/var/lib/shirudo/keys/``.
 
+Both ``shirudo`` and ``shirudo-build`` lock all current and future
+process mappings before command dispatch.  Manual invocations and host
+tests need ``CAP_IPC_LOCK`` or a memory-lock limit large enough for the
+process, its libraries, mapped artifacts and subsequent allocations.
+Startup refuses to run if locking fails.  The shipped systemd services
+set ``LimitMEMLOCK=infinity``.  Locks remain for the process lifetime;
+an exec clears them and the operator helper applies its own hardening.
+
 5) Target host
 --------------
 

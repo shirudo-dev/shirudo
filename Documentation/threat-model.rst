@@ -184,7 +184,8 @@ T3  Tampering with shirudo's files and process
     Runtime executables reject traced callers and run in
     secure-exec mode, so the loader ignores unsafe environment variables.
     The process drops dumpability, forbids new privileges and locks
-    sensitive buffers. The bpf keyring is sealed with
+    all current and future process mappings against swapping before command
+    dispatch, refusing startup if locking fails. The bpf keyring is sealed with
     ``KEYCTL_RESTRICT_KEYRING`` so no key can be linked into it for the
     rest of the boot, ``lsm/key_permission`` leaves writing, unlinking,
     revoking, invalidating and re-permissioning it and the keys it

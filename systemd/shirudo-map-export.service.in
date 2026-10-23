@@ -8,6 +8,7 @@ ConditionPathExists=/run/shirudo/bpffs/lsm_link
 
 [Service]
 Type=oneshot
+LimitMEMLOCK=infinity
 TimeoutStartSec=5min
 EnvironmentFile=-/etc/shirudo/map-export.env
 ExecStart=@bindir@/shirudo upatch map --all

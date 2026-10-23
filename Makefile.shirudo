@@ -599,6 +599,7 @@ TEST_HELPERS := $(VERITY_TEST_HELPERS) \
                 testing/helper/test-string \
                 testing/helper/test-conditions \
                 testing/helper/test-config-image \
+                testing/helper/test-harden \
                 testing/helper/test-chain \
                 testing/helper/test-tpm-wire \
                 testing/helper/test-register \
@@ -634,6 +635,11 @@ testing/helper/test-conditions: testing/helper/test-conditions.c util/conditions
                                 util/string.o util/malloc.o
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^
+
+testing/helper/test-harden: testing/helper/test-harden.c util/harden.o util/log.o \
+		util/string.o util/malloc.o
+	@printf '  CC      $@\n'
+	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(LIBCRYPTO_LIBS)
 
 # chain.o's read/extend paths reference util/tpm (libtss2); the tests
 # only exercise the pure helpers, but the symbols must still resolve.
