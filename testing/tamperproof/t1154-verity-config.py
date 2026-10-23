@@ -45,20 +45,7 @@ def run(label, *arguments, success=True):
 
 
 def fault_command():
-    runtime = RUNTIME
-    directories = []
-    for directory, _, files in os.walk(runtime, followlinks=False):
-        if any(name.endswith(".so") or ".so." in name for name in files):
-            directories.append(directory)
-    library_path = ":".join(sorted(directories))
-    for name in ("lib64/ld-linux-x86-64.so.2", "lib/ld-linux-aarch64.so.1",
-                 "lib/ld-linux-riscv64-lp64d.so.1"):
-        interpreter = runtime / name
-        if interpreter.is_file():
-            return [str(interpreter), "--inhibit-cache", "--library-path",
-                    library_path, str(runtime / "usr/bin/shirudo-image-fault")]
-    raise AssertionError("runtime ELF interpreter missing")
-
+    return [str(RUNTIME / "usr/bin/shirudo-image-fault")]
 
 
 def root(name):

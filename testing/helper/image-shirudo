@@ -2,18 +2,4 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 
-runtime=/run/shirudo/runtime
-library_path=$runtime/lib:$runtime/lib64:$runtime/usr/lib:$runtime/usr/lib64
-for directory in "$runtime"/lib/*-linux-gnu "$runtime"/usr/lib/*-linux-gnu; do
-	[ -d "$directory" ] && library_path=$library_path:$directory
-done
-for loader in "$runtime"/lib64/ld-linux-x86-64.so.2 \
-	"$runtime"/lib/ld-linux-aarch64.so.1 \
-	"$runtime"/lib/ld-linux-riscv64-lp64d.so.1; do
-	if [ -x "$loader" ]; then
-		exec "$loader" --inhibit-cache --library-path "$library_path" \
-			"$runtime/usr/bin/shirudo" "$@"
-	fi
-done
-printf "image-shirudo: runtime ELF interpreter not found\n" >&2
-exit 1
+exec /run/shirudo/runtime/usr/bin/shirudo "$@"

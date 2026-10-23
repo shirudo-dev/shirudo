@@ -46,23 +46,6 @@ def snapshot():
     return files, mappings, keyring_contents()
 
 
-def runtime_command(binary):
-    interpreter = {
-        "x86_64": "lib64/ld-linux-x86-64.so.2",
-        "aarch64": "lib/ld-linux-aarch64.so.1",
-        "riscv64": "lib/ld-linux-riscv64-lp64d.so.1",
-    }[platform.machine()]
-    loader = pathlib.Path(RUNTIME) / interpreter
-    assert os.access(loader, os.X_OK), ("runtime interpreter prerequisite", loader)
-    libraries = [pathlib.Path(RUNTIME) / name
-                 for name in ("lib", "lib64", "usr/lib", "usr/lib64")]
-    for pattern in ("lib/*-linux-gnu", "usr/lib/*-linux-gnu"):
-        libraries.extend(sorted(path for path in pathlib.Path(RUNTIME).glob(pattern)
-                                if path.is_dir()))
-    return [str(loader), "--inhibit-cache", "--library-path",
-            ":".join(map(str, libraries)), binary]
-
-
 def chroot_run(root, command, arguments):
     def enter():
         os.chroot(root)
@@ -104,7 +87,7 @@ def isolated(root, command):
 def main():
     binary = os.path.abspath(sys.argv[1])
     assert binary.startswith(RUNTIME + "/"), ("runtime executable required", binary)
-    command = runtime_command(binary)
+    command = [binary]
     healthy = subprocess.run([*command, "image", "status"], capture_output=True,
                              timeout=30, check=False)
     assert healthy.returncode == 0, ("healthy image prerequisite", healthy.stderr)

@@ -214,7 +214,7 @@ test_expect_success 'installed helper finds the image scripts beside it' '
 	mkdir -p "$W/operator/gen-image" &&
 	cp "$B" "$W/operator/shirudo-build" &&
 	cp ../tools/gen-image/shirudo-gen-* ../tools/gen-image/common.sh \
-		../tools/gen-image/runtime-service.conf.in "$W/operator/gen-image/" &&
+		../tools/gen-image/runtime-service*.conf.in "$W/operator/gen-image/" &&
 	"$W/operator/shirudo-build" image build "$W/data" -o "$W/installed" --keys-dir "$W/keys" &&
 	verify "$W/installed" "$W/keys/cert.der"
 '
@@ -290,6 +290,22 @@ if command -v mkfs.ext4 >/dev/null 2>&1 && command -v debugfs >/dev/null 2>&1; t
 			>"$W/extracted.der" 2>/dev/null &&
 		cmp "$W/extracted.der" "$W/other/cert.der"
 	'
+	test_expect_success 'static runtime images run directly without a packaged loader' '
+		../tools/gen-image/shirudo-gen-runtime --binary "$W/static-probe" \
+			--bootstrap-conf "$W/bootstrap.conf" --cert "$W/keys/cert.der" \
+			--config-cert "$W/other/cert.der" --keys-dir "$W/keys" --builder "$B" \
+			--unit-output "$W/static-runtime.service" \
+			--output "$W/static-runtime" --size 8 &&
+		verify "$W/static-runtime" "$W/keys/cert.der" &&
+		grep -qx "ExecStart=/run/shirudo/runtime/usr/bin/shirudo init" \
+			"$W/static-runtime.service" &&
+		debugfs -R "dump /usr/bin/shirudo $W/extracted-static" \
+			"$W/static-runtime.img" >/dev/null 2>&1 &&
+		cmp "$W/static-probe" "$W/extracted-static" &&
+		debugfs -R "ls /" "$W/static-runtime.img" >"$W/static-root" 2>/dev/null &&
+		! grep -Eq "(lib|lib64)" "$W/static-root"
+	'
+
 fi
 
 test_done

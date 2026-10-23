@@ -564,8 +564,8 @@ build/verity-tests/shirudo-policy-probe: \
 
 ifeq ($(PROFILE),target)
 VERITY_TEST_LIBS := $(TARGET_TLS_STATIC_LINK_LIBS) \
-		    $(TARGET_STATIC_RUNTIME_LINK_LIBS) \
-		    -Wl,-Bdynamic $(TARGET_TLS_DYNAMIC_LINK_LIBS)
+		    $(TARGET_STATIC_RUNTIME_LINK_LIBS)
+VERITY_TEST_LDFLAGS := $(HARDEN_STATIC_PIE_LDFLAGS) -static-pie -static-libgcc
 else
 VERITY_TEST_LIBS := $(DYNAMIC_LIBS)
 endif
@@ -575,8 +575,8 @@ build/verity-tests/shirudo-image-fault: testing/helper/image-fault.c \
 		$(MAIN_OBJ) $(BUILTIN_OBJS) $(UTIL_OBJS) $(VERSION_OBJ) $(LIBBPF_A)
 	@printf '  CC      $@\n'
 	$(Q)mkdir -p $(dir $@)
-	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) $(RPATH_LDFLAGS) -o $@ \
-		$(filter-out %.h,$^) \
+	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) $(RPATH_LDFLAGS) \
+		$(VERITY_TEST_LDFLAGS) -o $@ $(filter-out %.h,$^) \
 		-Wl,--wrap=main,--wrap=Esys_PCR_Extend \
 		-Wl,--wrap=shirudo_config_root_begin,--wrap=shirudo_config_root_end \
 		$(STATIC_LIBS) $(VERITY_TEST_LIBS)
