@@ -145,7 +145,7 @@ static int compile_to_temp(const char *source, const char *vmlinux_h,
 		return -errno;
 	close(fd);
 
-	rc = shirudo_build_compile(source, tmpl, vmlinux_h, extra_cflags);
+	rc = shirudo_build_compile(source, tmpl, vmlinux_h, extra_cflags, NULL);
 	if (rc) {
 		unlink(tmpl);
 		return rc;
@@ -395,7 +395,7 @@ int main(int argc, char **argv)
 				return 1;
 			}
 			rc = shirudo_build_compile(input, artifact_buf,
-						   vmlinux_h, extra_cflags);
+						   vmlinux_h, extra_cflags, NULL);
 			if (rc) {
 				pr_err("compile %s: %d", input, rc);
 				return 1;

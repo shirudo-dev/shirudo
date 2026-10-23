@@ -771,6 +771,18 @@ static const char *build_vmlinux_from_cwd(char *out, size_t cap)
 	return NULL;
 }
 
+static const char *build_shirudo_bpf_include(char *out)
+{
+	char header[PATH_MAX];
+
+	if (!realpath("bpf/lib", out))
+		return NULL;
+	if (strsprintf(header, sizeof(header), "%s/shirudo_serializer.h",
+		       out) < 0 || access(header, R_OK))
+		return NULL;
+	return out;
+}
+
 static void build_stage_close(struct bpm_build_spec *spec)
 {
 	char object[PATH_MAX + 8];
@@ -794,7 +806,8 @@ static void build_stage_close(struct bpm_build_spec *spec)
  * ended up with.
  */
 static int build_upatches(struct bpm_build_spec *spec, const char *pkey,
-			  const char *cert, const char *vmlinux_override)
+			  const char *cert, const char *vmlinux_override,
+			  const char *shirudo_bpf_incdir)
 {
 	const char *vmlinux_h = vmlinux_override;
 
@@ -829,7 +842,8 @@ static int build_upatches(struct bpm_build_spec *spec, const char *pkey,
 			}
 			if (strsprintf(object, sizeof(object), "%s.bpf.o", load) < 0)
 				return -ENAMETOOLONG;
-			rc = shirudo_build_compile(source, object, vmlinux_h, NULL);
+			rc = shirudo_build_compile(source, object, vmlinux_h, NULL,
+						   shirudo_bpf_incdir);
 			if (rc) {
 				pr_err("bpm build: compile %s failed", u->source);
 				return rc < 0 ? rc : -EIO;
@@ -1135,8 +1149,10 @@ static int shirudo_build_bpm_build(int argc, char **argv)
 	const char *context = ".", *file_arg = NULL, *version = NULL;
 	const char *keys_arg = NULL, *vmlinux_arg = NULL;
 	const char *vmlinux_override = NULL;
+	const char *shirudo_bpf_incdir = NULL;
 	char build_file[PATH_MAX], resolved_file[PATH_MAX];
 	char keys_dir[PATH_MAX], vmlinux_abs[PATH_MAX];
+	char shirudo_bpf_incdir_buf[PATH_MAX];
 	char keys_abs[PATH_MAX], pkey[PATH_MAX], cert_path[PATH_MAX];
 	char fingerprint[SHIRUDO_CRYPTO_SHA256_LEN * 2 + 1];
 	__u8 digest[SHIRUDO_CRYPTO_SHA256_LEN];
@@ -1210,6 +1226,7 @@ static int shirudo_build_bpm_build(int argc, char **argv)
 							  sizeof(vmlinux_abs));
 	if (!getcwd(out_dir, sizeof(out_dir)))
 		return -errno;
+	shirudo_bpf_incdir = build_shirudo_bpf_include(shirudo_bpf_incdir_buf);
 	if (file_arg) {
 		if (strscpy(build_file, file_arg, sizeof(build_file)) < 0)
 			return -ENAMETOOLONG;
@@ -1261,7 +1278,8 @@ static int shirudo_build_bpm_build(int argc, char **argv)
 	rc = build_stage_open(spec);
 	if (rc)
 		goto out_cert;
-	rc = build_upatches(spec, pkey, cert_path, vmlinux_override);
+	rc = build_upatches(spec, pkey, cert_path, vmlinux_override,
+			    shirudo_bpf_incdir);
 	if (!rc)
 		rc = build_archive(spec, version, cert_path, fingerprint, out_dir);
 	build_stage_close(spec);
