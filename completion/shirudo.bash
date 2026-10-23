@@ -90,6 +90,9 @@ _shirudo()
 			COMPREPLY=( $(compgen -W "--key-file=" -- "$cur") )
 		elif [[ $sub == repo && cword -eq 3 ]]; then
 			COMPREPLY=( $(compgen -W "update" -- "$cur") )
+		elif [[ $sub == info ]]; then
+			COMPREPLY=( $(compgen -f -X '!*.bee' -- "$cur") \
+				    $(compgen -d -- "$cur") )
 		elif [[ $sub == build && ${COMP_WORDS[COMP_CWORD-1]} == -f ]]; then
 			COMPREPLY=( $(compgen -f -X '!*.bee' -- "$cur") \
 				    $(compgen -d -- "$cur") )
