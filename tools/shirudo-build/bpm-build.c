@@ -32,6 +32,7 @@
 #include "log.h"
 #include "hex.h"
 #include "malloc.h"
+#include "macros.h"
 #include "timefmt.h"
 #include "package.h"
 #include "paths.h"
@@ -757,6 +758,19 @@ static int build_stage_open(struct bpm_build_spec *spec)
 	return 0;
 }
 
+static const char *build_vmlinux_from_cwd(char *out, size_t cap)
+{
+	static const char *const paths[] = {
+		"./vmlinux.h", "./vendor/linux/vmlinux.h",
+	};
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(paths); i++)
+		if (realpath(paths[i], out))
+			return out;
+	return NULL;
+}
+
 static void build_stage_close(struct bpm_build_spec *spec)
 {
 	char object[PATH_MAX + 8];
@@ -1120,6 +1134,7 @@ static int shirudo_build_bpm_build(int argc, char **argv)
 {
 	const char *context = ".", *file_arg = NULL, *version = NULL;
 	const char *keys_arg = NULL, *vmlinux_arg = NULL;
+	const char *vmlinux_override = NULL;
 	char build_file[PATH_MAX], resolved_file[PATH_MAX];
 	char keys_dir[PATH_MAX], vmlinux_abs[PATH_MAX];
 	char keys_abs[PATH_MAX], pkey[PATH_MAX], cert_path[PATH_MAX];
@@ -1188,6 +1203,11 @@ static int shirudo_build_bpm_build(int argc, char **argv)
 		       vmlinux_arg, strerror(errno));
 		return -errno;
 	}
+	if (vmlinux_arg)
+		vmlinux_override = vmlinux_abs;
+	else
+		vmlinux_override = build_vmlinux_from_cwd(vmlinux_abs,
+							  sizeof(vmlinux_abs));
 	if (!getcwd(out_dir, sizeof(out_dir)))
 		return -errno;
 	if (file_arg) {
@@ -1241,8 +1261,7 @@ static int shirudo_build_bpm_build(int argc, char **argv)
 	rc = build_stage_open(spec);
 	if (rc)
 		goto out_cert;
-	rc = build_upatches(spec, pkey, cert_path,
-			    vmlinux_arg ? vmlinux_abs : NULL);
+	rc = build_upatches(spec, pkey, cert_path, vmlinux_override);
 	if (!rc)
 		rc = build_archive(spec, version, cert_path, fingerprint, out_dir);
 	build_stage_close(spec);

@@ -55,8 +55,9 @@ target boundary) and `AGENTS.md` (the no-subprocess invariant).
 `make install-operator` installs it alongside `shirudo` at this path.
 The operator package includes both binaries and depends on `clang` and
 `llvm` to compile `.bpf.c` inputs. Building from source also needs a
-`vmlinux.h` for the target kernel; pass `--vmlinux` when it is not in
-the default search paths.
+`vmlinux.h` for the target kernel. BPM builds search from the command's
+working directory before the package directory; pass `--vmlinux` to
+select a different header explicitly.
 
 For checkout/developer use, build both binaries and put their directories
 first on `PATH`:

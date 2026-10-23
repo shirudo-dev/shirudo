@@ -353,6 +353,10 @@ rebuilt package gets a new version.
 
 ``--vmlinux`` selects the BTF header used to compile BPF C entries. Its
 path is resolved before the builder changes to the package directory.
+Without it, ``bpm build`` checks ``./vmlinux.h`` and
+``./vendor/linux/vmlinux.h`` from the command's working directory first,
+then checks those paths from the package directory and the installed
+shared header path.
 
 6) Publishing
 -------------
