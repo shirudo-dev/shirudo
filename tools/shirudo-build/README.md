@@ -14,7 +14,7 @@ dispatch to this separate helper with `execv`; when compiling `.bpf.c`
 input, the helper forks and execs `clang -target bpf`. The helper ships
 only in the operator package, so no target-side code path can reach the
 compiler or the operator signing code. It hosts the operator-only BPM
-commands: `shirudo bpm build` (Beefile to signed `.bee`), `shirudo bpm
+commands: `shirudo bpm build` (package definition to signed `.bee` archive), `shirudo bpm
 push` (package and certificate referrer, with an optional signed index), and
 `shirudo bpm tree append` (signed upatch tree). The CMS signer and these
 command implementations are linked only into `shirudo-build`.
@@ -43,7 +43,7 @@ target boundary) and `AGENTS.md` (the no-subprocess invariant).
 | `<file.bpf.o>` | gen_loader → sign → package (skip compile) |
 | `--unload <name>` | emit signed UNLOAD directive `.upatch` |
 | `keys vouch <cert.der>` | sign a vouch for another certificate |
-| `bpm build [context] --version <v>` | compile, sign and package every Beefile upatch into a `.bee` |
+| `bpm build [context] --version <v> [-f <name>.bee]` | compile, sign and package every Beefile upatch into a `.bee` |
 | `bpm push <pkg.bee> oci://...` | publish the package and certificate referrer; with signing material, also update the signed index |
 | `bpm tree append <pkg.bee> oci://...` | publish the next generation of a signed upatch tree |
 
@@ -86,11 +86,14 @@ Example layout:
 
 ```text
 example-shield/
-├── Beefile
+├── example-shield.bee
 └── shield.bpf.c
 ```
 
-Example `Beefile`:
+The local package definition uses the package name with a `.bee` suffix.
+`bpm build` stores it inside the package archive as `Beefile`.
+
+Example `example-shield.bee`:
 
 ```toml
 [package]
@@ -114,6 +117,7 @@ Build and inspect the package, then publish its tree entry:
 
 ```sh
 shirudo bpm build ./example-shield --version 1.0.0 \
+  -f ./example-shield/example-shield.bee \
   --keys-dir /var/lib/shirudo/keys
 shirudo bpm info ./example-shield-1.0.0.bee
 shirudo bpm tree append ./example-shield-1.0.0.bee \

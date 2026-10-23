@@ -91,7 +91,8 @@ _shirudo()
 		elif [[ $sub == repo && cword -eq 3 ]]; then
 			COMPREPLY=( $(compgen -W "update" -- "$cur") )
 		elif [[ $sub == build && ${COMP_WORDS[COMP_CWORD-1]} == -f ]]; then
-			COMPREPLY=( $(compgen -f -- "$cur") )
+			COMPREPLY=( $(compgen -f -X '!*.bee' -- "$cur") \
+				    $(compgen -d -- "$cur") )
 		elif [[ $sub == build && ${COMP_WORDS[COMP_CWORD-1]} == --keys-dir ]]; then
 			COMPREPLY=( $(compgen -d -- "$cur") )
 		elif [[ $sub == build && $cur == -* ]]; then

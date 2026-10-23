@@ -194,11 +194,17 @@ and extends nothing.
 6) Packages and registries
 --------------------------
 
-A package is a directory with a ``Beefile`` next to the BPF sources::
+A package is a directory with a ``<name>.bee`` Beefile next to the BPF sources::
+
+    example-shield/
+    ├── example-shield.bee
+    └── shield.bpf.c
+
+Example ``example-shield.bee``::
 
     [package]
-    name = "kernel-obs"
-    description = "shirudo kernel observability"
+    name = "example-shield"
+    description = "Example BPF shield"
     license = "GPL-2.0 OR BSD-2-Clause"
     authors = ["Example Org"]
 
@@ -206,16 +212,17 @@ A package is a directory with a ``Beefile`` next to the BPF sources::
     source = "decoders/exec.lua"
 
     [[upatches]]
-    source = "kernel-obs.bpf.c"
+    source = "shield.bpf.c"
 
 ``[[files]]`` entries are copied into the package (headers, decoders,
 reproducers); each ``[[upatches]]`` entry is built and signed, with its
 unload directive, through ``shirudo-build``.  On the operator::
 
-    shirudo bpm build ./pkg --version 1.0.0 --keys-dir /var/lib/shirudo/keys
-    shirudo bpm info ./kernel-obs-1.0.0.bee
-    shirudo bpm push ./kernel-obs-1.0.0.bee \
-        oci://quay.io/example/kernel-obs --keys-dir /var/lib/shirudo/keys
+    shirudo bpm build ./pkg --version 1.0.0 \
+        -f ./pkg/example-shield.bee --keys-dir /var/lib/shirudo/keys
+    shirudo bpm info ./example-shield-1.0.0.bee
+    shirudo bpm push ./example-shield-1.0.0.bee \
+        oci://quay.io/example/example-shield --keys-dir /var/lib/shirudo/keys
 
 ``push`` uploads the package and its certificate and, given the signing
 material, adds the version to the registry's signed index at

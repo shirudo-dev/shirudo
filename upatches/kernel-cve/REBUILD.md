@@ -1,6 +1,6 @@
 # Rebuilding exported kernel-CVE upatches
 
-This bundle contains the generated Beefile, combined manifest, the shared `vmlinux.h`, BPF C sources, and (for entries that have them) signed payloads, object files, logs, certificates, and per-record JSON metadata.
+This bundle contains the generated `kernel-cve.bee` package definition, combined manifest, the shared `vmlinux.h`, BPF C sources, and (for entries that have them) signed payloads, object files, logs, certificates, and per-record JSON metadata.
 
 From a compatible Shirudo checkout, copy this directory beneath `upatches/` and run the normal Jbrust shield builder for `kernel-cve` with the destination project's signer. Replace the package signer with the destination project's signer when rebuilding the signed entry.
 

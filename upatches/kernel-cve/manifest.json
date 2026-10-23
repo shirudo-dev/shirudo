@@ -6,7 +6,7 @@
     "upatches_included": false
   },
   "collateral": {
-    "beefile": "kernel-cve/Beefile",
+    "beefile": "kernel-cve/kernel-cve.bee",
     "manifest": "kernel-cve/manifest.json",
     "per_entry_source_dirs": "kernel-cve/sources/",
     "rebuild_notes": "kernel-cve/REBUILD.md"

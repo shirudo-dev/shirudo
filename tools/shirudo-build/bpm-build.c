@@ -1109,7 +1109,7 @@ static void build_usage(void)
 {
 	fprintf(stderr,
 		"usage: shirudo bpm build [context] --version <version>\n"
-		"       shirudo bpm build [context] -f <Beefile> --version <version>\n"
+		"       shirudo bpm build [context] -f <name>.bee --version <version>\n"
 		"                              [--keys-dir <dir>]\n\n"
 		"Builds a signed .bee package from a Beefile. The build command\n"
 		"is available only in shirudo-operator and requires signing keys.\n");
@@ -1246,7 +1246,7 @@ usage:
 static void bpm_usage(FILE *fp)
 {
 	fprintf(fp,
-		"usage: shirudo bpm build [context] --version <version> [-f <Beefile>]\n"
+		"usage: shirudo bpm build [context] --version <version> [-f <name>.bee]\n"
 		"                         [--keys-dir <dir>]\n"
 		"       shirudo bpm push <package-file> <repository> [--keys-dir <dir> |\n"
 		"                        --index-cert <cert.der> --index-key <key.pem>]\n"

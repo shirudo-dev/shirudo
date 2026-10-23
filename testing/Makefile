@@ -128,7 +128,7 @@ TEST_VM_BUNDLE_SOURCES := $(sort $(wildcard \
 	$(ROOT)/testing/fixtures/decoders/* \
 	$(ROOT)/testing/signing/*.sh \
 	$(ROOT)/upatches/kernel-obs/*.c $(ROOT)/upatches/kernel-obs/*.h $(ROOT)/upatches/kernel-obs/*.list \
-		$(ROOT)/upatches/kernel-obs/*.py $(ROOT)/upatches/kernel-obs/Beefile \
+		$(ROOT)/upatches/kernel-obs/*.py $(ROOT)/upatches/kernel-obs/kernel-obs.bee \
 	$(ROOT)/upatches/kernel-obs/decoders/*))
 # The kernel build replaces versioned package files; depend on its stable stamp.
 TEST_VM_BUNDLE_ARTIFACTS := $(VM_KERNEL_STAMP)

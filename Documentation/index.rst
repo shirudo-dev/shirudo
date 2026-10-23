@@ -127,7 +127,7 @@ Contributing
     licence.  Vendored files keep their upstream SPDX identifiers.
 
 ``upatches/``
-    The packages shirudo ships, each with its ``Beefile``.
+    The packages shirudo ships, each with a named ``.bee`` package definition.
 
 ``vendor/libbpf/``
     Vendored libbpf and BPF UAPI headers with shirudo's BSD shims for

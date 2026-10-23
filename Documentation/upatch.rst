@@ -252,7 +252,19 @@ for tests and ``init``'s own boot-restore, not for operation.
 5) Packaging
 ------------
 
-A package is a directory with a ``Beefile`` next to the sources::
+A package is a directory with a ``<name>.bee`` Beefile next to the sources::
+
+    example-shields/
+    ├── example-shields.bee
+    └── shield.bpf.c
+
+The ``.bee`` suffix names the package definition. ``bpm build`` writes
+the versioned package archive as ``<name>-<version>.bee`` and stores the
+definition inside that archive under the member name ``Beefile``. Pass
+the local definition with ``-f``; the legacy default filename
+``Beefile`` remains accepted when ``-f`` is omitted.
+
+Example ``example-shields.bee``::
 
     [package]
     name = "example-shields"
@@ -312,11 +324,13 @@ A package is a directory with a ``Beefile`` next to the sources::
     when it satisfies every key given.  An entry without a selector
     applies everywhere.
 
-``upatches/kernel-cve/Beefile`` in the tree is a worked example with
-one entry per CVE shield, and ``upatches/kernel-obs/Beefile`` one with
+``upatches/kernel-cve/kernel-cve.bee`` in the tree is a worked example
+with one entry per CVE shield, and
+``upatches/kernel-obs/kernel-obs.bee`` one with
 decoders and shared headers.  Build and inspect::
 
     shirudo bpm build ./example-shields --version 1.0.0 \
+        -f ./example-shields/example-shields.bee \
         --keys-dir /var/lib/shirudo/keys
     shirudo bpm info ./example-shields-1.0.0.bee
 
@@ -327,7 +341,7 @@ provides the helper.  From a checkout, set ``SHIRUDO_BUILD`` to
 checkout root on ``PATH``.  If ``shirudo bpm --help`` shows only target
 commands, the helper was not found.
 
-``bpm build [context] --version <v> [-f <Beefile>] [--keys-dir <dir>]``
+``bpm build [context] --version <v> [-f <name>.bee] [--keys-dir <dir>]``
 builds and signs every entry through ``shirudo-build`` and writes
 ``<name>-<version>.bee``: a gzip tarball with the ``Beefile``, the
 ``upatches/*.upatch`` and ``*.unload.upatch`` artifacts, the
