@@ -43,7 +43,7 @@ target boundary) and `AGENTS.md` (the no-subprocess invariant).
 | `<file.bpf.o>` | gen_loader → sign → package (skip compile) |
 | `--unload <name>` | emit signed UNLOAD directive `.upatch` |
 | `keys vouch <cert.der>` | sign a vouch for another certificate |
-| `bpm build [context] --version <v> [-f <name>.bee]` | compile, sign and package every Beefile upatch into a `.bee` |
+| `bpm build [context] --version <v> [-f <name>.bee] [--vmlinux <file>]` | compile, sign and package every Beefile upatch into a `.bee` |
 | `bpm push <pkg.bee> oci://...` | publish the package and certificate referrer; with signing material, also update the signed index |
 | `bpm tree append <pkg.bee> oci://...` | publish the next generation of a signed upatch tree |
 

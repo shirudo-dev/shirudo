@@ -780,9 +780,9 @@ static void build_stage_close(struct bpm_build_spec *spec)
  * ended up with.
  */
 static int build_upatches(struct bpm_build_spec *spec, const char *pkey,
-			  const char *cert)
+			  const char *cert, const char *vmlinux_override)
 {
-	const char *vmlinux_h = NULL;
+	const char *vmlinux_h = vmlinux_override;
 
 	for (size_t i = 0; i < spec->n_upatches; i++) {
 		char source[PATH_MAX], load[PATH_MAX], unload[PATH_MAX];
@@ -1110,15 +1110,18 @@ static void build_usage(void)
 	fprintf(stderr,
 		"usage: shirudo bpm build [context] --version <version>\n"
 		"       shirudo bpm build [context] -f <name>.bee --version <version>\n"
-		"                              [--keys-dir <dir>]\n\n"
+		"                              [--keys-dir <dir>]\n"
+		"                              [--vmlinux <vmlinux.h>]\n\n"
 		"Builds a signed .bee package from a Beefile. The build command\n"
 		"is available only in shirudo-operator and requires signing keys.\n");
 }
 
 static int shirudo_build_bpm_build(int argc, char **argv)
 {
-	const char *context = ".", *file_arg = NULL, *version = NULL, *keys_arg = NULL;
-	char build_file[PATH_MAX], resolved_file[PATH_MAX], keys_dir[PATH_MAX];
+	const char *context = ".", *file_arg = NULL, *version = NULL;
+	const char *keys_arg = NULL, *vmlinux_arg = NULL;
+	char build_file[PATH_MAX], resolved_file[PATH_MAX];
+	char keys_dir[PATH_MAX], vmlinux_abs[PATH_MAX];
 	char keys_abs[PATH_MAX], pkey[PATH_MAX], cert_path[PATH_MAX];
 	char fingerprint[SHIRUDO_CRYPTO_SHA256_LEN * 2 + 1];
 	__u8 digest[SHIRUDO_CRYPTO_SHA256_LEN];
@@ -1151,6 +1154,12 @@ static int shirudo_build_bpm_build(int argc, char **argv)
 			keys_arg = argv[i];
 		} else if (!strncmp(argv[i], "--keys-dir=", 11)) {
 			keys_arg = argv[i] + 11;
+		} else if (!strcmp(argv[i], "--vmlinux")) {
+			if (++i >= argc)
+				goto usage;
+			vmlinux_arg = argv[i];
+		} else if (!strncmp(argv[i], "--vmlinux=", 10)) {
+			vmlinux_arg = argv[i] + 10;
 		} else if (argv[i][0] == '-') {
 			goto usage;
 		} else if (++positional == 1) {
@@ -1174,6 +1183,11 @@ static int shirudo_build_bpm_build(int argc, char **argv)
 		return rc;
 	if (shirudo_build_check_keys(pkey, cert_path))
 		return -EACCES;
+	if (vmlinux_arg && !realpath(vmlinux_arg, vmlinux_abs)) {
+		pr_err("bpm build: cannot resolve vmlinux.h %s: %s",
+		       vmlinux_arg, strerror(errno));
+		return -errno;
+	}
 	if (!getcwd(out_dir, sizeof(out_dir)))
 		return -errno;
 	if (file_arg) {
@@ -1227,7 +1241,8 @@ static int shirudo_build_bpm_build(int argc, char **argv)
 	rc = build_stage_open(spec);
 	if (rc)
 		goto out_cert;
-	rc = build_upatches(spec, pkey, cert_path);
+	rc = build_upatches(spec, pkey, cert_path,
+			    vmlinux_arg ? vmlinux_abs : NULL);
 	if (!rc)
 		rc = build_archive(spec, version, cert_path, fingerprint, out_dir);
 	build_stage_close(spec);
@@ -1247,7 +1262,7 @@ static void bpm_usage(FILE *fp)
 {
 	fprintf(fp,
 		"usage: shirudo bpm build [context] --version <version> [-f <name>.bee]\n"
-		"                         [--keys-dir <dir>]\n"
+		"                         [--keys-dir <dir>] [--vmlinux <vmlinux.h>]\n"
 		"       shirudo bpm push <package-file> <repository> [--keys-dir <dir> |\n"
 		"                        --index-cert <cert.der> --index-key <key.pem>]\n"
 		"       shirudo bpm tree append <package-file> <repository> [options]\n\n"

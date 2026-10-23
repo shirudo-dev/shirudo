@@ -342,6 +342,7 @@ checkout root on ``PATH``.  If ``shirudo bpm --help`` shows only target
 commands, the helper was not found.
 
 ``bpm build [context] --version <v> [-f <name>.bee] [--keys-dir <dir>]``
+``[--vmlinux <vmlinux.h>]``
 builds and signs every entry through ``shirudo-build`` and writes
 ``<name>-<version>.bee``: a gzip tarball with the ``Beefile``, the
 ``upatches/*.upatch`` and ``*.unload.upatch`` artifacts, the
@@ -349,6 +350,9 @@ builds and signs every entry through ``shirudo-build`` and writes
 ``build-environment.json`` recording the toolchain.  Versions are what
 the registry index orders by and are immutable once published, so a
 rebuilt package gets a new version.
+
+``--vmlinux`` selects the BTF header used to compile BPF C entries. Its
+path is resolved before the builder changes to the package directory.
 
 6) Publishing
 -------------

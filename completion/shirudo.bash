@@ -95,8 +95,10 @@ _shirudo()
 				    $(compgen -d -- "$cur") )
 		elif [[ $sub == build && ${COMP_WORDS[COMP_CWORD-1]} == --keys-dir ]]; then
 			COMPREPLY=( $(compgen -d -- "$cur") )
+		elif [[ $sub == build && ${COMP_WORDS[COMP_CWORD-1]} == --vmlinux ]]; then
+			COMPREPLY=( $(compgen -f -- "$cur") )
 		elif [[ $sub == build && $cur == -* ]]; then
-			COMPREPLY=( $(compgen -W "-f --version --keys-dir" -- "$cur") )
+			COMPREPLY=( $(compgen -W "-f --version --keys-dir --vmlinux" -- "$cur") )
 		elif [[ $sub == build ]]; then
 			COMPREPLY=( $(compgen -d -- "$cur") )
 		elif [[ $sub == tree && cword -eq 3 ]]; then
