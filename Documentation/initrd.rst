@@ -18,7 +18,7 @@ commands, `architecture <architecture.rst>`__ for the LSM flow and
 * An authenticated UKI containing the bootstrap binary and configuration.
   ``runtime.image`` names the cached runtime bundle and ``runtime.root_hash``
   gives its exact expected SHA-256 root. Missing image settings are an error.
-* The runtime image contains Shirudo, its ELF interpreter and libraries,
+* The runtime image contains the fully static Shirudo executable,
   initial BPF certificate, config-verification certificate and bootstrap TPM
   settings. The initial config bundle is signed by an accepted config key.
 * Boot parameters ``bpf.keyring_unsealed=1 dm_verity.keyring_unsealed=1``.
@@ -66,9 +66,8 @@ waits in ``/run/shirudo/eventlog.pending`` for the root service to adopt.
 
 Generate a systemd drop-in with ``shirudo-gen-runtime --unit-output`` and
 install it at ``/etc/systemd/system/shirudo.service.d/verity.conf``. It invokes
-the runtime's ELF interpreter with its host cache disabled and library paths
-inside the image, then starts the runtime binary. The loader and executable
-both come from the verified runtime, not from the host root filesystem.
+the fully static binary at ``/run/shirudo/runtime/usr/bin/shirudo`` directly.
+The executable comes from the verified runtime image.
 
 The service re-runs ``init``, checks the existing guards and measurements,
 and adopts the initrd eventlog record without another extension. Successful

@@ -15,9 +15,9 @@ usage: shirudo-gen-runtime --binary <shirudo-target> --bootstrap-conf <file>
        [--size <MiB>] [--builder <shirudo-build>] [--unit-output <file>]
        [--extra-binary <trusted-ELF>]
 
-Package the trusted executable, its complete dynamic-library closure,
-authenticated bootstrap settings and public certificates into a runtime image.
-The input binary must be trusted: ldd invokes its dynamic loader on the operator.
+Package the trusted executable, bootstrap settings and public certificates.
+Static targets run directly. Dynamic executables bring their loader and libraries.
+Use trusted inputs: ldd invokes dynamic loaders on the operator.
 EOF
 }
 

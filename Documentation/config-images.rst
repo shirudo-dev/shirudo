@@ -29,8 +29,8 @@ The target uses these mounts and directories::
     /run/shirudo/bpffs       protected BPF objects
     /var/lib/shirudo         protected writable state
 
-The runtime image contains the target binary, its ELF interpreter and
-libraries, bootstrap ``shirudo.conf``, initial BPF trust anchors and the
+The runtime image contains the fully static target binary, bootstrap
+``shirudo.conf``, initial BPF trust anchors and the
 config verification certificate. Every executable on this image has the
 same eligibility for Shirudo authority. Do not include shells, debuggers
 or general-purpose interpreters unless that authority is intended.
@@ -45,11 +45,10 @@ certificate, initial BPF trust anchors, executable authority or TPM
 settings. Rotating the config verification certificate requires a new
 runtime image and UKI followed by reboot.
 
-The generator packages the ELF interpreter and complete library closure.
-The runtime invocation names that interpreter explicitly, disables its
-host cache and supplies library paths inside the runtime image. Executable
-mappings from elsewhere are denied. A missing runtime library fails the
-operation instead of falling back to a host library.
+The static target runs directly from the runtime image. It needs no ELF
+interpreter or shared libraries at startup. Additional dynamic executables
+supplied by the operator bring their interpreter and libraries into the
+image. Executable mappings from outside the image are denied.
 
 The authenticated bootstrap configuration selects the initial cached config
 prefix, the verification certificate and a reserved static TPM PCR. For
@@ -145,7 +144,7 @@ operator can also sign an already prepared 4096-byte-aligned ext4 image::
 
     shirudo image build filesystem.img -o config --keys-dir operator-keys
 
-Generate the runtime image with its library closure and public assets::
+Generate the runtime image with its static executable and public assets::
 
     tools/gen-image/shirudo-gen-runtime --binary ./shirudo-target \
         --bootstrap-conf bootstrap.conf --cert initial-bpf-cert.der \
@@ -153,8 +152,8 @@ Generate the runtime image with its library closure and public assets::
         --keys-dir operator-keys \
         --builder tools/shirudo-build/shirudo-build
 
-Use a trusted native input binary: the operator's library inspection runs
-its ELF interpreter. Never put private keys in either image.
+Use trusted native input binaries. Dynamic executable inspection runs
+their ELF interpreter on the operator. Never put private keys in either image.
 
 The Bash builder runs standard ``veritysetup format`` with format version 1,
 SHA-256, 4096-byte data and hash blocks and a 32-byte salt. The standard
@@ -205,12 +204,12 @@ of config-root verification. The initrd also enrolls and seals the BPF
 keyring, attaches the guards, mounts
 the runtime under guard protection and completes measured config activation.
 The runtime bootstrap settings select the config verification key and PCR.
-After switch-root, services and CLI commands execute the runtime binary
-through its packaged interpreter and library paths. The generator prints
+After switch-root, services and CLI commands execute the static binary at
+``/run/shirudo/runtime/usr/bin/shirudo`` directly. The generator prints
 that invocation and can write a service override with ``--unit-output``.
 The ``shirudo`` commands below denote that configured runtime invocation;
 substitute the command and arguments for its final ``init`` when invoking
-the generated loader command directly.
+the generated command directly.
 
 Image mode needs writable ``/var/lib/shirudo`` available during the initrd
 run: the image cache and pending activation record must be durable before a
@@ -506,9 +505,9 @@ public fixture set and cache every config bundle under
 ``contrib/verity-vm-config-fixtures.sh --keys-dir <operator-keys>
 --output <new-directory>`` builds the signed config and revocation fixtures;
 only its ``public/`` directory belongs on the target. The standard host
-bundle also packages the runtime, library closure and test helper. The
-``image-shirudo`` test wrapper executes the image interpreter explicitly,
-with the host loader cache disabled. Production services use the invocation
+bundle also packages the runtime and static test helpers. The
+``image-shirudo`` test wrapper executes the runtime binary directly.
+Production services use the invocation
 emitted by ``shirudo-gen-runtime``.
 
 For built-in kernel trust coverage, the operator may supply

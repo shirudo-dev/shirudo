@@ -57,13 +57,12 @@ updates and attestation while the node keeps running. The operator chooses
 when to reboot; Shirudo never reboots automatically and has no same-boot
 recovery command.
 
-For a target binary linked against glibc, `shirudo-gen-runtime` packages the
-ELF interpreter and its complete library closure without modifying the
-binary. Use a trusted, native target binary on the operator. It prints the
-explicit loader invocation to use after mounting the runtime image. The
-invocation disables the host loader cache and supplies only library paths
-inside the image. The LSM also denies executable mappings from outside the
-approved image, so missing libraries fail instead of falling back to the host.
+`shirudo-gen-runtime` packages the fully static target from `make target`.
+The generated service runs `/run/shirudo/runtime/usr/bin/shirudo` directly,
+without an ELF interpreter or shared libraries. For dynamic executables
+supplied by the operator, the generator also packages their interpreter and
+libraries. Use trusted native inputs: dynamic library inspection runs their
+loader on the operator. Executable mappings outside the image are denied.
 
 ```sh
 tools/gen-image/shirudo-gen-runtime --binary ./shirudo-target \
@@ -78,14 +77,14 @@ for `config.verification_key` in the bootstrap configuration. The initial
 BPF certificate is `keys/cert.der` inside the image. Runtime images have no
 shell or debugger unless the operator explicitly supplies one.
 
-The generated service content is kept in `runtime-service.conf.in` beside
-the scripts. Keep that template and `common.sh` with the scripts when copying this directory.
-The generator substitutes only the interpreter and library paths.
+The generated service content is kept in `runtime-service-static.conf.in`
+and `runtime-service.conf.in` beside the scripts. Keep both templates and
+`common.sh` with the scripts when copying this directory.
 
 Pass `--unit-output runtime-service.conf` to generate a systemd drop-in for
 the root phase. Install it as
 `/etc/systemd/system/shirudo.service.d/verity.conf`. It clears the writable
-`init.env` file and starts the loader and Shirudo binary from the runtime
+`init.env` file and starts the Shirudo binary from the runtime
 image. Generate the initrd with `shirudo-gen-initrd --bootstrap-conf <file>`;
 this bootstrap file carries `runtime.image` and `runtime.root_hash`, while
 the file inside the runtime image carries config verification settings.
