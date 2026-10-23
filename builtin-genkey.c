@@ -59,6 +59,69 @@ static int ensure_keys_dir(const char *keys_dir)
 	return rc;
 }
 
+static int check_user_keys_dir(const char *keys_dir)
+{
+	char component[NAME_MAX + 1];
+	struct stat st;
+	const char *p, *end;
+	int dirfd, nextfd, rc = 0;
+
+	if (keys_dir[0] != '/')
+		return -EINVAL;
+	dirfd = open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	if (dirfd < 0)
+		return -errno;
+	if (fstat(dirfd, &st) != 0) {
+		rc = -errno;
+		close(dirfd);
+		return rc;
+	}
+	if (st.st_uid != 0 || (st.st_mode & 0022)) {
+		close(dirfd);
+		return -EPERM;
+	}
+	for (p = keys_dir + 1; *p; p = end ? end + 1 : p + strlen(p)) {
+		size_t len;
+		int final;
+
+		end = strchr(p, '/');
+		len = end ? (size_t)(end - p) : strlen(p);
+		if (!len)
+			continue;
+		if (len > NAME_MAX) {
+			rc = -ENAMETOOLONG;
+			break;
+		}
+		memcpy(component, p, len);
+		component[len] = '\0';
+		nextfd = openat(dirfd, component,
+				O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+		if (nextfd < 0) {
+			rc = -errno;
+			break;
+		}
+		if (fstat(nextfd, &st) != 0) {
+			rc = -errno;
+			close(nextfd);
+			break;
+		}
+		final = !end || end[1] == '\0';
+		if ((st.st_uid != 0 && st.st_uid != geteuid()) ||
+		    (final && st.st_uid != geteuid()) ||
+		    (st.st_mode & 0022)) {
+			rc = -EPERM;
+			close(nextfd);
+			break;
+		}
+		close(dirfd);
+		dirfd = nextfd;
+		if (final)
+			break;
+	}
+	close(dirfd);
+	return rc;
+}
+
 static EVP_PKEY *gen_keypair(void)
 {
 	EVP_PKEY *k = EVP_PKEY_Q_keygen(NULL, NULL, GENKEY_ALG);
@@ -319,15 +382,20 @@ int cmd_genkey(int argc, const char **argv)
 		return 1;
 	}
 
-	if (geteuid() != 0 && strcmp(keys_dir, SHIRUDO_KEYS_DIR) == 0) {
-		pr_err("genkey: default keys dir %s requires root; "
-		       "rerun with sudo or pass --keys-dir <dir>",
-		       SHIRUDO_KEYS_DIR);
-		return 1;
-	}
-
 	if (ensure_keys_dir(keys_dir) != 0)
 		return 1;
+	if (geteuid() != 0 && strcmp(keys_dir, SHIRUDO_KEYS_DIR) == 0) {
+		rc = check_user_keys_dir(keys_dir);
+		if (rc) {
+			pr_err("genkey: default keys dir %s is not safe for user key "
+			       "generation: %s", SHIRUDO_KEYS_DIR,
+			       strerror(-rc));
+			pr_err("it must be owned by the current user and not writable "
+			       "by group or others");
+			pr_err("rerun with sudo or pass --keys-dir <dir>");
+			return 1;
+		}
+	}
 	rc = 1;
 
 	if (!force && (path_exists(pkey_path) ||
