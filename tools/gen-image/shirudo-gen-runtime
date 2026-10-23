@@ -58,10 +58,12 @@ check_inputs()
 	check_image_options "$output" "$keys_dir" "$size"
 	require_command readelf 'install binutils (readelf)'
 	require_command ldd 'ldd is required on the operator'
+	LC_ALL=C readelf -h "$binary" >/dev/null || die 'target binary is not ELF'
 	interpreter=$(elf_interpreter "$binary")
-	[ -n "$interpreter" ] && [ "${interpreter:0:1}" = / ] ||
-		die 'expected a dynamically linked target ELF with an absolute interpreter'
-	[ -f "$interpreter" ] || die "interpreter not found: $interpreter"
+	if [ -n "$interpreter" ]; then
+		[ "${interpreter:0:1}" = / ] && [ -f "$interpreter" ] ||
+			die "interpreter not found: $interpreter"
+	fi
 }
 
 stage_files()
@@ -71,8 +73,12 @@ stage_files()
 	install -m 0644 "$conf" "$work/root/etc/shirudo/shirudo.conf"
 	install -m 0644 "$cert" "$work/root/keys/cert.der"
 	install -m 0644 "$config_cert" "$work/root/etc/shirudo/config-cert.der"
-	LC_ALL=C ldd "$binary" >"$work/ldd" || die 'could not resolve target libraries'
-	printf '%s\n' "$interpreter" >"$work/interpreters"
+	: >"$work/ldd"
+	: >"$work/interpreters"
+	if [ -n "$interpreter" ]; then
+		LC_ALL=C ldd "$binary" >"$work/ldd" || die 'could not resolve target libraries'
+		printf '%s\n' "$interpreter" >"$work/interpreters"
+	fi
 }
 
 stage_extra_binaries()
@@ -119,9 +125,13 @@ build_runtime_image()
 	"$here/shirudo-gen-image" --source "$work/root" --output "$output" \
 		--keys-dir "$keys_dir" --kind runtime --size "$size" --builder "$builder"
 	printf 'Runtime invocation (after the authenticated image is mounted):\n' >&2
-	printf '%q --inhibit-cache --library-path %q %q init\n' \
-		"/run/shirudo/runtime$interpreter" "$library_path" \
-		/run/shirudo/runtime/usr/bin/shirudo >&2
+	if [ -n "$interpreter" ]; then
+		printf '%q --inhibit-cache --library-path %q %q init\n' \
+			"/run/shirudo/runtime$interpreter" "$library_path" \
+			/run/shirudo/runtime/usr/bin/shirudo >&2
+	else
+		printf '/run/shirudo/runtime/usr/bin/shirudo init\n' >&2
+	fi
 }
 
 write_service()
@@ -133,6 +143,10 @@ write_service()
 	case "$interpreter$library_path" in *[[:space:]\\\"%]*) die 'runtime paths cannot be encoded in a systemd ExecStart' ;; esac
 	interpreter_escaped=$(escape_sed_replacement "$interpreter")
 	library_path_escaped=$(escape_sed_replacement "$library_path")
+	if [ -z "$interpreter" ]; then
+		(set -o noclobber; cat "$here/runtime-service-static.conf.in" >"$unit_output")
+		return
+	fi
 	(
 		set -o noclobber
 		sed -e "s|@interpreter@|$interpreter_escaped|g" \
