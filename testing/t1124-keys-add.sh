@@ -2,9 +2,8 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 #
-# t1124 -- `keys add` on a live target: the bundle's third certificate
-# joins the trusted set on disk with the vouch the primary signed for
-# it, and the bpf keyring stays as the boot sealed it.
+# t1124 -- a signed CONFIG owns the trusted set, so live `keys add`
+# refuses changes and leaves the boot-enrolled membership intact.
 
 cd "$(dirname "$0")"
 . ./integration-lib.sh
@@ -33,18 +32,18 @@ print(len(v) if isinstance(v, list) else v)
 "
 }
 
-test_expect_success 'a vouch made for another certificate is refused' '
+test_expect_success 'a mismatched live vouch cannot change the signed set' '
 	! "$SHIRUDO_BIN" keys add "$THIRD" --vouch "$OWN_VOUCH" >/dev/null 2>&1 &&
 	! [ -e "$TRUSTED/$THIRD_FP.der" ] &&
 	[ "$(status_field certs)" = 2 ]
 '
 
-test_expect_success 'the vouched certificate joins the trusted set on disk' '
-	out=$("$SHIRUDO_BIN" keys add "$THIRD" --vouch "$VOUCH" 2>/dev/null) &&
-	[ "$out" = "$THIRD_FP" ] &&
-	cmp -s "$THIRD" "$TRUSTED/$THIRD_FP.der" &&
-	cmp -s "$VOUCH" "$TRUSTED/$THIRD_FP.vouch" &&
-	[ "$(status_field certs)" = 3 ] &&
+test_expect_success 'a valid vouch cannot change the signed trusted set' '
+	! "$SHIRUDO_BIN" keys add "$THIRD" --vouch "$VOUCH" >"$W/add" 2>&1 &&
+	grep -q "signed config" "$W/add" &&
+	! [ -e "$TRUSTED/$THIRD_FP.der" ] &&
+	! [ -e "$TRUSTED/$THIRD_FP.vouch" ] &&
+	[ "$(status_field certs)" = 2 ] &&
 	[ "$(status_field certs_unvouched)" = 0 ]
 '
 
@@ -53,16 +52,16 @@ test_expect_success 'the bpf keyring keeps the set the boot sealed' '
 	grep -qE "keyring +\.bpf: 2" /proc/keys
 '
 
-test_expect_success 'adding it again changes nothing' '
-	out=$("$SHIRUDO_BIN" keys add "$THIRD" --vouch "$VOUCH" 2>/dev/null) &&
-	[ "$out" = "$THIRD_FP" ] &&
-	[ "$(status_field certs)" = 3 ]
+test_expect_success 'repeating the live add still leaves the signed set unchanged' '
+	! "$SHIRUDO_BIN" keys add "$THIRD" --vouch "$VOUCH" >/dev/null 2>&1 &&
+	! [ -e "$TRUSTED/$THIRD_FP.der" ] &&
+	[ "$(status_field certs)" = 2 ]
 '
 
-test_expect_success 'keys lists the member with its voucher' '
+test_expect_success 'keys lists only the boot-enrolled members' '
 	"$SHIRUDO_BIN" keys 2>/dev/null >"$W/keys" &&
-	grep -q "^  $THIRD_FP\$" "$W/keys" &&
-	grep -q "3 members, 0 revoked, 0 unvouched" "$W/keys" &&
+	! grep -q "^  $THIRD_FP\$" "$W/keys" &&
+	grep -q "2 members, 0 revoked, 0 unvouched" "$W/keys" &&
 	grep -q "^Keyring (.bpf):" "$W/keys"
 '
 

@@ -14,6 +14,7 @@ permissions:
 jobs:
   deb:
     runs-on: ubuntu-latest
+    timeout-minutes: 150
 
     steps:
       - name: Check out repository
@@ -33,6 +34,13 @@ jobs:
           fi
           mkdir -p build
           printf '%s\n' "$version" > build/ci-version
+
+      - name: Restore the LVH static target dependencies
+        id: lvh-target-deps
+        uses: actions/cache/restore@v4
+        with:
+          path: build/lvh-target-deps
+          key: lvh-target-deps-kind-bpf-next-20260603.072225-${{ hashFiles('.github/scripts/lvh-target-deps.sh') }}
 
       - name: Build the tarball, deb and target rpm packages and run shirudo in LVH VM
         uses: cilium/little-vm-helper@f86d344aca812dda5aef167867a9a0a90ca6cca5 # v0.0.31
@@ -95,83 +103,7 @@ jobs:
 
             git config --global --add safe.directory /host
 
-            # Build the static target dependencies outside the /host mount.
-            # The recursive Make-based builder crashes in the LVH guest, so
-            # keep this CI-only path explicit and pass the staged paths below.
-            rm -rf /tmp/shirudo-target-deps /tmp/shirudo-openssl /tmp/shirudo-curl \
-              /tmp/openssl-3.5.9 /tmp/curl-8.18.0
-            mkdir -p /tmp/shirudo-target-deps/lib
-
-            # OpenSSL 3.5+ as a static archive: the distribution's libcrypto.a
-            # predates ML-DSA and ML-KEM. Static-only, no providers on disk.
-            curl -fsSL https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz \
-              -o /tmp/openssl-3.5.9.tar.gz
-            tar -C /tmp -xf /tmp/openssl-3.5.9.tar.gz
-            cd /tmp/openssl-3.5.9
-            ./Configure --prefix=/tmp/shirudo-openssl --openssldir=/etc/ssl \
-              --libdir=lib no-shared no-module no-docs no-tests no-apps
-            make -j4
-            make install_sw
-
-            curl -fsSL https://curl.se/download/curl-8.18.0.tar.xz \
-              -o /tmp/curl-8.18.0.tar.xz
-            tar -C /tmp -xf /tmp/curl-8.18.0.tar.xz
-            cd /tmp/curl-8.18.0
-            PKG_CONFIG_PATH=/tmp/shirudo-openssl/lib/pkgconfig \
-            CPPFLAGS=-I/tmp/shirudo-openssl/include \
-            LDFLAGS=-L/tmp/shirudo-openssl/lib \
-            ./configure \
-              --prefix=/tmp/shirudo-curl \
-              --with-openssl=/tmp/shirudo-openssl \
-              --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt \
-              --with-ca-path=/etc/ssl/certs \
-              --enable-static \
-              --disable-shared \
-              --without-libpsl --without-brotli --without-zstd \
-              --without-nghttp2 --without-nghttp3 --without-ngtcp2 \
-              --without-libidn2 --without-librtmp --without-libssh2 \
-              --without-libssh --without-libgsasl --without-winidn \
-              --disable-ldap --disable-ldaps --disable-rtsp --disable-dict \
-              --disable-telnet --disable-tftp --disable-pop3 --disable-imap \
-              --disable-smtp --disable-gopher --disable-mqtt --disable-smb \
-              --disable-ftp --disable-file --disable-manual --disable-docs
-            make -j4
-            make install
-
-            git clone --depth 1 --branch 4.2.0 \
-              https://github.com/tpm2-software/tpm2-tss.git \
-              /tmp/shirudo-target-deps/tpm2-tss
-            cd /tmp/shirudo-target-deps/tpm2-tss
-            ./bootstrap
-            PKG_CONFIG_PATH=/tmp/shirudo-openssl/lib/pkgconfig \
-            ./configure \
-              --prefix=/tmp/shirudo-target-deps \
-              --libdir=/tmp/shirudo-target-deps/lib \
-              --enable-static \
-              --disable-shared \
-              --enable-nodl \
-              --disable-fapi \
-              --disable-policy \
-              --disable-tcti-cmd \
-              --disable-tcti-i2c-ftdi \
-              --disable-tcti-i2c-helper \
-              --disable-tcti-libtpms \
-              --disable-tcti-pcap \
-              --disable-tcti-spi-ftdi \
-              --disable-tcti-spi-helper \
-              --disable-tcti-spi-ltt2go \
-              --disable-tcti-spidev \
-              --disable-tcti-mssim \
-              --disable-tcti-swtpm
-            make -j4
-            make install
-
-            install -m 0644 /tmp/shirudo-openssl/lib/libcrypto.a /tmp/shirudo-target-deps/lib/libcrypto.a
-            install -m 0644 /tmp/shirudo-openssl/lib/libssl.a /tmp/shirudo-target-deps/lib/libssl.a
-            install -m 0644 /usr/lib/x86_64-linux-gnu/libelf.a /tmp/shirudo-target-deps/lib/libelf.a
-            install -m 0644 /usr/lib/x86_64-linux-gnu/libz.a /tmp/shirudo-target-deps/lib/libz.a
-            install -m 0644 /usr/lib/x86_64-linux-gnu/libzstd.a /tmp/shirudo-target-deps/lib/libzstd.a
-            install -m 0644 /usr/lib/x86_64-linux-gnu/libluajit-5.1.a /tmp/shirudo-target-deps/lib/libluajit-5.1.a
+            sh .github/scripts/lvh-target-deps.sh
 
             cd /host
 
@@ -252,6 +184,70 @@ jobs:
             popd
 
             apt-get remove -y shirudo-operator
+
+      - name: Save the LVH static target dependencies
+        if: always() && steps.lvh-target-deps.outputs.cache-hit != 'true' && hashFiles('build/lvh-target-deps/lib/libcrypto.a') != '' && hashFiles('build/lvh-target-deps/curl/lib/libcurl.a') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: build/lvh-target-deps
+          key: ${{ steps.lvh-target-deps.outputs.cache-primary-key }}
+
+      - name: Name the target kernel cache week
+        id: target-kernel-week
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the cached Shirudo bpf-next kernel
+        id: target-kernel
+        uses: actions/cache/restore@v4
+        with:
+          path: artifacts/bpf-next-kernel-debs
+          key: test-vm-kernel-${{ steps.target-kernel-week.outputs.week }}-${{ hashFiles('contrib/build-kernel-package.sh', 'contrib/test-vm-arch.sh', 'testing/Makefile', 'kernel/*.patch') }}
+
+      - name: Restore the target VM image
+        id: target-vm-image
+        uses: actions/cache/restore@v4
+        with:
+          path: build/test-vm/cache
+          key: test-vm-images-${{ hashFiles('contrib/test-vm-runtime-packages', 'contrib/prepare-test-vm-runtime.sh', 'contrib/build-test-vm-bundle.sh', 'contrib/test-vm-arch.sh') }}
+
+      - name: Restore the target build dependencies
+        id: target-deps
+        uses: actions/cache/restore@v4
+        with:
+          path: build/target-deps
+          key: target-deps-${{ hashFiles('Makefile.target-deps') }}
+
+      - name: Prepare runner with the cached Shirudo bpf-next kernel
+        run: .github/scripts/target-tests.sh setup
+
+      - name: Run target tests in staging configuration
+        run: .github/scripts/target-tests.sh staging
+
+      # Keep reporting the production boot failure without blocking package builds.
+      - name: Run target tests in production configuration
+        continue-on-error: true
+        run: .github/scripts/target-tests.sh production
+
+      - name: Save the target build dependencies
+        if: always() && steps.target-deps.outputs.cache-hit != 'true' && hashFiles('build/target-deps/lib/libcrypto.a') != '' && hashFiles('build/target-deps/curl/lib/libcurl.a') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: build/target-deps
+          key: ${{ steps.target-deps.outputs.cache-primary-key }}
+
+      - name: Save the target kernel
+        if: always() && steps.target-kernel.outputs.cache-hit != 'true' && hashFiles('artifacts/bpf-next-kernel-debs/bzImage.sha256sum') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: artifacts/bpf-next-kernel-debs
+          key: ${{ steps.target-kernel.outputs.cache-primary-key }}
+
+      - name: Save the target VM image
+        if: always() && steps.target-vm-image.outputs.cache-hit != 'true' && hashFiles('build/test-vm/cache/runtime/*.qcow2') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: build/test-vm/cache
+          key: ${{ steps.target-vm-image.outputs.cache-primary-key }}
 
       - name: Upload deb package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

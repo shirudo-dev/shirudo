@@ -134,6 +134,7 @@ done
 	-o "$output/public/shirudo-test-revoked-key.upatch" \
 	--name shirudo-test-revoked-key \
 	--vmlinux "$source_dir/vendor/linux/vmlinux.h" \
+	--extra-cflags "-I$source_dir/vendor/libbpf" \
 	--key "$output/private/boot/signing_key.pem" \
 	--cert "$output/public/boot.der"
 

@@ -25,6 +25,7 @@ test-vm-arch = $(shell TEST_VM_ARCH='$(TEST_VM_ARCH)'; \
 
 KERNEL_PATCHES ?= $(if $(wildcard $(ROOT)/kernel/*.patch),$(ROOT)/kernel/,)
 override KERNEL_PATCHES := $(if $(strip $(KERNEL_PATCHES)),$(call root-path,$(KERNEL_PATCHES)),)
+KERNEL_PATCH_FILES := $(foreach patch,$(KERNEL_PATCHES),$(if $(wildcard $(patch)/*.patch),$(wildcard $(patch)/*.patch),$(wildcard $(patch))))
 PACKAGE_FORMAT ?= $(call test-vm-arch,TEST_VM_HOST_PKG_FORMAT)
 
 TEST_VM_MODE ?= verity
@@ -170,7 +171,7 @@ bpf-next:
 		KERNEL_BUILD_JOBS='$(KERNEL_BUILD_JOBS)' \
 		$(ROOT)/contrib/build-kernel-package.sh
 
-$(KERNEL_BUILD_STAMP): $(ROOT)/contrib/build-kernel-package.sh
+$(KERNEL_BUILD_STAMP): $(ROOT)/contrib/build-kernel-package.sh $(KERNEL_PATCH_FILES)
 	$(Q)KERNEL_TAG='$(KERNEL_TAG_NORMALIZED)' \
 		KERNEL_COMMIT='$(KERNEL_COMMIT)' \
 		KERNEL_PATCHES='$(KERNEL_PATCHES)' \

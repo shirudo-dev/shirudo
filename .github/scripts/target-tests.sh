@@ -4,9 +4,10 @@
 #
 # .github/scripts/target-tests.sh -- run the target suite in the test VM as
 # make -C testing test-tgt does on a developer's host. setup makes the
-# runner the VM host: KVM, the VM's packages, the bpf-next kernel unless a
-# restored copy is current, and the OpenSSL 3.5 toolchain from
-# vm-toolchain.sh. The suite boots an image-backed target from a dracut initrd.
+# runner the VM host: KVM, the VM's packages, a compatible LVH kernel or
+# the Shirudo test kernel cache, and the OpenSSL 3.5 toolchain from
+# vm-toolchain.sh. staging runs the suite as is, production boots the
+# guest from a dracut initrd.
 #
 #   .github/scripts/target-tests.sh setup|production
 #
@@ -36,12 +37,164 @@ diagnose() {
 	echo '::endgroup::'
 }
 
-# The production run leaves root's files behind; the caches need them.
+restore_workspace_ownership() {
+	sudo chown -R "$(id -u):$(id -g)" .
+}
+
+# The LVH build and production run leave root's files behind.
 finish() {
 	status=$?
-	sudo chown -R "$(id -u):$(id -g)" artifacts build 2>/dev/null || :
+	restore_workspace_ownership || status=$?
 	[ "$status" -eq 0 ] || diagnose
 	exit "$status"
+}
+
+require_kernel_config() {
+	config="$1"
+	setting="$2"
+	if ! grep -qx "$setting" "$config"; then
+		printf 'LVH kernel config lacks %s\n' "$setting" >&2
+		return 1
+	fi
+}
+
+validate_lvh_kernel() {
+	source_dir="$1"
+	[ -d "$source_dir/boot" ] || {
+		echo "LVH kernel artifacts are missing: $source_dir/boot" >&2
+		return 1
+	}
+
+	set -- "$source_dir"/boot/vmlinuz-*
+	[ "$#" -eq 1 ] && [ -s "$1" ] || {
+		echo "expected one LVH vmlinuz in $source_dir/boot" >&2
+		return 1
+	}
+	image="$1"
+	release=${image##*/vmlinuz-}
+	btf="$source_dir/boot/btf-$release"
+	config="$source_dir/boot/config-$release"
+	modules="$source_dir/lib/modules/$release"
+
+	[ -s "$btf" ] || {
+		echo "LVH kernel BTF is missing: $btf" >&2
+		return 1
+	}
+	[ -s "$config" ] || {
+		echo "LVH kernel config is missing: $config" >&2
+		return 1
+	}
+	[ -d "$modules" ] || {
+		echo "LVH kernel modules are missing: $modules" >&2
+		return 1
+	}
+	grep -aq 'signature_size' "$btf" || {
+		echo "LVH kernel BTF lacks bpf_attr.signature_size" >&2
+		return 1
+	}
+
+	for setting in \
+		CONFIG_BPF_EVENTS=y \
+		CONFIG_BPF_LSM=y \
+		CONFIG_BPF_SYSCALL=y \
+		CONFIG_BPF_JIT=y \
+		CONFIG_CGROUP_BPF=y \
+		CONFIG_FUNCTION_TRACER=y \
+		CONFIG_DYNAMIC_FTRACE=y \
+		CONFIG_DYNAMIC_FTRACE_WITH_DIRECT_CALLS=y \
+		CONFIG_DEBUG_INFO_BTF=y \
+		CONFIG_KEYS=y \
+		CONFIG_ASYMMETRIC_KEY_TYPE=y \
+		CONFIG_ASYMMETRIC_PUBLIC_KEY_SUBTYPE=y \
+		CONFIG_X509_CERTIFICATE_PARSER=y \
+		CONFIG_PKCS7_MESSAGE_PARSER=y \
+		CONFIG_TCG_TPM=y \
+		CONFIG_TCG_TIS_CORE=y \
+		CONFIG_TCG_TIS=y \
+		CONFIG_TCG_CRB=y \
+		CONFIG_SYSTEM_DATA_VERIFICATION=y \
+		CONFIG_CRYPTO_MLDSA=y \
+		CONFIG_CRYPTO_SHA512=y \
+		CONFIG_CRYPTO_SHA256=y \
+		CONFIG_MODULE_SIG=y \
+		CONFIG_UPROBES=y \
+		CONFIG_SECURITY=y \
+		CONFIG_SECURITY_NETWORK=y \
+		CONFIG_SECURITYFS=y \
+		CONFIG_MODULES=y \
+		CONFIG_PCI=y \
+		CONFIG_PCI_MSI=y \
+		CONFIG_PCIEPORTBUS=y \
+		CONFIG_NETDEVICES=y \
+		CONFIG_ETHERNET=y \
+		CONFIG_IPV6=y \
+		CONFIG_PACKET=y \
+		CONFIG_ISO9660_FS=y \
+		CONFIG_DEVTMPFS=y \
+		CONFIG_DEVTMPFS_MOUNT=y \
+		CONFIG_VIRTIO=y \
+		CONFIG_VIRTIO_PCI=y \
+		CONFIG_VIRTIO_BLK=y \
+		CONFIG_VIRTIO_NET=y \
+		CONFIG_NET_9P=y \
+		CONFIG_NET_9P_VIRTIO=y \
+		CONFIG_9P_FS=y \
+		CONFIG_OVERLAY_FS=y \
+		CONFIG_EXT4_FS=y \
+		CONFIG_EXT4_FS_SECURITY=y \
+		CONFIG_TMPFS=y \
+		CONFIG_EFI_PARTITION=y \
+		CONFIG_ACPI=y \
+		CONFIG_PNP=y \
+		CONFIG_PNPACPI=y \
+		CONFIG_NETFILTER=y \
+		CONFIG_NETFILTER_INGRESS=y \
+		CONFIG_NET_NS=y \
+		CONFIG_NF_CONNTRACK=y \
+		CONFIG_NF_TABLES=m \
+		CONFIG_VETH=m \
+		CONFIG_BRIDGE=m \
+		CONFIG_VLAN_8021Q=m \
+		CONFIG_NF_FLOW_TABLE=m \
+		CONFIG_NF_FLOW_TABLE_INET=m \
+		CONFIG_NF_FLOW_TABLE_PROCFS=y \
+		CONFIG_BLK_DEV_INITRD=y \
+		CONFIG_RD_GZIP=y \
+		CONFIG_RD_XZ=y \
+		CONFIG_RD_ZSTD=y \
+		CONFIG_BLK_DEV_LOOP=y \
+		CONFIG_BLK_DEV_NVME=y \
+		CONFIG_EFI=y \
+		CONFIG_EFI_STUB=y \
+		CONFIG_SERIAL_8250=y \
+		CONFIG_SERIAL_8250_CONSOLE=y \
+		CONFIG_PROC_FS=y
+	do
+		require_kernel_config "$config" "$setting" || return 1
+	done
+	return 0
+}
+
+stage_lvh_kernel() {
+	mkdir -p "$kernel/lib/modules" || return 1
+	cp "$image" "$kernel/bzImage" || return 1
+	cp "$btf" "$kernel/vmlinux.btf" || return 1
+	cp "$config" "$kernel/kernel.config" || return 1
+	cp -a "$modules" "$kernel/lib/modules/" || return 1
+	(
+		cd "$kernel" || exit 1
+		sha256sum bzImage > bzImage.sha256sum || exit 1
+		sha256sum vmlinux.btf > vmlinux.btf.sha256sum || exit 1
+	) || return 1
+}
+
+build_test_kernel() {
+	# A restored kernel is older than the checkout of the script that
+	# built it.
+	if [ -s "$kernel/bzImage.sha256sum" ]; then
+		touch "$kernel/bzImage.sha256sum"
+	fi
+	make -C testing kernel
 }
 
 setup() {
@@ -53,12 +206,16 @@ setup() {
 	sudo udevadm control --reload-rules
 	sudo udevadm trigger --name-match=kvm
 
-	# A restored kernel is older than the checkout of the script that
-	# built it.
-	if [ -s "$kernel/bzImage.sha256sum" ]; then
-		touch "$kernel/bzImage.sha256sum"
+	if [ -n "${LVH_KERNEL_ARTIFACT_DIR:-}" ] &&
+		validate_lvh_kernel "$LVH_KERNEL_ARTIFACT_DIR"; then
+		stage_lvh_kernel || exit 1
+	else
+		if [ -n "${LVH_KERNEL_ARTIFACT_DIR:-}" ]; then
+			printf '%s\n' \
+				'::warning::LVH kernel is incompatible; using the target kernel cache or building it on a cache miss.'
+		fi
+		build_test_kernel
 	fi
-	make -C testing kernel
 
 	mkdir -p build
 	sudo BPF_VMLINUX_BTF="$PWD/$kernel/vmlinux.btf" \
@@ -94,14 +251,16 @@ setup() {
 }
 
 case "${1:-}" in
-setup|production) ;;
+setup|staging|production) ;;
 *)
-	echo "usage: $0 setup|production" >&2
+	echo "usage: $0 setup|staging|production" >&2
 	exit 2
 	;;
 esac
 
 trap finish EXIT
+
+restore_workspace_ownership
 
 if [ "$1" = setup ]; then
 	setup
@@ -115,4 +274,9 @@ fi
 # emergency mode for instance, would otherwise hold the job for an hour.
 export TEST_VM_TIMEOUT=900
 
-sudo -E env PATH="$PATH" make -C testing test-tgt
+if [ "$1" = staging ]; then
+	make -C testing test-vm-bundle
+	sudo -E env PATH="$PATH" make -C testing test-tgt TEST_VM_INITRD=1
+else
+	sudo -E env PATH="$PATH" make -C testing test-tgt TEST_VM_INITRD=1
+fi

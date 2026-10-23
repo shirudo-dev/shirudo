@@ -329,6 +329,10 @@ test -c /dev/tpm0
 test -c /dev/tpmrm0
 tpm2_getrandom 8 >/dev/null
 
+if [[ "$VM_INITRD" == 1 ]]; then
+	log "initrd Shirudo journal"
+	journalctl -b -u shirudo-initrd.service --no-pager | tail -40 || true
+fi
 (cd "$BUNDLE/verity" && sha256sum -c manifest)
 mountpoint -q /run/shirudo/runtime
 mountpoint -q /run/shirudo/config
@@ -336,11 +340,21 @@ install -m 0755 "$BUNDLE/verity/shirudo-runtime" /usr/local/bin/shirudo-runtime
 SHIRUDO_BIN=/usr/local/bin/shirudo-runtime
 for unit in "${TARGET_UNITS[@]}"; do
 	case "$unit" in *.service) ;; *) continue ;; esac
+	unit_file="/usr/lib/systemd/system/$unit"
+	exec_starts=$(sed -nE \
+		's#^ExecStart=(-?)[^[:space:]]*/shirudo([[:space:]]|$)#ExecStart=\1/usr/local/bin/shirudo-runtime\2#p' \
+		"$unit_file")
+	exec_count=$(awk '/^ExecStart=/ { count++ } END { print count + 0 }' \
+		"$unit_file")
+	replacement_count=$(printf '%s\n' "$exec_starts" |
+		awk '/^ExecStart=/ { count++ } END { print count + 0 }')
+	if [[ "$exec_count" -eq 0 || "$replacement_count" -ne "$exec_count" ]]; then
+		log "could not rewrite every ExecStart in $unit_file ($replacement_count/$exec_count)"
+		exit 1
+	fi
 	mkdir -p "/etc/systemd/system/$unit.d"
 	{
-		printf '[Service]\nExecStart=\n'
-		sed -n 's|^ExecStart=/usr/local/bin/shirudo |ExecStart=/usr/local/bin/shirudo-runtime |p' \
-			"/usr/lib/systemd/system/$unit"
+		printf '[Service]\nExecStart=\n%s\n' "$exec_starts"
 	} >"/etc/systemd/system/$unit.d/runtime.conf"
 done
 systemctl daemon-reload
@@ -348,7 +362,6 @@ systemctl daemon-reload
 test -e /run/shirudo/bpffs/lsm_link
 if [[ "$VM_INITRD" == 1 ]]; then
 	log "checking that the initrd brought enforcement up"
-	journalctl -b -u shirudo-initrd.service --no-pager | tail -20 || true
 	"$SHIRUDO_BIN" status --json | python3 -c '
 import json, sys
 d = json.load(sys.stdin)

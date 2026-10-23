@@ -316,6 +316,7 @@ static int load_runtime_config(bool trusted_boot)
 /* The initrd checks the runtime against its authenticated UKI root. */
 static int mount_runtime(bool trusted_boot)
 {
+	const char *step = "open runtime image";
 	struct shirudo_config_image_open opened = {
 		.data_fd = -1,
 		.hash_fd = -1,
@@ -337,22 +338,30 @@ static int mount_runtime(bool trusted_boot)
 	rc = shirudo_config_image_open_root(image.bootstrap.runtime,
 					    image.bootstrap.runtime_root,
 					    &opened);
-	if (rc)
-		return rc;
-	rc = mkdir_owned(SHIRUDO_RUNTIME_DIR);
 	if (!rc) {
+		step = "prepare runtime mountpoint";
+		rc = mkdir_owned(SHIRUDO_RUNTIME_DIR);
+	}
+	if (!rc) {
+		step = "create runtime dm-verity mapping";
 		rc = shirudo_dm_verity_create(&opened, "shirudo-runtime",
 					      &device);
 		created = !rc;
 	}
-	if (rc == -EEXIST)
+	if (rc == -EEXIST) {
+		step = "inspect runtime dm-verity mapping";
 		rc = shirudo_dm_verity_inspect("shirudo-runtime", &opened.image,
 					       &device);
-	if (!rc)
+	}
+	if (!rc) {
+		step = "verify runtime image";
 		rc = shirudo_dm_verity_verify(&device, &opened);
-	if (!rc)
+	}
+	if (!rc) {
+		step = "mount runtime image";
 		rc = shirudo_dm_verity_mount(&device, SHIRUDO_RUNTIME_DIR,
 					     true);
+	}
 	if (rc && created) {
 		cleanup = shirudo_dm_verity_remove(&device, false);
 		if (cleanup)
@@ -363,8 +372,12 @@ static int mount_runtime(bool trusted_boot)
 	if (!rc && trusted_boot)
 		image.boot_runtime = device;
 	shirudo_config_image_close(&opened);
-	if (!rc)
+	if (!rc) {
+		step = "load runtime config";
 		rc = load_runtime_config(trusted_boot);
+	}
+	if (rc)
+		pr_err("image: %s: %s", step, strerror(-rc));
 	return rc;
 }
 
@@ -684,6 +697,12 @@ static int boot_target(struct shirudo_config_update_target *target)
 	return rc;
 }
 
+static int boot_keys_error(const char *step, int rc)
+{
+	pr_err("initrd boot keys: %s: %s", step, strerror(-rc));
+	return rc;
+}
+
 static int enroll_config_key(void)
 {
 	__u8 *der = NULL;
@@ -693,16 +712,29 @@ static int enroll_config_key(void)
 
 	rc = keys_read_der(image.bootstrap.certificate, &der, &size);
 	if (rc)
-		return rc;
+		return boot_keys_error("read config verification certificate", rc);
 	ring = shirudo_keyring_dm_verity_serial();
-	rc = ring < 0 ? ring : keyring_holds_cert(ring, der, size);
+	if (ring < 0) {
+		rc = (int)ring;
+		xfree(der, size);
+		return boot_keys_error("lookup dm-verity keyring", rc);
+	}
+	rc = keyring_holds_cert(ring, der, size);
+	if (rc < 0) {
+		xfree(der, size);
+		return boot_keys_error("check config certificate enrollment", rc);
+	}
 	if (!rc)
 		rc = shirudo_keyring_dm_verity_add_cert(der, size);
 	xfree(der, size);
 	if (rc < 0)
-		return rc;
+		return boot_keys_error("add config verification certificate", rc);
 	rc = shirudo_keyring_dm_verity_seal();
-	return rc == -EEXIST ? 0 : rc;
+	if (rc == -EEXIST)
+		return 0;
+	if (rc)
+		return boot_keys_error("seal dm-verity keyring", rc);
+	return 0;
 }
 
 /* The authenticated initrd validates the boot set before installing guards. */
@@ -715,25 +747,30 @@ int shirudo_image_boot_keys(struct shirudo_trusted_set *set)
 	/* These temporary mounts are released before loading the guards. */
 	image.boot_keys_open = true;
 	rc = mount_runtime(true);
-	if (!rc)
-		rc = enroll_config_key();
-	if (!rc)
-		rc = open_update();
-	if (!rc)
-		rc = boot_target(&image.boot_target);
-	if (!rc)
-		rc = prepare_config(&image, &image.boot_target, true);
-	if (!rc)
-		rc = shirudo_keys_validate_image_set(SHIRUDO_RUNTIME_CERT_PATH,
-						     image.candidate_fd, set);
 	if (rc)
-		return rc;
+		return boot_keys_error("mount runtime", rc);
+	rc = enroll_config_key();
+	if (rc)
+		return boot_keys_error("enrol config certificate", rc);
+	rc = open_update();
+	if (rc)
+		return boot_keys_error("open config update state", rc);
+	rc = boot_target(&image.boot_target);
+	if (rc)
+		return boot_keys_error("select boot config", rc);
+	rc = prepare_config(&image, &image.boot_target, true);
+	if (rc)
+		return boot_keys_error("prepare boot config", rc);
+	rc = shirudo_keys_validate_image_set(SHIRUDO_RUNTIME_CERT_PATH,
+					     image.candidate_fd, set);
+	if (rc)
+		return boot_keys_error("validate BPF trust set", rc);
 	/* Guard loaders need the initial signer until activation. */
 	strscpy(primary.path, SHIRUDO_RUNTIME_CERT_PATH, sizeof(primary.path));
 	rc = keys_digest_file(primary.path, primary.sha256,
 			      primary.fingerprint);
 	if (rc)
-		return rc;
+		return boot_keys_error("digest primary certificate", rc);
 	for (i = 0; i < set->n; i++)
 		if (!memcmp(set->certs[i].sha256, primary.sha256, 32))
 			break;

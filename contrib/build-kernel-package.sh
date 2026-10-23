@@ -394,6 +394,9 @@ CONFIG_TCG_TPM=y
 CONFIG_TCG_TIS_CORE=y
 CONFIG_TCG_TIS=y
 CONFIG_TCG_CRB=y
+CONFIG_SECCOMP=y
+CONFIG_SECCOMP_FILTER=y
+CONFIG_CROSS_MEMORY_ATTACH=y
 CONFIG_SECURITY=y
 CONFIG_SECURITY_NETWORK=y
 CONFIG_SECURITYFS=y
@@ -407,6 +410,8 @@ CONFIG_MODULES=y
 CONFIG_MODULE_UNLOAD=y
 CONFIG_BLK_DEV=y
 CONFIG_BLOCK=y
+CONFIG_MD=y
+CONFIG_BLK_DEV_DM=y
 CONFIG_BLK_DEV_INITRD=y
 CONFIG_RD_GZIP=y
 CONFIG_RD_XZ=y
@@ -458,7 +463,10 @@ CONFIG_SQUASHFS_XZ=y
 CONFIG_SQUASHFS_ZSTD=y
 CONFIG_EXT4_FS=y
 CONFIG_EXT4_FS_SECURITY=y
+CONFIG_DM_VERITY=y
+CONFIG_DM_VERITY_VERIFY_ROOTHASH_SIG=y
 CONFIG_TMPFS=y
+CONFIG_TMPFS_XATTR=y
 CONFIG_TTY=y
 CONFIG_ACPI=y
 CONFIG_PNP=y
@@ -536,6 +544,7 @@ require_config() {
 
 require_config CONFIG_BPF_LSM y
 require_config CONFIG_BPF_SYSCALL y
+require_config CONFIG_KEYS y
 require_config CONFIG_BPF_JIT y
 require_config CONFIG_CGROUP_BPF y
 require_config CONFIG_FUNCTION_TRACER y
@@ -545,6 +554,9 @@ require_config CONFIG_DEBUG_INFO_BTF y
 require_config CONFIG_TCG_TPM y
 require_config CONFIG_TCG_TIS_CORE y
 require_config CONFIG_TCG_TIS y
+require_config CONFIG_SECCOMP y
+require_config CONFIG_SECCOMP_FILTER y
+require_config CONFIG_CROSS_MEMORY_ATTACH y
 require_config CONFIG_SYSTEM_DATA_VERIFICATION y
 require_config CONFIG_UPROBES y
 require_config CONFIG_SECURITY y
@@ -570,6 +582,11 @@ if [[ "$config_profile" == slim ]]; then
   require_config CONFIG_SQUASHFS_ZSTD y
 fi
 require_config CONFIG_MODULES y
+require_config CONFIG_MD y
+require_config CONFIG_BLK_DEV_DM y
+require_config CONFIG_DM_VERITY y
+require_config CONFIG_DM_VERITY_VERIFY_ROOTHASH_SIG y
+require_config CONFIG_BLK_DEV_LOOP y
 require_config CONFIG_PCI y
 require_config CONFIG_PCI_MSI y
 require_config CONFIG_PCIEPORTBUS y
@@ -591,6 +608,7 @@ require_config CONFIG_OVERLAY_FS y
 require_config CONFIG_EXT4_FS y
 require_config CONFIG_EXT4_FS_SECURITY y
 require_config CONFIG_TMPFS y
+require_config CONFIG_TMPFS_XATTR y
 require_config CONFIG_EFI_PARTITION y
 case "$TEST_VM_ARCH" in
 x86_64)

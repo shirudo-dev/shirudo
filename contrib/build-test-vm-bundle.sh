@@ -352,6 +352,7 @@ build_fixture()
 			"$REPO_ROOT/testing/fixtures/$source" \
 			-o "$TMP_DIR/fixtures/$name.upatch" \
 			--name "$name" --vmlinux "$REPO_ROOT/vendor/linux/vmlinux.h" \
+			--extra-cflags "-I$REPO_ROOT/vendor/libbpf" \
 			--key "$keys_dir/signing_key.pem" \
 			--cert "$keys_dir/cert.der"
 	)
@@ -551,6 +552,7 @@ EOF
 			"$source_dir/kernel-obs.bpf.c" \
 			-o "$TMP_DIR/fixtures/kernel-obs.upatch" \
 			--name kernel-obs --vmlinux "$REPO_ROOT/vendor/linux/vmlinux.h" \
+			--extra-cflags "-I$REPO_ROOT/vendor/libbpf" \
 		--key "$keys_dir/signing_key.pem" \
 		--cert "$keys_dir/cert.der"
 	)
@@ -564,6 +566,7 @@ EOF
 			"$source_dir/kernel-obs-cred-anomaly.bpf.c" \
 			-o "$TMP_DIR/fixtures/kernel-obs-cred-anomaly.upatch" \
 			--name kernel-obs --vmlinux "$REPO_ROOT/vendor/linux/vmlinux.h" \
+			--extra-cflags "-I$REPO_ROOT/vendor/libbpf" \
 			--key "$keys_dir/signing_key.pem" \
 			--cert "$keys_dir/cert.der"
 	)

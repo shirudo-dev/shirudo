@@ -439,8 +439,9 @@ current limits; the separate `directory-entry investigation
 
 The enforcement hooks are present at bpf-next commit
 ``0867b7bfa9de65674c6e599fa21b762b71011b14``. Direct access to the kernel
-``.dm-verity`` keyring additionally requires upstream commit
-``1041fca2ee8a`` (``keys: add KEY_SPEC_DM_VERITY_KEYRING``).
+``.dm-verity`` keyring additionally requires patch 1/3 of the bpf-next v2
+series ``keys: Add well known IDs for fs-verity/dm-verity keys``. The test-
+kernel build applies the local copy under ``kernel/``.
 Shirudo also requires the signed-BPF kernel interfaces listed in
 `requirements <requirements.rst>`__.
 

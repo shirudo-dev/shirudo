@@ -249,8 +249,11 @@ static int init_keyring(void)
 	int rc;
 
 	ring = keyring_bpf_serial();
-	if (ring <= 0)
-		return ring ? ring : -ENOKEY;
+	if (ring <= 0) {
+		rc = ring ? ring : -ENOKEY;
+		pr_err("bpf keyring lookup: %s", strerror(-rc));
+		return rc;
+	}
 	if (!identity_read(&id)) {
 		if (id.keyring_type != SHIRUDO_SIG_KEYRING_BPF ||
 		    id.keyring_serial != ring ||
@@ -1234,6 +1237,13 @@ static void initrd_leave(void)
 			strerror(errno));
 }
 
+static int init_phase_error(int rc, const char *phase)
+{
+	if (rc)
+		pr_err("init: %s failed: %s", phase, strerror(-rc));
+	return rc;
+}
+
 static int run_init(void)
 {
 	struct shirudo_measured_upatch *set = NULL;
@@ -1242,44 +1252,47 @@ static int run_init(void)
 
 	rc = init_bpffs();
 	if (rc)
-		return rc;
+		return init_phase_error(rc, "private bpffs setup");
 
 	rc = init_keyring();
-	if (!rc)
-		rc = shirudo_image_boot_keys_close();
 	if (rc)
-		return rc;
+		return init_phase_error(rc, "BPF keyring initialization");
+	rc = shirudo_image_boot_keys_close();
+	if (rc)
+		return init_phase_error(rc, "closing the boot key image");
 
 	/* Seal writable state before the hooks attach, then adopt the initrd log. */
 	rc = seal_label_tree();
 	if (rc)
-		return rc;
+		return init_phase_error(rc, "sealing persistent state");
 	rc = eventlog_adopt_pending();
 	if (rc)
-		return rc;
+		return init_phase_error(rc, "adopting the pending eventlog");
 
 	rc = init_lsm();
 	if (rc)
-		return rc;
+		return init_phase_error(rc, "loading enforcement");
 
 	rc = seal_label_tree();
 	if (rc)
-		return rc;
+		return init_phase_error(rc, "sealing initialized state");
 	rc = shirudo_image_runtime_mount();
-	if (!rc)
-		rc = shirudo_image_boot();
-	if (!rc)
-		rc = keys_load(SHIRUDO_RUNTIME_DIR "/keys",
-			       SHIRUDO_KEYS_REVOKED_DIR, true, &enrolled);
 	if (rc)
-		return rc;
+		return init_phase_error(rc, "mounting the authenticated runtime");
+	rc = shirudo_image_boot();
+	if (rc)
+		return init_phase_error(rc, "loading authenticated boot settings");
+	rc = keys_load(SHIRUDO_RUNTIME_DIR "/keys",
+		       SHIRUDO_KEYS_REVOKED_DIR, true, &enrolled);
+	if (rc)
+		return init_phase_error(rc, "loading trusted keys");
 
 	rc = boot_restore(&set, &n);
 	if (rc) {
 		pr_err("init: boot-restore failed; further changes "
 		       "and attestation remain blocked");
 		xfree(set, n * sizeof(*set));
-		return rc;
+		return init_phase_error(rc, "restoring boot upatches");
 	}
 
 	rc = chain_extend_init(set, n);
@@ -1287,12 +1300,12 @@ static int run_init(void)
 	if (rc) {
 		pr_err("init: incomplete -- LSM active and upatches "
 		       "loaded, but TPM register not advanced");
-		return rc;
+		return init_phase_error(rc, "binding the TPM register");
 	}
 
 	rc = shirudo_image_boot_complete();
 	if (rc)
-		return rc;
+		return init_phase_error(rc, "completing authenticated boot");
 
 	pr_info("init: complete (LSM active, writable state sealed)");
 	return 0;

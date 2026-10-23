@@ -55,6 +55,10 @@ print(d.get(sys.argv[1], ""))
 ' "$1"
 }
 
+keyring_mode() {
+	"$SHIRUDO_BIN" status --json 2>/dev/null | report_field keyring_mode
+}
+
 # The BPM tree tests (t1118-t1120) walk one append-only tree in order:
 # the state a sync writes under /var/lib/shirudo is sealed, so a test
 # cannot remove it and each one continues from where the previous one
