@@ -352,8 +352,8 @@ binary, as described in `operations <operations.rst>`__.
   docutils' ``rst2html`` (``python3-docutils``).
 * The host-side suite, ``make -C testing test-op``, runs its Python
   helpers on the standard library alone.  With the ``cryptography``
-  module installed, ``t0033-tpm-wire.sh`` also cross-checks the TPM
-  credential blob it builds against an independent implementation;
+  module installed, ``testing/tpm/t0033-tpm-wire.sh`` also cross-checks
+  the TPM credential blob it builds against an independent implementation;
   without it that one check is skipped.
 * ``make -C testing fuzz`` builds the parsers' libFuzzer targets with
   ``clang`` and needs its fuzzer and sanitizer runtime

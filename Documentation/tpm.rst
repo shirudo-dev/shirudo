@@ -573,10 +573,10 @@ context and the deferred mitigations the plan.
 8) Testing
 ----------
 
-``testing/t0033-tpm-wire.sh`` checks the policy digests, names, wire
+``testing/tpm/t0033-tpm-wire.sh`` checks the policy digests, names, wire
 parsers, the key derivations, the endorsement policy and the
 credential blob against known vectors and an independent
-implementation, without a TPM.  ``testing/t0034-register.sh`` drives the
+implementation, without a TPM.  ``testing/tpm/t0034-register.sh`` drives the
 whole register and attestation path, the initrd phases simulated as
 PCR 11 extensions, the credential challenge with an ECC and an RSA
 endorsement key included, against libtpms:

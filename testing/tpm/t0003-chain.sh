@@ -6,7 +6,7 @@
 # and constant-time compare. These underpin the measurement register;
 # a drift here silently breaks attestation.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
 H=helper/test-chain

@@ -8,7 +8,7 @@
 # usable TPM; init refuses to run without one, so a host with no chain
 # has no shirudo state and the test skips (it runs on the CI vTPM runner).
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./integration-lib.sh
 target_guard
 

@@ -6,7 +6,7 @@
 # under, NV and object names, and the attestation structures the
 # verifier parses, each against values computed independently here.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
 H=helper/test-tpm-wire

@@ -7,7 +7,7 @@
 # system's init adopts it, and adoption appends it to the eventlog
 # exactly once.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 H=helper/test-eventlog
 W=$(mktemp -d)

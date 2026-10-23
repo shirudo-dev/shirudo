@@ -8,7 +8,7 @@
 # a verifier accepts or refuses. Needs the libtpms-backed
 # helper/tpmsim-cmd; skipped where libtpms is not installed.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
 R=helper/test-register

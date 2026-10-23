@@ -6,7 +6,7 @@
 # shirudo.conf, a valid load refuses with category eventlog_full at
 # pre-flight. No BPF_PROG_LOAD, no chain extend, no append. Non-destructive.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./integration-lib.sh
 target_guard
 

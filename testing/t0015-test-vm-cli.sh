@@ -902,17 +902,18 @@ test_expect_success 'operator and target runners have disjoint explicit scopes' 
 	grep -q "for t in t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
 	grep -q "for t in otel/t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
 	grep -q "bpm/t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
+	grep -q "tpm/t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
 	! grep -q "t1101" ../testing/run-tests.sh &&
 	for test_name in \
 		t1200-target-fixtures.sh \
 		bpm/t1118-bpm-tree.sh \
 		bpm/t1119-bpm-tree-sequential.sh \
 		bpm/t1120-bpm-tree-delete.sh \
-		t1102-eventlog-full.sh \
+		tpm/t1102-eventlog-full.sh \
 		t1103-version-gate.sh \
 		t1104-payload-mismatch.sh \
 		t1107-load-unload.sh \
-		t1108-tpm-chain.sh \
+		tpm/t1108-tpm-chain.sh \
 		t1111-upatch-get.sh \
 		t1114-uprobe-multi.sh \
 		otel/t1115-map-export-all.sh \
