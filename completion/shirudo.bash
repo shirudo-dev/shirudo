@@ -90,6 +90,14 @@ _shirudo()
 			COMPREPLY=( $(compgen -W "--key-file=" -- "$cur") )
 		elif [[ $sub == repo && cword -eq 3 ]]; then
 			COMPREPLY=( $(compgen -W "update" -- "$cur") )
+		elif [[ $sub == build && ${COMP_WORDS[COMP_CWORD-1]} == -f ]]; then
+			COMPREPLY=( $(compgen -f -- "$cur") )
+		elif [[ $sub == build && ${COMP_WORDS[COMP_CWORD-1]} == --keys-dir ]]; then
+			COMPREPLY=( $(compgen -d -- "$cur") )
+		elif [[ $sub == build && $cur == -* ]]; then
+			COMPREPLY=( $(compgen -W "-f --version --keys-dir" -- "$cur") )
+		elif [[ $sub == build ]]; then
+			COMPREPLY=( $(compgen -d -- "$cur") )
 		elif [[ $sub == tree && cword -eq 3 ]]; then
 			COMPREPLY=( $(compgen -W "sync append" -- "$cur") )
 		elif [[ $sub == tree && ${COMP_WORDS[3]} == sync && $cur == -* ]]; then
