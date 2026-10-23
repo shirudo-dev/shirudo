@@ -11,9 +11,9 @@ cd "$(dirname "$0")"
 fail=0
 : "${SHIRUDO_TEST_SUITE_FAILURES_FILE:=}"
 	for t in \
-	t1118-bpm-tree.sh \
-	t1119-bpm-tree-sequential.sh \
-	t1120-bpm-tree-delete.sh
+	bpm/t1118-bpm-tree.sh \
+	bpm/t1119-bpm-tree-sequential.sh \
+	bpm/t1120-bpm-tree-delete.sh
 do
 	if sh "$t"; then
 		:

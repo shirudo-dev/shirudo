@@ -5,7 +5,7 @@
 # t1119 -- re-sync the publication t1118 applied, then follow the tree to
 # the next generation and apply only the operation it appends.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./integration-lib.sh
 target_guard
 

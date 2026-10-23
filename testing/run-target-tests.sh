@@ -15,9 +15,9 @@ fail=0
 : "${SHIRUDO_TEST_SUITE_FAILURES_FILE:=}"
 for t in \
 	t1200-target-fixtures.sh \
-	t1118-bpm-tree.sh \
-	t1119-bpm-tree-sequential.sh \
-	t1120-bpm-tree-delete.sh \
+	bpm/t1118-bpm-tree.sh \
+	bpm/t1119-bpm-tree-sequential.sh \
+	bpm/t1120-bpm-tree-delete.sh \
 	t1102-eventlog-full.sh \
 	t1103-version-gate.sh \
 	t1104-payload-mismatch.sh \

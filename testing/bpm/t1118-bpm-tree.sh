@@ -6,7 +6,7 @@
 # operation, skip another by selector, and fetch only the selected upatch.
 # The upatch it applies stays loaded: t1119 and t1120 continue this tree.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./integration-lib.sh
 target_guard
 

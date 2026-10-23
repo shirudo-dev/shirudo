@@ -5,7 +5,7 @@
 # t1120 -- delete the upatch t1118 applied through an appended tree
 # operation, then add it back in the generation after that.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./integration-lib.sh
 target_guard
 

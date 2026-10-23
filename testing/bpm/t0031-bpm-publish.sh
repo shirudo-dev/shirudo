@@ -11,7 +11,7 @@
 # digest against an independent recomputation of its canonical form.
 # Needs clang, shirudo-build, python3 and an OpenSSL >= 3.5 (ML-DSA).
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
 S=../shirudo
