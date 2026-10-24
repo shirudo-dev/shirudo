@@ -25,6 +25,7 @@ struct shirudo_identity {
 	__u32	n_keys;
 	__s32	key_serials[SHIRUDO_IDENTITY_KEYS_MAX];
 	__u8	runtime_root[32];
+	__u32	mnt_ns_inum;
 };
 
 #define SHIRUDO_TASK_TRUSTED	1
@@ -61,7 +62,7 @@ _Static_assert(sizeof(struct shirudo_device_authority) == 48,
 	       "device authority ABI");
 _Static_assert(sizeof(struct shirudo_task_authority) == 8,
 	       "task authority ABI");
-_Static_assert(sizeof(struct shirudo_identity) == 116,
+_Static_assert(sizeof(struct shirudo_identity) == 120,
 	       "frozen identity ABI");
 
 /*

@@ -15,6 +15,7 @@ struct shirudo_sb_id {
 	__u32	n_keys;
 	__s32	key_serials[SHIRUDO_IDENTITY_KEYS_MAX];
 	__u8	runtime_root[32];
+	__u32	mnt_ns_inum;
 };
 
 struct {

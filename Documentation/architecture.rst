@@ -288,8 +288,9 @@ serial for this singleton; a nonzero serial must match the frozen record.
 A certificate in another caller keyring cannot authorize a load.
 
 bpffs and keyring guards. The identity map contains the bpffs and run-device
-numbers, runtime root hash, BPF keyring kind and serial, and enrolled key
-serials. It is written and frozen before the admission gates attach.
+numbers, the mount namespace inode recorded during initialization, runtime root
+hash, BPF keyring kind and serial, and enrolled key serials. It is written and
+frozen before the admission gates attach.
 The task map is seeded with the authenticated bootstrap task, then frozen
 against userspace writes. Runtime exec and fork hooks maintain its marks.
 Expected config roots remain writable only by trusted tasks preparing a
@@ -306,12 +307,15 @@ to every task but shirudo, while viewing, listing and the possessed
 search the kernel verifies signatures with stay open.  Sealing stops
 keys from being added; this stops root from taking them away, so that
 signer removal happens through signed config activation.
-``lsm/sb_umount``, ``lsm/move_mount``,
-``lsm/sb_mount`` and ``lsm/sb_remount`` deny unconditionally, for every
-caller including shirudo, direct unmount, relocation, mount-over and
-remount of that superblock. A lazy unmount of a parent mount is not covered;
-see residual risk 3 in the threat model and
-`issue 22 <https://github.com/shirudo-dev/shirudo/issues/22>`__.
+``lsm/sb_umount``, ``lsm/move_mount``, ``lsm/sb_mount`` and ``lsm/sb_remount``
+deny direct unmount, relocation, mount-over and remount of that superblock.
+The unmount hook also checks ancestor mount trees containing the bpffs. It
+denies these in the namespace recorded during initialization, and denies a
+foreign namespace's tree if any mount is shared or the bounded tree scan is
+incomplete. It permits the detach only for a fully scanned foreign tree with
+no shared mounts, so namespace-local cleanup cannot propagate to Shirudo's
+protected mount. This allows systemd to clean up a private service mount
+namespace without weakening protection in the host namespace.
 The pins are the only thing
 keeping the enforcement programs alive, and one ``umount`` would
 otherwise detach everything. Named refusal points increment counters in

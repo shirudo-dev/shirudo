@@ -137,8 +137,12 @@ T2  Detaching or replacing enforcement
     The VFS unlinks a rename's victim without ``inode_unlink``, so both
     hooks are needed. ``sb_umount``, ``move_mount``, ``sb_mount`` and
     ``sb_remount`` deny direct operations against that superblock.
-    Unmounting a parent mount and legacy mount moves remain gaps,
-    described in residual risk 3. Infrastructure maps are
+    Parent unmounts are checked against the mount tree: the namespace recorded
+    during initialization is protected, and a foreign namespace may detach an
+    ancestor only after a complete scan confirms the tree has no shared
+    mounts. Incomplete scans and trees containing shared mounts are denied.
+    Legacy mount moves remain a gap described in residual risk 3.
+    Infrastructure maps are
     frozen at creation, so even with the LSM gone userspace could not
     rewrite the identity map. ``lsm/bpf_map`` denies writable map fds
     to every process except shirudo; map updates and freezes have the
@@ -392,17 +396,17 @@ Each of these is known, documented and bounded; none is silent.
     authorization boundary. The authenticated initrd bootstrap binary and
     trusted runtime process memory remain in the TCB.
 
-3.  A lazy unmount of a mount above ``/run/shirudo/bpffs``, such as
-    ``umount -l /run``, can detach the bpffs with it. The kernel calls
-    ``sb_umount`` for the requested parent mount alone, so the direct
-    bpffs check does not stop this. Once its last references disappear,
-    the pins can be released and enforcement can detach. The mount-tree
-    check was reverted because it blocked systemd service startup.
-    `Issue 22 <https://github.com/shirudo-dev/shirudo/issues/22>`__ tracks
-    keeping the pins alive without depending on a visible mount tree.
-    Mounting over ``/run/shirudo`` only hides the pins; it does not release
-    them. Enforcement continues, but state-changing commands refuse
-    ``lsm_detached`` while their pins are hidden.
+3.  ``sb_umount`` checks whether an unmount target contains the protected
+    bpffs. It denies the operation in the mount namespace recorded during
+    initialization and denies foreign-namespace trees if a mount is shared or
+    the bounded scan cannot complete. It permits only a fully scanned,
+    unshared tree in a different namespace. This lets systemd lazily detach a
+    copied old-root tree while setting up a private service mount namespace;
+    the detach stays local and cannot propagate back to the protected mount.
+    Direct bpffs unmounts remain denied in every namespace. Mounting over
+    ``/run/shirudo`` only hides the pins; it does not release them. Enforcement
+    continues, but state-changing commands refuse ``lsm_detached`` while their
+    pins are hidden.
 
     Legacy ``mount(MS_MOVE)`` bypasses the source check used by
     ``move_mount``. Runtime-image relocation succeeded in an isolated

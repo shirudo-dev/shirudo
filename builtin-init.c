@@ -631,6 +631,17 @@ static int init_lsm(void)
 		goto out;
 	}
 	id.run_dev = kernel_dev_t(st.st_dev);
+	if (stat("/proc/self/ns/mnt", &st)) {
+		err = -errno;
+		pr_err("stat /proc/self/ns/mnt: %s", strerror(errno));
+		goto out;
+	}
+	id.mnt_ns_inum = (__u32)st.st_ino;
+	if (!id.mnt_ns_inum) {
+		pr_err("mount namespace inode is zero");
+		err = -EINVAL;
+		goto out;
+	}
 
 	memcpy(id.runtime_root, shirudo_image_runtime_root(), 32);
 

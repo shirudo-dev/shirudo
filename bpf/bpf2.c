@@ -43,23 +43,107 @@ static __always_inline int shirudo_image_mount(struct super_block *sb,
 	return -EPERM;
 }
 
+#define SHIRUDO_MOUNT_WALK_MAX	4096
+#define SHIRUDO_MOUNT_DEPTH_MAX	64
+
+#define shirudo_mount_of(ptr, member)					\
+	((struct mount *)((unsigned long)(ptr) -			\
+			  bpf_core_field_offset(struct mount, member)))
+
+static __always_inline unsigned long shirudo_ptr_addr(const void *ptr)
+{
+	unsigned long addr = 0;
+
+	bpf_probe_read_kernel(&addr, sizeof(addr), &ptr);
+	return addr;
+}
+
+/*
+ * Find the protected bpffs below an unmount target. A complete walk also
+ * reports whether any mount in the subtree belongs to a shared peer group.
+ */
+static __always_inline bool shirudo_mount_tree_has(struct mount *root,
+						   __u32 sb_dev,
+						   bool check_private,
+						   bool *private_tree)
+{
+	struct mount *cur = root, *parent;
+	struct list_head *next;
+	bool climbed, found;
+	int i, j;
+
+	*private_tree = true;
+	found = false;
+	bpf_for(i, 0, SHIRUDO_MOUNT_WALK_MAX) {
+		if (BPF_CORE_READ(cur, mnt.mnt_sb, s_dev) == sb_dev) {
+			found = true;
+			if (!check_private)
+				return true;
+		}
+		if (check_private && BPF_CORE_READ(cur, mnt_group_id))
+			*private_tree = false;
+		next = BPF_CORE_READ(cur, mnt_mounts.next);
+		if (next != &cur->mnt_mounts) {
+			cur = shirudo_mount_of(next, mnt_child);
+			continue;
+		}
+		climbed = false;
+		bpf_for(j, 0, SHIRUDO_MOUNT_DEPTH_MAX) {
+			if (cur == root)
+				return found;
+			parent = BPF_CORE_READ(cur, mnt_parent);
+			next = BPF_CORE_READ(cur, mnt_child.next);
+			if (next != &parent->mnt_mounts) {
+				cur = shirudo_mount_of(next, mnt_child);
+				climbed = true;
+				break;
+			}
+			cur = parent;
+		}
+		if (!climbed) {
+			*private_tree = false;
+			return true;
+		}
+	}
+	*private_tree = false;
+	return true;
+}
+
 SEC("lsm/sb_umount")
 int BPF_PROG(shirudo_lsm_sb_umount, struct vfsmount *mnt, int flags,
 	     int ret)
 {
+	struct shirudo_sb_id *id = shirudo_policy();
 	struct super_block *sb = BPF_CORE_READ(mnt, mnt_sb);
-	__u32 dev;
+	struct mount *target;
+	__u32 dev, target_ns;
+	bool check_private, private_tree;
 
-	if (ret)
-		return ret;
-	ret = shirudo_parent_mount(sb, false);
 	if (ret)
 		return ret;
 	if (BPF_CORE_READ_INTO(&dev, sb, s_dev))
 		return shirudo_tamper_deny(SHIRUDO_TAMPER_BPFFS_UMOUNT,
 					   -EPERM);
 	ret = shirudo_deny_bpffs_mount(dev, SHIRUDO_TAMPER_BPFFS_UMOUNT);
-	return ret ? ret : shirudo_image_mount(sb, true);
+	if (ret)
+		return ret;
+	if (id && id->sb_dev) {
+		target = shirudo_mount_of(shirudo_ptr_addr(mnt), mnt);
+		target_ns = BPF_CORE_READ(target, mnt_ns, ns.inum);
+		check_private = id->mnt_ns_inum && target_ns &&
+				target_ns != id->mnt_ns_inum;
+		if (shirudo_mount_tree_has(target, id->sb_dev, check_private,
+					   &private_tree)) {
+			if (check_private && private_tree)
+				return 0;
+			return shirudo_tamper_deny(SHIRUDO_TAMPER_BPFFS_UMOUNT_ABOVE,
+						   -EPERM);
+		}
+	}
+	ret = shirudo_parent_mount(sb, false);
+	if (ret)
+		return ret;
+	return shirudo_image_mount(sb, true);
 }
 
 SEC("lsm/move_mount")
