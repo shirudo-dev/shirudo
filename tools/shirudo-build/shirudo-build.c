@@ -212,6 +212,8 @@ int main(int argc, char **argv)
 
 	if (argc >= 2 && strcmp(argv[1], "image") == 0)
 		return shirudo_build_image(argc - 1, argv + 1);
+	if (argc >= 2 && strcmp(argv[1], "upatch") == 0)
+		return shirudo_build_upatch_cli(argc - 1, argv + 1);
 	if (argc >= 2 && strcmp(argv[1], "bpm") == 0)
 		return shirudo_build_bpm(argc - 1, argv + 1);
 	if (argc >= 3 && strcmp(argv[1], "keys") == 0 &&

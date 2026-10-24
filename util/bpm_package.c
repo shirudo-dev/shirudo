@@ -360,6 +360,132 @@ int bpm_pkg_read_member(const char *archive, const char *member,
 				      out, out_len, max);
 }
 
+int bpm_pkg_visit_members(const char *archive, const char *package_dir,
+			  bpm_pkg_member_fn visit, void *ctx)
+{
+	gzFile gz = gzopen(archive, "rb");
+	char root[256] = {};
+	__u8 h[512];
+	int rc = 0;
+
+	if (!gz)
+		return -errno;
+	if (gzdirect(gz)) {
+		gzclose(gz);
+		return -EINVAL;
+	}
+	for (;;) {
+		char name[PATH_MAX], rel[PATH_MAX], *slash;
+		int n = gzread(gz, h, sizeof(h));
+		__u64 size, remain, pad;
+		size_t name_len, root_len;
+		bool zero = true;
+		int type;
+
+		if (n == 0)
+			break;
+		if (n != (int)sizeof(h)) {
+			rc = -EINVAL;
+			break;
+		}
+		for (size_t i = 0; i < sizeof(h); i++) {
+			if (h[i]) {
+				zero = false;
+				break;
+			}
+		}
+		if (zero)
+			break;
+		if (!memchr(h, '\0', 100) || h[345] ||
+		    bpm_tar_octal((char *)h + 124, 12, &size)) {
+			rc = -EINVAL;
+			break;
+		}
+		strscpy(name, (char *)h, sizeof(name));
+		type = h[156] ? h[156] : '0';
+		name_len = strlen(name);
+		if (type == '5' && name_len && name[name_len - 1] == '/')
+			name[--name_len] = '\0';
+		if (!bpm_archive_rel_ok(name)) {
+			rc = -EINVAL;
+			break;
+		}
+		if (!root[0]) {
+			slash = strchr(name, '/');
+			if ((!slash && type != '5') || (slash && slash == name) ||
+			    (slash ? (size_t)(slash - name) : name_len) >=
+				    sizeof(root)) {
+				rc = -EINVAL;
+				break;
+			}
+			root_len = slash ? (size_t)(slash - name) : name_len;
+			memcpy(root, name, root_len);
+			root[root_len] = '\0';
+		}
+		root_len = strlen(root);
+		if (strncmp(name, root, root_len) ||
+		    (name[root_len] && name[root_len] != '/')) {
+			rc = -EINVAL;
+			break;
+		}
+		if (package_dir && strcmp(root, package_dir)) {
+			rc = -EINVAL;
+			break;
+		}
+		if (type != '0' && type != '5') {
+			rc = -EPERM;
+			break;
+		}
+		strscpy(rel, name + root_len + (name[root_len] == '/'),
+			sizeof(rel));
+		if (!*rel) {
+			if (type != '5') {
+				rc = -EINVAL;
+				break;
+			}
+		} else if (!bpm_archive_rel_ok(rel)) {
+			rc = -EINVAL;
+			break;
+		} else if (visit) {
+			rc = visit(ctx, rel, (char)type);
+			if (rc)
+				break;
+		}
+		remain = size;
+		while (remain) {
+			__u8 discard[65536];
+			size_t want = remain > sizeof(discard) ?
+				      sizeof(discard) : (size_t)remain;
+
+			n = gzread(gz, discard, (__u32)want);
+			if (n <= 0) {
+				rc = -EINVAL;
+				goto done;
+			}
+			remain -= (size_t)n;
+		}
+		pad = (512 - (size % 512)) % 512;
+		while (pad) {
+			__u8 discard[512];
+			size_t want = pad > sizeof(discard) ?
+				      sizeof(discard) : (size_t)pad;
+
+			n = gzread(gz, discard, (__u32)want);
+			if (n <= 0) {
+				rc = -EINVAL;
+				goto done;
+			}
+			pad -= (size_t)n;
+		}
+	}
+	if (!root[0])
+		rc = -EINVAL;
+done:
+	if (gzclose(gz) != Z_OK && !rc)
+		rc = -EINVAL;
+	return rc;
+}
+
 static X509 *read_x509_memory(const __u8 *body, size_t len)
 {
 	BIO *b;

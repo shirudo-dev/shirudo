@@ -99,6 +99,16 @@ trailing `w` for opens for writing only. Both are compiled into the
 signed object: edit the list, run `make lists` in this directory and
 rebuild the package. There is nothing to configure on the target.
 
+To update only the watch addresses in an existing `.upatch`, run
+`python3 rewrite_watch_upatch.py watch.list kernel-obs.upatch`. It takes
+the same address and CIDR format as `gen_watch.py`, preserves the compiled
+loader and BTF, and re-signs the changed `.rodata` with the operator key
+from `/var/lib/shirudo/keys` (or `--keys-dir`). Use `--dry-run` to check
+that the new tries fit the arrays in the existing BTF layout, or `-o` to
+write a separate artifact. The tool refuses a list that needs more trie
+nodes than the existing arrays hold; changing those capacities still
+requires rebuilding the BPF object.
+
 ## Read the tables
 
 ```sh

@@ -193,6 +193,35 @@ static void parse_decoders(struct shirudo_upatch *u)
 	u->nr_decoders = nr_decoders;
 }
 
+static int upatch_parse(const void *data, size_t size,
+			struct shirudo_upatch *out)
+{
+	int rc;
+
+	memset(out, 0, sizeof(*out));
+	if (!data || !size || size > SHIRUDO_UPATCH_FILE_MAX)
+		return -EINVAL;
+	out->map = data;
+	out->map_size = size;
+	rc = parse_header(out->map, out->map_size, &out->hdr);
+	if (rc)
+		goto err;
+	rc = validate_bounds(&out->hdr, out->map_size);
+	if (rc)
+		goto err;
+	parse_decoders(out);
+	return 0;
+err:
+	memset(out, 0, sizeof(*out));
+	return rc;
+}
+
+int upatch_open_memory(const void *data, size_t size,
+		       struct shirudo_upatch *out)
+{
+	return upatch_parse(data, size, out);
+}
+
 int upatch_open(const char *path, struct shirudo_upatch *out)
 {
 	struct stat st;
@@ -225,29 +254,23 @@ int upatch_open(const char *path, struct shirudo_upatch *out)
 	if (m == MAP_FAILED)
 		return -errno;
 
-	out->map = m;
-	out->map_size = (size_t)st.st_size;
-
-	rc = parse_header(out->map, out->map_size, &out->hdr);
-	if (rc != 0) {
-		upatch_close(out);
+	rc = upatch_parse(m, (size_t)st.st_size, out);
+	if (rc) {
+		munmap(m, (size_t)st.st_size);
 		return rc;
 	}
-	rc = validate_bounds(&out->hdr, out->map_size);
-	if (rc != 0) {
-		upatch_close(out);
-		return rc;
-	}
-	parse_decoders(out);
+	out->mapped = true;
 	return 0;
 }
 
 void upatch_close(struct shirudo_upatch *u)
 {
-	if (u->map) {
+	if (u->map && u->mapped)
 		munmap((void *)u->map, u->map_size);
+	if (u->map) {
 		u->map = NULL;
 		u->map_size = 0;
+		u->mapped = false;
 		u->decoder_blob = NULL;
 		u->decoder_blob_len = 0;
 		u->nr_decoders = 0;

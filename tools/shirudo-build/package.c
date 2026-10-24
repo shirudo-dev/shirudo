@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -26,6 +27,7 @@
 #include <shirudo/upatch.h>
 
 #include "bpf/lib/shirudo_serializer.h"
+#include "bpm_package.h"
 #include "elf_target.h"
 #include "io.h"
 #include "loader.h"
@@ -33,8 +35,10 @@
 #include "macros.h"
 #include "malloc.h"
 #include "package.h"
+#include "paths.h"
 #include "sign.h"
 #include "upatch.h"
+#include "upatch_rodata.h"
 
 /*
  * A detached CMS over an ML-DSA-87 signature is about 5 KiB (4627-byte
@@ -106,6 +110,292 @@ static void pack_header(struct shirudo_upatch_header *h,
 	h->reserved0        = 0;
 	h->type             = htole32(type);
 	h->reserved1        = 0;
+}
+
+int shirudo_build_package_resign(const char *original,
+				 const char *modified, const char *output,
+				 const struct shirudo_data_range *ranges,
+				 size_t nr_ranges, const char *pkey_path,
+				 const char *cert_path)
+{
+	struct shirudo_upatch_header hdr;
+	struct shirudo_sign_io sio = {};
+	struct shirudo_upatch src = {}, mod = {};
+	struct shirudo_rodata_range watch_ranges[2] = {};
+	const __u8 *src_data, *mod_data;
+	bool range_found[2] = {};
+	__u8 digest[SHIRUDO_SHA256_LEN], *payload = NULL, *sig_buf = NULL;
+	char name[SHIRUDO_UPATCH_NAME_MAX + 1];
+	__u32 loader_off, sig_off, data_off, meta_off;
+	__u32 digest_len;
+	__u64 total, payload_len;
+	size_t i, j;
+	int fd = -1;
+	int rc;
+
+	if (!original || !modified || !output || !ranges || !nr_ranges ||
+	    nr_ranges > 16 || !strcmp(original, output) ||
+	    !strcmp(modified, output))
+		return -EINVAL;
+	rc = upatch_open(original, &src);
+	if (rc)
+		return rc;
+	rc = upatch_open(modified, &mod);
+	if (rc)
+		goto out;
+	src_data = upatch_data(&src);
+	mod_data = upatch_data(&mod);
+	if (upatch_is_unload(&src) || upatch_is_unload(&mod) ||
+	    memcmp(src.map, mod.map, SHIRUDO_UPATCH_HEADER_SIZE) ||
+	    src.hdr.loader_insns_len != mod.hdr.loader_insns_len ||
+	    src.hdr.signature_len != mod.hdr.signature_len ||
+	    src.hdr.data_len != mod.hdr.data_len ||
+	    src.hdr.metadata_len != mod.hdr.metadata_len ||
+	    memcmp(upatch_loader(&src), upatch_loader(&mod),
+		   src.hdr.loader_insns_len) ||
+	    memcmp(upatch_signature(&src), upatch_signature(&mod),
+		   src.hdr.signature_len) ||
+	    (src.hdr.metadata_len &&
+	     memcmp(upatch_metadata(&src), upatch_metadata(&mod),
+		    src.hdr.metadata_len))) {
+		rc = -EINVAL;
+		goto out;
+	}
+	for (i = 0; i < nr_ranges; i++) {
+		if (!ranges[i].length || ranges[i].offset > src.hdr.data_len ||
+		    ranges[i].length > src.hdr.data_len - ranges[i].offset ||
+		    (i && ranges[i].offset <
+		     ranges[i - 1].offset + ranges[i - 1].length)) {
+			rc = -EINVAL;
+			goto out;
+		}
+	}
+	for (i = 0; i < src.hdr.data_len; i++) {
+		bool allowed = false;
+
+		for (j = 0; j < nr_ranges; j++)
+			if (i >= ranges[j].offset &&
+			    i - ranges[j].offset < ranges[j].length) {
+				allowed = true;
+				break;
+			}
+		if (!allowed && src_data[i] != mod_data[i]) {
+			rc = -EPERM;
+			goto out;
+		}
+	}
+	if (!memchr(src.hdr.name, '\0', sizeof(src.hdr.name))) {
+		rc = -EINVAL;
+		goto out;
+	}
+	if ((__u64)src.hdr.loader_insns_len + src.hdr.data_len > SIZE_MAX) {
+		rc = -EOVERFLOW;
+		goto out;
+	}
+	payload_len = (__u64)src.hdr.loader_insns_len + src.hdr.data_len;
+	payload = xmalloc((size_t)payload_len);
+	if (!payload) {
+		rc = -ENOMEM;
+		goto out;
+	}
+	memcpy(payload, upatch_loader(&src), src.hdr.loader_insns_len);
+	memcpy(payload + src.hdr.loader_insns_len, upatch_data(&src),
+	       src.hdr.data_len);
+	rc = bpm_verify_cms(payload, (size_t)payload_len,
+			    upatch_signature(&src), src.hdr.signature_len,
+			    cert_path);
+	if (rc)
+		goto out;
+	if (EVP_Digest(payload, (size_t)payload_len, digest, &digest_len,
+		       EVP_sha256(), NULL) != 1 ||
+	    digest_len != sizeof(digest) ||
+	    memcmp(digest, src.hdr.payload_sha256, sizeof(digest))) {
+		rc = -EBADMSG;
+		goto out;
+	}
+	rc = upatch_rodata_watch_ranges(&src, watch_ranges);
+	if (rc)
+		goto out;
+	if (nr_ranges != ARRAY_SIZE(watch_ranges)) {
+		rc = -EINVAL;
+		goto out;
+	}
+	for (i = 0; i < nr_ranges; i++) {
+		for (j = 0; j < ARRAY_SIZE(watch_ranges); j++)
+			if (ranges[i].offset == watch_ranges[j].offset &&
+			    ranges[i].length == watch_ranges[j].size &&
+			    !range_found[j]) {
+				range_found[j] = true;
+				break;
+			}
+		if (j == ARRAY_SIZE(watch_ranges)) {
+			rc = -EPERM;
+			goto out;
+		}
+	}
+	sig_buf = xmalloc(SHIRUDO_MAX_SIG_SIZE);
+	if (!sig_buf) {
+		rc = -ENOMEM;
+		goto out;
+	}
+	sio.insns = upatch_loader(&mod);
+	sio.insns_sz = mod.hdr.loader_insns_len;
+	sio.data = upatch_data(&mod);
+	sio.data_sz = mod.hdr.data_len;
+	sio.signature = sig_buf;
+	sio.signature_sz = SHIRUDO_MAX_SIG_SIZE;
+	rc = cms_sign(&sio, pkey_path, cert_path);
+	if (rc)
+		goto out;
+	loader_off = sizeof(hdr);
+	if ((__u64)loader_off + sio.insns_sz > UINT32_MAX) {
+		rc = -EOVERFLOW;
+		goto out;
+	}
+	sig_off = loader_off + (__u32)sio.insns_sz;
+	if ((__u64)sig_off + sio.signature_sz > UINT32_MAX) {
+		rc = -EOVERFLOW;
+		goto out;
+	}
+	data_off = sig_off + (__u32)sio.signature_sz;
+	if ((__u64)data_off + sio.data_sz > UINT32_MAX) {
+		rc = -EOVERFLOW;
+		goto out;
+	}
+	meta_off = data_off + (__u32)sio.data_sz;
+	total = (__u64)meta_off + mod.hdr.metadata_len;
+	if (total > SHIRUDO_UPATCH_FILE_MAX) {
+		rc = -E2BIG;
+		goto out;
+	}
+	memcpy(name, mod.hdr.name, SHIRUDO_UPATCH_NAME_MAX);
+	name[SHIRUDO_UPATCH_NAME_MAX] = '\0';
+	pack_header(&hdr, name, mod.hdr.type, mod.hdr.flags,
+		    sio.payload_sha256,
+		    loader_off, (__u32)sio.insns_sz,
+		    sig_off, (__u32)sio.signature_sz,
+		    mod.hdr.metadata_len ? meta_off : 0, mod.hdr.metadata_len,
+		    sio.data_sz ? data_off : 0, (__u32)sio.data_sz,
+		    mod.hdr.log_buf_sz, mod.hdr.nr_maps, mod.hdr.nr_progs);
+	fd = open(output, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+	if (fd < 0) {
+		rc = -errno;
+		goto out;
+	}
+	rc = write_complete(fd, &hdr, sizeof(hdr));
+	if (!rc)
+		rc = write_complete(fd, sio.insns, sio.insns_sz);
+	if (!rc)
+		rc = write_complete(fd, sig_buf, sio.signature_sz);
+	if (!rc && sio.data_sz)
+		rc = write_complete(fd, sio.data, sio.data_sz);
+	if (!rc && mod.hdr.metadata_len)
+		rc = write_complete(fd, upatch_metadata(&mod), mod.hdr.metadata_len);
+	if (!rc && fsync(fd) != 0)
+		rc = -errno;
+out:
+	if (fd >= 0)
+		close(fd);
+	if (sig_buf)
+		xfree(sig_buf, SHIRUDO_MAX_SIG_SIZE);
+	if (payload)
+		xfree(payload, (size_t)payload_len);
+	upatch_close(&mod);
+	upatch_close(&src);
+	return rc;
+}
+
+int shirudo_build_upatch_cli(int argc, char **argv)
+{
+	const char *keys_dir = NULL, *original = NULL, *modified = NULL;
+	const char *output = NULL;
+	const char *pkey = SHIRUDO_SIGNING_KEY_PATH;
+	const char *cert = SHIRUDO_CERT_PATH;
+	struct shirudo_data_range ranges[16] = {};
+	char pkey_buf[PATH_MAX], cert_buf[PATH_MAX];
+	int pkey_explicit = 0, cert_explicit = 0;
+	size_t nr_ranges = 0;
+	int i;
+	int rc;
+
+	if (argc < 2 || strcmp(argv[1], "rewrite-rodata")) {
+		fprintf(stderr,
+			"usage: shirudo-build upatch rewrite-rodata "
+			"<original.upatch> <modified.upatch> -o <output.upatch> "
+			"--data-range <offset:length>... [--keys-dir <dir>] "
+			"[--key <signing_key.pem>] [--cert <cert.der>]\n");
+		return 2;
+	}
+	for (i = 2; i < argc; i++) {
+		if (!strcmp(argv[i], "-o") && i + 1 < argc) {
+			output = argv[++i];
+		} else if (!strcmp(argv[i], "--data-range") && i + 1 < argc) {
+			const char *range = argv[++i];
+			size_t off_len = digits(range, strlen(range));
+			const char *length;
+			size_t len_len;
+			__u64 offset, len;
+
+			if (nr_ranges == ARRAY_SIZE(ranges) || !off_len ||
+			    off_len >= strlen(range) ||
+			    range[off_len] != ':')
+				return 2;
+			length = range + off_len + 1;
+			len_len = digits(length, strlen(length));
+			if (!len_len || length[len_len] ||
+			    parse_u64(range, off_len, UINT32_MAX, &offset) ||
+			    parse_u64(length, len_len, UINT32_MAX, &len) || !len)
+				return 2;
+			ranges[nr_ranges].offset = (__u32)offset;
+			ranges[nr_ranges].length = (__u32)len;
+			nr_ranges++;
+		} else if (!strcmp(argv[i], "--keys-dir") && i + 1 < argc) {
+			keys_dir = argv[++i];
+		} else if (!strcmp(argv[i], "--key") && i + 1 < argc) {
+			pkey = argv[++i];
+			pkey_explicit = 1;
+		} else if (!strcmp(argv[i], "--cert") && i + 1 < argc) {
+			cert = argv[++i];
+			cert_explicit = 1;
+		} else if (argv[i][0] == '-') {
+			pr_err("upatch rewrite-rodata: unknown option %s", argv[i]);
+			return 2;
+		} else if (!original) {
+			original = argv[i];
+		} else if (!modified) {
+			modified = argv[i];
+		} else {
+			pr_err("upatch rewrite-rodata: unexpected argument %s",
+			       argv[i]);
+			return 2;
+		}
+	}
+	if (!original || !modified || !output || !nr_ranges) {
+		pr_err("upatch rewrite-rodata requires two inputs, -o, and data ranges");
+		return 2;
+	}
+	keys_dir = keys_dir_resolve(keys_dir);
+	if (keys_dir) {
+		if (!pkey_explicit) {
+			rc = shirudo_key_path(pkey_buf, sizeof(pkey_buf), keys_dir,
+					      SHIRUDO_SIGNING_KEY_FILE);
+			if (rc)
+				return 2;
+			pkey = pkey_buf;
+		}
+		if (!cert_explicit) {
+			rc = shirudo_key_path(cert_buf, sizeof(cert_buf), keys_dir,
+					      SHIRUDO_CERT_FILE);
+			if (rc)
+				return 2;
+			cert = cert_buf;
+		}
+	}
+	rc = shirudo_build_package_resign(original, modified, output,
+					  ranges, nr_ranges, pkey, cert);
+	if (rc)
+		pr_err("upatch rewrite-rodata: %s", strerror(-rc));
+	return rc ? 1 : 0;
 }
 
 static bool unsupported_kprobe_section(const char *sec)

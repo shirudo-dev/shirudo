@@ -45,6 +45,12 @@ int bpm_verify_cms(const __u8 *payload, size_t payload_len,
 int bpm_tar_octal(const char *p, size_t n, __u64 *out);
 bool bpm_archive_rel_ok(const char *name);
 
+typedef int (*bpm_pkg_member_fn)(void *ctx, const char *member, char type);
+
+/* Visit validated package-relative ustar members without extracting them. */
+int bpm_pkg_visit_members(const char *archive, const char *package_dir,
+			  bpm_pkg_member_fn visit, void *ctx);
+
 /*
  * Read one member of a gzip'd ustar .bee into an xmalloc'd buffer of
  * out_len + 1 bytes. member is relative to the single top-level package

@@ -90,6 +90,23 @@ _shirudo()
 			COMPREPLY=( $(compgen -W "--key-file=" -- "$cur") )
 		elif [[ $sub == repo && cword -eq 3 ]]; then
 			COMPREPLY=( $(compgen -W "update" -- "$cur") )
+		elif [[ $sub == info && cword -eq 3 ]]; then
+			COMPREPLY=( $(compgen -W "upatches data" -- "$cur") \
+				    $(compgen -f -X '!*.bee' -- "$cur") \
+				    $(compgen -d -- "$cur") )
+		elif [[ $sub == info && ${COMP_WORDS[3]} == upatches && cword -eq 4 ]]; then
+			COMPREPLY=( $(compgen -f -X '!*.bee' -- "$cur") \
+				    $(compgen -d -- "$cur") )
+		elif [[ $sub == info && ${COMP_WORDS[3]} == upatches && cword -eq 5 ]]; then
+			COMPREPLY=( $(compgen -W "--all" -- "$cur") )
+		elif [[ $sub == info && ${COMP_WORDS[3]} == data && cword -eq 4 ]]; then
+			COMPREPLY=( $(compgen -f -X '!*.bee' -- "$cur") \
+				    $(compgen -d -- "$cur") )
+		elif [[ $sub == info && ${COMP_WORDS[3]} == data && cword -eq 5 ]]; then
+			COMPREPLY=( $(compgen -f -X '!*.upatch' -- "$cur") \
+				    $(compgen -d -- "$cur") )
+		elif [[ $sub == info && ${COMP_WORDS[3]} == data && cword -eq 6 ]]; then
+			COMPREPLY=( $(compgen -W "--json" -- "$cur") )
 		elif [[ $sub == info ]]; then
 			COMPREPLY=( $(compgen -f -X '!*.bee' -- "$cur") \
 				    $(compgen -d -- "$cur") )

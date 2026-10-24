@@ -220,6 +220,7 @@ UTIL_SRCS := \
     util/seal.c \
     util/serializer.c \
     util/upatch_maps.c \
+    util/upatch_rodata.c \
     util/upatch_decode.c \
     util/upatch_maps_otel.c \
     util/elf_target.c \
@@ -432,6 +433,7 @@ tools/shirudo-build/shirudo-build: $(BUILD_OBJS) util/sign.o util/config_image.o
                                    util/seal.o util/harden.o util/string.o \
                                    util/crypto_openssl.o util/tls_openssl.o \
                                    util/bpm_oci.o util/bpm_package.o \
+                                   util/upatch_rodata.o \
                                    util/bpm_tree.o $(VERSION_OBJ) \
                                    $(LIBBPF_A)
 	@printf '  LD      $@\n'

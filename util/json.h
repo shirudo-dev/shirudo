@@ -8,6 +8,7 @@
 #ifndef SHIRUDO_JSON_H
 #define SHIRUDO_JSON_H
 
+#include <stdbool.h>
 #include <stddef.h>
 
 #include <shirudo/misc.h>
@@ -29,6 +30,7 @@ struct shirudo_json_emit {
 	int		err;	/* sticky; -ENOSPC, -EILSEQ, -E2BIG */
 	__u32		depth;	/* open-container nesting */
 	__u32		nonempty; /* bit d set: container at depth d has a member */
+	bool		value_pending;
 };
 
 /*
@@ -38,9 +40,14 @@ struct shirudo_json_emit {
  */
 void json_obj_open(struct shirudo_json_emit *e);
 void json_obj_open_key(struct shirudo_json_emit *e, const char *key);
+/* Value containers and scalars consume a pending json_key or array slot. */
+void json_obj_value_open(struct shirudo_json_emit *e);
 void json_obj_close(struct shirudo_json_emit *e);
 void json_arr_open(struct shirudo_json_emit *e, const char *key);
+void json_arr_open_value(struct shirudo_json_emit *e);
 void json_arr_close(struct shirudo_json_emit *e);
+void json_key(struct shirudo_json_emit *e, const char *key);
+void json_value_begin(struct shirudo_json_emit *e);
 void json_kv_string(struct shirudo_json_emit *e,
 		    const char *key, const char *val);
 void json_kv_int(struct shirudo_json_emit *e,
@@ -52,6 +59,9 @@ void json_kv_null(struct shirudo_json_emit *e, const char *key);
 void json_kv_raw(struct shirudo_json_emit *e, const char *key,
 		 const char *value, size_t value_len);
 void json_str(struct shirudo_json_emit *e, const char *val);
+void json_str_value(struct shirudo_json_emit *e, const char *val);
+void json_raw_value(struct shirudo_json_emit *e, const char *value,
+		    size_t value_len);
 void json_raw(struct shirudo_json_emit *e, const char *value,
 	      size_t value_len);
 

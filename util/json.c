@@ -143,6 +143,13 @@ void json_obj_open_key(struct shirudo_json_emit *e, const char *key)
 	enter(e);
 }
 
+void json_obj_value_open(struct shirudo_json_emit *e)
+{
+	json_value_begin(e);
+	put(e, '{');
+	enter(e);
+}
+
 void json_obj_close(struct shirudo_json_emit *e)
 {
 	put(e, '}');
@@ -156,6 +163,29 @@ void json_arr_open(struct shirudo_json_emit *e, const char *key)
 	put(e, ':');
 	put(e, '[');
 	enter(e);
+}
+
+void json_arr_open_value(struct shirudo_json_emit *e)
+{
+	json_value_begin(e);
+	put(e, '[');
+	enter(e);
+}
+
+void json_key(struct shirudo_json_emit *e, const char *key)
+{
+	sep(e);
+	put_string(e, key);
+	put(e, ':');
+	e->value_pending = true;
+}
+
+void json_value_begin(struct shirudo_json_emit *e)
+{
+	if (e->value_pending)
+		e->value_pending = false;
+	else
+		sep(e);
 }
 
 void json_arr_close(struct shirudo_json_emit *e)
@@ -220,6 +250,22 @@ void json_str(struct shirudo_json_emit *e, const char *val)
 {
 	sep(e);
 	put_string(e, val);
+}
+
+void json_str_value(struct shirudo_json_emit *e, const char *val)
+{
+	json_value_begin(e);
+	put_string(e, val);
+}
+
+void json_raw_value(struct shirudo_json_emit *e, const char *value,
+		    size_t value_len)
+{
+	size_t i;
+
+	json_value_begin(e);
+	for (i = 0; i < value_len && !e->err; i++)
+		put(e, value[i]);
 }
 
 void json_raw(struct shirudo_json_emit *e, const char *value,

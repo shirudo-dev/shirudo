@@ -50,6 +50,7 @@
 #include "util/paths.h"
 #include "util/seal.h"
 #include "util/upatch.h"
+#include "util/upatch_rodata.h"
 
 struct bpm_source {
 	char name[BPM_MAX_NAME];
@@ -431,6 +432,177 @@ static int print_package_readme(const char *source)
 out:
 	xfree(beefile, beefile_len + 1);
 	xfree(readme, readme_len + 1);
+	if (archive == temporary)
+		unlink(temporary);
+	return rc;
+}
+
+struct bpm_upatches_ctx {
+	bool all;
+	char *list;
+	size_t len;
+	size_t cap;
+};
+
+static int print_upatch_member(void *ctx, const char *member, char type)
+{
+	struct bpm_upatches_ctx *opts = ctx;
+	static const char prefix[] = "upatches/";
+	static const char unload[] = ".unload.upatch";
+	static const char suffix[] = ".upatch";
+	size_t len = strlen(member), unload_len = sizeof(unload) - 1;
+	size_t suffix_len = sizeof(suffix) - 1;
+	size_t need, cap;
+	char *next;
+
+	if (type != '0' || strncmp(member, prefix, sizeof(prefix) - 1) ||
+	    len < suffix_len || strcmp(member + len - suffix_len, suffix))
+		return 0;
+	if (!opts->all && len >= unload_len &&
+	    !strcmp(member + len - unload_len, unload))
+		return 0;
+	if (len <= sizeof(prefix) - 1 || strchr(member + sizeof(prefix) - 1, '/'))
+		return 0;
+	if (len > SIZE_MAX - opts->len - 1)
+		return -EOVERFLOW;
+	need = opts->len + len + 1;
+	if (need > opts->cap) {
+		cap = opts->cap ? opts->cap : 4096;
+		while (cap < need) {
+			if (cap > SHIRUDO_JSON_MAX_BYTES / 2) {
+				cap = SHIRUDO_JSON_MAX_BYTES;
+				break;
+			}
+			cap *= 2;
+		}
+		if (cap < need)
+			return -E2BIG;
+		next = xreallocarray(opts->list, opts->cap, cap, 1);
+		if (!next)
+			return -ENOMEM;
+		opts->list = next;
+		opts->cap = cap;
+	}
+	memcpy(opts->list + opts->len, member, len);
+	opts->list[opts->len + len] = '\n';
+	opts->len = need;
+	return 0;
+}
+
+static int bpm_info_archive(const char *source, char temporary[])
+{
+	int fd, rc;
+
+	if (strncmp(source, "oci://", 6))
+		return 0;
+	fd = mkstemp(temporary);
+	if (fd < 0)
+		return -errno;
+	close(fd);
+	rc = download_package(source, temporary);
+	if (rc)
+		unlink(temporary);
+	return rc;
+}
+
+static int print_package_upatches(const char *source, bool all)
+{
+	char temporary[] = "/tmp/shirudo-bpm-upatches-XXXXXX";
+	size_t beefile_len = 0;
+	__u8 *beefile = NULL;
+	const char *archive = source;
+	char package_dir[101];
+	struct bpm_upatches_ctx ctx = { .all = all };
+	int rc;
+
+	rc = bpm_info_archive(source, temporary);
+	if (rc)
+		return rc;
+	if (!strncmp(source, "oci://", 6))
+		archive = temporary;
+	rc = bpm_pkg_read_member_in(archive, "Beefile", NULL, package_dir,
+				    sizeof(package_dir), &beefile, &beefile_len,
+				    4u * 1024u * 1024u);
+	if (!rc)
+		rc = bpm_pkg_visit_members(archive, package_dir,
+					   print_upatch_member, &ctx);
+	if (!rc && ctx.len)
+		rc = write_complete(STDOUT_FILENO, ctx.list, ctx.len);
+	if (rc == -ENOENT)
+		pr_err("bpm info upatches: package %s does not include Beefile",
+		       source);
+	if (beefile)
+		xfree(beefile, beefile_len + 1);
+	if (ctx.list)
+		xfree(ctx.list, ctx.cap);
+	if (archive == temporary)
+		unlink(temporary);
+	return rc;
+}
+
+static int print_package_upatch_data(const char *source, const char *member,
+				     bool json)
+{
+	static const char suffix[] = ".upatch";
+	char temporary[] = "/tmp/shirudo-bpm-data-XXXXXX";
+	size_t beefile_len = 0, upatch_len = 0;
+	__u8 *beefile = NULL, *bytes = NULL;
+	const char *archive = source;
+	char package_dir[101];
+	struct shirudo_upatch u = {};
+	int rc;
+
+	if (!bpm_archive_rel_ok(member) || strncmp(member, "upatches/", 9) ||
+	    strlen(member) < sizeof(suffix) - 1 ||
+	    strcmp(member + strlen(member) - (sizeof(suffix) - 1), suffix) ||
+	    strchr(member + 9, '/'))
+		return -EINVAL;
+	rc = bpm_info_archive(source, temporary);
+	if (rc)
+		return rc;
+	if (!strncmp(source, "oci://", 6))
+		archive = temporary;
+	rc = bpm_pkg_read_member_in(archive, "Beefile", NULL, package_dir,
+				    sizeof(package_dir), &beefile, &beefile_len,
+				    4u * 1024u * 1024u);
+	if (rc) {
+		if (rc == -ENOENT)
+			pr_err("bpm info data: package %s does not include Beefile",
+			       source);
+		goto out;
+	}
+	rc = bpm_pkg_read_member_in(archive, member, package_dir, NULL, 0,
+				    &bytes, &upatch_len,
+				    SHIRUDO_UPATCH_FILE_MAX);
+	if (rc) {
+		if (rc == -ENOENT)
+			pr_err("bpm info data: package %s has no member %s",
+			       source, member);
+		goto out;
+	}
+	rc = upatch_open_memory(bytes, upatch_len, &u);
+	if (rc) {
+		pr_err("bpm info data: %s is not a valid upatch", member);
+		goto out;
+	}
+	if (upatch_is_unload(&u)) {
+		pr_err("bpm info data: %s is an unload directive", member);
+		rc = -EINVAL;
+		goto out;
+	}
+	rc = upatch_rodata_print(&u, member, json);
+	if (rc == -ENODATA)
+		pr_err("bpm info data: %s has no loader .rodata map data", member);
+	else if (rc == -ENOENT || rc == -EOPNOTSUPP)
+		pr_err("bpm info data: %s has no supported BTF .rodata data", member);
+	else if (rc == -EINVAL)
+		pr_err("bpm info data: cannot decode .rodata in %s", member);
+out:
+	upatch_close(&u);
+	if (beefile)
+		xfree(beefile, beefile_len + 1);
+	if (bytes)
+		xfree(bytes, upatch_len + 1);
 	if (archive == temporary)
 		unlink(temporary);
 	return rc;
@@ -2149,11 +2321,18 @@ static void bpm_pull_usage(void)
 static void bpm_info_usage(void)
 {
 	fprintf(stderr,
-		"usage: shirudo bpm info <package-file|package-reference>\n\n"
-		"Prints README.md from a local .bee file or an OCI package.\n"
+		"usage: shirudo bpm info <package-file|package-reference>\n"
+		"       shirudo bpm info upatches <package> [--all]\n"
+		"       shirudo bpm info data <package> <upatch-member> [--json]\n\n"
+		"Prints package README.md, lists packaged upatches, or decodes\n"
+		"the BPF .rodata initial data using its BTF types.\n"
 		"Examples:\n"
 		"  shirudo bpm info ./package.bee\n"
-		"  shirudo bpm info oci://quay.io/namespace/package:tag\n");
+		"  shirudo bpm info upatches ./package.bee\n"
+		"  shirudo bpm info upatches ./package.bee --all\n"
+		"  shirudo bpm info data ./package.bee upatches/kernel-obs.upatch\n"
+		"  shirudo bpm info data ./package.bee upatches/kernel-obs.upatch --json\n"
+		"Package may be a local .bee file or an oci:// reference.\n");
 }
 
 static int bpm_finish(int lock, int rc, const char *action)
@@ -2268,19 +2447,49 @@ int cmd_bpm(int argc, const char **argv)
 	if (!strcmp(sub, "config"))
 		return cmd_bpm_config(argc - 1, argv + 1);
 	if (!strcmp(sub, "info")) {
+		bool json = false, all = false;
+		const char *source;
 		int rc;
 
 		if (argc == 3 && is_help(argv[2])) {
 			bpm_info_usage();
 			return 0;
 		}
-		if (argc != 3) {
+		if (argc < 3) {
 			bpm_info_usage();
 			return 2;
 		}
+		if (!strcmp(argv[2], "upatches")) {
+			if ((argc != 4 && argc != 5) ||
+			    (argc == 5 && strcmp(argv[4], "--all"))) {
+				bpm_info_usage();
+				return 2;
+			}
+			source = argv[3];
+			all = argc == 5;
+		} else if (!strcmp(argv[2], "data")) {
+			if ((argc != 5 && argc != 6) ||
+			    (argc == 6 && strcmp(argv[5], "--json"))) {
+				bpm_info_usage();
+				return 2;
+			}
+			source = argv[3];
+			json = argc == 6;
+		} else {
+			if (argc != 3) {
+				bpm_info_usage();
+				return 2;
+			}
+			source = argv[2];
+		}
 		if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
 			return bpm_fail("initialize curl", -EIO);
-		rc = print_package_readme(argv[2]);
+		if (!strcmp(argv[2], "upatches"))
+			rc = print_package_upatches(source, all);
+		else if (!strcmp(argv[2], "data"))
+			rc = print_package_upatch_data(source, argv[4], json);
+		else
+			rc = print_package_readme(source);
 		return bpm_finish(-1, rc, "info");
 	}
 	if (!strcmp(sub, "tree") && (argc < 3 || is_help(argv[2]))) {

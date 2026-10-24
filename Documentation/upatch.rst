@@ -440,7 +440,20 @@ moves installed packages to the newest indexed version; ``uninstall``
 loads the package's unload directives, so a package can only be
 removed through artifacts its operator signed.  ``bpm info`` prints a
 package's README from a local file or a reference before installing
-it.
+it.  ``bpm info upatches`` lists the package's load upatches, while
+``--all`` includes unload directives.  ``bpm info data`` decodes the
+selected upatch's ``.rodata`` initial value and prints BTF
+variable names, types and values with offsets into both the loader data
+and the upatch file.  It reads the packaged artifact without running its
+loader.  Add ``--json`` to emit the same information as JSON; integer
+values remain JSON numbers, enums include their name and numeric value,
+and values without a supported BTF representation are shown as hex.
+The member path is relative to the package root, for example::
+
+    shirudo bpm info upatches ./kernel-obs-0.1.bee
+    shirudo bpm info upatches ./kernel-obs-0.1.bee --all
+    shirudo bpm info data ./kernel-obs-0.1.bee upatches/kernel-obs.upatch
+    shirudo bpm info data ./kernel-obs-0.1.bee upatches/kernel-obs.upatch --json
 
 The tree
 ~~~~~~~~

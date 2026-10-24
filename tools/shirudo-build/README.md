@@ -42,6 +42,7 @@ target boundary) and `AGENTS.md` (the no-subprocess invariant).
 | `<source.bpf.c>` | compile (fork/exec clang) → gen_loader → sign → package |
 | `<file.bpf.o>` | gen_loader → sign → package (skip compile) |
 | `--unload <name>` | emit signed UNLOAD directive `.upatch` |
+| `upatch rewrite-rodata <original> <modified> -o <output> --data-range <offset:length>...` | verify an existing signed upatch, permit changes only to its BTF watch arrays, then re-sign it |
 | `keys vouch <cert.der>` | sign a vouch for another certificate |
 | `bpm build [context] --version <v> [-f <name>.bee] [--vmlinux <file>]` | compile, sign and package every Beefile upatch into a `.bee` |
 | `bpm push <pkg.bee> oci://...` | publish the package and certificate referrer; with signing material, also update the signed index |
