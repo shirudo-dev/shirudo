@@ -691,8 +691,11 @@ Post-init integration tests run only against a real kernel in the KVM
 guest with swtpm attached through ``/dev/tpmrm0``
 (``make -C testing test-tgt``).  There is no software signing fixture:
 the guest uses the production kernel-held writer and installed
-``shirudo`` binary.  ``testing/tpm/t1127-nv-writer.sh`` runs the command-binding
-tests below and checks that the production register is unchanged.
+``shirudo`` binary.  ``testing/tpm/t1108-tpm-chain.sh`` exercises measured
+loads and unloads, initialization reuse, prediction, attestation
+and rejection of forged writer evidence.
+Prediction uses the offline command fixture rather than overriding the
+production runtime's certificate selection.
 ``make -C testing test-tgt`` also exercises the
 production initrd and switch-root path in ``testing/t1122-initrd.sh``.
 
@@ -701,7 +704,8 @@ the production provisioning function and signs through ``keyctl``.
 It reuses the production TPM connection, NV lifecycle, kernel signing
 and signed-policy helpers; only the invalid inputs and assertions are
 test-specific.  Production still selects its signing key from the
-frozen identity.
+frozen identity, and the guard test checks that the shared signing
+primitive cannot bypass that key's LSM protection.
 It tests nonce and command binding directly through ESYS on a scratch
 NV index in the guest.  Replayed and corrupted signatures must fail
 without changing NV.  ``PolicySigned`` accepts an authorization for
@@ -710,6 +714,20 @@ fresh session then extends A and the test checks the exact result,
 removes the scratch index and unlinks its temporary keyring.
 No linker wrapping, software private-key files or production
 fault-injection hooks are used.
+
+``testing/tpm/t1127-nv-writer.sh`` exercises the actual kernel key guard,
+including public-key inspection in the init record and refused private-key reads,
+signing, updates, permission changes, revocation and invalidation.
+Its identity lookup opens the frozen map read-only, as
+required by the map-FD guard.
+Separately, ``testing/helper/test-tpm-preopened`` opens a TPM connection
+after initialization and forks an unrelated writer which inherits it.
+The child submits the former public ``PolicyNvWritten``/``PolicyOR``
+sequence directly through ESYS, without requesting a kernel signature.
+``NV_Extend`` must return the TPM's session-1 policy failure, and reads
+before and after must succeed with identical values.  A userspace
+``EACCES`` or transport failure does not pass this test.  This exercises
+an inherited connection, not a descriptor opened before LSM attachment.
 
 Configuration image measurements
 ================================

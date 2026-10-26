@@ -9,13 +9,15 @@
 #include "identity.h"
 #include "log.h"
 
-/* Protocol fixtures precede authenticated runtime initialization. */
+/* Protocol setup and offline prediction do not enter the runtime. */
 int main(int argc, const char **argv)
 {
 	harden_stdio();
 	log_init();
 	if (harden_self())
 		return 1;
+	if (argc > 2 && !strcmp(argv[1], "attest") && !strcmp(argv[2], "predict"))
+		return cmd_attest(argc - 1, argv + 1);
 	if (shirudo_enforcement_active() != 0) {
 		fputs("register CLI fixture requires an uninitialized target\n", stderr);
 		return 1;

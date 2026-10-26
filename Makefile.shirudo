@@ -626,6 +626,8 @@ TEST_HELPERS := $(VERITY_TEST_HELPERS) \
                 testing/helper/test-upatch-link-lockdown \
                 testing/helper/test-exec-churn \
 		testing/upatch/kernel-obs/exec/exec-paths
+TEST_HELPERS += testing/helper/test-nv-writer
+TEST_HELPERS += testing/helper/test-tpm-preopened
 
 testing/helper/test-json-parser: testing/helper/test-json-parser.c util/json.o util/hex.o \
                                  util/string.o util/malloc.o
@@ -660,6 +662,15 @@ REGISTER_OBJS := util/config_attest.o util/config_update.o util/config_measure.o
                  $(VERSION_OBJ) $(LIBBPF_A)
 REGISTER_LIBS := $(LIBCRYPTO_LIBS) $(LIBSSL_LIBS) $(TSS2_LIBS) \
                  $(LIBBPF_A) $(LIBELF_LIBS) $(ZLIB_LIBS)
+
+testing/helper/test-nv-writer: testing/helper/test-nv-writer.c $(REGISTER_OBJS)
+	@printf '  CC      $@\n'
+	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(REGISTER_LIBS)
+
+testing/helper/test-tpm-preopened: testing/helper/test-tpm-preopened.c \
+                                 $(REGISTER_OBJS)
+	@printf '  CC      $@\n'
+	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(REGISTER_LIBS)
 
 testing/helper/test-keys: testing/helper/test-keys.c util/keys.o \
                           util/upatch.o $(REGISTER_OBJS)
