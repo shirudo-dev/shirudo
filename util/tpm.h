@@ -27,6 +27,9 @@ int tpm_open(struct shirudo_tpm **out);
 int tpm_open_quiet(struct shirudo_tpm **out);
 void tpm_close(struct shirudo_tpm *t);
 
+int tpm_nv_set_writer(struct shirudo_tpm *t,
+		      const __u8 public[SHIRUDO_TPM_NV_RSA_BYTES]);
+
 int tpm_pcr_read(struct shirudo_tpm *t, __u32 pcr,
 		 __u8 out[SHIRUDO_TPM_DIGEST_LEN]);
 int tpm_pcr_extend(struct shirudo_tpm *t, __u32 pcr,

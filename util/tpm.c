@@ -10,8 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <tss2/tss2_esys.h>
-#include <tss2/tss2_tctildr.h>
+#include "tpm_internal.h"
 
 #include <shirudo/misc.h>
 #include <shirudo/string.h>
@@ -21,16 +20,10 @@
 #include "log.h"
 #include "malloc.h"
 #include "paths.h"
-#include "tpm.h"
 
 #define EK_CERT_NV_RSA		0x01C00002u
 #define EK_CERT_NV_ECC		0x01C0000Au
 #define NV_READ_CHUNK		512u
-
-struct shirudo_tpm {
-	TSS2_TCTI_CONTEXT	*tcti;
-	ESYS_CONTEXT		*esys;
-};
 
 /*
  * The env, then the file, then /dev/tpmrm0. An override is for VMs,
@@ -120,6 +113,18 @@ void tpm_close(struct shirudo_tpm *t)
 	if (t->tcti)
 		Tss2_TctiLdr_Finalize(&t->tcti);
 	xfree(t, sizeof(*t));
+}
+
+int tpm_nv_set_writer(struct shirudo_tpm *t,
+		      const __u8 public[SHIRUDO_TPM_NV_RSA_BYTES])
+{
+	if (!t || !public) {
+		pr_err("tpm: NV writer modulus is required");
+		return -EACCES;
+	}
+	memcpy(t->writer_public, public, sizeof(t->writer_public));
+	t->writer_set = true;
+	return 0;
 }
 
 static bool rc_is(TSS2_RC rc, TSS2_RC code)
@@ -407,7 +412,7 @@ int tpm_nv_read(struct shirudo_tpm *t, __u32 index, __u8 out[32])
 	return 0;
 }
 
-static int policy_session_start(struct shirudo_tpm *t, ESYS_TR *session)
+int tpm_policy_session_start(struct shirudo_tpm *t, ESYS_TR *session)
 {
 	TPMT_SYM_DEF sym = { .algorithm = TPM2_ALG_NULL };
 	TSS2_RC rc;
@@ -429,6 +434,134 @@ static void session_flush(struct shirudo_tpm *t, ESYS_TR session)
 		Esys_FlushContext(t->esys, session);
 }
 
+int tpm_writer_prepare(struct shirudo_tpm *t, ESYS_TR session,
+		       const __u8 name[SHIRUDO_TPM_NAME_LEN],
+		       const __u8 event[SHIRUDO_TPM_DIGEST_LEN],
+		       struct tpm_writer_authorization *authorization)
+{
+	TPM2B_NONCE *nonce = NULL;
+	TSS2_RC rc;
+	int err;
+
+	authorization->cphash.size = SHIRUDO_TPM_DIGEST_LEN;
+	err = tpm_nv_extend_cphash(name, event, authorization->cphash.buffer);
+	if (err) {
+		pr_err("tpm: compute NV_Extend command hash: %s", strerror(-err));
+		return err;
+	}
+	rc = Esys_TRSess_GetNonceTPM(t->esys, session, &nonce);
+	if (rc != TSS2_RC_SUCCESS || !nonce) {
+		pr_err("tpm: NV writer PolicySigned: rc=0x%08x", (__u32)rc);
+		Esys_Free(nonce);
+		return -EACCES;
+	}
+	authorization->nonce = *nonce;
+	Esys_Free(nonce);
+	err = tpm_writer_auth_hash(authorization->nonce.buffer, authorization->nonce.size,
+				   authorization->cphash.buffer, authorization->digest);
+	if (err)
+		pr_err("tpm: compute NV writer authorization: %s", strerror(-err));
+	return err;
+}
+
+int tpm_writer_load(struct shirudo_tpm *t,
+		    const __u8 public_key[SHIRUDO_TPM_NV_RSA_BYTES], ESYS_TR *key)
+{
+	__u8 public_area[SHIRUDO_TPM_NV_RSA_PUBLIC_AREA_LEN];
+	__u8 expected[SHIRUDO_TPM_NAME_LEN];
+	TPM2B_PUBLIC public = {};
+	TPMT_PUBLIC *p = &public.publicArea;
+	TPM2B_NAME *name = NULL;
+	TSS2_RC rc;
+	int err;
+
+	*key = ESYS_TR_NONE;
+	p->type = TPM2_ALG_RSA;
+	p->nameAlg = TPM2_ALG_SHA256;
+	p->objectAttributes = TPMA_OBJECT_SIGN_ENCRYPT;
+	p->parameters.rsaDetail.symmetric.algorithm = TPM2_ALG_NULL;
+	p->parameters.rsaDetail.scheme.scheme = TPM2_ALG_RSASSA;
+	p->parameters.rsaDetail.scheme.details.rsassa.hashAlg = TPM2_ALG_SHA256;
+	p->parameters.rsaDetail.keyBits = 3072;
+	p->parameters.rsaDetail.exponent = 65537;
+	p->unique.rsa.size = SHIRUDO_TPM_NV_RSA_BYTES;
+	memcpy(p->unique.rsa.buffer, public_key, SHIRUDO_TPM_NV_RSA_BYTES);
+	rc = Esys_LoadExternal(t->esys, ESYS_TR_NONE, ESYS_TR_NONE,
+			       ESYS_TR_NONE, NULL, &public, ESYS_TR_RH_NULL, key);
+	if (rc != TSS2_RC_SUCCESS)
+		goto tss_error;
+	rc = Esys_TR_GetName(t->esys, *key, &name);
+	if (rc != TSS2_RC_SUCCESS || !name)
+		goto tss_error;
+	tpm_writer_public(public_key, public_area);
+	err = tpm_object_name(public_area, sizeof(public_area), expected);
+	if (err || name->size != sizeof(expected) ||
+	    memcmp(name->name, expected, sizeof(expected))) {
+		pr_err("tpm: loaded NV writer Name differs from its public area");
+		err = -EPROTO;
+		goto out;
+	}
+	err = 0;
+	goto out;
+tss_error:
+	pr_err("tpm: NV writer PolicySigned: rc=0x%08x", (__u32)rc);
+	err = -EACCES;
+out:
+	Esys_Free(name);
+	if (err) {
+		session_flush(t, *key);
+		*key = ESYS_TR_NONE;
+	}
+	return err;
+}
+
+TSS2_RC tpm_writer_authorize(struct shirudo_tpm *t, ESYS_TR key, ESYS_TR session,
+			     const struct tpm_writer_authorization *authorization,
+			     const __u8 signature[SHIRUDO_TPM_NV_RSA_BYTES])
+{
+	TPM2B_NONCE ref = { .size = sizeof(SHIRUDO_TPM_NV_POLICY_REF) - 1 };
+	TPMT_SIGNATURE sig = { .sigAlg = TPM2_ALG_RSASSA };
+	TPM2B_TIMEOUT *timeout = NULL;
+	TPMT_TK_AUTH *ticket = NULL;
+	TSS2_RC rc;
+
+	sig.signature.rsassa.hash = TPM2_ALG_SHA256;
+	sig.signature.rsassa.sig.size = SHIRUDO_TPM_NV_RSA_BYTES;
+	memcpy(sig.signature.rsassa.sig.buffer, signature, SHIRUDO_TPM_NV_RSA_BYTES);
+	memcpy(ref.buffer, SHIRUDO_TPM_NV_POLICY_REF, ref.size);
+	rc = Esys_PolicySigned(t->esys, key, session, ESYS_TR_NONE,
+			       ESYS_TR_NONE, ESYS_TR_NONE, &authorization->nonce,
+			       &authorization->cphash, &ref, 0, &sig, &timeout, &ticket);
+	Esys_Free(timeout);
+	Esys_Free(ticket);
+	return rc;
+}
+
+int tpm_policy_session_finish(struct shirudo_tpm *t, ESYS_TR session,
+			      const __u8 expected[SHIRUDO_TPM_DIGEST_LEN])
+{
+	TPM2B_DIGEST *digest = NULL;
+	TSS2_RC rc;
+	int err = 0;
+
+	rc = Esys_PolicyCommandCode(t->esys, session, ESYS_TR_NONE,
+				    ESYS_TR_NONE, ESYS_TR_NONE, TPM2_CC_NV_Extend);
+	if (rc != TSS2_RC_SUCCESS) {
+		pr_err("tpm: register policy assertion: rc=0x%08x", (__u32)rc);
+		return -EACCES;
+	}
+	rc = Esys_PolicyGetDigest(t->esys, session, ESYS_TR_NONE,
+				  ESYS_TR_NONE, ESYS_TR_NONE, &digest);
+	if (rc != TSS2_RC_SUCCESS || !digest || digest->size != SHIRUDO_TPM_DIGEST_LEN ||
+	    memcmp(digest->buffer, expected, SHIRUDO_TPM_DIGEST_LEN)) {
+		pr_err("tpm: register policy digest does not match the "
+		       "computed policy (rc=0x%08x)", (__u32)rc);
+		err = -EPROTO;
+	}
+	Esys_Free(digest);
+	return err;
+}
+
 /*
  * Walk one branch of the register's write policy in a real session and
  * close it with PolicyOR. The session digest is then compared with the
@@ -447,7 +580,7 @@ static int policy_session_register(struct shirudo_tpm *t, bool init,
 	TSS2_RC rc;
 	int err;
 
-	err = policy_session_start(t, session);
+	err = tpm_policy_session_start(t, session);
 	if (err)
 		return err;
 	rc = Esys_PolicyNvWritten(t->esys, *session, ESYS_TR_NONE, ESYS_TR_NONE,
@@ -842,7 +975,7 @@ int tpm_activate_credential(struct shirudo_tpm *t,
 	memcpy(id.credential, blob, blob_len);
 	sec.size = (__u16)secret_len;
 	memcpy(sec.secret, secret, secret_len);
-	err = policy_session_start(t, &session);
+	err = tpm_policy_session_start(t, &session);
 	if (err)
 		return err;
 	/* The endorsement key's policy: the hierarchy's own authorisation. */
