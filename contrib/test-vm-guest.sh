@@ -328,6 +328,14 @@ grep -aq signature_size /sys/kernel/btf/vmlinux
 test -c /dev/tpm0
 test -c /dev/tpmrm0
 tpm2_getrandom 8 >/dev/null
+if [[ -r /sys/module/bpf/parameters/keyring_unsealed ]]; then
+	log "bpf.keyring_unsealed=$(</sys/module/bpf/parameters/keyring_unsealed)"
+else
+	log "bpf.keyring_unsealed parameter is missing"
+fi
+if ! grep -F 'keyring .bpf' /proc/keys; then
+	log ".bpf keyring is absent from /proc/keys"
+fi
 
 if [[ "$VM_INITRD" == 1 ]]; then
 	log "initrd Shirudo journal"
