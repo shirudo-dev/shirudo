@@ -182,4 +182,92 @@ PY
 	[ "$failed" = 0 ]
 '
 
+test_expect_success 'a challenge requires the correct pinned endorsement and attestation keys' '
+	! "$SHIRUDO_BIN" attest challenge --evidence="$W/evidence.json" \
+		--out="$W/challenge-none.json" >"$W/challenge-none.out" &&
+	grep -q "^FAIL: no endorsement certificate: pin the key" "$W/challenge-none.out" &&
+	[ ! -e "$W/challenge-none.json" ] &&
+	! "$SHIRUDO_BIN" attest challenge --evidence="$W/evidence.json" \
+		--ek-name=000b$(printf "%064d" 0) --out="$W/challenge-wrong.json" \
+		>"$W/challenge-wrong.out" &&
+	grep -q "^FAIL: endorsement key: the pinned key" "$W/challenge-wrong.out" &&
+	! "$SHIRUDO_BIN" attest challenge --evidence="$W/evidence.json" \
+		--ak-name=000b$(printf "%064d" 0) --trust-presented-ek \
+		--out="$W/challenge-wrong.json" >"$W/challenge-wrong-ak.out" &&
+	grep -q "^FAIL: attestation key: the pinned key" "$W/challenge-wrong-ak.out"
+'
+
+test_expect_success 'the production target activates an ECC endorsement-key challenge' '
+	"$SHIRUDO_BIN" attest challenge --evidence="$W/evidence.json" \
+		--ak-name="$AK" --ek-name="$EK" --out="$W/challenge.json" >"$W/challenge.out" &&
+	credential=$(sed -n "s/^credential: //p" "$W/challenge.out") &&
+	[ "${#credential}" = 64 ] &&
+	"$SHIRUDO_BIN" attest --nonce=1112 --challenge="$W/challenge.json" \
+		--out="$W/evidence-credential.json" &&
+	"$SHIRUDO_BIN" attest verify --evidence="$W/evidence-credential.json" --nonce=1112 \
+		--ak-name="$AK" --ek-name="$EK" --allow-runtime-events \
+		--expect-credential="$credential" >"$W/credential.report" &&
+	grep -qx "verdict: ok" "$W/credential.report"
+'
+
+test_expect_success 'wrong credentials, corrupted blobs and foreign challenges are rejected' '
+	! "$SHIRUDO_BIN" attest verify --evidence="$W/evidence-credential.json" --nonce=1112 \
+		--ak-name="$AK" --allow-runtime-events --expect-credential=$(printf "%064d" 0) \
+		>"$W/wrong-credential.report" &&
+	grep -q "^FAIL: attestation key: activated the credential" "$W/wrong-credential.report" &&
+	python3 - "$W/challenge.json" "$W" <<"PY"
+import copy, json, sys
+d = json.load(open(sys.argv[1]))
+corrupt = copy.deepcopy(d)
+blob = bytearray.fromhex(corrupt["credential_blob"])
+blob[-1] ^= 1
+corrupt["credential_blob"] = blob.hex()
+json.dump(corrupt, open(sys.argv[2] + "/challenge-corrupt.json", "w"))
+foreign = copy.deepcopy(d)
+foreign["ak_name"] = "000b" + "00" * 32
+json.dump(foreign, open(sys.argv[2] + "/challenge-foreign.json", "w"))
+PY
+	! "$SHIRUDO_BIN" attest --nonce=1112 --challenge="$W/challenge-corrupt.json" \
+		--out="$W/corrupt-evidence.json" &&
+	! "$SHIRUDO_BIN" attest --nonce=1112 --challenge="$W/challenge-foreign.json" \
+		--out="$W/foreign-evidence.json"
+'
+
+test_expect_success 'an RSA endorsement key activates the challenge through the production target' '
+	tpm2_createek -T device:/dev/tpmrm0 -G rsa -c "$W/rsa.ctx" -u "$W/rsa-public" &&
+	python3 - "$W/rsa-public" "$W/evidence.json" "$W/rsa.json" <<"PY"
+import hashlib, json, sys
+encoded = open(sys.argv[1], "rb").read()
+assert int.from_bytes(encoded[:2], "big") == len(encoded) - 2
+public = encoded[2:]
+d = json.load(open(sys.argv[2]))
+doc = {"ak": {"name": d["ak"]["name"]},
+       "ek": {"type": "rsa", "public": public.hex(),
+              "name": (b"\x00\x0b" + hashlib.sha256(public).digest()).hex()}}
+json.dump(doc, open(sys.argv[3], "w"))
+PY
+	"$SHIRUDO_BIN" attest challenge --evidence="$W/rsa.json" --trust-presented-ek \
+		--out="$W/challenge-rsa.json" >"$W/challenge-rsa.out" &&
+	credential=$(sed -n "s/^credential: //p" "$W/challenge-rsa.out") &&
+	"$SHIRUDO_BIN" attest --nonce=1314 --challenge="$W/challenge-rsa.json" \
+		--out="$W/evidence-rsa.json" &&
+	"$SHIRUDO_BIN" attest verify --evidence="$W/evidence-rsa.json" --nonce=1314 \
+		--ak-name="$AK" --allow-runtime-events --expect-credential="$credential" \
+		>"$W/rsa.report" &&
+	grep -qx "verdict: ok" "$W/rsa.report"
+'
+
+test_expect_success 'a non-endorsement public key cannot establish endorsement trust' '
+	python3 - "$W/evidence.json" "$W/fake-ek.json" <<"PY"
+import json, sys
+d = json.load(open(sys.argv[1]))
+d["ek"] = {"type": "ecc", "public": d["ak"]["public"], "name": d["ak"]["name"]}
+json.dump(d, open(sys.argv[2], "w"))
+PY
+	! "$SHIRUDO_BIN" attest challenge --evidence="$W/fake-ek.json" --trust-presented-ek \
+		--out="$W/challenge-fake.json" >"$W/fake-ek.out" &&
+	grep -q "^FAIL: endorsement key: TCG default template" "$W/fake-ek.out" &&
+	[ ! -e "$W/challenge-fake.json" ]
+'
+
 test_done

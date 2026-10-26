@@ -692,8 +692,8 @@ guest with swtpm attached through ``/dev/tpmrm0``
 (``make -C testing test-tgt``).  There is no software signing fixture:
 the guest uses the production kernel-held writer and installed
 ``shirudo`` binary.  ``testing/tpm/t1108-tpm-chain.sh`` exercises measured
-loads and unloads, initialization reuse, prediction, attestation
-and rejection of forged writer evidence.
+loads and unloads, initialization reuse, prediction, attestation,
+credential activation and rejection of forged writer evidence.
 Prediction uses the offline command fixture rather than overriding the
 production runtime's certificate selection.
 ``make -C testing test-tgt`` also exercises the
