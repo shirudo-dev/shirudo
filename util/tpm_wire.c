@@ -14,6 +14,8 @@
 #include "tpm_wire.h"
 
 #define TPM_CC_POLICY_OR		0x00000171u
+#define TPM_CC_POLICY_COMMAND_CODE	0x0000016Cu
+#define TPM_CC_POLICY_SIGNED		0x00000160u
 #define TPM_CC_POLICY_PCR		0x0000017Fu
 #define TPM_CC_POLICY_NV_WRITTEN	0x0000018Fu
 
@@ -146,6 +148,98 @@ void tpm_policy_or(const __u8 a[32], const __u8 b[32],
 	static const __u8 zero[32];
 
 	policy_hash(zero, TPM_CC_POLICY_OR, a, 32, b, 32, out);
+}
+
+/*
+ * This fixed TPMT_PUBLIC adds a 24-byte prefix to the public-key bytes.
+ * It excludes the outer TPM2B_PUBLIC size field.
+ */
+void tpm_writer_public(const __u8 modulus[SHIRUDO_TPM_NV_RSA_BYTES],
+		       __u8 out[SHIRUDO_TPM_NV_RSA_PUBLIC_AREA_LEN])
+{
+	tpm_put16(out, SHIRUDO_TPM_ALG_RSA);	/* type */
+	tpm_put16(out + 2, SHIRUDO_TPM_ALG_SHA256);	/* nameAlg */
+	tpm_put32(out + 4, 0x00040000);	/* TPMA_OBJECT_SIGN_ENCRYPT */
+	tpm_put16(out + 8, 0);		/* Empty authPolicy: size only. */
+	tpm_put16(out + 10, SHIRUDO_TPM_ALG_NULL);	/* symmetric.algorithm */
+	tpm_put16(out + 12, SHIRUDO_TPM_ALG_RSASSA);	/* scheme.scheme */
+	tpm_put16(out + 14, SHIRUDO_TPM_ALG_SHA256);	/* scheme hash */
+	tpm_put16(out + 16, 3072);		/* RSA keyBits */
+	tpm_put32(out + 18, 65537);	/* RSA exponent F4: 2^16 + 1. */
+	/* unique.rsa: two-byte size at offset 22, public-key bytes at offset 24. */
+	tpm_put2b(out + 22, modulus, SHIRUDO_TPM_NV_RSA_BYTES);
+}
+
+int tpm_nv_extend_cphash(const __u8 name[SHIRUDO_TPM_NAME_LEN],
+			 const __u8 event[32], __u8 out[32])
+{
+	__u8 command[4 + 2 * SHIRUDO_TPM_NAME_LEN + 2 + 32];
+
+	tpm_put32(command, SHIRUDO_TPM_CC_NV_EXTEND);
+	memcpy(command + 4, name, SHIRUDO_TPM_NAME_LEN);
+	memcpy(command + 4 + SHIRUDO_TPM_NAME_LEN, name, SHIRUDO_TPM_NAME_LEN);
+	tpm_put2b(command + 4 + 2 * SHIRUDO_TPM_NAME_LEN, event, 32);
+	return sha256_buffer(command, sizeof(command), out);
+}
+
+int tpm_writer_auth_hash(const __u8 *nonce, size_t nonce_len,
+			 const __u8 cphash[32], __u8 out[32])
+{
+	__u8 bytes[64 + 4 + 32 + sizeof(SHIRUDO_TPM_NV_POLICY_REF) - 1];
+
+	if (!nonce_len || nonce_len > 64)
+		return -EINVAL;
+	memcpy(bytes, nonce, nonce_len);
+	tpm_put32(bytes + nonce_len, 0);
+	memcpy(bytes + nonce_len + 4, cphash, 32);
+	memcpy(bytes + nonce_len + 4 + 32, SHIRUDO_TPM_NV_POLICY_REF,
+	       sizeof(SHIRUDO_TPM_NV_POLICY_REF) - 1);
+	return sha256_buffer(bytes, nonce_len + 4 + 32 + sizeof(SHIRUDO_TPM_NV_POLICY_REF) - 1,
+			     out);
+}
+
+int tpm_policy_signed(const __u8 prev[32],
+		      const __u8 writer_public[SHIRUDO_TPM_NV_RSA_BYTES],
+		      __u8 out[32])
+{
+	__u8 public[SHIRUDO_TPM_NV_RSA_PUBLIC_AREA_LEN];
+	__u8 bytes[32 + sizeof(SHIRUDO_TPM_NV_POLICY_REF) - 1];
+	__u8 name[SHIRUDO_TPM_NAME_LEN];
+	int rc;
+
+	tpm_writer_public(writer_public, public);
+	rc = tpm_object_name(public, sizeof(public), name);
+	if (rc)
+		return rc;
+	policy_hash(prev, TPM_CC_POLICY_SIGNED, name, sizeof(name), NULL, 0, out);
+	memcpy(bytes, out, 32);
+	memcpy(bytes + 32, SHIRUDO_TPM_NV_POLICY_REF,
+	       sizeof(SHIRUDO_TPM_NV_POLICY_REF) - 1);
+	return sha256_buffer(bytes, sizeof(bytes), out);
+}
+
+void tpm_policy_command_code(const __u8 prev[32],
+			     __u32 command_code, __u8 out[32])
+{
+	__u8 cc_be[4];
+
+	tpm_put32(cc_be, command_code);
+	policy_hash(prev, TPM_CC_POLICY_COMMAND_CODE, cc_be, sizeof(cc_be), NULL, 0, out);
+}
+
+int tpm_register_policy_final(const __u8 branch_written[32],
+			      const __u8 branch_init[32],
+			      const __u8 writer_public[SHIRUDO_TPM_NV_RSA_BYTES],
+			      __u8 policy[32])
+{
+	int rc;
+
+	tpm_policy_or(branch_written, branch_init, policy);
+	rc = tpm_policy_signed(policy, writer_public, policy);
+	if (rc)
+		return rc;
+	tpm_policy_command_code(policy, SHIRUDO_TPM_CC_NV_EXTEND, policy);
+	return 0;
 }
 
 void tpm_register_policy(__u32 pcr_mask,

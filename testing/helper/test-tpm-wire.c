@@ -37,11 +37,66 @@ static int gethex(const char *hex, __u8 *out, size_t cap, size_t *len)
 
 int main(int argc, char **argv)
 {
+	__u8 public[SHIRUDO_TPM_NV_RSA_BYTES];
 	__u8 a[32], b[32], out[32], buf[2048];
 	size_t len;
 
 	if (argc < 2)
 		return 2;
+	if (strcmp(argv[1], "writer-public") == 0 && argc == 3) {
+		__u8 area[SHIRUDO_TPM_NV_RSA_PUBLIC_AREA_LEN];
+
+		if (hex_decode(argv[2], buf, SHIRUDO_TPM_NV_RSA_BYTES))
+			return 2;
+		tpm_writer_public(buf, area);
+		puthex(area, sizeof(area));
+		return 0;
+	}
+	if (strcmp(argv[1], "policy-signed") == 0 && argc == 4) {
+		if (hex_decode(argv[2], a, 32) ||
+		    hex_decode(argv[3], public, sizeof(public)))
+			return 2;
+		if (tpm_policy_signed(a, public, out))
+			return 1;
+		puthex(out, 32);
+		return 0;
+	}
+	if (strcmp(argv[1], "extend-cphash") == 0 && argc == 4) {
+		if (hex_decode(argv[2], buf, SHIRUDO_TPM_NAME_LEN) ||
+		    hex_decode(argv[3], a, 32))
+			return 2;
+		if (tpm_nv_extend_cphash(buf, a, out))
+			return 1;
+		puthex(out, 32);
+		return 0;
+	}
+	if (strcmp(argv[1], "writer-auth") == 0 && argc == 4) {
+		if (gethex(argv[2], buf, 64, &len) ||
+		    hex_decode(argv[3], a, 32) ||
+		    tpm_writer_auth_hash(buf, len, a, out))
+			return 2;
+		puthex(out, 32);
+		return 0;
+	}
+	if (strcmp(argv[1], "command-code") == 0 && argc == 4) {
+		__u32 command_code = (__u32)strtoul(argv[3], NULL, 0);
+
+		if (hex_decode(argv[2], a, 32))
+			return 2;
+		tpm_policy_command_code(a, command_code, out);
+		puthex(out, 32);
+		return 0;
+	}
+	if (strcmp(argv[1], "register-final") == 0 && argc == 5) {
+		if (hex_decode(argv[2], a, 32) ||
+		    hex_decode(argv[3], b, 32) ||
+		    hex_decode(argv[4], public, sizeof(public)))
+			return 2;
+		if (tpm_register_policy_final(a, b, public, out))
+			return 1;
+		puthex(out, 32);
+		return 0;
+	}
 	if (strcmp(argv[1], "nv-written") == 0 && argc == 4) {
 		if (hex_decode(argv[2], a, 32))
 			return 2;

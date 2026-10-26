@@ -14,6 +14,7 @@
 #include <string.h>
 
 #include <shirudo/misc.h>
+#include <shirudo/tpm.h>
 
 static inline void tpm_put16(__u8 *p, __u16 v)
 {
@@ -44,6 +45,7 @@ static inline size_t tpm_put2b(__u8 *p, const __u8 *data, size_t len)
 #define SHIRUDO_TPM_ALG_SHA256		0x000Bu
 #define SHIRUDO_TPM_ALG_ECC		0x0023u
 #define SHIRUDO_TPM_ALG_ECDSA		0x0018u
+#define SHIRUDO_TPM_ALG_RSASSA		0x0014u
 #define SHIRUDO_TPM_ALG_NULL		0x0010u
 #define SHIRUDO_TPM_ALG_CFB		0x0043u
 #define SHIRUDO_TPM_ECC_NIST_P256	0x0003u
@@ -52,6 +54,25 @@ static inline size_t tpm_put2b(__u8 *p, const __u8 *data, size_t len)
 #define SHIRUDO_TPM_GENERATED		0xFF544347u
 #define SHIRUDO_TPM_PCR_SELECT_LEN	3
 #define SHIRUDO_TPM_PCR_SELECTION_LEN	(7 + SHIRUDO_TPM_PCR_SELECT_LEN)
+#define SHIRUDO_TPM_CC_NV_EXTEND		0x00000136u
+#define SHIRUDO_TPM_NV_POLICY_REF		"shirudo-nv-writer-v1"
+
+void tpm_writer_public(const __u8 modulus[SHIRUDO_TPM_NV_RSA_BYTES],
+		       __u8 out[SHIRUDO_TPM_NV_RSA_PUBLIC_AREA_LEN]);
+int tpm_nv_extend_cphash(const __u8 name[SHIRUDO_TPM_NAME_LEN],
+			 const __u8 event[32], __u8 out[32]);
+int tpm_writer_auth_hash(const __u8 *nonce, size_t nonce_len,
+			 const __u8 cphash[32], __u8 out[32]);
+int tpm_policy_signed(const __u8 prev[32],
+		      const __u8 writer_public[SHIRUDO_TPM_NV_RSA_BYTES],
+		      __u8 out[32]);
+void tpm_policy_command_code(const __u8 prev[SHIRUDO_TPM_DIGEST_LEN],
+			     __u32 command_code,
+			     __u8 out[SHIRUDO_TPM_DIGEST_LEN]);
+int tpm_register_policy_final(const __u8 branch_written[32],
+			      const __u8 branch_init[32],
+			      const __u8 writer_public[SHIRUDO_TPM_NV_RSA_BYTES],
+			      __u8 policy[32]);
 
 /*
  * Attributes of the measurement register: an extend-only NV index

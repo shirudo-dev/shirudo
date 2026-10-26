@@ -13,6 +13,18 @@ H=helper/test-tpm-wire
 Z=0000000000000000000000000000000000000000000000000000000000000000
 
 py() { python3 -c "$1"; }
+PUB=$(py 'import struct; print((struct.pack(">HHIHHHHHIH", 1, 11, 0x40000, 0, 16, 20, 11, 3072, 65537, 384) + bytes.fromhex("80" + "00"*382 + "01")).hex())')
+MODULUS=$(py 'print("80" + "00"*382 + "01")')
+
+test_expect_success 'the writer public area fixes RSA-3072, RSASSA and SHA-256' '
+	[ "$(./$H writer-public "$MODULUS")" = "$PUB" ] &&
+	zero=$(py "print(\"00\"*384)") &&
+	even=$(py "print(\"80\" + \"00\"*383)") &&
+	[ "$(./$H writer-public "$zero")" = "$(printf "%s" "$PUB" | cut -c1-48)$zero" ] &&
+	[ "$(./$H writer-public "$even")" = "$(printf "%s" "$PUB" | cut -c1-48)$even" ] &&
+	! ./$H writer-public 00 &&
+	! ./$H writer-public "$PUB"
+'
 
 test_expect_success 'PolicyNvWritten(YES) = H(prev || CC || 01)' '
 	want=$(py "import hashlib; print(hashlib.sha256(bytes(32) + bytes.fromhex(\"0000018f01\")).hexdigest())") &&
@@ -31,16 +43,67 @@ test_expect_success 'PolicyOR starts from zero and folds both branches' '
 	[ "$(./$H or $a $b)" = "$want" ]
 '
 
-test_expect_success 'register policy = OR(written, unwritten+PCR(H(values)))' '
+test_expect_success 'PolicySigned binds the writer Name and policy reference' '
+	p=$(py "print(\"12\"*32)") &&
+	want=$(py "import hashlib; name=bytes.fromhex(\"000b\")+hashlib.sha256(bytes.fromhex(\"$PUB\")).digest(); d=hashlib.sha256(bytes.fromhex(\"$p\")+bytes.fromhex(\"00000160\")+name).digest(); print(hashlib.sha256(d+b\"shirudo-nv-writer-v1\").hexdigest())") &&
+	[ "$(./$H policy-signed $p $MODULUS)" = "$want" ]
+'
+
+test_expect_success 'PolicyCommandCode folds the authorized command as a u32' '
+	p=$(py "print(\"34\"*32)") &&
+	want=$(py "import hashlib; print(hashlib.sha256(bytes.fromhex(\"34\"*32 + \"0000016c00000136\")).hexdigest())") &&
+	[ "$(./$H command-code $p 0x136)" = "$want" ] &&
+	[ "$(./$H command-code $p 0x137)" != "$want" ]
+'
+
+test_expect_success 'register final policy requires the writer and only NV_Extend' '
+	a=$(py "print(\"11\"*32)") && b=$(py "print(\"22\"*32)") &&
+	want=$(py "
+import hashlib
+digest = hashlib.sha256(bytes(32) + bytes.fromhex(\"00000171\" + \"11\"*32 + \"22\"*32)).digest()
+name = bytes.fromhex(\"000b\") + hashlib.sha256(bytes.fromhex(\"$PUB\")).digest()
+digest = hashlib.sha256(digest + bytes.fromhex(\"00000160\") + name).digest()
+digest = hashlib.sha256(digest + b\"shirudo-nv-writer-v1\").digest()
+print(hashlib.sha256(digest + bytes.fromhex(\"0000016c00000136\")).hexdigest())
+") &&
+	[ "$(./$H register-final $a $b $MODULUS)" = "$want" ] &&
+	[ "$(./$H or $a $b)" != "$want" ]
+'
+
+test_expect_success 'register policy branches match independent vectors' '
 	v9=$(py "print(\"cd\"*32)") && v11=$(py "print(\"ef\"*32)") &&
 	out=$(./$H register-policy 0xa00 $v9 $v11) &&
-	w=$(echo "$out" | sed -n 1p) && i=$(echo "$out" | sed -n 2p) &&
-	p=$(echo "$out" | sed -n 3p) &&
-	[ "$w" = "$(./$H nv-written $Z 1)" ] &&
-	unwritten=$(./$H nv-written $Z 0) &&
-	vd=$(py "import hashlib; print(hashlib.sha256(bytes.fromhex(\"cd\"*32 + \"ef\"*32)).hexdigest())") &&
-	[ "$i" = "$(./$H pcr $unwritten 0xa00 $vd)" ] &&
-	[ "$p" = "$(./$H or $w $i)" ]
+	want=$(py "
+import hashlib
+def h(data):
+    return hashlib.sha256(data).digest()
+written = h(bytes(32) + bytes.fromhex(\"0000018f01\"))
+unwritten = h(bytes(32) + bytes.fromhex(\"0000018f00\"))
+values = h(bytes.fromhex(\"cd\"*32 + \"ef\"*32))
+init = h(unwritten + bytes.fromhex(\"0000017f00000001000b03000a00\") + values)
+policy = h(bytes(32) + bytes.fromhex(\"00000171\") + written + init)
+print(written.hex())
+print(init.hex())
+print(policy.hex())
+") &&
+	[ "$out" = "$want" ]
+'
+
+test_expect_success 'NV_Extend cpHash includes both Names and the TPM2B event' '
+	name=000b$(py "print(\"ab\"*32)") &&
+	event=$(py "print(\"cd\"*32)") &&
+	want=$(py "import hashlib; print(hashlib.sha256(bytes.fromhex(\"00000136$name$name\"+\"0020\"+\"$event\")).hexdigest())") &&
+	[ "$(./$H extend-cphash "$name" "$event")" = "$want" ]
+'
+
+test_expect_success 'writer authorization covers nonce, zero expiry, cpHash and reference' '
+	cp=$(py "print(\"cd\"*32)") &&
+	for length in 1 32 64; do
+		nonce=$(py "print(\"ab\"*$length)") &&
+		want=$(py "import hashlib; print(hashlib.sha256(bytes.fromhex(\"$nonce\"+\"00000000\"+\"$cp\")+b\"shirudo-nv-writer-v1\").hexdigest())") &&
+		[ "$(./$H writer-auth "$nonce" "$cp")" = "$want" ] || exit 1
+	done &&
+	! ./$H writer-auth "" "$cp"
 '
 
 test_expect_success 'NV name = 000b || H(TPMS_NV_PUBLIC)' '
