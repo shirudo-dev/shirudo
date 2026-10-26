@@ -70,7 +70,7 @@ print(hashlib.sha256(digest + bytes.fromhex(\"0000016c00000136\")).hexdigest())
 	[ "$(./$H or $a $b)" != "$want" ]
 '
 
-test_expect_success 'register policy branches match independent vectors' '
+test_expect_success 'register policy = OR(written, init) -> Signed -> NV_Extend' '
 	v9=$(py "print(\"cd\"*32)") && v11=$(py "print(\"ef\"*32)") &&
 	out=$(./$H register-policy 0xa00 $v9 $v11 $MODULUS) &&
 	want=$(py "
@@ -82,6 +82,10 @@ unwritten = h(bytes(32) + bytes.fromhex(\"0000018f00\"))
 values = h(bytes.fromhex(\"cd\"*32 + \"ef\"*32))
 init = h(unwritten + bytes.fromhex(\"0000017f00000001000b03000a00\") + values)
 policy = h(bytes(32) + bytes.fromhex(\"00000171\") + written + init)
+name = bytes.fromhex(\"000b\") + h(bytes.fromhex(\"$PUB\"))
+policy = h(policy + bytes.fromhex(\"00000160\") + name)
+policy = h(policy + b\"shirudo-nv-writer-v1\")
+policy = h(policy + bytes.fromhex(\"0000016c00000136\"))
 print(written.hex())
 print(init.hex())
 print(policy.hex())

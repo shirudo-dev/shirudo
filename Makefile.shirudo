@@ -605,6 +605,7 @@ TEST_HELPERS := $(VERITY_TEST_HELPERS) \
                 testing/helper/test-tpm-wire \
                 testing/helper/test-register \
                 testing/helper/test-register-cli \
+                testing/helper/test-nv-cphash \
                 testing/helper/test-eventlog \
                 testing/helper/test-keys \
                 testing/helper/test-seal \
@@ -698,6 +699,10 @@ testing/helper/test-register-cli: testing/helper/test-register-cli.c \
 testing/helper/tpmsim-cmd: testing/helper/tpmsim-cmd.c
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS_BASE) -Iinclude $(TPMSIM_CFLAGS) -o $@ $< $(TPMSIM_LIBS) -lcrypto
+
+testing/helper/test-nv-cphash: testing/helper/test-nv-cphash.c util/keyring.o $(REGISTER_OBJS)
+	@printf '  CC      $@\n'
+	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(REGISTER_LIBS)
 
 testing/helper/test-config: testing/helper/test-config.c util/config.o util/io.o util/seal.o util/log.o util/hex.o \
                             util/image_config.o util/string.o util/malloc.o

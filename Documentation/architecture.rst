@@ -136,7 +136,7 @@ The target holds the certificate, the sealed keyring, the private bpffs
 mount, the installed upatches, the eventlog and the TPM register.  It runs
 ``init``, ``upatch load``, ``upatch unload`` and the install side of
 ``bpm``.  The target never sees the operator's private key.  Its separate
-boot-scoped RSA key is held in the kernel for local register authorization.
+boot-scoped RSA key authorizes only local TPM register extensions.
 
 Delivery is pull-based.  The operator publishes a package to an OCI
 registry; the target pulls it on a timer or by hand, verifies the
@@ -445,7 +445,7 @@ its public key and key IDs into the identity map.  The mandatory key guard
 permits signing only from tasks with authenticated runtime authority.
 The key survives switch-root and TPM resets within that
 kernel boot.  `The TPM design <tpm.rst#write-policy>`__ describes its
-key custody and trust assumptions.
+provisioning, command-bound signatures and process-integrity assumptions.
 
 7) Target state
 ---------------
@@ -495,9 +495,11 @@ Measurement register.  The measurement lives in a TPM 2.0 NV index
 (default ``0x01818E00``) built the way systemd builds its NvPCRs: an
 extend-only index (``TPM2_NT_EXTEND``) whose contents clear at every
 TPM reset (``TPMA_NV_CLEAR_STCLEAR``) and whose write policy is
-``PolicyOR(PolicyNvWritten(YES), PolicyNvWritten(NO) || PolicyPCR(PCRs
-9, 11))``, computed from the values PCRs 9 and 11 hold when ``init``
-binds the register.  ``init`` runs from the initrd, after systemd has
+bound to PCRs 9 and 11 and the boot writer's public key.
+Both the first and subsequent writes require command-bound authorization;
+the complete policy is specified in `the TPM design <tpm.rst#write-policy>`__.
+``init`` runs from the initrd,
+after systemd has
 measured ``enter-initrd`` into PCR 11 and before ``leave-initrd``
 moves it, performs the first write through the PCR branch and then
 extends PCR 9 with the record ``nvpcr-init:shirudo:0x1818e00:<name>``
@@ -510,9 +512,11 @@ under a weaker policy has a name other than the one ``init`` recorded
 and anchored.  The record carries both PCR values and whether the
 initrd was running, so a verifier pins the ``enter-initrd`` value and
 refuses a binding made from the root file system.
-Reads need no authorisation; defining and undefining the index needs
-the owner hierarchy, whose password, when set, comes from
-``tpm.owner_auth`` in ``/etc/shirudo/shirudo.conf``.  Every
+Reads and certification use the index's empty authorization; no writer
+secret is needed.  Defining and undefining the index need the owner
+hierarchy.  Its authorization is empty by default; when set, the
+password comes from ``tpm.owner_auth`` in
+``/etc/shirudo/shirudo.conf``.  Every
 state-changing command reads the register first and refuses with
 ``tampered`` when ``--expect-chain`` disagrees or the index is not the
 one ``init`` recorded.  There is no TPM opt-out; an unmeasured target

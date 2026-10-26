@@ -197,6 +197,17 @@ incorrect authenticated root stop initialization rather than choosing a
 host-root fallback. Installing a target package alone does not provision the
 images or start enforcement.
 
+The authenticated NV-writer upgrade also requires updating the operator
+verifier: the write policy and certified index Name change, and old
+public-write-policy evidence is rejected.  Install the updated
+target profile and rebuild the initrd before rebooting.  No secret file
+needs migration or backup: the RSA writer is generated afresh at kernel
+boot and stored in a protected asymmetric key.  The kernel needs its
+PKCS#8 private-key parser and RSA implementation; the TPM must verify
+RSA-3072 RSASSA/SHA-256.  The writer's public key lives in the frozen
+identity map; there is no separate mutable binding-attempt record.
+
+
 4) Kernel updates
 -----------------
 

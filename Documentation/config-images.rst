@@ -330,7 +330,8 @@ it does not persist per-effect phases or predicted PCR before/after values.
 Direct TPM-command measurement spoofing remains separate work. Genuine
 operations are measured and their history is replayed, but a PCR alone
 does not prove activation against an attacker able to issue measurement
-commands. This limitation also affects the existing upatch NV register.
+commands. The separate upatch NV register requires a guarded boot-writer
+signature; that authorization does not cover config PCR extensions.
 No IMA integration is added, and signatures do not prevent rollback.
 
 Attestation includes the config PCR even if ``--pcrs`` omits it. The

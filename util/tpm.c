@@ -19,6 +19,7 @@
 #include "image_config.h"
 #include "log.h"
 #include "malloc.h"
+#include "nv_writer.h"
 #include "paths.h"
 
 #define EK_CERT_NV_RSA		0x01C00002u
@@ -537,6 +538,41 @@ TSS2_RC tpm_writer_authorize(struct shirudo_tpm *t, ESYS_TR key, ESYS_TR session
 	return rc;
 }
 
+static int policy_writer_signed(struct shirudo_tpm *t, ESYS_TR session,
+				__u32 index, const __u8 event[32])
+{
+	struct tpm_writer_authorization authorization = {};
+	__u8 signature[SHIRUDO_TPM_NV_RSA_BYTES];
+	ESYS_TR key = ESYS_TR_NONE;
+	struct tpm_nv_info nv;
+	TSS2_RC rc;
+	int err;
+
+	err = tpm_nv_info(t, index, &nv);
+	if (err)
+		return err;
+	if (!nv.defined || nv.name_len != SHIRUDO_TPM_NAME_LEN) {
+		pr_err("tpm: NV writer requires a defined register");
+		return -ENODEV;
+	}
+	err = tpm_writer_prepare(t, session, nv.name, event, &authorization);
+	if (err)
+		return err;
+	err = nv_writer_sign(authorization.digest, signature);
+	if (err)
+		return err;
+	err = tpm_writer_load(t, t->writer_public, &key);
+	if (err)
+		return err;
+	rc = tpm_writer_authorize(t, key, session, &authorization, signature);
+	session_flush(t, key);
+	if (rc != TSS2_RC_SUCCESS) {
+		pr_err("tpm: NV writer PolicySigned: rc=0x%08x", (__u32)rc);
+		return -EACCES;
+	}
+	return 0;
+}
+
 int tpm_policy_session_finish(struct shirudo_tpm *t, ESYS_TR session,
 			      const __u8 expected[SHIRUDO_TPM_DIGEST_LEN])
 {
@@ -564,29 +600,32 @@ int tpm_policy_session_finish(struct shirudo_tpm *t, ESYS_TR session,
 
 /*
  * Walk one branch of the register's write policy in a real session and
- * close it with PolicyOR. The session digest is then compared with the
- * policy computed in software, so a formula drift fails loudly here
- * instead of as an unexplained TPM2_RC_POLICY_FAIL.
+ * authorize the exact NV_Extend with the kernel-held writer after PolicyOR.
+ * Compare the session digest with the software policy to detect drift.
  */
 static int policy_session_register(struct shirudo_tpm *t, bool init,
+				   __u32 index, const __u8 event[32],
 				   __u32 pcr_mask,
 				   const __u8 branch_written[32],
 				   const __u8 branch_init[32],
 				   ESYS_TR *session)
 {
 	TPML_DIGEST branches = { .count = 2 };
-	TPM2B_DIGEST *digest = NULL;
 	__u8 expected[32];
 	TSS2_RC rc;
 	int err;
 
+	if (!t->writer_set) {
+		pr_err("tpm: register policy requires the NV writer public key");
+		return -EACCES;
+	}
 	err = tpm_policy_session_start(t, session);
 	if (err)
 		return err;
 	rc = Esys_PolicyNvWritten(t->esys, *session, ESYS_TR_NONE, ESYS_TR_NONE,
 				  ESYS_TR_NONE, init ? TPM2_NO : TPM2_YES);
 	if (rc == TSS2_RC_SUCCESS && init) {
-		TPM2B_DIGEST live = { .size = 0 };
+		TPM2B_DIGEST live = {};
 		TPML_PCR_SELECTION sel;
 
 		pcr_selection(pcr_mask, &sel);
@@ -601,6 +640,14 @@ static int policy_session_register(struct shirudo_tpm *t, bool init,
 		rc = Esys_PolicyOR(t->esys, *session, ESYS_TR_NONE,
 				   ESYS_TR_NONE, ESYS_TR_NONE, &branches);
 	}
+	if (rc == TSS2_RC_SUCCESS) {
+		err = policy_writer_signed(t, *session, index, event);
+		if (err) {
+			session_flush(t, *session);
+			*session = ESYS_TR_NONE;
+			return err;
+		}
+	}
 	if (rc != TSS2_RC_SUCCESS) {
 		if (rc_is(rc, TPM2_RC_VALUE) && init)
 			pr_err("tpm: the anchoring PCR moved; the register "
@@ -612,20 +659,16 @@ static int policy_session_register(struct shirudo_tpm *t, bool init,
 		*session = ESYS_TR_NONE;
 		return -EACCES;
 	}
-	rc = Esys_PolicyGetDigest(t->esys, *session, ESYS_TR_NONE,
-				  ESYS_TR_NONE, ESYS_TR_NONE, &digest);
-	tpm_policy_or(branch_written, branch_init, expected);
-	if (rc != TSS2_RC_SUCCESS || digest->size != 32 ||
-	    memcmp(digest->buffer, expected, 32) != 0) {
-		pr_err("tpm: register policy digest does not match the "
-		       "computed policy (rc=0x%08x)", (__u32)rc);
-		Esys_Free(digest);
+	err = tpm_register_policy_final(branch_written, branch_init, t->writer_public, expected);
+	if (err)
+		pr_err("tpm: compute signed register policy: %s", strerror(-err));
+	else
+		err = tpm_policy_session_finish(t, *session, expected);
+	if (err) {
 		session_flush(t, *session);
 		*session = ESYS_TR_NONE;
-		return -EPROTO;
 	}
-	Esys_Free(digest);
-	return 0;
+	return err;
 }
 
 static int nv_extend_session(struct shirudo_tpm *t, __u32 index,
@@ -660,7 +703,7 @@ int tpm_nv_extend_first(struct shirudo_tpm *t, __u32 index,
 	ESYS_TR session = ESYS_TR_NONE;
 	int err;
 
-	err = policy_session_register(t, true, pcr_mask, branch_written,
+	err = policy_session_register(t, true, index, event, pcr_mask, branch_written,
 				      branch_init, &session);
 	if (err)
 		return err;
@@ -677,7 +720,7 @@ int tpm_nv_extend(struct shirudo_tpm *t, __u32 index,
 	ESYS_TR session = ESYS_TR_NONE;
 	int err;
 
-	err = policy_session_register(t, false, 0, branch_written,
+	err = policy_session_register(t, false, index, event, 0, branch_written,
 				      branch_init, &session);
 	if (err)
 		return err;

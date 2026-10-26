@@ -245,6 +245,25 @@ T5  Silent state change
     records for one reset, so the history a register holds cannot be
     restarted by rebinding it.
 
+    Both policy branches require a command-bound signature from the
+    kernel-held boot writer, guarded by ``lsm/key_permission`` using
+    the committed runtime task mark. The `TPM design <tpm.rst#write-policy>`__
+    specifies provisioning and authorization.  Under the process-integrity
+    assumptions below, this prevents an attacker from appending an expected
+    positive event without doing the operation, even with a fabricated
+    exported eventlog.  The private key never lives in the eventlog, a
+    regular file or a readable BPF map.
+    Trusted initialization, TPM identity and approved boot measurements
+    remain prerequisites.  The NV Name commits to the writer's public
+    key, not proof of its custody.      Trusted initialization briefly handles the private key and scrubs
+    it after import; later process
+    memory disclosures do not expose reusable writer authority.
+    Injected code can still request signatures.  Kernel memory
+    disclosure, privileged kernel tracing and hibernation exposure
+    remain outside the key API's protection.  RSA authorization is
+    classical.  Existing process-security and executable-integrity
+    assumptions, including residual risks 2 and 5, still apply.
+
 T6  The boot window
     Enforcement is BPF and does not survive a reboot by itself.
     ``shirudo-initrd.service`` runs ``init`` from the initrd, after the
@@ -412,17 +431,19 @@ Each of these is known, documented and bounded; none is silent.
     or grant authority to host files. The separate `mount-move
     investigation <https://github.com/shirudo-dev/shirudo/issues/12>`__ records the evidence.
 
-4.  TPM measurement writers are not yet bound to completed Shirudo
+4.  Config PCR writers are not yet bound to completed Shirudo
     operations. A caller with direct TPM-command access can append to the
-    written NV register or the config PCR. Garbage makes replay fail and
+    config PCR. Garbage makes replay fail and
     can deny service. A public digest of a valid operation can instead
     record a claim that the operation happened when it did not. A fresh
     nonce, a genuine TPM quote and replay of an externally supplied log do
     not prove who appended the digest or that the operation completed.
     The separate measurement-spoofing investigation is not fixed by image
     mode. Static PCRs prevent runtime reset, not unauthorized extends.
-    Restricting measurement writers and handling operation/measurement
-    ordering remain separate work; no IMA integration is added.
+    The upatch NV register requires the guarded boot writer, but owner
+    undefinition and PCR interference can still deny service. Restricting
+    config PCR writers and handling operation/measurement ordering remain
+    separate work; no IMA integration is added.
 
 5.  Authenticated boot must verify the expected runtime root. dm-verity
     verifies runtime files but still trusts the UKI, kernel and trusted process

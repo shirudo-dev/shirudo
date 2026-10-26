@@ -255,8 +255,7 @@ int tpm_register_policy(__u32 pcr_mask,
 	tpm_policy_nv_written(zero, false, unwritten);
 	sha256_buffer(pcr_values, 32 * n_values, pcr_digest);
 	tpm_policy_pcr(unwritten, pcr_mask, pcr_digest, branch_init);
-	tpm_policy_or(branch_written, branch_init, policy);
-	return 0;
+	return tpm_register_policy_final(branch_written, branch_init, writer_public, policy);
 }
 
 void tpm_nv_name(__u32 index, __u32 attrs,

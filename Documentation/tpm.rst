@@ -13,7 +13,8 @@ target without believing anything the target says about itself.  This
 document describes both as implemented, how they relate to systemd's
 NvPCRs, which the register is modelled on, and what they do not yet
 do.  The code is authoritative: ``util/chain.c`` (register and event
-digests), ``util/tpm.c`` (libtss2 calls), ``util/tpm_wire.c`` (policy
+digests), ``util/nv_writer.c`` (kernel-held writer),
+``util/tpm.c`` (libtss2 calls), ``util/tpm_wire.c`` (policy
 digests, names and the TPM wire structures, used by both sides),
 ``util/eventlog.c``, ``util/attest.c`` and ``builtin-attest.c``.
 `threat-model <threat-model.rst>`__ states what the design defends
@@ -42,10 +43,12 @@ are ``0x0E060048``:
 
 ``TPMA_NV_POLICYWRITE``
     The only way to write is a policy session that satisfies the
-    index's write policy below; there is no password.
+    index's write policy below.  Neither owner-write nor auth-write
+    supplies an alternative write route.
 
 ``TPMA_NV_OWNERREAD`` and ``TPMA_NV_AUTHREAD``
-    Reads need no authorisation.
+    Reads and certification use an empty password.  Owner-authorized
+    reads are also supported.
 
 ``TPMA_NV_NO_DA`` and ``TPMA_NV_ORDERLY``
     Failed authorisations do not count towards dictionary-attack
@@ -56,12 +59,11 @@ are ``0x0E060048``:
 Write policy
 ~~~~~~~~~~~~
 
-The write policy is ``PolicyOR(written, init)`` with two branches:
+The write policy is ``PolicyOR(written, init)``, followed by
+``PolicySigned`` and ``PolicyCommandCode(NV_Extend)``.  Its branches:
 
-* ``written`` is ``PolicyNvWritten(YES)``: once the index has been
-  written this boot, anyone with access to the TPM may extend it,
-  exactly as anyone may extend a PCR.  Appending history is not the
-  threat; rewriting it is.
+* ``written`` is ``PolicyNvWritten(YES)``: later writes cannot
+  initialize a recreated, unwritten index.
 
 * ``init`` is ``PolicyNvWritten(NO)`` followed by ``PolicyPCR`` over
   PCRs 9 and 11 at the values they hold when ``init`` binds the
@@ -71,12 +73,53 @@ The write policy is ``PolicyOR(written, init)`` with two branches:
   ``leave-initrd``, so a register bound from the initrd can be bound by
   nothing that runs after it.
 
-Trusted initialization also provisions a boot-scoped RSA-3072 writer
-in a sealed kernel keyring and scrubs its temporary private-key copies.
-The frozen identity records its public key and key IDs.  The key guard
-permits signing only from tasks with authenticated runtime authority;
-this relies on trusted bootstrap and process integrity, not the public
-file label.  The writer survives switch-root and TPM resets in that boot.
+Both branches require an RSA-3072 RSASSA-PKCS1-v1_5 signature with
+SHA-256 from this boot's kernel-held NV writer key.  The signature
+covers the live session's nonempty TPM nonce, a zero expiration,
+the SHA-256 command hash and the fixed reference
+``shirudo-nv-writer-v1``.  The command hash covers ``NV_Extend``, both
+handle Names and the marshalled event.  The first write uses the
+unwritten Name; subsequent writes use the written Name.  The TPM
+checks that exact command hash when executing the extend.  A caller
+with a pre-opened or passed TPM descriptor cannot authorize a new
+extend without the guarded signing operation.  Public appends would permit fabricated positive events:
+measuring an expected load is not proof that the load happened.
+
+Startup hardening locks all current and future process mappings before
+command dispatch.  Trusted initialization generates the key, imports
+PKCS#8 into a kernel ``asymmetric`` key and scrubs its temporary copies;
+the mapping locks remain active until process exit.  Bootstrap creates
+the signer in its lasting keyring with owner view/search permissions,
+then restricts and seals the ring.  Bootstrap is trusted: production
+runs in the measured initrd before untrusted workloads. The public key,
+private-key ID and keyring ID are frozen in the identity map before attachment.
+There is no additional state key or mutable binding-attempt marker.
+The keyring is already available to later invocations;
+``lsm/key_permission`` must be attached and pinned before initialization
+completes and untrusted workloads run.
+The mandatory guard checks committed runtime task authority, never a
+public label or mutable executable pointer. Search is refused even for
+possessed NV keys: that permission authorizes signing or invalidation.
+These denials are not counted because ordinary keyring traversal also
+requests search.  The asymmetric key has no private-payload read operation.
+
+The key survives switch-root and a TPM reset during the same kernel
+boot.  Later
+one-shot invocations hold only the public key and request signatures
+through ``KEYCTL_PKEY_SIGN``.  Sessions and external public-key handles
+are flushed after use.  Expiration zero does not impose a time limit:
+an outstanding signature remains bound to its live session and exact
+command until that session is destroyed.
+
+The authenticated runtime and process guards protect the code that can
+request signatures. The static target does not load host libraries or
+OpenSSL provider configuration, and runtime exec rejects traced callers.
+Code that compromises an authorized task can still use the signing
+operation without extracting the private key.
+Kernel memory disclosure, privileged kernel tracing,
+hibernation images and compromise during key generation remain outside
+the protection of the key API.  RSA authorization is classical, unlike
+the operator's ML-DSA-87 artifact signatures.
 
 The index's TPM name is the SHA-256 of its public area (handle, name
 algorithm, attributes, policy digest, size), prefixed with the
@@ -96,18 +139,22 @@ it binds the register after it has re-applied the installed set, in
 this order:
 
 1. Read PCRs 9 and 11; the values are ``pcr_before`` and
-   ``phase_before``.  Compute both policy branches, the policy digest
-   and the two names from them.
+   ``phase_before``.  Read the writer's public key from the frozen
+   identity map and reconstruct its fixed TPMT_PUBLIC template, with
+   exponent 65537.  Compute both policy branches, the policy digest
+   and the two NV Names.
 
-2. If the index exists from an earlier boot, is unwritten and carries
-   the expected unwritten name, keep it.  Otherwise define it under
-   the computed policy, undefining a stale index first.  Defining and
+2. Define the index, replacing a prior written or mismatching index.
+   Defining and
    undefining need the owner hierarchy; when the TPM has an owner
    password, ``tpm.owner_auth`` in ``/etc/shirudo/shirudo.conf``
    supplies it.  The name the TPM reports is compared with the one
    computed in software; a mismatch is ``EPROTO``, not a retry.
+   The index receives no secret writer authorization; its policy names
+   the public signing key.  Provisioning still uses the existing owner
+   authorization over the trusted local TPM channel.
 
-3. Extend the index with the init event through the ``init`` branch.
+3. Extend the index with the init event through the signed ``init`` branch.
    The session walks the branch on the TPM and its digest is read back
    with ``PolicyGetDigest`` and compared with the software policy, so
    a drift between ``util/tpm_wire.c`` and the TPM fails with a clear
@@ -124,8 +171,9 @@ this order:
 5. Append the ``init`` record to the eventlog (section 3) with both
    PCR values, whether the initrd was running, the written name, the
    anchor and its digest, the register value, the TPM's reset
-   count and ``nv_writer_public``: the 384-byte big-endian RSA modulus
-   in 768 hex digits, without a TPM header.  The exponent is fixed at 65537.
+   count and ``nv_writer_public``: the writer's public key, encoded as
+   the 384-byte, big-endian RSA modulus in 768 hex digits, without a TPM
+   header.  The exponent is fixed at 65537 and is not stored.
 
 The phase measurements are ``systemd-pcrphase-initrd.service``'s,
 which systemd runs only for a measured UKI boot; without them PCR 11
@@ -144,8 +192,8 @@ means this register period already has its binding.  A re-run of
 it and adds no event; finds it gone, unwritten or renamed, it refuses
 with ``tampered`` and binds nothing before the next TPM reset, because
 a second binding would restart the history the record vouches for.
-An absent or unreadable writer identity refuses as well.  Reuse and
-extension check the live policy, reset count and frozen writer identity.
+An absent or unreadable writer identity refuses as well.  A re-run
+with a complete binding reuses the same writer.
 Without a record for the current count, whether the boot is new or
 the TPM was reset without a reboot, the index is bound; one found
 written by someone else first is undefined and bound again, with a
@@ -155,7 +203,7 @@ Extending later
 ~~~~~~~~~~~~~~~
 
 Every load, unload and tree operation extends the register through
-the ``written`` branch, with the policy recomputed from the
+the authenticated ``written`` branch, with the policy recomputed from the
 ``pcr_before`` on this boot's init record, and only after checking
 that the live index carries the recorded name.  No register this boot
 is ``tpm_error``; a live index whose name is not the recorded one is
@@ -177,10 +225,19 @@ TPM access
 
 The TCTI is ``SHIRUDO_TPM_TCTI`` in the environment, else ``tpm.tcti``
 in ``shirudo.conf``, else ``device:/dev/tpmrm0``, the kernel resource
-manager.  Redirecting it on a target changes nothing for the operator:
-the evidence is signed by the key the operator pinned, and a
-substitute TPM fails verification.  libtss2's own logging is silenced
-unless ``TSS2_LOG`` is set.
+manager.  Initialization requires the trusted local TPM channel
+described above.  Register writes send command-bound signatures, not
+the writer's private key.  A substitute TPM cannot forge evidence signed by the
+operator's pinned attestation key.  The selected transport
+implementation remains part of shirudo's trusted process code.
+
+Migration requires an updated target and initrd, a
+trusted reboot, and the updated operator verifier.  The new policy
+changes the NV Name; old public-write-policy evidence is
+rejected, not accepted through a compatibility branch.  The Name
+commits to the writer's public key and policy reference.  It does not
+prove private-key custody: verification still requires trusted TPM
+identity and approved boot measurements covering initialization.
 
 2) Events
 ---------
@@ -239,8 +296,7 @@ extension, written with ``fsync`` and sealed like everything under
     ``payload_sha256`` pairs), ``pcr`` (9), ``pcr_before``,
     ``phase_pcr`` (11), ``phase_before``, ``bound_in`` (``initrd`` or
     ``root``), ``nv_name`` (the written name), ``anchor``,
-    ``anchor_digest``, ``chain`` (the register after the event) and
-    ``nv_writer_public`` (the boot writer's RSA modulus).
+    ``anchor_digest`` and ``chain`` (the register after the event).
 
 ``upatch_load`` and ``upatch_unload``
     ``upatch`` with ``name`` and ``payload_sha256``; an unload a
@@ -441,10 +497,11 @@ checks, in order:
    index of its own under a policy over PCRs it extends and resets at
    will; the name a register bound to that record's ``pcr_before`` and
    ``phase_before`` must have, computed in software from the handle,
-   the attributes with ``TPMA_NV_WRITTEN``, the policy and the size,
-   equals both the certified name and the recorded one.  Every
-   ``--expect-bind-pcr`` value equals the recorded one for that PCR, so
-   the operator pins the ``enter-initrd`` phase value from the UKI, and
+   the attributes with ``TPMA_NV_WRITTEN``, the policy including the
+   fixed RSA-3072 template, ``nv_writer_public`` public key and reference,
+   and the size, equals both the certified name and the recorded one.
+   Every ``--expect-bind-pcr`` value equals the recorded one for that PCR,
+   so the operator pins the ``enter-initrd`` phase value from the UKI, and
    ``--require-initrd`` fails unless the record says the binding was
    made while the initrd ran; the record is the target's word, so
    ``--expect-bind-pcr=11`` is what proves it.
@@ -482,12 +539,12 @@ not shirudo evidence exits 2.
 --event=tree:<seq>=<operation_digest>...]`` prints ``set_digest``,
 ``init_event``, ``register_at_boot`` and, with events,
 ``register_after_events``, from the same functions the target uses.
-With ``--bind-pcr=9=<hex> --bind-pcr=11=<hex> --writer-public=<hex>``
-it also prints
+With ``--bind-pcr=9=<hex> --bind-pcr=11=<hex>
+--writer-public=<384-byte public-key hex>`` it also prints
 ``register_name``, the anchor string and ``pcr9_after_anchor``, so the
-name and PCR 9 can be pinned from values the operator knows.  The writer
-input is the 768-digit ``nv_writer_public`` from the boot's init record;
-it is required together with both binding PCRs.
+name and PCR 9 can be pinned from values the operator knows.  A fresh
+boot's writer public key is an additional input; it cannot be predicted
+from artifacts and PCR binding values alone.
 
 ``shirudo attest challenge --evidence=<path> --out=<path>
 [--ek-ca=<bundle>]`` is described in section 4; it prints its checks,
@@ -504,13 +561,20 @@ systemd v259 and reworked in v262.  Shared with it:
 
 * the index type and attributes, in particular ``TPM2_NT_EXTEND`` and
   ``TPMA_NV_CLEAR_STCLEAR``, so the register is a per-boot PCR in NV;
-* the write policy shape, ``PolicyOR`` of a ``PolicyNvWritten(YES)``
-  branch open to every TPM user and an initialisation branch that only
+* the two-branch policy shape, ``PolicyOR`` of a ``PolicyNvWritten(YES)``
+  branch and an initialisation branch that only
   a particular boot state satisfies;
 * the index name as the anchor, certified by ``TPM2_NV_Certify``, and
   the ``nvpcr-init:<name>:0x<handle>:<tpm name>`` event string.
 
 Different from it, and why it matters:
+
+* **Authenticated writers.**  Unlike systemd's public-append NvPCRs,
+  shirudo requires ``PolicySigned`` and ``NV_Extend`` command
+  restriction after the OR.  Its runtime events assert successful
+  operations, not merely a history that cannot be erased.  Native
+  systemd registration must preserve that authorization; adopting a
+  public-append policy would reintroduce false positive measurements.
 
 * **The initialisation branch.**  systemd v262 binds it with
   ``PolicyAuthorize`` to the UKI's PCR signing key (policy reference
@@ -542,7 +606,8 @@ Different from it, and why it matters:
 Registering the register as a systemd NvPCR, so that its name follows
 the UKI signing key and systemd anchors it before the separator while
 shirudo only extends it, is the deferred step that would remove the
-remaining differences; until then the two coexist without interfering.
+boot-integration differences; it must retain authenticated writers.
+Until then the two coexist without interfering.
 
 7) Limits
 ---------
@@ -554,8 +619,8 @@ context and the deferred mitigations the plan.
 * **The binding values come from the record unless pinned.**
   ``verify`` recomputes the index name from the ``pcr_before`` and
   ``phase_before`` the init record claims; ``--expect-bind-pcr`` makes
-  them values the operator knows, and ``predict --bind-pcr`` turns
-  those into the expected name and PCR 9.  Root with the owner
+  them values the operator knows, and ``predict --bind-pcr`` with the
+  writer public key turns those into the expected name and PCR 9.  Root with the owner
   authorisation (empty on most TPMs) can still undefine the written
   index at runtime; from then on every extension and ``init`` itself
   refuse ``tampered`` until the next TPM reset, a denial of service and
@@ -622,6 +687,29 @@ parsers, the key derivations, the endorsement policy and the
 credential blob against known vectors and an independent
 implementation, without a TPM.
 
+Post-init integration tests run only against a real kernel in the KVM
+guest with swtpm attached through ``/dev/tpmrm0``
+(``make -C testing test-tgt``).  There is no software signing fixture:
+the guest uses the production kernel-held writer and installed
+``shirudo`` binary.  ``testing/tpm/t1127-nv-writer.sh`` runs the command-binding
+tests below and checks that the production register is unchanged.
+``make -C testing test-tgt`` also exercises the
+production initrd and switch-root path in ``testing/t1122-initrd.sh``.
+
+``testing/helper/test-nv-cphash`` creates a separate kernel-held key with
+the production provisioning function and signs through ``keyctl``.
+It reuses the production TPM connection, NV lifecycle, kernel signing
+and signed-policy helpers; only the invalid inputs and assertions are
+test-specific.  Production still selects its signing key from the
+frozen identity.
+It tests nonce and command binding directly through ESYS on a scratch
+NV index in the guest.  Replayed and corrupted signatures must fail
+without changing NV.  ``PolicySigned`` accepts an authorization for
+event A; extending event B must fail without changing the value.  A
+fresh session then extends A and the test checks the exact result,
+removes the scratch index and unlinks its temporary keyring.
+No linker wrapping, software private-key files or production
+fault-injection hooks are used.
 
 Configuration image measurements
 ================================
@@ -654,5 +742,6 @@ Without an expected config root, successful replay is reported as
 consistency without operator approval. Neither this replay nor a static
 PCR proves that only the trusted updater issued the TPM command: direct
 measurement writers can record a selection without the corresponding
-operation. Restricting writers remains separate work for both the config
-PCR and the existing NV register; no IMA integration is added.
+operation. Restricting writers remains separate work for the config PCR;
+the upatch NV register requires the guarded writer described above.
+No IMA integration is added.

@@ -62,6 +62,8 @@ struct tpm_nv_info {
  * the first write of a boot the init branch, which TPM2_PolicyPCR
  * only satisfies while the anchoring PCR still holds the value the
  * policy was computed from, every later one the written branch.
+ * Both branches require the kernel-held writer's command-bound
+ * signature; extending requires nv_set_writer first.
  */
 int tpm_nv_info(struct shirudo_tpm *t, __u32 index,
 		struct tpm_nv_info *info);

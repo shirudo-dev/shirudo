@@ -328,6 +328,7 @@ testing/helper/test-config-attest
 testing/helper/test-config-update
 testing/helper/tpmsim-cmd
 testing/helper/test-tpm-wire
+testing/helper/test-nv-cphash
 testing/helper/test-config
 testing/helper/test-bpf-load
 testing/helper/test-bpf-cmd

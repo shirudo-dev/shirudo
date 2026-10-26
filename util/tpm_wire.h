@@ -98,8 +98,9 @@ void tpm_policy_or(const __u8 a[SHIRUDO_TPM_DIGEST_LEN],
 /*
  * The register's write policy from the values the binding PCRs held
  * at binding time, given in PCR order: PolicyOR(PolicyNvWritten(YES),
- * PolicyNvWritten(NO) + PolicyPCR(mask, SHA-256(values))). The two
- * branch digests are what a session has to present to PolicyOR.
+ * PolicyNvWritten(NO) + PolicyPCR(mask, SHA-256(values))), followed by
+ * PolicySigned and PolicyCommandCode(NV_Extend). The two branch
+ * digests are what a session has to present to PolicyOR.
  */
 int tpm_register_policy(__u32 pcr_mask,
 			const __u8 *pcr_values, size_t n_values,

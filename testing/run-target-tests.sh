@@ -57,6 +57,7 @@ for t in \
 	otel/t1115-map-export-all.sh \
 	otel/t1116-otel-backend.sh \
 	otel/t1117-otel-serialized-metric.sh \
+	tpm/t1127-nv-writer.sh \
 	tamperproof/t1110-lsm-deny.sh \
 	tamperproof/t1112-prog-load-keyring-gate.sh \
 	tamperproof/t1113-mount-lockdown.sh \
