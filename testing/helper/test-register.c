@@ -8,9 +8,14 @@
  */
 
 #include <errno.h>
+#include <linux/keyctl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+#include <bpf/bpf.h>
 
 #include <shirudo/misc.h>
 
@@ -19,11 +24,77 @@
 #include "config.h"
 #include "eventlog.h"
 #include "hex.h"
+#include "identity.h"
 #include "json.h"
 #include "malloc.h"
+#include "nv_writer.h"
 #include "paths.h"
 #include "tpm.h"
 #include "version.h"
+
+/* Provision real kernel signing authority before the VM attaches its LSM. */
+static int writer_create(void)
+{
+	struct bpf_map_create_opts opts = { .sz = sizeof(opts) };
+	struct shirudo_identity id = {};
+	int fd, rc, unlink_rc;
+	__u32 zero = 0;
+	long ret;
+
+	rc = nv_writer_create(&id.nv_writer_ring, &id.nv_writer_key,
+			      id.nv_writer_public);
+	if (rc)
+		goto out;
+	errno = 0;
+	ret = syscall(__NR_keyctl, KEYCTL_SETPERM, id.nv_writer_ring, 0x3f3f0000L, 0, 0);
+	if (ret != -1 || errno != EACCES) {
+		fprintf(stderr, "writer keyring permissions were not sealed: %ld/%d\n",
+			ret, errno);
+		rc = ret < 0 ? -errno : -EPROTO;
+		goto out;
+	}
+	fd = bpf_map_create(BPF_MAP_TYPE_ARRAY, "shirudo_test_id", sizeof(zero),
+			    sizeof(id), 1, &opts);
+	if (fd < 0) {
+		rc = -errno;
+		goto out;
+	}
+	if (bpf_map_update_elem(fd, &zero, &id, BPF_ANY) ||
+	    bpf_map_freeze(fd) || bpf_obj_pin(fd, SHIRUDO_IDENTITY_PIN))
+		rc = -errno;
+	close(fd);
+	if (!rc)
+		return 0;
+out:
+	if (id.nv_writer_ring > 0) {
+		unlink_rc = keyring_unlink_key(KEY_SPEC_USER_KEYRING, id.nv_writer_ring);
+		if (unlink_rc)
+			fprintf(stderr, "unlink protocol-test writer: %s\n",
+				strerror(-unlink_rc));
+	}
+	fprintf(stderr, "kernel writer setup: %s\n", strerror(-rc));
+	return 1;
+}
+
+static int writer_remove(void)
+{
+	struct shirudo_identity id = {};
+	int rc;
+
+	rc = identity_read(&id);
+	if (rc) {
+		fprintf(stderr, "kernel writer identity: %s\n", strerror(-rc));
+		return 1;
+	}
+	if (unlink(SHIRUDO_IDENTITY_PIN)) {
+		perror("unlink protocol-test identity");
+		return 1;
+	}
+	rc = keyring_unlink_key(KEY_SPEC_USER_KEYRING, id.nv_writer_ring);
+	if (rc)
+		fprintf(stderr, "unlink protocol-test writer: %s\n", strerror(-rc));
+	return rc ? 1 : 0;
+}
 
 static void puthex(const __u8 *b, size_t n)
 {
@@ -147,6 +218,19 @@ int main(int argc, char **argv)
 
 	if (argc < 2)
 		return 2;
+
+	if (!strcmp(argv[1], "writer-create") && argc == 2)
+		return writer_create();
+	if (!strcmp(argv[1], "writer-remove") && argc == 2)
+		return writer_remove();
+	if (!strcmp(argv[1], "writer-public") && argc == 2) {
+		__u8 public[SHIRUDO_TPM_NV_RSA_BYTES];
+
+		if (nv_writer_read(public))
+			return 1;
+		puthex(public, sizeof(public));
+		return 0;
+	}
 
 	if (strcmp(argv[1], "init") == 0 && argc == 3) {
 		struct shirudo_chain_init_info info;

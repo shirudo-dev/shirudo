@@ -2,25 +2,28 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 #
-# t0034 -- the measurement register against a software TPM: binding
-# from the initrd, the anchor, extends, the recreate and replay attacks,
-# a reset and a late binding, the credential challenge, and the evidence
-# a verifier accepts or refuses. Needs the libtpms-backed
-# helper/tpmsim-cmd; skipped where libtpms is not installed.
+# t0034 -- register lifecycle with a real kernel writer in a pre-init VM.
 
 cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
-R=helper/test-register
+R=./helper/test-register
 SIM=$(pwd)/helper/tpmsim-cmd
-S=../shirudo
-[ -x "$SIM" ] || test_skip_all "helper/tpmsim-cmd not built (libtpms-dev missing)"
-[ -x "$R" ] || test_skip_all "helper/test-register not built"
-[ -x "$S" ] || test_skip_all "shirudo not built"
-command -v python3 >/dev/null 2>&1 || test_skip_all "no python3"
-
-WORK=$(mktemp -d)
-trap 'rm -rf "$WORK"' EXIT HUP INT TERM
+S=./helper/test-register-cli
+. ./tpm/register-lib.sh
+[ "$(id -u)" = 0 ] && [ -x "$SIM" ] && [ -x "$R" ] && [ -x "$S" ] || {
+	echo "register VM requires root and the built TPM helpers" >&2
+	exit 1
+}
+WORK=$(mktemp -d) || exit 1
+cleanup() {
+	result=$?
+	register_writer_stop || result=1
+	rm -rf "$WORK"
+	exit "$result"
+}
+trap cleanup EXIT HUP INT TERM
+register_writer_start || exit 1
 mkdir -p "$WORK/keys"
 head -c 700 /dev/urandom >"$WORK/keys/cert.der"
 : >"$WORK/initrd-release"

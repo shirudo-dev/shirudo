@@ -441,6 +441,11 @@ suites when validating a deployment.
   module installed, ``testing/tpm/t0033-tpm-wire.sh`` also cross-checks
   the TPM credential blob it builds against an independent implementation;
   without it that one check is skipped.
+* ``make -C testing test-tgt-register`` additionally needs libtpms
+  development headers on the build host (``libtpms-dev`` on Debian and
+  Ubuntu).  The prepared guest installs libtpms and the command TCTI
+  runtime.  Signing uses the guest's real kernel keyring, not a software
+  signing replacement.
 * ``make -C testing fuzz`` builds the parsers' libFuzzer targets with
   ``clang`` and needs its fuzzer and sanitizer runtime
   (``libclang-rt-<version>-dev`` on Debian and Ubuntu).

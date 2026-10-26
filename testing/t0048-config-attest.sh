@@ -9,13 +9,21 @@ H=${SHIRUDO_TEST_CONFIG_ATTEST_HELPER:-$(pwd)/helper/test-config-attest}
 U=${SHIRUDO_TEST_CONFIG_HELPER:-$(pwd)/helper/test-config-update}
 R=$(pwd)/helper/test-register
 SIM=$(pwd)/helper/tpmsim-cmd
-S=${SHIRUDO_IMAGE_TEST_SHIRUDO:-../shirudo}
+S=${SHIRUDO_IMAGE_TEST_SHIRUDO:-$(pwd)/helper/test-register-cli}
+. ./tpm/register-lib.sh
 for helper in "$H" "$U" "$R" "$SIM" "$S"; do
 	[ -x "$helper" ] || test_skip_all "missing helper: $helper"
 done
 command -v python3 >/dev/null 2>&1 || test_skip_all "no python3"
 WORK=$(mktemp -d)
-trap 'rm -rf "$WORK"' EXIT HUP INT TERM
+cleanup() {
+	result=$?
+	register_writer_stop || result=1
+	rm -rf "$WORK"
+	exit "$result"
+}
+trap cleanup EXIT HUP INT TERM
+register_writer_start || exit 1
 mkdir -m 700 "$WORK/config" "$WORK/keys"
 head -c 700 /dev/urandom >"$WORK/keys/cert.der"
 : >"$WORK/initrd-release"

@@ -16,6 +16,19 @@ test_expect_success 'test-vm rejects a missing local kernel before boot' '
 	grep -q "kernel image not found" "$WORK/missing.out"
 '
 
+test_expect_success 'register protocols run only in an isolated pre-init test VM' '
+	! TEST_VM_SUITE=register VM_MODE=test TEST_VM_INITRD=0 \
+		TEST_VM_WORK_DIR="$WORK/register" TEST_VM_KERNEL="$WORK/no-bzImage" \
+		"$RUNNER" >"$WORK/register.out" 2>&1 &&
+	grep -q "kernel image not found" "$WORK/register.out" &&
+	! TEST_VM_SUITE=register VM_MODE=interactive TEST_VM_INITRD=0 \
+		"$RUNNER" >"$WORK/register-interactive.out" 2>&1 &&
+	grep -q "register suite requires test mode" "$WORK/register-interactive.out" &&
+	! TEST_VM_SUITE=register VM_MODE=test TEST_VM_INITRD=1 \
+		"$RUNNER" >"$WORK/register-initrd.out" 2>&1 &&
+	grep -q "register suite requires test mode" "$WORK/register-initrd.out"
+'
+
 test_expect_success 'test-vm requires a SHA-256 for a remote kernel' '
 	! TEST_VM_WORK_DIR="$WORK/no-sha" \
 		TEST_VM_KERNEL_URL=https://example.invalid/bzImage "$RUNNER" \

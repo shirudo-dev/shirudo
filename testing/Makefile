@@ -21,7 +21,7 @@ test-vm-arch = $(shell TEST_VM_ARCH='$(TEST_VM_ARCH)'; \
 .DEFAULT_GOAL := help
 .PHONY: help clean test-helpers test-op fuzz test bundle test-vm-bundle kernel \
 	bpf-next vm vm-console vm-ssh vm-stop vm-clean test-tgt test-tgt-obs \
-	test-vm test-vm-clean
+	test-tgt-register test-vm test-vm-clean
 
 KERNEL_PATCHES ?= $(if $(wildcard $(ROOT)/kernel/*.patch),$(ROOT)/kernel/,)
 override KERNEL_PATCHES := $(if $(strip $(KERNEL_PATCHES)),$(call root-path,$(KERNEL_PATCHES)),)
@@ -224,8 +224,9 @@ vm-ssh:
 	$(Q)VM_NAME="$(VM_NAME)" \
 		TEST_VM_WORK_DIR="$(TEST_VM_WORK_DIR)" $(ROOT)/contrib/test-vm.sh --ssh
 
-test-tgt: $(VM_KERNEL_DEP) test-vm-bundle
-	$(Q)VM_MODE=test TEST_VM_SUITE="$(TEST_VM_SUITE)" VM_VERBOSE="$(TEST_VM_VERBOSE)" VM_NAME="$(VM_NAME)" VM_TENANT="$(VM_TENANT)" \
+define run-target-vm
+VM_MODE=test TEST_VM_SUITE="$(1)" VM_VERBOSE="$(TEST_VM_VERBOSE)" VM_NAME="$(2)" VM_TENANT="$(VM_TENANT)" \
+		TEST_VM_INITRD="$(3)" \
 		TEST_VM_KERNEL="$(abspath $(VM_KERNEL_IMAGE))" \
 		TEST_VM_KERNEL_ARTIFACT_DIR="$(abspath $(VM_KERNEL_ARTIFACT_DIR))" \
 		TEST_VM_WORK_DIR="$(TEST_VM_WORK_DIR)" \
@@ -237,9 +238,16 @@ test-tgt: $(VM_KERNEL_DEP) test-vm-bundle
 		TEST_VM_OCI_CA="$(TEST_VM_OCI_CA)" \
 		TEST_VM_BPM_OCI_REPOSITORY="$(TEST_VM_BPM_OCI_REPOSITORY)" \
 		TEST_VM_BPM_OCI_INDEX_CERT="$(TEST_VM_BPM_OCI_INDEX_CERT)" \
-		TEST_VM_MODE="$(TEST_VM_MODE)" TEST_VM_INITRD="$(TEST_VM_INITRD)" \
+		TEST_VM_MODE="$(TEST_VM_MODE)" \
 		TEST_VM_HOST_BUNDLE="$(abspath $(TEST_VM_BUNDLE_DIR))" \
 		$(ROOT)/contrib/test-vm.sh
+endef
+
+test-tgt-register: $(VM_KERNEL_DEP) test-vm-bundle
+	$(Q)$(call run-target-vm,register,$(if $(VM_NAME),$(VM_NAME),shirudo)-register,0)
+
+test-tgt: $(VM_KERNEL_DEP) test-vm-bundle test-tgt-register
+	$(Q)$(call run-target-vm,$(TEST_VM_SUITE),$(VM_NAME),$(TEST_VM_INITRD))
 
 test-tgt-obs: $(VM_KERNEL_DEP) test-vm-bundle
 	$(Q)VM_MODE=test TEST_VM_SUITE=obs VM_VERBOSE="$(TEST_VM_VERBOSE)" VM_NAME="$(VM_NAME)" VM_TENANT="$(VM_TENANT)" \
@@ -304,6 +312,7 @@ help:
 	  '  make -C testing test-helpers' \
 	  '  make -C testing fuzz [FUZZ_SECONDS=60]' \
 	  '  make -C testing test-tgt (dm-verity, dracut initrd, root required)' \
+	  '  make -C testing test-tgt-register' \
 	  '  make -C testing test-tgt-obs' \
 	  '  make -C testing vm, vm-console, vm-ssh, vm-stop, or vm-clean' \
 	  '  make -C testing vm KERNEL=7.4' \

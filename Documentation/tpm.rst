@@ -590,24 +590,30 @@ context and the deferred mitigations the plan.
 8) Testing
 ----------
 
+``make -C testing test-tgt-register`` runs ``testing/tpm/t0034-register.sh``
+in a dedicated pre-init KVM guest.  It provisions a real kernel signing
+key and freezes its public metadata in a BPF identity map; no signing
+or keyring implementation is replaced.  The libtpms command transport
+controls PCR phases and TPM resets while the guest kernel and writer
+survive.  This preserves lifecycle, attestation and credential-activation
+coverage, including index recreation, the closed first-write window,
+reset recovery and late binding.  It is a protocol test before the LSM
+attaches, not evidence of guard enforcement.  The host suite skips it;
+``test-tgt`` runs it before the normal target suite.
+The same guest runs ``testing/t0048-config-attest.sh`` with a fresh native
+writer to cover config-PCR evidence alongside the signed NV register.
+The test-only ``test-register-cli`` invokes the attestation and status
+commands before enforcement, without entering an authenticated runtime.
+The production CLI rejects that synthetic identity map; protected-target
+tests continue to invoke the installed runtime binary.
+
 ``testing/t0051-harden.sh`` checks process-wide locking, fail-closed
 startup and the memory-lock limits of every shipped service.
 
 ``testing/tpm/t0033-tpm-wire.sh`` checks the policy digests, names, wire
 parsers, the key derivations, the endorsement policy and the
 credential blob against known vectors and an independent
-implementation, without a TPM.  ``testing/tpm/t0034-register.sh`` drives the
-whole register and attestation path, the initrd phases simulated as
-PCR 11 extensions, the credential challenge with an ECC and an RSA
-endorsement key included, against libtpms:
-``testing/helper/tpmsim-cmd`` is a ``cmd:`` TCTI driver around the simulator,
-built when ``pkg-config libtpms`` succeeds, and ``testing/helper/test-register``
-exercises binding, extending, replay, recreation, a TPM reset and
-``attest`` evidence and verification through ``SHIRUDO_TPM_TCTI``,
-``SHIRUDO_EVENTLOG_PATH`` and ``SHIRUDO_KEYS_DIR``.  Deleting the
-simulator's ``volatile`` state file is a TPM reset.  The target suite
-runs the same path against swtpm in the QEMU VM (``make -C testing test-tgt``);
-``contrib/swtpm.sh`` starts a software TPM for a development target.
+implementation, without a TPM.
 
 
 Configuration image measurements

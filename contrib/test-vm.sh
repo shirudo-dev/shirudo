@@ -156,10 +156,12 @@ valid_vm_name()
 validate_mode()
 {
 	[[ "$TEST_MODE" == verity ]] || die "TEST_VM_MODE must be verity"
-	[[ "$VM_INITRD" == 1 && "$SKIP_SEAL" == 0 ]] ||
-		die "dm-verity requires TEST_VM_INITRD=1 and TEST_VM_SKIP_SEAL=0"
-	[[ "$VM_SUITE" == all || "$VM_SUITE" == obs ]] ||
-		die "dm-verity requires the complete test suite or obs"
+	if [[ "$VM_SUITE" != register ]]; then
+		[[ "$VM_INITRD" == 1 && "$SKIP_SEAL" == 0 ]] ||
+			die "dm-verity requires TEST_VM_INITRD=1 and TEST_VM_SKIP_SEAL=0"
+		[[ "$VM_SUITE" == all || "$VM_SUITE" == obs ]] ||
+			die "dm-verity requires the complete test suite or obs"
+	fi
 	case "$VM_MODE" in
 	interactive|test) ;;
 	*) die "VM_MODE must be 'interactive' or 'test'" ;;
@@ -169,7 +171,11 @@ validate_mode()
 	tree)
 		[[ "$VM_MODE" == test ]] || die "tree suite requires VM_MODE=test"
 		;;
-	*) die "TEST_VM_SUITE must be 'all', 'obs', or 'tree'" ;;
+	register)
+		[[ "$VM_MODE" == test && "$VM_INITRD" == 0 && "$SKIP_SEAL" == 0 ]] ||
+			die "register suite requires test mode without a production initrd"
+		;;
+	*) die "TEST_VM_SUITE must be 'all', 'obs', 'tree', or 'register'" ;;
 	esac
 	case "$SKIP_SEAL" in
 	0|1) ;;

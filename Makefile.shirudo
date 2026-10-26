@@ -604,6 +604,7 @@ TEST_HELPERS := $(VERITY_TEST_HELPERS) \
                 testing/helper/test-chain \
                 testing/helper/test-tpm-wire \
                 testing/helper/test-register \
+                testing/helper/test-register-cli \
                 testing/helper/test-eventlog \
                 testing/helper/test-keys \
                 testing/helper/test-seal \
@@ -654,8 +655,10 @@ REGISTER_OBJS := util/config_attest.o util/config_update.o util/config_measure.o
                  util/hex.o util/crypto_openssl.o util/json.o util/string.o \
                  util/io.o util/seal.o util/config.o util/image_config.o \
                  util/log.o util/malloc.o \
-                 util/initrd.o $(VERSION_OBJ)
-REGISTER_LIBS := $(LIBCRYPTO_LIBS) $(LIBSSL_LIBS) $(TSS2_LIBS)
+                 util/initrd.o util/nv_writer.o util/identity.o \
+                 $(VERSION_OBJ) $(LIBBPF_A)
+REGISTER_LIBS := $(LIBCRYPTO_LIBS) $(LIBSSL_LIBS) $(TSS2_LIBS) \
+                 $(LIBBPF_A) $(LIBELF_LIBS) $(ZLIB_LIBS)
 
 testing/helper/test-keys: testing/helper/test-keys.c util/keys.o \
                           util/upatch.o $(REGISTER_OBJS)
@@ -682,10 +685,15 @@ testing/helper/test-tpm-wire: testing/helper/test-tpm-wire.c util/tpm_wire.o uti
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^ -lcrypto -lssl
 
-testing/helper/test-register: testing/helper/test-register.c util/attest.o \
+testing/helper/test-register: testing/helper/test-register.c util/attest.o util/keyring.o \
                         $(REGISTER_OBJS)
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(REGISTER_LIBS)
+
+testing/helper/test-register-cli: testing/helper/test-register-cli.c \
+		$(BUILTIN_OBJS) $(UTIL_OBJS) $(VERSION_OBJ) $(LIBBPF_A)
+	@printf '  CC      $@\n'
+	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(STATIC_LIBS) $(DYNAMIC_LIBS)
 
 testing/helper/tpmsim-cmd: testing/helper/tpmsim-cmd.c
 	@printf '  CC      $@\n'

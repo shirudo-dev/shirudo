@@ -341,6 +341,27 @@ if [[ "$VM_INITRD" == 1 ]]; then
 	log "initrd Shirudo journal"
 	journalctl -b -u shirudo-initrd.service --no-pager | tail -40 || true
 fi
+
+if [[ "${TEST_VM_SUITE:-all}" == register ]]; then
+	[[ "$VM_INITRD" == 0 ]] || {
+		log "register protocol tests must precede production initialization"
+		exit 1
+	}
+	log "running register protocol tests with a real kernel writer"
+	: >/mnt/shirudo-out/failed-tests
+	: >/mnt/shirudo-out/failed-suites
+	(
+		cd testing
+		SHIRUDO_TEST_REGISTER_VM=1 \
+			SHIRUDO_TEST_FAILURES_FILE=/mnt/shirudo-out/failed-tests \
+			sh tpm/t0034-register.sh
+		SHIRUDO_TEST_REGISTER_VM=1 \
+			SHIRUDO_TEST_FAILURES_FILE=/mnt/shirudo-out/failed-tests \
+			sh t0048-config-attest.sh
+	)
+	exit 0
+fi
+
 (cd "$BUNDLE/verity" && sha256sum -c manifest)
 mountpoint -q /run/shirudo/runtime
 mountpoint -q /run/shirudo/config
