@@ -87,7 +87,7 @@ static void pack_header(struct shirudo_upatch_header *h,
 			__u32 meta_off, __u32 meta_len,
 			__u32 data_off, __u32 data_len,
 			__u32 log_buf_sz,
-			__u32 nr_maps, __u32 nr_progs)
+			__u32 rodata_data_off, __u32 nr_maps, __u32 nr_progs)
 {
 	memset(h, 0, sizeof(*h));
 	h->magic   = htole64(SHIRUDO_UPATCH_MAGIC);
@@ -107,23 +107,24 @@ static void pack_header(struct shirudo_upatch_header *h,
 	h->log_buf_sz       = htole32(log_buf_sz);
 	h->nr_maps          = htole32(nr_maps);
 	h->nr_progs         = htole32(nr_progs);
-	h->reserved0        = 0;
+	h->rodata_data_off  = htole32(rodata_data_off);
 	h->type             = htole32(type);
 	h->reserved1        = 0;
 }
 
-int shirudo_build_package_resign(const char *original,
-				 const char *modified, const char *output,
-				 const struct shirudo_data_range *ranges,
-				 size_t nr_ranges, const char *pkey_path,
-				 const char *cert_path)
+static int package_resign_symbols(const char *original,
+				  const char *modified, const char *output,
+				  const struct shirudo_data_range *ranges,
+				  size_t nr_ranges, const char *const *symbols,
+				  size_t nr_symbols, const char *pkey_path,
+				  const char *cert_path)
 {
 	struct shirudo_upatch_header hdr;
 	struct shirudo_sign_io sio = {};
 	struct shirudo_upatch src = {}, mod = {};
-	struct shirudo_rodata_range watch_ranges[2] = {};
+	struct shirudo_rodata_range expected[16] = {};
 	const __u8 *src_data, *mod_data;
-	bool range_found[2] = {};
+	bool range_found[16] = {};
 	__u8 digest[SHIRUDO_SHA256_LEN], *payload = NULL, *sig_buf = NULL;
 	char name[SHIRUDO_UPATCH_NAME_MAX + 1];
 	__u32 loader_off, sig_off, data_off, meta_off;
@@ -133,8 +134,9 @@ int shirudo_build_package_resign(const char *original,
 	int fd = -1;
 	int rc;
 
-	if (!original || !modified || !output || !ranges || !nr_ranges ||
-	    nr_ranges > 16 || !strcmp(original, output) ||
+	if (!original || !modified || !output || !ranges || !symbols ||
+	    !nr_ranges || nr_ranges > ARRAY_SIZE(expected) ||
+	    nr_symbols != nr_ranges || !strcmp(original, output) ||
 	    !strcmp(modified, output))
 		return -EINVAL;
 	rc = upatch_open(original, &src);
@@ -213,22 +215,20 @@ int shirudo_build_package_resign(const char *original,
 		rc = -EBADMSG;
 		goto out;
 	}
-	rc = upatch_rodata_watch_ranges(&src, watch_ranges);
-	if (rc)
-		goto out;
-	if (nr_ranges != ARRAY_SIZE(watch_ranges)) {
-		rc = -EINVAL;
-		goto out;
+	for (i = 0; i < nr_symbols; i++) {
+		rc = upatch_rodata_symbol_range(&src, symbols[i], &expected[i]);
+		if (rc)
+			goto out;
 	}
 	for (i = 0; i < nr_ranges; i++) {
-		for (j = 0; j < ARRAY_SIZE(watch_ranges); j++)
-			if (ranges[i].offset == watch_ranges[j].offset &&
-			    ranges[i].length == watch_ranges[j].size &&
+		for (j = 0; j < nr_symbols; j++)
+			if (ranges[i].offset == expected[j].offset &&
+			    ranges[i].length == expected[j].size &&
 			    !range_found[j]) {
 				range_found[j] = true;
 				break;
 			}
-		if (j == ARRAY_SIZE(watch_ranges)) {
+		if (j == nr_symbols) {
 			rc = -EPERM;
 			goto out;
 		}
@@ -276,7 +276,8 @@ int shirudo_build_package_resign(const char *original,
 		    sig_off, (__u32)sio.signature_sz,
 		    mod.hdr.metadata_len ? meta_off : 0, mod.hdr.metadata_len,
 		    sio.data_sz ? data_off : 0, (__u32)sio.data_sz,
-		    mod.hdr.log_buf_sz, mod.hdr.nr_maps, mod.hdr.nr_progs);
+		    mod.hdr.log_buf_sz, mod.hdr.rodata_data_off,
+		    mod.hdr.nr_maps, mod.hdr.nr_progs);
 	fd = open(output, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
 	if (fd < 0) {
 		rc = -errno;
@@ -302,6 +303,163 @@ out:
 		xfree(payload, (size_t)payload_len);
 	upatch_close(&mod);
 	upatch_close(&src);
+	return rc;
+}
+
+int shirudo_build_package_resign(const char *original,
+				 const char *modified, const char *output,
+				 const struct shirudo_data_range *ranges,
+				 size_t nr_ranges, const char *pkey_path,
+				 const char *cert_path)
+{
+	static const char *const symbols[] = {
+		"obs_watch_v4", "obs_watch_v6",
+	};
+
+	return package_resign_symbols(original, modified, output, ranges,
+				      nr_ranges, symbols, ARRAY_SIZE(symbols),
+				      pkey_path, cert_path);
+}
+
+int shirudo_build_package_patch_rodata(const char *input, const char *output,
+				       const char *symbol, const __u8 *value,
+				      size_t value_len, const char *pkey_path,
+				      const char *cert_path)
+{
+	struct shirudo_upatch src = {};
+	struct shirudo_rodata_range range = {};
+	struct shirudo_data_range allowed = {};
+	const char *symbols[1] = { symbol };
+	__u8 digest[SHIRUDO_SHA256_LEN], *payload = NULL, *candidate = NULL;
+	char modified[] = "/tmp/shirudo-rodata-XXXXXX";
+	__u64 payload_len;
+	__u32 digest_len;
+	int fd = -1;
+	int rc;
+
+	if (!input || !output || !symbol || !value || !value_len ||
+	    !strcmp(input, output))
+		return -EINVAL;
+	rc = upatch_open(input, &src);
+	if (rc)
+		return rc;
+	if (upatch_is_unload(&src)) {
+		rc = -EINVAL;
+		goto out;
+	}
+	payload_len = (__u64)src.hdr.loader_insns_len + src.hdr.data_len;
+	if (payload_len > SIZE_MAX) {
+		rc = -EOVERFLOW;
+		goto out;
+	}
+	payload = xmalloc((size_t)payload_len);
+	if (!payload) {
+		rc = -ENOMEM;
+		goto out;
+	}
+	memcpy(payload, upatch_loader(&src), src.hdr.loader_insns_len);
+	memcpy(payload + src.hdr.loader_insns_len, upatch_data(&src),
+	       src.hdr.data_len);
+	rc = bpm_verify_cms(payload, (size_t)payload_len,
+			    upatch_signature(&src), src.hdr.signature_len,
+			    cert_path);
+	if (rc)
+		goto out;
+	if (EVP_Digest(payload, (size_t)payload_len, digest, &digest_len,
+		       EVP_sha256(), NULL) != 1 ||
+	    digest_len != sizeof(digest) ||
+	    memcmp(digest, src.hdr.payload_sha256, sizeof(digest))) {
+		rc = -EBADMSG;
+		goto out;
+	}
+	rc = upatch_rodata_symbol_range(&src, symbol, &range);
+	if (rc)
+		goto out;
+	if (value_len != range.size || range.offset > src.hdr.data_len ||
+	    value_len > src.hdr.data_len - range.offset) {
+		rc = -EINVAL;
+		goto out;
+	}
+	candidate = xmalloc(src.map_size);
+	if (!candidate) {
+		rc = -ENOMEM;
+		goto out;
+	}
+	memcpy(candidate, src.map, src.map_size);
+	memcpy(candidate + src.hdr.data_off + range.offset, value, value_len);
+	fd = mkstemp(modified);
+	if (fd < 0) {
+		rc = -errno;
+		goto out;
+	}
+	rc = write_complete(fd, candidate, src.map_size);
+	if (!rc && fsync(fd))
+		rc = -errno;
+	if (close(fd) && !rc)
+		rc = -errno;
+	fd = -1;
+	if (rc)
+		goto out;
+	allowed.offset = range.offset;
+	allowed.length = range.size;
+	rc = package_resign_symbols(input, modified, output, &allowed, 1,
+				    symbols, ARRAY_SIZE(symbols), pkey_path,
+				    cert_path);
+out:
+	if (fd >= 0)
+		close(fd);
+	if (modified[0] && access(modified, F_OK) == 0)
+		unlink(modified);
+	if (candidate)
+		xfree(candidate, src.map_size);
+	if (payload)
+		xfree(payload, (size_t)payload_len);
+	upatch_close(&src);
+	return rc;
+}
+
+int shirudo_build_package_verify(const char *input, const char *cert_path)
+{
+	struct shirudo_upatch upatch = {};
+	__u8 digest[SHIRUDO_SHA256_LEN], *payload = NULL;
+	__u64 payload_len;
+	__u32 digest_len;
+	int rc;
+
+	rc = upatch_open(input, &upatch);
+	if (rc)
+		return rc;
+	if (upatch_is_unload(&upatch)) {
+		rc = -EINVAL;
+		goto out;
+	}
+	payload_len = (__u64)upatch.hdr.loader_insns_len + upatch.hdr.data_len;
+	if (payload_len > SIZE_MAX) {
+		rc = -EOVERFLOW;
+		goto out;
+	}
+	payload = xmalloc((size_t)payload_len);
+	if (!payload) {
+		rc = -ENOMEM;
+		goto out;
+	}
+	memcpy(payload, upatch_loader(&upatch), upatch.hdr.loader_insns_len);
+	memcpy(payload + upatch.hdr.loader_insns_len, upatch_data(&upatch),
+	       upatch.hdr.data_len);
+	rc = bpm_verify_cms(payload, (size_t)payload_len,
+			    upatch_signature(&upatch), upatch.hdr.signature_len,
+			    cert_path);
+	if (rc)
+		goto out;
+	if (EVP_Digest(payload, (size_t)payload_len, digest, &digest_len,
+		       EVP_sha256(), NULL) != 1 ||
+	    digest_len != sizeof(digest) ||
+	    memcmp(digest, upatch.hdr.payload_sha256, sizeof(digest)))
+		rc = -EBADMSG;
+out:
+	if (payload)
+		xfree(payload, (size_t)payload_len);
+	upatch_close(&upatch);
 	return rc;
 }
 
@@ -1376,12 +1534,16 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 	__u32 write_meta_len = meta_len, attach_meta_len = 0;
 	__u32 decoder_blob_len = 0, signed_data_len = 0;
 	__u32 nr_maps = 0, nr_progs = 0;
+	__u32 rodata_data_off = 0;
 	struct shirudo_upatch_header hdr;
+	struct shirudo_upatch rodata_upatch = {};
 	struct decoder_set decoders = {};
 	struct shirudo_sign_io sio = {};
 	const void *signed_data = NULL;
 	const void *write_meta = meta;
+	size_t loader_data_len;
 	void *signed_data_buf = NULL;
+	void *loader_data_buf = NULL;
 	void *decoder_blob = NULL;
 	__u32 nr_decoders = 0;
 	void *attach_meta = NULL;
@@ -1451,6 +1613,29 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 	if (err)
 		goto out;
 	signed_data = signed_data_buf ? signed_data_buf : opts.data;
+	if (__builtin_add_overflow(opts.insns_sz, (size_t)signed_data_len,
+				   &loader_data_len)) {
+		err = -EOVERFLOW;
+		goto out;
+	}
+	loader_data_buf = xmalloc(loader_data_len);
+	if (!loader_data_buf) {
+		err = -ENOMEM;
+		goto out;
+	}
+	memcpy(loader_data_buf, opts.insns, opts.insns_sz);
+	if (signed_data_len)
+		memcpy((__u8 *)loader_data_buf + opts.insns_sz, signed_data,
+		       signed_data_len);
+	rodata_upatch.map = loader_data_buf;
+	rodata_upatch.hdr.loader_insns_len = (__u32)opts.insns_sz;
+	rodata_upatch.hdr.data_off = (__u32)opts.insns_sz;
+	rodata_upatch.hdr.data_len = signed_data_len;
+	err = upatch_rodata_data_offset(&rodata_upatch, &rodata_data_off);
+	if (err == -ENOENT)
+		err = 0;
+	if (err)
+		goto out;
 
 	sig_buf = xmalloc(SHIRUDO_MAX_SIG_SIZE);
 	if (!sig_buf) {
@@ -1482,7 +1667,7 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 		    write_meta_len ? meta_off : 0, write_meta_len,
 		    data_len ? data_off : 0, data_len,
 		    1u * 1024u * 1024u,
-		    nr_maps, nr_progs);
+		    rodata_data_off, nr_maps, nr_progs);
 
 	fd = open(out_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 	if (fd < 0) {
@@ -1517,6 +1702,8 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 out:
 	if (fd >= 0)
 		close(fd);
+	if (loader_data_buf)
+		xfree(loader_data_buf, loader_data_len);
 	free_decoder_set(&decoders);
 	xfree(signed_data_buf, signed_data_len);
 	xfree(decoder_blob, decoder_blob_len);

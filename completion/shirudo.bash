@@ -83,7 +83,18 @@ _shirudo()
 			subs=$("$bin" bpm --list-cmds 2>/dev/null)
 			COMPREPLY=( $(compgen -W "$subs" -- "$cur") )
 		elif [[ $sub == config && cword -eq 3 ]]; then
-			COMPREPLY=( $(compgen -W "register" -- "$cur") )
+			COMPREPLY=( $(compgen -W "register update" -- "$cur") )
+		elif [[ $sub == config && ${COMP_WORDS[3]} == update && ${COMP_WORDS[COMP_CWORD-1]} == --base-package ]]; then
+			COMPREPLY=( $(compgen -f -X '!*.bee' -- "$cur") )
+		elif [[ $sub == config && ${COMP_WORDS[3]} == update && (${COMP_WORDS[COMP_CWORD-1]} == -f ||
+			${COMP_WORDS[COMP_CWORD-1]} == --file) ]]; then
+			COMPREPLY=( $(compgen -f -X '!*.bee' -- "$cur") )
+		elif [[ $sub == config && ${COMP_WORDS[3]} == update && ${COMP_WORDS[COMP_CWORD-1]} == --rodata-input ]]; then
+			COMPREPLY=( $(compgen -f -- "$cur") $(compgen -d -- "$cur") )
+		elif [[ $sub == config && ${COMP_WORDS[3]} == update && $cur == -* ]]; then
+			COMPREPLY=( $(compgen -W "--base-package --version -f --file --keys-dir --rodata-input" -- "$cur") )
+		elif [[ $sub == config && ${COMP_WORDS[3]} == update ]]; then
+			COMPREPLY=( $(compgen -f -X '!*.bee' -- "$cur") $(compgen -d -- "$cur") )
 		elif [[ $sub == config && ${COMP_WORDS[3]} == register && cword -eq 4 ]]; then
 			COMPREPLY=( $(compgen -W "add list remove" -- "$cur") )
 		elif [[ $sub == config && ${COMP_WORDS[3]} == register && ${COMP_WORDS[4]} == add && $cur == -* ]]; then
@@ -110,15 +121,19 @@ _shirudo()
 		elif [[ $sub == info ]]; then
 			COMPREPLY=( $(compgen -f -X '!*.bee' -- "$cur") \
 				    $(compgen -d -- "$cur") )
-		elif [[ $sub == build && ${COMP_WORDS[COMP_CWORD-1]} == -f ]]; then
+		elif [[ $sub == build && (${COMP_WORDS[COMP_CWORD-1]} == -f ||
+			${COMP_WORDS[COMP_CWORD-1]} == --file) ]]; then
 			COMPREPLY=( $(compgen -f -X '!*.bee' -- "$cur") \
 				    $(compgen -d -- "$cur") )
 		elif [[ $sub == build && ${COMP_WORDS[COMP_CWORD-1]} == --keys-dir ]]; then
 			COMPREPLY=( $(compgen -d -- "$cur") )
 		elif [[ $sub == build && ${COMP_WORDS[COMP_CWORD-1]} == --vmlinux ]]; then
 			COMPREPLY=( $(compgen -f -- "$cur") )
+		elif [[ $sub == build && ${COMP_WORDS[COMP_CWORD-1]} == --rodata-input ]]; then
+			COMPREPLY=( $(compgen -f -- "$cur") $(compgen -d -- "$cur") )
 		elif [[ $sub == build && $cur == -* ]]; then
-			COMPREPLY=( $(compgen -W "-f --version --keys-dir --vmlinux" -- "$cur") )
+			COMPREPLY=( $(compgen -W "-f --file --version --keys-dir \
+				--vmlinux --rodata-input" -- "$cur") )
 		elif [[ $sub == build ]]; then
 			COMPREPLY=( $(compgen -d -- "$cur") )
 		elif [[ $sub == tree && cword -eq 3 ]]; then

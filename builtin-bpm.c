@@ -1373,7 +1373,11 @@ static int cmd_bpm_config(int argc, const char **argv)
 	const char *op = argc > 1 ? argv[1] : NULL;
 
 	if (!op || is_help(op)) {
-		fprintf(stderr, "usage: shirudo bpm config register {add|list|remove} ...\n");
+		fprintf(stderr,
+			"usage: shirudo bpm config register {add|list|remove} ...\n"
+			"       shirudo bpm config update --base-package "
+			"<package.bee|oci://host/repo:tag> --version <version> "
+			"[-f <name>.bee] [options]\n");
 		return op ? 0 : 2;
 	}
 	if (strcmp(op, "register"))
@@ -2238,7 +2242,7 @@ out:
 }
 
 static const struct shirudo_help_item bpm_subcmds[] = {
-	{ "config", "register and manage OCI repositories" },
+	{ "config", "manage package inputs and OCI repositories" },
 	{ "repo", "refresh signed repository indexes" },
 	{ "tree", "synchronize or publish the signed upatch tree" },
 	{ "key", "add, fingerprint, and list package certificates" },
@@ -2444,6 +2448,9 @@ int cmd_bpm(int argc, const char **argv)
 				 n_subcmds);
 	if (!sub)
 		return 2;
+	if (!strcmp(sub, "config") && argc >= 3 &&
+	    !strcmp(argv[2], "update"))
+		return bpm_exec_operator("config", argc, argv);
 	if (!strcmp(sub, "config"))
 		return cmd_bpm_config(argc - 1, argv + 1);
 	if (!strcmp(sub, "info")) {

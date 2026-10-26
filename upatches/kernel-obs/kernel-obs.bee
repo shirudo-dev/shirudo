@@ -1,8 +1,0 @@
-[package]
-name = "kernel-obs"
-description = "shirudo kernel observability: exec, network, DNS, listeners, watched destinations, executable mappings, privilege and sensitive file access"
-license = "GPL-2.0 OR BSD-2-Clause"
-authors = ["Authors of shirudo"]
-
-[[upatches]]
-source = "kernel-obs.bpf.c"

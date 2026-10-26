@@ -326,7 +326,7 @@ Example ``example-shields.bee``::
 
 ``upatches/kernel-cve/kernel-cve.bee`` in the tree is a worked example
 with one entry per CVE shield, and
-``upatches/kernel-obs/kernel-obs.bee`` one with
+``upatches/kernel-obs/Beefile`` one with
 decoders and shared headers.  Build and inspect::
 
     shirudo bpm build ./example-shields --version 1.0.0 \
@@ -357,6 +357,54 @@ Without it, ``bpm build`` checks ``./vmlinux.h`` and
 ``./vendor/linux/vmlinux.h`` from the command's working directory first,
 then checks those paths from the package directory and the installed
 shared header path.
+
+Generated rodata
+~~~~~~~~~~~~~~~~
+
+An upatch may declare repeated ``[[upatches.rodata]]`` entries. Each
+entry names a BTF variable, a default input file, and a ``generator`` and
+``update`` command array. The generator runs during ``bpm build``; the
+updater runs during ``bpm config update``. Commands are executed without
+a shell from the Beefile's directory. Shirudo appends ``--input <path>
+--symbol <name> --output <path>``. The program writes the raw bytes for
+that BTF variable to the output file, and the builder rejects a value
+whose length differs from the BTF variable size.
+
+The default input path is relative to the Beefile. Its override name is
+the input basename up to its first dot: ``watch.list`` is named
+``watch``. Multiple entries can share that input and one command-line
+override. An override path is resolved relative to the caller's working
+directory::
+
+    shirudo bpm build ./upatches/kernel-obs --version 0.1.1 \
+        --rodata-input watch=./customer/watch.list
+
+To change data without compiling BPF again, ``bpm config update`` takes
+a previously built package. By default, it reads the Beefile, updater
+programs, and declared input files from that package. This runs code
+from the package on the operator, so omitting ``-f`` explicitly trusts
+those packaged files. The upatch CMS signature does not authenticate the
+Beefile or updater files. Pass ``-f`` to use a locally selected Beefile
+and its updater files instead. It re-signs the changed upatches,
+regenerates their unload directives, and writes a new package version::
+
+    shirudo bpm config update \
+        --base-package oci://registry.example.com/shirudo/kernel-obs:0.1.0 \
+        --version 0.1.1 \
+        --rodata-input watch=./customer/watch.list
+
+To use a local Beefile instead of trusting the packaged updater, pass
+``-f`` explicitly::
+
+    shirudo bpm config update \
+        --base-package ./kernel-obs-0.1.0.bee \
+        --version 0.1.1 -f ./upatches/kernel-obs/Beefile \
+        --rodata-input watch=./customer/watch.list
+
+Generator and updater programs execute on the operator and must be
+trusted. Include their source and any default input needed later with
+``[[files]]`` entries in the Beefile. The target receives the signed
+upatch and never executes these programs.
 
 6) Publishing
 -------------

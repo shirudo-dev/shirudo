@@ -68,7 +68,7 @@ def mutate(name, off, fmt, value):
     struct.pack_into(fmt, data, off, value)
     (root / name).write_bytes(data)
 mutate("bad-version", 8, "<I", 2)
-mutate("reserved0", 348, "<I", 1)
+mutate("rodata-offset-oob", 348, "<I", 1)
 mutate("reserved1", 356, "<I", 1)
 mutate("zero-loader", 308, "<I", 0)
 mutate("zero-signature", 316, "<I", 0)
@@ -86,7 +86,7 @@ test_expect_success 'structured valid container parses' '
 	"$S" upatch info "$WORK/valid-structured" >/dev/null 2>&1
 '
 test_expect_success 'structured header and section bounds fail cleanly' '
-	for f in bad-version reserved0 reserved1 zero-loader zero-signature \
+	for f in bad-version rodata-offset-oob reserved1 zero-loader zero-signature \
 		 loader-in-header signature-oob data-overflow metadata-in-header \
 		 data-len-overflow; do reject "$WORK/$f" || exit 1; done
 '

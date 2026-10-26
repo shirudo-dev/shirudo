@@ -19,6 +19,22 @@
 #include "upatch.h"
 
 #define BPM_BUILD_MAX_ENTRIES 128
+#define BPM_BUILD_MAX_RODATA 16
+#define BPM_BUILD_MAX_COMMAND_ARGS 16
+
+struct bpm_build_rodata {
+	char symbol[128];
+	char input[PATH_MAX];
+	char generator[BPM_BUILD_MAX_COMMAND_ARGS][SHIRUDO_TREE_STRING_MAX];
+	char update[BPM_BUILD_MAX_COMMAND_ARGS][SHIRUDO_TREE_STRING_MAX];
+	int n_generator;
+	int n_update;
+};
+
+struct bpm_build_input_override {
+	char name[128];
+	char path[PATH_MAX];
+};
 
 struct bpm_build_file {
 	char source[PATH_MAX];
@@ -49,6 +65,8 @@ struct bpm_build_upatch {
 	char name[SHIRUDO_UPATCH_NAME_MAX];
 	char payload_sha256[SHIRUDO_CRYPTO_SHA256_LEN * 2 + 1];
 	struct bpm_build_tree tree;
+	struct bpm_build_rodata *rodata;
+	size_t n_rodata;
 };
 
 struct bpm_build_spec {
@@ -73,6 +91,7 @@ int bpm_build_parse_beefile(const __u8 *body, size_t len,
 void bpm_build_spec_free(struct bpm_build_spec *spec);
 
 int shirudo_build_bpm(int argc, char **argv);
+int shirudo_build_bpm_config_update(int argc, char **argv);
 int shirudo_build_bpm_push(int argc, char **argv);
 int shirudo_build_bpm_tree(int argc, char **argv);
 bool shirudo_build_is_help(const char *arg);

@@ -56,9 +56,9 @@ struct shirudo_upatch_header {
 	__u32		log_buf_sz;		/* verifier-log buf size */
 	__u32		nr_maps;		/* loader ctx bpf_map_desc count */
 	__u32		nr_progs;		/* loader ctx bpf_prog_desc count */
-	__u32		reserved0;		/* zero */
+	__u32		rodata_data_off;	/* offset in gen_loader_opts.data */
 	__u32		type;			/* enum shirudo_upatch_type */
-	__u32		reserved1;		/* zero; keeps the v1 header 8-byte aligned */
+	__u32		reserved1;		/* zero; keeps the header 8-byte aligned */
 };
 
 _Static_assert(sizeof(struct shirudo_upatch_header) ==

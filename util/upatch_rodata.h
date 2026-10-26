@@ -19,6 +19,10 @@ struct shirudo_rodata_range {
 
 int upatch_rodata_print(const struct shirudo_upatch *u, const char *path,
 			bool json);
+int upatch_rodata_symbol_range(const struct shirudo_upatch *u,
+			       const char *symbol,
+			       struct shirudo_rodata_range *range);
+int upatch_rodata_data_offset(const struct shirudo_upatch *u, __u32 *offset);
 int upatch_rodata_watch_ranges(const struct shirudo_upatch *u,
 			       struct shirudo_rodata_range ranges[2]);
 

@@ -69,13 +69,13 @@ static int parse_header(const __u8 *m, size_t n,
 	p += 4;
 	out->nr_progs		= rd_le32(p);
 	p += 4;
-	out->reserved0		= rd_le32(p);
+	out->rodata_data_off	= rd_le32(p);
 	p += 4;
 	out->type		= rd_le32(p);
 	p += 4;
 	out->reserved1		= rd_le32(p);
 	p += 4;
-	if (out->reserved0 != 0 || out->reserved1 != 0)
+	if (out->reserved1 != 0)
 		return -EINVAL;
 	return 0;
 }
@@ -103,6 +103,8 @@ static int validate_bounds(const struct shirudo_upatch_header *h, size_t n)
 	if (!section_inside(h->metadata_off, h->metadata_len, n))
 		return -EINVAL;
 	if (!section_inside(h->data_off, h->data_len, n))
+		return -EINVAL;
+	if (h->rodata_data_off > h->data_len)
 		return -EINVAL;
 	if (h->loader_insns_len == 0 || h->signature_len == 0)
 		return -EINVAL;
@@ -206,6 +208,7 @@ static int upatch_parse(const void *data, size_t size,
 	rc = parse_header(out->map, out->map_size, &out->hdr);
 	if (rc)
 		goto err;
+	out->rodata_offset_valid = true;
 	rc = validate_bounds(&out->hdr, out->map_size);
 	if (rc)
 		goto err;

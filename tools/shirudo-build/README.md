@@ -45,6 +45,7 @@ target boundary) and `AGENTS.md` (the no-subprocess invariant).
 | `upatch rewrite-rodata <original> <modified> -o <output> --data-range <offset:length>...` | verify an existing signed upatch, permit changes only to its BTF watch arrays, then re-sign it |
 | `keys vouch <cert.der>` | sign a vouch for another certificate |
 | `bpm build [context] --version <v> [-f <name>.bee] [--vmlinux <file>]` | compile, sign and package every Beefile upatch into a `.bee` |
+| `bpm config update --base-package <package.bee|oci://host/repo:tag> --version <v> [-f <name>.bee]` | update existing signed upatches from packaged or local rodata configuration |
 | `bpm push <pkg.bee> oci://...` | publish the package and certificate referrer; with signing material, also update the signed index |
 | `bpm tree append <pkg.bee> oci://...` | publish the next generation of a signed upatch tree |
 
@@ -94,6 +95,28 @@ example-shield/
 
 The local package definition uses the package name with a `.bee` suffix.
 `bpm build` stores it inside the package archive as `Beefile`.
+
+An upatch may define repeated `[[upatches.rodata]]` entries with a BTF
+`symbol`, a default `input` file, and `generator` and `update` command
+arrays. Commands run in the Beefile's directory without a shell. Shirudo
+appends `--input <path> --symbol <name> --output <path>`; the program writes
+the symbol's raw value bytes to that output file. Its length must match the
+BTF variable. The input override name is the input file's basename through
+its first dot, so `watch.list` is selected with
+`--rodata-input watch=<path>`. Multiple entries can share that input name.
+The default input resolves relative to the Beefile; an override resolves
+relative to the command's working directory.
+
+`bpm config update --base-package <package.bee|oci://host/repo:tag> --version <v>`
+reuses the load upatches in the base package, invokes each configured `update`
+command, re-signs changed `.rodata`, regenerates unload directives, and
+writes a new package. It does not compile BPF. Without `-f`, the Beefile
+and files named by its `[[files]]` entries come from the base package, and
+the operator is choosing to trust and execute its updater programs; those
+files are not covered by the upatch CMS signature. Pass `-f <name>.bee` to
+select a local Beefile and its locally resolved updater files instead.
+List every updater dependency and default input in `[[files]]` when
+packaged updates should be self-contained.
 
 Example `example-shield.bee`:
 

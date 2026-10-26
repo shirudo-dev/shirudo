@@ -109,6 +109,33 @@ write a separate artifact. The tool refuses a list that needs more trie
 nodes than the existing arrays hold; changing those capacities still
 requires rebuilding the BPF object.
 
+The Beefile also declares `watch.list` as the input for both watch trie
+variables. `bpm build` uses `gen_watch_rodata.py` to create their raw BTF
+values. The input name is derived from the basename before its first dot,
+so `watch.list` is named `watch`; override it for one build with:
+
+```sh
+shirudo bpm build ./upatches/kernel-obs --version 0.1.1 \
+	--rodata-input watch=./customer/watch.list
+```
+
+To update the data without recompiling BPF, `bpm config update` reads the
+Beefile and updater dependencies from a previously built package. This
+chooses to trust and run the package's updater on the operator; those files
+are not covered by the upatch CMS signature. It then writes a new versioned
+package:
+
+```sh
+shirudo bpm config update \
+	--base-package oci://registry.example.com/shirudo/kernel-obs:0.1.0 \
+	--version 0.1.1 \
+	--rodata-input watch=./customer/watch.list
+```
+
+Pass `-f ./upatches/kernel-obs/Beefile` to use the local Beefile
+and updater files instead. The target receives only the newly signed
+upatch and never runs the updater.
+
 ## Read the tables
 
 ```sh

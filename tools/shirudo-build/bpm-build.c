@@ -8,6 +8,7 @@
  */
 
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -17,6 +18,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/utsname.h>
 #include <time.h>
 #include <unistd.h>
@@ -26,8 +28,11 @@
 #include <shirudo/string.h>
 
 #include "bpm.h"
+#include "bpm_oci.h"
+#include "bpm_package.h"
 #include "compile.h"
 #include "crypto.h"
+#include "io.h"
 #include "json.h"
 #include "log.h"
 #include "hex.h"
@@ -356,6 +361,7 @@ static int build_target_ok(const char *target);
 static int build_parse_spec(struct bpm_build_spec *spec, char *body)
 {
 	struct bpm_build_upatch *upatch = NULL, *tree_owner = NULL;
+	struct bpm_build_rodata *rodata = NULL;
 	struct shirudo_tree_selector *sel = NULL;
 	struct bpm_build_file *file = NULL;
 	bool tree_section = false;
@@ -387,6 +393,7 @@ static int build_parse_spec(struct bpm_build_spec *spec, char *body)
 				memmove(section, s, strlen(s) + 1);
 			file = NULL;
 			upatch = NULL;
+			rodata = NULL;
 			tree_section = !array &&
 				(!strcmp(section, "upatches.tree") ||
 				 !strcmp(section, "upatches.tree.selector") ||
@@ -402,6 +409,17 @@ static int build_parse_spec(struct bpm_build_spec *spec, char *body)
 					return -E2BIG;
 				upatch = &spec->upatches[spec->n_upatches++];
 				tree_owner = upatch;
+			} else if (array && !strcmp(section, "upatches.rodata")) {
+				if (!tree_owner ||
+				    tree_owner->n_rodata >= BPM_BUILD_MAX_RODATA)
+					return -E2BIG;
+				if (!tree_owner->rodata) {
+					tree_owner->rodata = xcalloc(BPM_BUILD_MAX_RODATA,
+								     sizeof(*tree_owner->rodata));
+					if (!tree_owner->rodata)
+						return -ENOMEM;
+				}
+				rodata = &tree_owner->rodata[tree_owner->n_rodata++];
 			} else if (array) {
 				return -EINVAL;
 			} else if (tree_section) {
@@ -480,6 +498,30 @@ static int build_parse_spec(struct bpm_build_spec *spec, char *body)
 			}
 			if (build_parse_string(value, dst, cap))
 				return -EINVAL;
+		} else if (rodata) {
+			if (!strcmp(key, "symbol")) {
+				if (build_parse_string(value, rodata->symbol,
+						       sizeof(rodata->symbol)))
+					return -EINVAL;
+			} else if (!strcmp(key, "input")) {
+				if (build_parse_string(value, rodata->input,
+						       sizeof(rodata->input)))
+					return -EINVAL;
+			} else if (!strcmp(key, "generator")) {
+				if (rodata->n_generator ||
+				    build_parse_string_array(value, rodata->generator,
+							     BPM_BUILD_MAX_COMMAND_ARGS,
+							     &rodata->n_generator))
+					return -EINVAL;
+			} else if (!strcmp(key, "update")) {
+				if (rodata->n_update ||
+				    build_parse_string_array(value, rodata->update,
+							     BPM_BUILD_MAX_COMMAND_ARGS,
+							     &rodata->n_update))
+					return -EINVAL;
+			} else {
+				return -EINVAL;
+			}
 		} else if (tree_section && !strcmp(section, "upatches.tree")) {
 			struct bpm_build_tree *t = &tree_owner->tree;
 			char *dst = NULL;
@@ -552,6 +594,15 @@ static int build_parse_spec(struct bpm_build_spec *spec, char *body)
 			*p = (char)tolower((__u8)*p);
 		if (strcmp(u->type, "bpf") || build_default_targets(u))
 			return -EINVAL;
+		for (size_t j = 0; j < u->n_rodata; j++) {
+			struct bpm_build_rodata *r = &u->rodata[j];
+
+			if (!r->symbol[0] || !r->input[0] ||
+			    !r->n_generator || !r->n_update ||
+			    r->input[0] == '/' || strstr(r->input, "../") ||
+			    !strcmp(r->input, ".."))
+				return -EINVAL;
+		}
 		if (!u->tree.present)
 			continue;
 		if (!u->tree.id[0] || !upatch_name_valid(u->tree.id))
@@ -605,6 +656,10 @@ void bpm_build_spec_free(struct bpm_build_spec *spec)
 		if (spec->upatches[i].tree.selector)
 			xfree(spec->upatches[i].tree.selector,
 			      sizeof(*spec->upatches[i].tree.selector));
+		if (spec->upatches[i].rodata)
+			xfree(spec->upatches[i].rodata,
+			      BPM_BUILD_MAX_RODATA *
+			      sizeof(*spec->upatches[i].rodata));
 	}
 	if (spec->build_file)
 		xfree(spec->build_file, spec->build_file_len + 1);
@@ -637,6 +692,158 @@ static int build_resolve_source(const struct bpm_build_spec *spec,
 		return errno ? -errno : -EINVAL;
 	if (strlen(out) >= cap)
 		return -ENAMETOOLONG;
+	return 0;
+}
+
+static int build_rodata_input_name(const char *path, char *name, size_t cap)
+{
+	const char *base = strrchr(path, '/');
+	const char *dot;
+	size_t len;
+
+	base = base ? base + 1 : path;
+	dot = strchr(base, '.');
+	len = dot ? (size_t)(dot - base) : strlen(base);
+	if (!len || len >= cap)
+		return -EINVAL;
+	memcpy(name, base, len);
+	name[len] = '\0';
+	return 0;
+}
+
+static const char *build_rodata_input(const struct bpm_build_rodata *rodata,
+				      const struct bpm_build_input_override *overrides,
+				      size_t n_overrides)
+{
+	char name[128];
+
+	if (build_rodata_input_name(rodata->input, name, sizeof(name)))
+		return NULL;
+	for (size_t i = 0; i < n_overrides; i++)
+		if (!strcmp(overrides[i].name, name))
+			return overrides[i].path;
+	return rodata->input;
+}
+
+static int build_run_rodata_command(const struct bpm_build_spec *spec,
+				    const struct bpm_build_rodata *rodata,
+				    bool update, const char *input,
+				    const char *output)
+{
+	const char *argv[BPM_BUILD_MAX_COMMAND_ARGS + 7] = {};
+	const char (*command)[SHIRUDO_TREE_STRING_MAX] = update ?
+		rodata->update : rodata->generator;
+	int n_command = update ? rodata->n_update : rodata->n_generator;
+	int status;
+	pid_t pid;
+
+	for (int i = 0; i < n_command; i++)
+		argv[i] = command[i];
+	argv[n_command++] = "--input";
+	argv[n_command++] = input;
+	argv[n_command++] = "--symbol";
+	argv[n_command++] = rodata->symbol;
+	argv[n_command++] = "--output";
+	argv[n_command++] = output;
+	pid = fork();
+	if (pid < 0)
+		return -errno;
+	if (!pid) {
+		if (chdir(spec->scope))
+			_exit(126);
+		execvp(argv[0], (char *const *)argv);
+		_exit(127);
+	}
+	if (waitpid(pid, &status, 0) < 0)
+		return -errno;
+	if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
+		return 0;
+	return -EIO;
+}
+
+static int build_rodata_apply(const struct bpm_build_spec *spec,
+			      const struct bpm_build_upatch *upatch,
+			      const char *load, const char *pkey,
+			      const char *cert,
+			      const struct bpm_build_input_override *overrides,
+			      size_t n_overrides, bool update)
+{
+	for (size_t i = 0; i < upatch->n_rodata; i++) {
+		const struct bpm_build_rodata *rodata = &upatch->rodata[i];
+		const char *selected = build_rodata_input(rodata, overrides,
+							 n_overrides);
+		char input[PATH_MAX], generated[PATH_MAX], patched[PATH_MAX];
+		__u8 *value = NULL;
+		size_t value_len = 0;
+		int rc;
+
+		if (!selected)
+			return -EINVAL;
+		if (selected == rodata->input) {
+			rc = build_resolve_source(spec, selected, input,
+						  sizeof(input), &(struct stat){});
+			if (rc)
+				return rc;
+		} else if (strscpy(input, selected, sizeof(input)) < 0) {
+			return -ENAMETOOLONG;
+		}
+		if (strsprintf(generated, sizeof(generated), "%s/rodata-%zu-%zu.bin",
+			       spec->stage, (size_t)(upatch - spec->upatches), i) < 0 ||
+		    strsprintf(patched, sizeof(patched), "%s/rodata-%zu-%zu.upatch",
+			       spec->stage, (size_t)(upatch - spec->upatches), i) < 0)
+			return -ENAMETOOLONG;
+		unlink(generated);
+		unlink(patched);
+		rc = build_run_rodata_command(spec, rodata, update, input,
+					      generated);
+		if (rc) {
+			pr_err("bpm %s: converter failed for .rodata symbol %s",
+			       update ? "config update" : "build", rodata->symbol);
+			goto out;
+		}
+		rc = build_read_file(generated, &value, &value_len,
+				     SHIRUDO_UPATCH_FILE_MAX);
+		if (rc)
+			goto out;
+		rc = shirudo_build_package_patch_rodata(load, patched,
+							rodata->symbol, value,
+							value_len, pkey, cert);
+		if (!rc && rename(patched, load))
+			rc = -errno;
+out:
+		if (value)
+			xfree(value, value_len + 1);
+		unlink(generated);
+		if (rc) {
+			unlink(patched);
+			return rc;
+		}
+	}
+	return 0;
+}
+
+static int build_rodata_overrides_known(const struct bpm_build_spec *spec,
+					const struct bpm_build_input_override *overrides,
+					size_t count)
+{
+	for (size_t i = 0; i < count; i++) {
+		bool found = false;
+
+		for (size_t j = 0; j < spec->n_upatches; j++) {
+			const struct bpm_build_upatch *upatch = &spec->upatches[j];
+
+			for (size_t k = 0; k < upatch->n_rodata; k++) {
+				char name[128];
+
+				if (!build_rodata_input_name(upatch->rodata[k].input,
+							     name, sizeof(name)) &&
+				    !strcmp(name, overrides[i].name))
+					found = true;
+			}
+		}
+		if (!found)
+			return -ENOENT;
+	}
 	return 0;
 }
 
@@ -675,7 +882,22 @@ static int build_add_target(char seen[][PATH_MAX], size_t *n, const char *target
 	return 0;
 }
 
-static int build_validate(struct bpm_build_spec *spec)
+static const char *
+build_rodata_command_source(const struct bpm_build_rodata *rodata, bool update)
+{
+	const char (*command)[SHIRUDO_TREE_STRING_MAX] = update ?
+		rodata->update : rodata->generator;
+	int n = update ? rodata->n_update : rodata->n_generator;
+
+	if (!n)
+		return NULL;
+	if (strchr(command[0], '/'))
+		return command[0];
+	return n > 1 ? command[1] : NULL;
+}
+
+static int build_validate(struct bpm_build_spec *spec,
+			  bool allow_missing_upatch_source)
 {
 	char seen[BPM_BUILD_MAX_ENTRIES * 3][PATH_MAX];
 	char resolved[PATH_MAX];
@@ -693,8 +915,53 @@ static int build_validate(struct bpm_build_spec *spec)
 
 		if (build_add_target(seen, &n, u->load_target) ||
 		    build_add_target(seen, &n, u->unload_target) ||
-		    build_resolve_source(spec, u->source, resolved, sizeof(resolved), &st))
+		    (allow_missing_upatch_source ? build_target_ok(u->source) :
+		     build_resolve_source(spec, u->source, resolved, sizeof(resolved),
+					  &st)))
 			return -EINVAL;
+		for (size_t j = 0; j < u->n_rodata; j++) {
+			struct bpm_build_rodata *r = &u->rodata[j];
+			char input_name[128], other_name[128];
+
+			if (build_resolve_source(spec, r->input, resolved,
+						 sizeof(resolved), &st) ||
+			    build_rodata_input_name(r->input, input_name,
+						    sizeof(input_name)))
+				return -EINVAL;
+			for (size_t k = 0; k < i; k++) {
+				for (size_t m = 0; m < spec->upatches[k].n_rodata; m++) {
+					struct bpm_build_rodata *prev =
+						&spec->upatches[k].rodata[m];
+
+					if (build_rodata_input_name(prev->input,
+								    other_name,
+								    sizeof(other_name)))
+						return -EINVAL;
+					if (!strcmp(input_name, other_name) &&
+					    strcmp(r->input, prev->input))
+						return -EEXIST;
+				}
+			}
+			for (size_t k = 0; k < j; k++) {
+				struct bpm_build_rodata *prev = &u->rodata[k];
+
+				if (build_rodata_input_name(prev->input, other_name,
+							    sizeof(other_name)))
+					return -EINVAL;
+				if (!strcmp(input_name, other_name) &&
+				    strcmp(r->input, prev->input))
+					return -EEXIST;
+			}
+			for (int k = 0; k < 2; k++) {
+				const char *cmd_source = build_rodata_command_source(r,
+									  k != 0);
+
+				if (!cmd_source ||
+				    build_resolve_source(spec, cmd_source, resolved,
+							 sizeof(resolved), &st))
+					return -EINVAL;
+			}
+		}
 	}
 	return 0;
 }
@@ -747,6 +1014,7 @@ static void build_upatch_name(const char *source, char *out, size_t cap)
 static int build_stage_open(struct bpm_build_spec *spec)
 {
 	const char *tmpdir = getenv("TMPDIR");
+	char resolved[PATH_MAX];
 
 	if (!tmpdir || !tmpdir[0])
 		tmpdir = "/tmp";
@@ -755,6 +1023,16 @@ static int build_stage_open(struct bpm_build_spec *spec)
 		return -ENAMETOOLONG;
 	if (!mkdtemp(spec->stage))
 		return -errno;
+	if (!realpath(spec->stage, resolved)) {
+		int rc = -errno;
+
+		rmdir(spec->stage);
+		return rc;
+	}
+	if (strscpy(spec->stage, resolved, sizeof(spec->stage)) < 0) {
+		rmdir(resolved);
+		return -ENAMETOOLONG;
+	}
 	return 0;
 }
 
@@ -783,6 +1061,40 @@ static const char *build_shirudo_bpf_include(char *out)
 	return out;
 }
 
+static int build_remove_tree(const char *path)
+{
+	struct dirent *entry;
+	struct stat st;
+	DIR *dir;
+	int rc = 0;
+
+	if (lstat(path, &st))
+		return errno == ENOENT ? 0 : -errno;
+	if (!S_ISDIR(st.st_mode))
+		return unlink(path) ? -errno : 0;
+	dir = opendir(path);
+	if (!dir)
+		return -errno;
+	while ((entry = readdir(dir))) {
+		char child[PATH_MAX];
+
+		if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))
+			continue;
+		if (strsprintf(child, sizeof(child), "%s/%s", path,
+			       entry->d_name) < 0) {
+			rc = -ENAMETOOLONG;
+			break;
+		}
+		rc = build_remove_tree(child);
+		if (rc)
+			break;
+	}
+	closedir(dir);
+	if (!rc && rmdir(path))
+		rc = -errno;
+	return rc;
+}
+
 static void build_stage_close(struct bpm_build_spec *spec)
 {
 	char object[PATH_MAX + 8];
@@ -798,7 +1110,7 @@ static void build_stage_close(struct bpm_build_spec *spec)
 		unlink(u->load_path);
 		unlink(u->unload_path);
 	}
-	rmdir(spec->stage);
+	build_remove_tree(spec->stage);
 }
 
 /*
@@ -807,7 +1119,9 @@ static void build_stage_close(struct bpm_build_spec *spec)
  */
 static int build_upatches(struct bpm_build_spec *spec, const char *pkey,
 			  const char *cert, const char *vmlinux_override,
-			  const char *shirudo_bpf_incdir)
+			  const char *shirudo_bpf_incdir,
+			  const struct bpm_build_input_override *overrides,
+			  size_t n_overrides, bool update)
 {
 	const char *vmlinux_h = vmlinux_override;
 
@@ -862,6 +1176,10 @@ static int build_upatches(struct bpm_build_spec *spec, const char *pkey,
 			unlink(object);
 		if (rc)
 			return rc < 0 ? rc : -EIO;
+		rc = build_rodata_apply(spec, u, load, pkey, cert, overrides,
+					n_overrides, update);
+		if (rc)
+			return rc;
 		if (upatch_open(load, &parsed))
 			return -EINVAL;
 		if (upatch_is_unload(&parsed) || !parsed.hdr.name[0]) {
@@ -1139,7 +1457,8 @@ static void build_usage(void)
 		"usage: shirudo bpm build [context] --version <version>\n"
 		"       shirudo bpm build [context] -f <name>.bee --version <version>\n"
 		"                              [--keys-dir <dir>]\n"
-		"                              [--vmlinux <vmlinux.h>]\n\n"
+		"                              [--vmlinux <vmlinux.h>]\n"
+		"                              [--rodata-input <name>=<path>]...\n\n"
 		"Builds a signed .bee package from a Beefile. The build command\n"
 		"is available only in shirudo-operator and requires signing keys.\n");
 }
@@ -1148,6 +1467,8 @@ static int shirudo_build_bpm_build(int argc, char **argv)
 {
 	const char *context = ".", *file_arg = NULL, *version = NULL;
 	const char *keys_arg = NULL, *vmlinux_arg = NULL;
+	struct bpm_build_input_override overrides[BPM_BUILD_MAX_ENTRIES] = {};
+	size_t n_overrides = 0;
 	const char *vmlinux_override = NULL;
 	const char *shirudo_bpf_incdir = NULL;
 	char build_file[PATH_MAX], resolved_file[PATH_MAX];
@@ -1191,6 +1512,36 @@ static int shirudo_build_bpm_build(int argc, char **argv)
 			vmlinux_arg = argv[i];
 		} else if (!strncmp(argv[i], "--vmlinux=", 10)) {
 			vmlinux_arg = argv[i] + 10;
+		} else if (!strcmp(argv[i], "--rodata-input")) {
+			const char *value;
+			const char *eq;
+			char path[PATH_MAX];
+			struct stat st;
+			size_t name_len;
+
+			if (++i >= argc || n_overrides == ARRAY_SIZE(overrides))
+				goto usage;
+			value = argv[i];
+			eq = strchr(value, '=');
+			if (!eq || eq == value || !eq[1])
+				goto usage;
+			name_len = (size_t)(eq - value);
+			if (name_len >= sizeof(overrides[0].name))
+				goto usage;
+			memcpy(overrides[n_overrides].name, value, name_len);
+			overrides[n_overrides].name[name_len] = '\0';
+			for (size_t j = 0; j < n_overrides; j++)
+				if (!strcmp(overrides[j].name,
+					    overrides[n_overrides].name))
+					goto usage;
+			if (!realpath(eq + 1, path))
+				return -errno;
+			if (stat(path, &st) || !S_ISREG(st.st_mode))
+				return -EINVAL;
+			if (strscpy(overrides[n_overrides].path, path,
+				    sizeof(overrides[n_overrides].path)) < 0)
+				return -ENAMETOOLONG;
+			n_overrides++;
 		} else if (argv[i][0] == '-') {
 			goto usage;
 		} else if (++positional == 1) {
@@ -1254,11 +1605,14 @@ static int shirudo_build_bpm_build(int argc, char **argv)
 		goto out;
 	rc = bpm_build_parse_beefile(body, body_len, spec);
 	if (!rc)
-		rc = build_validate(spec);
+		rc = build_validate(spec, false);
 	if (rc) {
 		pr_err("bpm build: %s is not a valid Beefile", resolved_file);
 		goto out;
 	}
+	rc = build_rodata_overrides_known(spec, overrides, n_overrides);
+	if (rc)
+		goto out;
 	if (cert_read_file(cert_path, &cert)) {
 		rc = -ENOENT;
 		goto out;
@@ -1279,7 +1633,7 @@ static int shirudo_build_bpm_build(int argc, char **argv)
 	if (rc)
 		goto out_cert;
 	rc = build_upatches(spec, pkey, cert_path, vmlinux_override,
-			    shirudo_bpf_incdir);
+			    shirudo_bpf_incdir, overrides, n_overrides, false);
 	if (!rc)
 		rc = build_archive(spec, version, cert_path, fingerprint, out_dir);
 	build_stage_close(spec);
@@ -1295,11 +1649,479 @@ usage:
 	return -EINVAL;
 }
 
+static int build_copy_package_member(const char *package, const char *member,
+				     const char *output)
+{
+	__u8 *body = NULL;
+	char parent[PATH_MAX];
+	size_t len = 0;
+	char *slash;
+	int fd = -1;
+	int rc;
+
+	rc = bpm_pkg_read_member(package, member, &body, &len,
+				 BPM_BUILD_MAX_FILE);
+	if (rc)
+		return rc;
+	if (strscpy(parent, output, sizeof(parent)) < 0) {
+		rc = -ENAMETOOLONG;
+		goto out;
+	}
+	slash = strrchr(parent, '/');
+	if (slash) {
+		char *p;
+		struct stat st;
+
+		*slash = '\0';
+		for (p = parent + (parent[0] == '/'); ; p++) {
+			if (*p != '/' && *p != '\0')
+				continue;
+			{
+				char saved = *p;
+
+				*p = '\0';
+				if (mkdir(parent, 0700) && errno != EEXIST) {
+					rc = -errno;
+					goto out;
+				}
+				if (lstat(parent, &st)) {
+					rc = -errno;
+					goto out;
+				}
+				if (!S_ISDIR(st.st_mode)) {
+					rc = -ENOTDIR;
+					goto out;
+				}
+				*p = saved;
+			}
+			if (!*p)
+				break;
+		}
+	}
+	fd = open(output, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+	if (fd < 0) {
+		rc = -errno;
+		goto out;
+	}
+	rc = write_complete(fd, body, len);
+	if (!rc && fsync(fd))
+		rc = -errno;
+out:
+	if (fd >= 0)
+		close(fd);
+	if (body)
+		xfree(body, len + 1);
+	return rc;
+}
+
+static int build_download_package(const char *reference, char *path)
+{
+	struct bpm_oci_client client = {};
+	struct bpm_descriptor layers[8] = {};
+	struct bpm_buffer manifest = {};
+	char repository[BPM_MAX_ENDPOINT], tag[BPM_MAX_NAME];
+	char url[PATH_MAX], digest[BPM_MAX_DIGEST];
+	__u8 *body = NULL;
+	size_t body_len = 0;
+	int n_layers = 0, fd = -1, rc;
+
+	rc = bpm_oci_parse_pull_ref(reference, &client, repository,
+				    sizeof(repository), tag, sizeof(tag));
+	if (rc)
+		return rc;
+	rc = bpm_oci_url(&client, repository, "manifests", tag, url,
+			 sizeof(url));
+	if (rc)
+		return rc;
+	rc = bpm_oci_get_memory(&client, url, BPM_MANIFEST_MEDIA, &manifest);
+	if (rc)
+		goto out;
+	rc = bpm_oci_parse_manifest(manifest.data, manifest.len, layers,
+				    ARRAY_SIZE(layers), &n_layers, NULL, 0);
+	if (rc)
+		goto out;
+	for (int i = 0; i < n_layers; i++) {
+		if (strcmp(layers[i].media, BPM_PACKAGE_MEDIA))
+			continue;
+		rc = bpm_oci_url(&client, repository, "blobs", layers[i].digest,
+				 url, sizeof(url));
+		if (rc)
+			goto out;
+		fd = mkstemp(path);
+		if (fd < 0) {
+			rc = -errno;
+			goto out;
+		}
+		if (close(fd)) {
+			rc = -errno;
+			fd = -1;
+			goto out;
+		}
+		fd = -1;
+		rc = bpm_oci_get_file(&client, url, BPM_PACKAGE_MEDIA, path,
+				      layers[i].size);
+		if (rc)
+			goto out;
+		rc = build_read_file(path, &body, &body_len, BPM_BUILD_MAX_FILE);
+		if (rc)
+			goto out;
+		rc = bpm_sha256_hex(body, body_len, digest, sizeof(digest));
+		if (!rc && !bpm_digest_matches(layers[i].digest, digest))
+			rc = -EKEYREJECTED;
+		goto out;
+	}
+	if (!rc)
+		rc = -ENOENT;
+out:
+	if (fd >= 0)
+		close(fd);
+	if (rc)
+		unlink(path);
+	if (body)
+		xfree(body, body_len + 1);
+	bpm_buffer_free(&manifest);
+	return rc;
+}
+
+int shirudo_build_bpm_config_update(int argc, char **argv)
+{
+	const char *file_arg = NULL, *base_arg = NULL;
+	const char *version = NULL, *keys_arg = NULL;
+	struct bpm_build_input_override overrides[BPM_BUILD_MAX_ENTRIES] = {};
+	size_t n_overrides = 0;
+	char build_file[PATH_MAX], resolved_file[PATH_MAX], source_dir[PATH_MAX];
+	char base_package[PATH_MAX], base_package_tmp[] =
+		"/tmp/shirudo-bpm-base-XXXXXX";
+	char keys_dir[PATH_MAX], keys_abs[PATH_MAX];
+	char out_dir[PATH_MAX], pkey[PATH_MAX], cert_path[PATH_MAX];
+	char fingerprint[SHIRUDO_CRYPTO_SHA256_LEN * 2 + 1];
+	__u8 digest[SHIRUDO_CRYPTO_SHA256_LEN], *body = NULL;
+	struct shirudo_cert cert = {};
+	struct bpm_package_info base_info = {};
+	struct bpm_build_spec *spec;
+	size_t body_len = 0;
+	int rc;
+	bool has_rodata = false, package_source, stage_open = false;
+	bool downloaded_package = false;
+
+	for (int i = 1; i < argc; i++) {
+		if (shirudo_build_is_help(argv[i])) {
+			fprintf(stdout,
+				"usage: shirudo bpm config update "
+				"--base-package <package.bee|oci://host/repo:tag> "
+				"--version <version> "
+				"[-f <name>.bee] [--rodata-input <name>=<path>]...\n"
+				"Without -f, the Beefile and updater inputs come from "
+				"--base-package and are trusted as operator-side code.\n");
+			return 0;
+		} else if (!strcmp(argv[i], "-f") ||
+			   !strcmp(argv[i], "--file")) {
+			if (++i >= argc)
+				goto usage;
+			file_arg = argv[i];
+		} else if (!strcmp(argv[i], "--base-package")) {
+			if (++i >= argc)
+				goto usage;
+			base_arg = argv[i];
+		} else if (!strcmp(argv[i], "--version")) {
+			if (++i >= argc)
+				goto usage;
+			version = argv[i];
+		} else if (!strcmp(argv[i], "--keys-dir")) {
+			if (++i >= argc)
+				goto usage;
+			keys_arg = argv[i];
+		} else if (!strcmp(argv[i], "--rodata-input")) {
+			const char *value, *eq;
+			char path[PATH_MAX];
+			struct stat st;
+			size_t name_len;
+
+			if (++i >= argc || n_overrides == ARRAY_SIZE(overrides))
+				goto usage;
+			value = argv[i];
+			eq = strchr(value, '=');
+			if (!eq || eq == value || !eq[1])
+				goto usage;
+			name_len = (size_t)(eq - value);
+			if (name_len >= sizeof(overrides[0].name))
+				goto usage;
+			memcpy(overrides[n_overrides].name, value, name_len);
+			overrides[n_overrides].name[name_len] = '\0';
+			for (size_t j = 0; j < n_overrides; j++)
+				if (!strcmp(overrides[j].name,
+					    overrides[n_overrides].name))
+					goto usage;
+			if (!realpath(eq + 1, path))
+				return -errno;
+			if (stat(path, &st) || !S_ISREG(st.st_mode))
+				return -EINVAL;
+			if (strscpy(overrides[n_overrides].path, path,
+				    sizeof(overrides[n_overrides].path)) < 0)
+				return -ENAMETOOLONG;
+			n_overrides++;
+		} else {
+			goto usage;
+		}
+	}
+	if (!base_arg || !version || !build_version_ok(version))
+		goto usage;
+	if (!strncmp(base_arg, "oci://", 6)) {
+		rc = build_download_package(base_arg, base_package_tmp);
+		if (rc)
+			return rc;
+		if (strscpy(base_package, base_package_tmp,
+			    sizeof(base_package)) < 0) {
+			unlink(base_package_tmp);
+			return -ENAMETOOLONG;
+		}
+		downloaded_package = true;
+	} else if (!realpath(base_arg, base_package)) {
+		goto usage;
+	}
+	rc = bpm_pkg_load_info(base_package, &base_info);
+	if (rc)
+		goto out_base;
+	if (bpm_semver_compare(version, base_info.version) <= 0) {
+		rc = -EINVAL;
+		goto out_base;
+	}
+	if (!getcwd(out_dir, sizeof(out_dir))) {
+		rc = -errno;
+		goto out_base;
+	}
+	if (!build_resolve_keys_dir(keys_arg, keys_dir, sizeof(keys_dir)) ||
+	    !realpath(keys_dir, keys_abs)) {
+		rc = -ENOENT;
+		goto out_base;
+	}
+	rc = key_paths(keys_abs, pkey, sizeof(pkey), cert_path,
+		       sizeof(cert_path));
+	if (rc)
+		goto out_base;
+	if (shirudo_build_check_keys(pkey, cert_path))
+		goto key_error;
+	package_source = !file_arg;
+	spec = xmalloc(sizeof(*spec));
+	if (!spec)
+		goto alloc_error;
+	if (package_source) {
+		rc = build_stage_open(spec);
+		if (rc)
+			goto out;
+		stage_open = true;
+		if (strsprintf(source_dir, sizeof(source_dir), "%s/source",
+			       spec->stage) < 0) {
+			rc = -ENAMETOOLONG;
+			goto out;
+		}
+		if (mkdir(source_dir, 0700)) {
+			rc = -errno;
+			goto out;
+		}
+		if (strsprintf(build_file, sizeof(build_file), "%s/Beefile",
+			       source_dir) < 0) {
+			rc = -ENAMETOOLONG;
+			goto out;
+		}
+		rc = build_copy_package_member(base_package, "Beefile", build_file);
+		if (rc == -ENOENT) {
+			pr_err("bpm config update: base package %s has no Beefile; "
+			       "rebuild it with a Beefile or pass -f <name>.bee",
+			       base_package);
+			rc = -EINVAL;
+		}
+		if (rc)
+			goto out;
+	} else if (strscpy(build_file, file_arg, sizeof(build_file)) < 0) {
+		rc = -ENAMETOOLONG;
+		goto out;
+	}
+	if (!realpath(build_file, resolved_file)) {
+		rc = -errno;
+		goto out;
+	}
+	strscpy(spec->scope, resolved_file, sizeof(spec->scope));
+	{
+		char *slash = strrchr(spec->scope, '/');
+
+		if (!slash) {
+			rc = -EINVAL;
+			goto out;
+		}
+		*slash = '\0';
+	}
+	rc = build_read_file(resolved_file, &body, &body_len,
+			     BPM_BUILD_MAX_FILE);
+	if (rc)
+		goto out;
+	rc = bpm_build_parse_beefile(body, body_len, spec);
+	if (!rc && package_source) {
+		for (size_t i = 0; i < spec->n_files && !rc; i++) {
+			char output[PATH_MAX];
+
+			if (build_target_ok(spec->files[i].source) ||
+			    build_target_ok(spec->files[i].target)) {
+				rc = -EINVAL;
+				break;
+			}
+			if (build_join(output, sizeof(output), spec->scope,
+				       spec->files[i].source)) {
+				rc = -ENAMETOOLONG;
+				break;
+			}
+			rc = build_copy_package_member(base_package,
+						       spec->files[i].target,
+						       output);
+		}
+		if (!rc) {
+			char readme[PATH_MAX];
+
+			if (build_join(readme, sizeof(readme), spec->scope,
+				       "README.md")) {
+				rc = -ENAMETOOLONG;
+			} else {
+				rc = build_copy_package_member(base_package,
+							       "README.md", readme);
+				if (rc == -ENOENT)
+					rc = 0;
+			}
+		}
+	}
+	if (!rc)
+		rc = build_validate(spec, package_source);
+	if (!rc)
+		rc = build_rodata_overrides_known(spec, overrides, n_overrides);
+	if (!rc && strcmp(spec->name, base_info.name))
+		rc = -EINVAL;
+	for (size_t i = 0; !rc && i < spec->n_upatches; i++)
+		if (spec->upatches[i].n_rodata)
+			has_rodata = true;
+	if (!rc && !has_rodata)
+		rc = -EINVAL;
+	if (rc)
+		goto out;
+	if (cert_read_file(cert_path, &cert)) {
+		rc = -ENOENT;
+		goto out_cert;
+	}
+	rc = cert_pubkey_digest(&cert, digest);
+	if (rc)
+		goto out_cert;
+	hex_encode(digest, sizeof(digest), fingerprint);
+	if (strcmp(fingerprint, base_info.signer)) {
+		rc = -EKEYREJECTED;
+		goto out_cert;
+	}
+	if (chdir(spec->scope)) {
+		rc = -errno;
+		goto out_cert;
+	}
+	if (!stage_open) {
+		rc = build_stage_open(spec);
+		if (rc)
+			goto out_cert;
+		stage_open = true;
+	}
+	for (size_t i = 0; i < spec->n_upatches && !rc; i++) {
+		struct bpm_build_upatch *upatch = &spec->upatches[i];
+		char load[PATH_MAX], unload[PATH_MAX];
+		char expected_name[SHIRUDO_UPATCH_NAME_MAX];
+		struct shirudo_upatch parsed = {};
+		__u8 payload[SHIRUDO_CRYPTO_SHA256_LEN];
+
+		if (strsprintf(load, sizeof(load), "%s/update-%zu.upatch",
+			       spec->stage, i) < 0 ||
+		    strsprintf(unload, sizeof(unload), "%s/update-%zu.unload.upatch",
+			       spec->stage, i) < 0) {
+			rc = -ENAMETOOLONG;
+			break;
+		}
+		rc = build_copy_package_member(base_package, upatch->load_target,
+					       load);
+		if (rc)
+			break;
+		rc = shirudo_build_package_verify(load, cert_path);
+		if (rc)
+			break;
+		build_upatch_name(upatch->source, expected_name,
+				  sizeof(expected_name));
+		rc = upatch_open(load, &parsed);
+		if (rc)
+			break;
+		if (upatch_is_unload(&parsed) ||
+		    strcmp(parsed.hdr.name, expected_name)) {
+			rc = -EINVAL;
+			upatch_close(&parsed);
+			break;
+		}
+		upatch_close(&parsed);
+		rc = build_rodata_apply(spec, upatch, load, pkey, cert_path,
+					overrides, n_overrides, true);
+		if (rc)
+			break;
+		rc = upatch_open(load, &parsed);
+		if (rc)
+			break;
+		if (upatch_is_unload(&parsed)) {
+			rc = -EINVAL;
+			upatch_close(&parsed);
+			break;
+		}
+		strscpy(upatch->name, parsed.hdr.name, sizeof(upatch->name));
+		memcpy(payload, parsed.hdr.payload_sha256, sizeof(payload));
+		hex_encode(payload, sizeof(payload), upatch->payload_sha256);
+		strscpy(upatch->type, upatch_type_str(&parsed),
+			sizeof(upatch->type));
+		upatch_close(&parsed);
+		strscpy(upatch->load_path, load, sizeof(upatch->load_path));
+		strscpy(upatch->unload_path, unload, sizeof(upatch->unload_path));
+		rc = shirudo_build_package_unload(upatch->name, payload, unload,
+						  pkey, cert_path);
+	}
+	if (!rc)
+		rc = build_archive(spec, version, cert_path, fingerprint, out_dir);
+out_cert:
+	cert_free(&cert);
+out:
+	if (stage_open) {
+		if (chdir(out_dir) && !rc)
+			rc = -errno;
+		build_stage_close(spec);
+	}
+	if (body)
+		xfree(body, body_len + 1);
+	bpm_build_spec_free(spec);
+	goto out_base;
+key_error:
+	rc = -EACCES;
+	goto out_base;
+alloc_error:
+	rc = -ENOMEM;
+out_base:
+	if (base_info.cert)
+		xfree(base_info.cert, base_info.cert_len + 1);
+	if (downloaded_package)
+		unlink(base_package);
+	return rc;
+usage:
+	fprintf(stderr,
+		"usage: shirudo bpm config update --base-package "
+		"<package.bee|oci://host/repo:tag> --version <version> "
+		"[-f <name>.bee] "
+		"[--rodata-input <name>=<path>]... [--keys-dir <dir>]\n");
+	return -EINVAL;
+}
+
 static void bpm_usage(FILE *fp)
 {
 	fprintf(fp,
 		"usage: shirudo bpm build [context] --version <version> [-f <name>.bee]\n"
 		"                         [--keys-dir <dir>] [--vmlinux <vmlinux.h>]\n"
+		"                         [--rodata-input <name>=<path>]...\n"
+		"       shirudo bpm config update --base-package <package.bee|oci://...>\n"
+		"                         --version <version> [-f <name>.bee]\n"
+		"                         [--rodata-input <name>=<path>]...\n"
 		"       shirudo bpm push <package-file> <repository> [--keys-dir <dir> |\n"
 		"                        --index-cert <cert.der> --index-key <key.pem>]\n"
 		"       shirudo bpm tree append <package-file> <repository> [options]\n\n"
@@ -1325,6 +2147,13 @@ int shirudo_build_bpm(int argc, char **argv)
 		rc = shirudo_build_bpm_build(argc - 1, argv + 1);
 		if (rc < 0 && rc != -EINVAL)
 			pr_err("bpm build: %s", strerror(-rc));
+		return rc ? 1 : 0;
+	}
+	if (!strcmp(argv[1], "config") && argc >= 3 &&
+	    !strcmp(argv[2], "update")) {
+		rc = shirudo_build_bpm_config_update(argc - 2, argv + 2);
+		if (rc < 0 && rc != -EINVAL)
+			pr_err("bpm config update: %s", strerror(-rc));
 		return rc ? 1 : 0;
 	}
 	if (!strcmp(argv[1], "push"))

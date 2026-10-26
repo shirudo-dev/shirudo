@@ -83,7 +83,7 @@ offset      size  type    field                  meaning
 336         4     u32     log_buf_sz             verifier-log buffer size to allocate at load
 340         4     u32     nr_maps                gen_loader bpf_map_desc count
 344         4     u32     nr_progs               gen_loader bpf_prog_desc count
-348         4     u32     reserved0              zero
+348         4     u32     rodata_data_off        ``.rodata`` initial value offset in ``data``
 352         4     u32     type                   ``1`` = BPF
 356         4     u32     reserved1              zero
 ==========  ====  ======  =====================  ===========================================
@@ -328,17 +328,19 @@ signed.  The integrity model is therefore:
 8) Versioning and compatibility
 -------------------------------
 
-``version`` is ``1``.  The format grows additively without a version
-bump:
+``version`` is ``1``.  The header's ``rodata_data_off`` field gives the
+offset within ``data`` of the initial ``.rodata`` value.  Writers derive
+it from the generated loader and readers check it against the BTF section
+size and data bounds.  The field is outside the loader signature and
+serves as a location hint for offline rewriting; the signed BTF remains
+authoritative for symbol offsets and sizes.
 
 - a signed decoder blob may be appended inside ``data`` and located by
-  the trailer at its end.  Older loaders ignore the additional bytes;
-  older readers treat them as opaque loader data;
-- the 360-byte header includes ``type`` and ``reserved1`` after
-  ``reserved0``;
-- ``reserved0`` and ``reserved1`` are zero in every file a writer
-  emits; a reader rejects a file in which ``reserved0`` is not, so the
-  slot can be given a meaning later without a flag day.
+  the trailer at its end.  Loaders ignore the additional bytes;
+  readers treat them as opaque loader data;
+- the 360-byte header includes ``rodata_data_off``, ``type`` and
+  ``reserved1``;
+- ``reserved1`` is zero in every file a writer emits.
 
 A reader must reject a file whose ``magic`` or ``version`` does not
 match, before trusting any offset.
@@ -352,8 +354,8 @@ match, before trusting any offset.
 2. ``magic`` and ``version`` match;
 3. each section ``(off, len)`` lies within the file, and any non-empty
    section starts at or after the 360-byte header;
-4. ``loader_insns_len`` and ``signature_len`` are non-zero, and
-   ``reserved0`` and ``reserved1`` are zero;
+4. ``loader_insns_len`` and ``signature_len`` are non-zero,
+   ``rodata_data_off`` is within ``data``, and ``reserved1`` is zero;
 5. decoders are parsed only if ``data`` ends with a matching trailer,
    all blob and entry bounds fit, fixed strings are NUL-terminated, and
    every source range stays inside the blob.  Malformed decoder

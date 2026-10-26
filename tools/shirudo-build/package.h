@@ -30,6 +30,11 @@ int shirudo_build_package_resign(const char *original,
 				 const struct shirudo_data_range *ranges,
 				 size_t nr_ranges, const char *pkey_path,
 				 const char *cert_path);
+int shirudo_build_package_patch_rodata(const char *input, const char *output,
+				       const char *symbol, const __u8 *value,
+				      size_t value_len, const char *pkey_path,
+				      const char *cert_path);
+int shirudo_build_package_verify(const char *input, const char *cert_path);
 int shirudo_build_upatch_cli(int argc, char **argv);
 
 #endif /* SHIRUDO_BUILD_PACKAGE_H */

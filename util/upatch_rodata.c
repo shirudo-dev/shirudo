@@ -296,22 +296,52 @@ static int btf_rodata_btf(const struct shirudo_upatch *u,
 	if (!found)
 		return -ENOENT;
 	view->btf = found;
+	if (u->rodata_offset_valid) {
+		const struct btf_type *sec = btf__type_by_id(found, found_id);
+		__u32 size = sec ? sec->size : 0;
+
+		if (!size || u->hdr.rodata_data_off > u->hdr.data_len ||
+		    size > u->hdr.data_len - u->hdr.rodata_data_off) {
+			btf__free(found);
+			view->btf = NULL;
+			return -EINVAL;
+		}
+	view->bytes = (const __u8 *)upatch_data(u) +
+			u->hdr.rodata_data_off;
+		view->data_offset = u->hdr.rodata_data_off;
+		view->size = size;
+		view->type_id = found_id;
+		return 0;
+	}
 	return find_rodata_data(u, found, found_id, view);
 }
 
-int upatch_rodata_watch_ranges(const struct shirudo_upatch *u,
-			       struct shirudo_rodata_range ranges[2])
+int upatch_rodata_data_offset(const struct shirudo_upatch *u, __u32 *offset)
 {
-	static const char *const names[] = {
-		"obs_watch_v4", "obs_watch_v6",
-	};
+	struct rodata_view view = {};
+	int rc;
+
+	if (!u || !offset)
+		return -EINVAL;
+	rc = btf_rodata_btf(u, &view);
+	if (!rc)
+		*offset = view.data_offset;
+	btf__free(view.btf);
+	return rc;
+}
+
+int upatch_rodata_symbol_range(const struct shirudo_upatch *u,
+			       const char *symbol,
+			       struct shirudo_rodata_range *range)
+{
 	struct rodata_view view = {};
 	const struct btf_type *sec;
 	const struct btf_var_secinfo *vars;
-	__u32 found = 0, i;
+	bool found = false;
+	__u32 i;
 	int rc;
 
-	if (!u || !ranges)
+	if (!u || !symbol || !symbol[0] || !range)
 		return -EINVAL;
 	rc = btf_rodata_btf(u, &view);
 	if (rc) {
@@ -327,7 +357,7 @@ int upatch_rodata_watch_ranges(const struct shirudo_upatch *u,
 	for (i = 0; i < BTF_INFO_VLEN(sec->info); i++) {
 		const struct btf_type *var;
 		const char *name;
-		__u32 j, offset, size;
+		__u32 offset, size;
 
 		var = btf__type_by_id(view.btf, vars[i].type);
 		if (!var || BTF_INFO_KIND(var->info) != BTF_KIND_VAR)
@@ -335,31 +365,42 @@ int upatch_rodata_watch_ranges(const struct shirudo_upatch *u,
 		name = btf__name_by_offset(view.btf, var->name_off);
 		if (!name)
 			continue;
-		for (j = 0; j < ARRAY_SIZE(names); j++) {
-			if (strcmp(name, names[j]))
-				continue;
-			if (found & (1u << j)) {
-				rc = -EEXIST;
-				goto out;
-			}
-			offset = vars[i].offset;
-			size = vars[i].size;
-			if (offset > view.size || size > view.size - offset ||
-			    view.data_offset > u->hdr.data_len ||
-			    offset > u->hdr.data_len - view.data_offset ||
-			    size > u->hdr.data_len - view.data_offset - offset) {
-				rc = -EINVAL;
-				goto out;
-			}
-			ranges[j].offset = view.data_offset + offset;
-			ranges[j].size = size;
-			found |= 1u << j;
+		if (strcmp(name, symbol))
+			continue;
+		if (found) {
+			rc = -EEXIST;
+			goto out;
 		}
+		offset = vars[i].offset;
+		size = vars[i].size;
+		if (offset > view.size || size > view.size - offset ||
+		    view.data_offset > u->hdr.data_len ||
+		    offset > u->hdr.data_len - view.data_offset ||
+		    size > u->hdr.data_len - view.data_offset - offset) {
+			rc = -EINVAL;
+			goto out;
+		}
+		range->offset = view.data_offset + offset;
+		range->size = size;
+		found = true;
 	}
-	rc = found == (1u << ARRAY_SIZE(names)) - 1 ? 0 : -ENOENT;
+	rc = found ? 0 : -ENOENT;
 out:
 	btf__free(view.btf);
 	return rc;
+}
+
+int upatch_rodata_watch_ranges(const struct shirudo_upatch *u,
+			       struct shirudo_rodata_range ranges[2])
+{
+	int rc;
+
+	if (!ranges)
+		return -EINVAL;
+	rc = upatch_rodata_symbol_range(u, "obs_watch_v4", &ranges[0]);
+	if (rc)
+		return rc;
+	return upatch_rodata_symbol_range(u, "obs_watch_v6", &ranges[1]);
 }
 
 static __u32 btf_unwrap(const struct btf *btf, __u32 id)

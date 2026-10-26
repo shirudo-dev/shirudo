@@ -28,16 +28,6 @@ BTF_KIND_RESTRICT = 11
 BTF_KIND_VAR = 14
 BTF_KIND_DATASEC = 15
 BTF_KIND_TYPE_TAG = 18
-BPF_PSEUDO_MAP_IDX_VALUE = 6
-BPF_FUNC_SYS_BPF = 166
-BPF_MAP_CREATE = 0
-BPF_MAP_UPDATE_ELEM = 2
-BPF_LDDW = 0x18
-BPF_JMP_CALL = 0x85
-BPF_ALU64_MOV_IMM = 0xB7
-BPF_LDXW = 0x61
-BPF_STXW = 0x63
-BPF_STXDW = 0x7B
 
 
 class RewriteError(Exception):
@@ -235,131 +225,6 @@ def btf_name(types, name_off):
 	raise RewriteError("BTF string table is unavailable")
 
 
-def decode_insn(raw, index):
-	return struct.unpack_from("<BBhi", raw, index * 8)
-
-
-def lddw_offset(insns, index, reg):
-	if index + 1 >= len(insns):
-		return None
-	code, regs, off, imm = insns[index]
-	next_code, _, next_off, next_imm = insns[index + 1]
-	if (code != BPF_LDDW or regs & 0xf != reg or regs >> 4 !=
-	    BPF_PSEUDO_MAP_IDX_VALUE or off or imm or next_code or next_off):
-		return None
-	return next_imm & 0xffffffff
-
-
-def sys_bpf_call(insns, index):
-	if index < 4 or index >= len(insns):
-		return None
-	if insns[index][0] != BPF_JMP_CALL or insns[index][3] != BPF_FUNC_SYS_BPF:
-		return None
-	cmd = insns[index - 4]
-	attr_size = insns[index - 1]
-	if (cmd[0] != BPF_ALU64_MOV_IMM or cmd[1] != 1 or
-	    insns[index - 3][0] != BPF_LDDW or
-	    attr_size[0] != BPF_ALU64_MOV_IMM or attr_size[1] != 3):
-		return None
-	attr = lddw_offset(insns, index - 3, 2)
-	if attr is None:
-		return None
-	return cmd[3], attr, attr_size[3]
-
-
-def next_sys_bpf(insns, start):
-	for index in range(start, len(insns)):
-		if sys_bpf_call(insns, index):
-			return index
-	return len(insns)
-
-
-def map_create_slot(insns, call, end):
-	for index in range(call + 1, end - 2):
-		offset = lddw_offset(insns, index, 1)
-		if offset is None:
-			continue
-		code, regs, off, imm = insns[index + 2]
-		if (code == BPF_STXW and regs & 0xf == 1 and regs >> 4 == 7 and
-		    off == 0 and offset % 4 == 0):
-			return offset // 4
-	return None
-
-
-def map_update_slot(insns, call, attr):
-	start = max(0, call - 48)
-	for index in range(start, call - 5):
-		fd_array_offset = lddw_offset(insns, index, 2)
-		if fd_array_offset is None:
-			continue
-		code, regs, off, imm = insns[index + 2]
-		if (code != BPF_LDXW or regs & 0xf != 0 or regs >> 4 != 2 or off or
-		    lddw_offset(insns, index + 3, 1) != attr):
-			continue
-		code, regs, off, imm = insns[index + 5]
-		if (code == BPF_STXW and regs & 0xf == 1 and regs >> 4 == 0 and
-		    off == 0 and fd_array_offset % 4 == 0):
-			return fd_array_offset // 4
-	return None
-
-
-def map_update_value_offset(insns, call, attr):
-	start = max(0, call - 24)
-	for index in range(start, call - 4):
-		value_offset = lddw_offset(insns, index, 0)
-		if value_offset is None:
-			continue
-		if lddw_offset(insns, index + 2, 1) != attr + 16:
-			continue
-		code, regs, off, imm = insns[index + 4]
-		if (code == BPF_STXDW and regs & 0xf == 1 and regs >> 4 == 0 and
-		    off == 0):
-			return value_offset
-	return None
-
-
-def locate_rodata_data(loader, data_blob, datasec_size):
-	if len(loader) % 8:
-		raise RewriteError("loader instruction section has an invalid size")
-	insns = [decode_insn(loader, i) for i in range(len(loader) // 8)]
-	created = {}
-	for index, insn in enumerate(insns):
-		call = sys_bpf_call(insns, index)
-		if not call:
-			continue
-		cmd, attr_offset, attr_size = call
-		if attr_offset > len(data_blob) or attr_size > len(data_blob) - attr_offset:
-			raise RewriteError("loader BPF attribute is outside its data section")
-		if cmd == BPF_MAP_CREATE:
-			if attr_size < 44:
-				continue
-			map_name = data_blob[attr_offset + 28:attr_offset + 44]
-			map_name = map_name.split(b"\0", 1)[0].decode("ascii", "ignore")
-			if not map_name.endswith(".rodata"):
-				continue
-			slot = map_create_slot(insns, index,
-					       next_sys_bpf(insns, index + 1))
-			if slot is None:
-				raise RewriteError("cannot find the loader slot for .rodata")
-			value_size = struct.unpack_from("<I", data_blob,
-							attr_offset + 8)[0]
-			if value_size != datasec_size:
-				raise RewriteError(".rodata map size does not match BTF")
-			created[slot] = value_size
-		elif cmd == BPF_MAP_UPDATE_ELEM:
-			slot = map_update_slot(insns, index, attr_offset)
-			if slot not in created or created[slot] != datasec_size:
-				continue
-			value_offset = map_update_value_offset(insns, index, attr_offset)
-			if value_offset is None:
-				continue
-			if value_offset > len(data_blob) or \
-			    datasec_size > len(data_blob) - value_offset:
-				raise RewriteError(".rodata initializer is outside loader data")
-			return value_offset
-		raise RewriteError("loader has no initial .rodata map value")
-
-
 def encode_nodes(nodes, layout):
 	if len(nodes) > layout["count"]:
 		raise RewriteError(
@@ -400,7 +265,7 @@ def rewrite(args):
 		raise RewriteError("input is not a bounded .upatch file")
 	magic, version, flags = struct.unpack_from("<QII", artifact, 0)
 	if magic != 0x53485244554e4150 or version != 1 or flags & 1:
-		raise RewriteError("input must be a load upatch in version 1 format")
+		raise RewriteError("input must be a version 1 load upatch")
 	loader_off, loader_len, sig_off, sig_len, meta_off, meta_len, \
 		data_off, data_len = struct.unpack_from("<8I", artifact, 304)
 	if (loader_off > len(artifact) or loader_len > len(artifact) - loader_off or
@@ -411,12 +276,14 @@ def rewrite(args):
 		raise RewriteError("upatch section bounds are invalid")
 	data_blob = artifact[data_off:data_off + data_len]
 	types, variables = read_watch_arrays(data_blob)
+	rodata_offset = struct.unpack_from("<I", artifact, 348)[0]
 	datasec_id = next(i for i, typ in enumerate(types)
 			  if typ["kind"] == BTF_KIND_DATASEC and
 			  typ["name"] == ".rodata")
 	datasec_size = types[datasec_id]["size_type"]
-	rodata_offset = locate_rodata_data(
-		artifact[loader_off:loader_off + loader_len], data_blob, datasec_size)
+	if rodata_offset > len(data_blob) or \
+	    datasec_size > len(data_blob) - rodata_offset:
+		raise RewriteError(".rodata initializer is outside loader data")
 	networks = read_networks(Path(args.iplist))
 	new_data = bytearray(data_blob)
 	counts = {}
