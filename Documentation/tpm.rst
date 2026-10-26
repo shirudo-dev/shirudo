@@ -71,6 +71,13 @@ The write policy is ``PolicyOR(written, init)`` with two branches:
   ``leave-initrd``, so a register bound from the initrd can be bound by
   nothing that runs after it.
 
+Trusted initialization also provisions a boot-scoped RSA-3072 writer
+in a sealed kernel keyring and scrubs its temporary private-key copies.
+The frozen identity records its public key and key IDs.  The key guard
+permits signing only from tasks with authenticated runtime authority;
+this relies on trusted bootstrap and process integrity, not the public
+file label.  The writer survives switch-root and TPM resets in that boot.
+
 The index's TPM name is the SHA-256 of its public area (handle, name
 algorithm, attributes, policy digest, size), prefixed with the
 algorithm identifier ``000b``.  Because ``TPMA_NV_WRITTEN`` is part of

@@ -4,6 +4,8 @@
 #ifndef SHIRUDO_BPF_IDENTITY_H
 #define SHIRUDO_BPF_IDENTITY_H
 
+#include <shirudo/tpm.h>
+
 /* Frozen ABI shared with struct shirudo_identity in util/identity.h. */
 #define SHIRUDO_IDENTITY_KEYS_MAX	16
 
@@ -15,6 +17,9 @@ struct shirudo_sb_id {
 	__u32	n_keys;
 	__s32	key_serials[SHIRUDO_IDENTITY_KEYS_MAX];
 	__u8	runtime_root[32];
+	__s32	nv_writer_ring;
+	__s32	nv_writer_key;
+	__u8	nv_writer_public[SHIRUDO_TPM_NV_RSA_BYTES];
 };
 
 struct {

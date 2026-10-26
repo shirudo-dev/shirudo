@@ -172,6 +172,7 @@ UTIL_SRCS := \
     util/keyring.c \
     util/keys.c \
     util/identity.c \
+    util/nv_writer.c \
     util/tamper.c \
     util/initrd.c \
     util/paths.c \
@@ -360,9 +361,9 @@ build/target/%.o: %.c Makefile.shirudo $(CONFIG_MK)
 # and UAPI kernel headers from vendor/libbpf, and shirudo's own BPF
 # library headers from bpf/lib.
 bpf/%.bpf.o: bpf/%.c $(VMLINUX_H) $(BPF_LIBBPF_HEADERS) \
-              $(wildcard bpf/*.h bpf/lib/*.h)
+              $(wildcard bpf/*.h bpf/lib/*.h) include/shirudo/tpm.h
 	@printf '  CLANG   $@\n'
-	$(Q)$(CLANG_BPF) -Ibpf/lib -I$(dir $(VMLINUX_H)) -I$(LIBBPF_VENDOR) \
+	$(Q)$(CLANG_BPF) -Iinclude -Ibpf/lib -I$(dir $(VMLINUX_H)) -I$(LIBBPF_VENDOR) \
 	    -I$(BPF_UAPI_INCLUDE) \
 	    -c $< -o $@
 

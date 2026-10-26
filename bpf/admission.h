@@ -271,6 +271,31 @@ static __always_inline int shirudo_bpffs_guard(__u32 target_dev,
 }
 
 /*
+ * NV-key search can sign or invalidate even when possessed. Do not count
+ * search denials: ordinary keyring traversal probes use that permission.
+ */
+static __always_inline int handle_nv_sig_key(const struct shirudo_sb_id *id,
+					     enum key_need_perm need)
+{
+	if (need == KEY_NEED_VIEW || shirudo_task_is_self(id))
+		return 0;
+	if (need == KEY_NEED_SEARCH)
+		return -EACCES;
+	return shirudo_tamper_deny(SHIRUDO_TAMPER_KEYRING, -EACCES);
+}
+
+static __always_inline int handle_nv_keyring(const struct shirudo_sb_id *id,
+					     enum key_need_perm need)
+{
+	if (need == KEY_NEED_VIEW || need == KEY_NEED_READ ||
+	    shirudo_task_is_self(id))
+		return 0;
+	if (need == KEY_NEED_SEARCH)
+		return -EACCES;
+	return shirudo_tamper_deny(SHIRUDO_TAMPER_KEYRING, -EACCES);
+}
+
+/*
  * The trust anchor in the kernel's keyrings: the keyring init froze
  * and the keys it holds. Root owns the bpf keyring with write and
  * setattr permission, so without this hook a single keyctl could
@@ -293,6 +318,16 @@ int BPF_PROG(shirudo_lsm_key_permission, key_ref_t key_ref,
 
 	if (ret)
 		return ret;
+	id = bpf_map_lookup_elem(&shirudo_bpffs_sb, &zero);
+	if (!id)
+		return 0;
+	key = (struct key *)((unsigned long)key_ref & ~1UL);
+	serial = BPF_CORE_READ(key, serial);
+	if (serial == id->nv_writer_key)
+		return handle_nv_sig_key(id, need);
+	if (serial == id->nv_writer_ring)
+		return handle_nv_keyring(id, need);
+
 	switch (need) {
 	case KEY_NEED_WRITE:
 	case KEY_NEED_SEARCH:
@@ -302,12 +337,9 @@ int BPF_PROG(shirudo_lsm_key_permission, key_ref_t key_ref,
 	default:
 		return 0;
 	}
-	id = bpf_map_lookup_elem(&shirudo_bpffs_sb, &zero);
-	if (!id || id->keyring_serial == 0)
+	if (id->keyring_serial == 0)
 		return 0;
 	possessed = (unsigned long)key_ref & 1;
-	key = (struct key *)((unsigned long)key_ref & ~1UL);
-	serial = BPF_CORE_READ(key, serial);
 	if (serial != id->keyring_serial) {
 		for (i = 0; i < SHIRUDO_IDENTITY_KEYS_MAX; i++)
 			if (i < id->n_keys && id->key_serials[i] == serial)

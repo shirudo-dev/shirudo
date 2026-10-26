@@ -23,6 +23,7 @@ with tempfile.TemporaryDirectory(prefix="shirudo-seal-seccomp-") as directory:
     command += ["-target", "bpf", "-O2", "-g", "-Wall", "-Wextra", "-Werror",
                 "-Wno-missing-declarations", "-Wno-unused-parameter",
                 "-Wdeclaration-after-statement", "-I" + str(work),
+                "-I" + str(root / "include"),
                 "-I" + str(root / "bpf/lib"),
                 "-I" + str(root / "vendor/libbpf"),
                 "-I" + str(root / "vendor/libbpf/include/uapi"),

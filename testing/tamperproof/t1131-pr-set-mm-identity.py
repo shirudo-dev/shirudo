@@ -74,7 +74,10 @@ class ShirudoIdentity(ctypes.Structure):
                 ("keyring_type", ctypes.c_uint32),
                 ("n_keys", ctypes.c_uint32),
                 ("key_serials", ctypes.c_int32 * 16),
-                ("runtime_root", ctypes.c_uint8 * 32)]
+                ("runtime_root", ctypes.c_uint8 * 32),
+                ("nv_writer_ring", ctypes.c_int32),
+                ("nv_writer_key", ctypes.c_int32),
+                ("nv_writer_public", ctypes.c_uint8 * 384)]
 
 
 def assert_frozen_runtime():

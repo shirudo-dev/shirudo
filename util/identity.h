@@ -9,6 +9,7 @@
 #define SHIRUDO_UTIL_IDENTITY_H
 
 #include <shirudo/misc.h>
+#include <shirudo/tpm.h>
 
 /* The keyring kinds the kernel names in a verdict (enum bpf_sig_keyring). */
 #define SHIRUDO_SIG_KEYRING_BPF		5
@@ -25,6 +26,9 @@ struct shirudo_identity {
 	__u32	n_keys;
 	__s32	key_serials[SHIRUDO_IDENTITY_KEYS_MAX];
 	__u8	runtime_root[32];
+	__s32	nv_writer_ring;
+	__s32	nv_writer_key;
+	__u8	nv_writer_public[SHIRUDO_TPM_NV_RSA_BYTES];
 };
 
 #define SHIRUDO_TASK_TRUSTED	1
@@ -61,7 +65,7 @@ _Static_assert(sizeof(struct shirudo_device_authority) == 48,
 	       "device authority ABI");
 _Static_assert(sizeof(struct shirudo_task_authority) == 8,
 	       "task authority ABI");
-_Static_assert(sizeof(struct shirudo_identity) == 116,
+_Static_assert(sizeof(struct shirudo_identity) == 508,
 	       "frozen identity ABI");
 
 /*

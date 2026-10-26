@@ -495,6 +495,14 @@ test_expect_success 'the VM kernel is not built on an unsupported architecture' 
 		"$WORK/riscv64-kernel.out"
 '
 
+test_expect_success 'the kernel builder requires the NV writer parser and RSA support' '
+	for symbol in PKCS8_PRIVATE_KEY_PARSER CRYPTO_RSA; do
+		grep -qx "CONFIG_$symbol=y" ../contrib/build-kernel-package.sh &&
+		grep -qx "require_config CONFIG_$symbol y" ../contrib/build-kernel-package.sh ||
+			exit 1
+	done
+'
+
 test_expect_success 'all kernel and VM builds use the slim profile' '
 	! grep -Eq "^(kernel-small|vm-small|test-vm-small-bundle):" ../testing/Makefile &&
 	! grep -q "KERNEL_PROFILE" ../testing/Makefile ../contrib/build-kernel-package.sh &&

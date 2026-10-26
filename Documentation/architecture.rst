@@ -135,7 +135,8 @@ root and ``tools/shirudo-build`` on ``PATH``.  Without the helper,
 The target holds the certificate, the sealed keyring, the private bpffs
 mount, the installed upatches, the eventlog and the TPM register.  It runs
 ``init``, ``upatch load``, ``upatch unload`` and the install side of
-``bpm``.  The target never sees the private key and never signs.
+``bpm``.  The target never sees the operator's private key.  Its separate
+boot-scoped RSA key is held in the kernel for local register authorization.
 
 Delivery is pull-based.  The operator publishes a package to an OCI
 registry; the target pulls it on a timer or by hand, verifies the
@@ -318,6 +319,8 @@ otherwise detach everything. Named refusal points increment counters in
 a frozen map pinned beside the identity map
 (``bpf/lib/shirudo_tamper.h``); ``shirudo status`` reads it back. Device, parent-mount and process checks do not yet have counters. A refusal
 at an earlier image check therefore need not increment a shared counter.
+Search denials on NV keys are not counted: traversal probes use the
+same permission as signing and invalidation.
 
 Filesystem seal. Initialization labels existing state under
 ``/var/lib/shirudo/`` with ``security.bpf.shirudo``. The fixed 64-byte label
@@ -435,6 +438,14 @@ selection again, measures a fresh BOOT event and completes initialization;
 it never retries the previous boot's PCR extension. The
 `config-images <config-images.rst>`__ guide describes this flow and the
 deferred TPM writer limitation.
+
+The boot-scoped NV writer is separate from the operator's artifact key.
+Trusted initialization imports it into a sealed kernel keyring and freezes
+its public key and key IDs into the identity map.  The mandatory key guard
+permits signing only from tasks with authenticated runtime authority.
+The key survives switch-root and TPM resets within that
+kernel boot.  `The TPM design <tpm.rst#write-policy>`__ describes its
+key custody and trust assumptions.
 
 7) Target state
 ---------------

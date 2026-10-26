@@ -50,6 +50,7 @@
 #include "util/loader.h"
 #include "util/log.h"
 #include "util/malloc.h"
+#include "util/nv_writer.h"
 #include "util/paths.h"
 #include "util/preflight.h"
 #include "util/seal.h"
@@ -586,6 +587,14 @@ static int init_lsm(void)
 	struct stat st;
 
 	if (access(shirudo_gate_guards[SHIRUDO_GUARD_BPF].pin, F_OK) == 0) {
+		err = identity_read(&id);
+		if (err || id.nv_writer_ring <= 0 ||
+		    id.nv_writer_key <= 0 ||
+		    access(SHIRUDO_KEY_PERMISSION_LINK_PIN, F_OK)) {
+			pr_err("init: NV writer protection missing; reboot "
+			       "with the updated initrd");
+			return err ? err : -EACCES;
+		}
 		pr_info("bpf2 already attached (%s exists)",
 			shirudo_gate_guards[SHIRUDO_GUARD_BPF].pin);
 		return 0;
@@ -669,6 +678,13 @@ static int init_lsm(void)
 	}
 	id.n_keys = (__u32)keys.n;
 	memcpy(id.key_serials, keys.serials, keys.n * sizeof(keys.serials[0]));
+	err = nv_writer_create(&id.nv_writer_ring, &id.nv_writer_key, id.nv_writer_public);
+	if (err) {
+		pr_err("init: create RSA-3072 NV writer: %s "
+		       "(requires kernel PKCS#8 private-key and RSA support)",
+		       strerror(-err));
+		goto out;
+	}
 
 	m_sb = bpf_object__find_map_by_name(obj, "shirudo_bpffs_sb");
 	if (!m_sb) {
@@ -756,7 +772,6 @@ static int init_lsm(void)
 		pr_err("attach lsm/key_permission: %s", strerror(-err));
 		goto out;
 	}
-
 	/*
 	 * With the other bpffs guards, so the mount is immutable before
 	 * enforcement goes live.

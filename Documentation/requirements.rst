@@ -96,6 +96,11 @@ fixture.
    * - ``CONFIG_CRYPTO_SHA256``
      - ``excl_prog_hash``, ``payload_sha256``, the measurement register
        and the eventlog digests.
+   * - ``CONFIG_PKCS8_PRIVATE_KEY_PARSER=y``, ``CONFIG_CRYPTO_RSA=y``
+     - Import and RSASSA-PKCS1-v1_5/SHA-256 signing with the
+       kernel-held RSA-3072 NV writer key.  The TPM must also support
+       RSA-3072 public-key loading and RSASSA/SHA-256 verification;
+       there is no RSA-2048 or alternative-algorithm fallback.
    * - ``CONFIG_TCG_TPM`` plus a TPM driver (``CONFIG_TCG_TIS``,
        ``CONFIG_TCG_CRB``, or the platform's virtual TPM)
      - The measurement register and the attestation key.  A TPM 2.0 is
@@ -299,6 +304,11 @@ since the libguestfs appliance resolves names through DNS alone.
    * - TPM attestation
      - ECDSA P-256 (the attestation key); TPMs sign with nothing
        post-quantum today, so the evidence is classical.
+   * - NV write authorization
+     - RSA-3072 RSASSA-PKCS1-v1_5 with SHA-256 through
+       ``PolicySigned``.  The kernel holds the private key and shirudo
+       holds the public key in the frozen identity map to provision the TPM with
+       for each session.
    * - TLS (registries, OTLP and S3 export)
      - TLS 1.3 only with hybrid ML-KEM key exchange only
        (X25519MLKEM768, SecP256r1MLKEM768), on every libcurl client in

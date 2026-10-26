@@ -33,4 +33,45 @@ assert "bpf_real_data_inode" in inventory["seal"]["extern"]
 PYTEST
 '
 
+test_expect_success 'the PR_SET_MM fixture matches the native identity map ABI' '
+	python3 - <<"PYTEST"
+import ast
+import ctypes
+import os
+from pathlib import Path
+import shlex
+import subprocess
+import tempfile
+
+root = Path.cwd().parent
+path = root / "testing/tamperproof/t1131-pr-set-mm-identity.py"
+definition = next(node for node in ast.parse(path.read_text()).body
+                  if isinstance(node, ast.ClassDef) and node.name == "ShirudoIdentity")
+namespace = {"ctypes": ctypes}
+exec(compile(ast.Module(body=[definition], type_ignores=[]), str(path), "exec"), namespace)
+identity = namespace["ShirudoIdentity"]
+fields = [name for name, field_type in identity._fields_]
+source = "\n".join([
+    "#include <stddef.h>",
+    "#include <stdio.h>",
+    "#include \"util/identity.h\"",
+    "int main(void)",
+    "{",
+    "\tprintf(\"%zu\\n\", sizeof(struct shirudo_identity));",
+    *[f"\tprintf(\"%zu\\n\", offsetof(struct shirudo_identity, {name}));" for name in fields],
+    "\treturn 0;",
+    "}",
+])
+with tempfile.TemporaryDirectory(prefix="shirudo-identity-abi-") as directory:
+    binary = Path(directory) / "identity-layout"
+    command = shlex.split(os.environ.get("CC", "cc"))
+    command += ["-std=gnu11", "-I" + str(root), "-I" + str(root / "include"),
+                "-x", "c", "-", "-o", str(binary)]
+    subprocess.run(command, input=source, text=True, check=True)
+    actual = [int(value) for value in subprocess.check_output([binary], text=True).split()]
+expected = [ctypes.sizeof(identity)] + [getattr(identity, name).offset for name in fields]
+assert actual == expected, (actual, expected)
+PYTEST
+'
+
 test_done
