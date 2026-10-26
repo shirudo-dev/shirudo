@@ -123,8 +123,9 @@ this order:
 
 5. Append the ``init`` record to the eventlog (section 3) with both
    PCR values, whether the initrd was running, the written name, the
-   anchor and its digest, the register value and the TPM's reset
-   count.
+   anchor and its digest, the register value, the TPM's reset
+   count and ``nv_writer_public``: the 384-byte big-endian RSA modulus
+   in 768 hex digits, without a TPM header.  The exponent is fixed at 65537.
 
 The phase measurements are ``systemd-pcrphase-initrd.service``'s,
 which systemd runs only for a measured UKI boot; without them PCR 11
@@ -143,6 +144,8 @@ means this register period already has its binding.  A re-run of
 it and adds no event; finds it gone, unwritten or renamed, it refuses
 with ``tampered`` and binds nothing before the next TPM reset, because
 a second binding would restart the history the record vouches for.
+An absent or unreadable writer identity refuses as well.  Reuse and
+extension check the live policy, reset count and frozen writer identity.
 Without a record for the current count, whether the boot is new or
 the TPM was reset without a reboot, the index is bound; one found
 written by someone else first is undefined and bound again, with a
@@ -236,7 +239,8 @@ extension, written with ``fsync`` and sealed like everything under
     ``payload_sha256`` pairs), ``pcr`` (9), ``pcr_before``,
     ``phase_pcr`` (11), ``phase_before``, ``bound_in`` (``initrd`` or
     ``root``), ``nv_name`` (the written name), ``anchor``,
-    ``anchor_digest`` and ``chain`` (the register after the event).
+    ``anchor_digest``, ``chain`` (the register after the event) and
+    ``nv_writer_public`` (the boot writer's RSA modulus).
 
 ``upatch_load`` and ``upatch_unload``
     ``upatch`` with ``name`` and ``payload_sha256``; an unload a
@@ -478,9 +482,12 @@ not shirudo evidence exits 2.
 --event=tree:<seq>=<operation_digest>...]`` prints ``set_digest``,
 ``init_event``, ``register_at_boot`` and, with events,
 ``register_after_events``, from the same functions the target uses.
-With ``--bind-pcr=9=<hex> --bind-pcr=11=<hex>`` it also prints
+With ``--bind-pcr=9=<hex> --bind-pcr=11=<hex> --writer-public=<hex>``
+it also prints
 ``register_name``, the anchor string and ``pcr9_after_anchor``, so the
-name and PCR 9 can be pinned from values the operator knows.
+name and PCR 9 can be pinned from values the operator knows.  The writer
+input is the 768-digit ``nv_writer_public`` from the boot's init record;
+it is required together with both binding PCRs.
 
 ``shirudo attest challenge --evidence=<path> --out=<path>
 [--ek-ca=<bundle>]`` is described in section 4; it prints its checks,

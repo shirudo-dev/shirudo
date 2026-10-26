@@ -430,6 +430,7 @@ struct record {
 };
 
 struct init_record {
+	__u8		writer_public[SHIRUDO_TPM_NV_RSA_BYTES];
 	bool		present;
 	bool		have_reset_count;
 	bool		initrd;
@@ -446,6 +447,7 @@ struct init_record {
 };
 
 struct parse {
+	char		writer_public_hex[2 * SHIRUDO_TPM_NV_RSA_BYTES + 1];
 	char		nonce_hex[2 * SHIRUDO_ATTEST_NONCE_MAX + 1];
 	__s64		pcr_mask;
 	char		ak_public_hex[2 * SHIRUDO_TPM_PUBLIC_MAX + 1];
@@ -534,7 +536,9 @@ static int on_record(void *ctx)
 			       SHIRUDO_TPM_NAME_LEN) ||
 		    hex_decode(p->anchor_digest_hex, in->anchor_digest,
 			       32) ||
-		    hex_decode(p->chain_hex, in->chain, 32))
+		    hex_decode(p->chain_hex, in->chain, 32) ||
+		    hex_decode(p->writer_public_hex, in->writer_public,
+			       sizeof(in->writer_public)))
 			return -EINVAL;
 		memcpy(in->digest, r->digest, 32);
 		in->pcr = (__u32)p->rec_pcr;
@@ -604,6 +608,7 @@ static int on_record(void *ctx)
 	p->key_fingerprint[0] = '\0';
 	p->key_sha_hex[0] = '\0';
 	p->anchor[0] = '\0';
+	p->writer_public_hex[0] = '\0';
 	p->bound_in[0] = '\0';
 	p->tree_seq = 0;
 	p->rec_pcr = -1;
@@ -847,6 +852,9 @@ int attest_verify(const char *evidence, size_t len,
 			  sizeof(p->bound_in), 0, NULL, 0 },
 			{ "nv_name", SHIRUDO_JSON_T_STRING, p->nv_name_hex,
 			  sizeof(p->nv_name_hex), 0, NULL, 0 },
+			{ "nv_writer_public", SHIRUDO_JSON_T_STRING,
+			  p->writer_public_hex, sizeof(p->writer_public_hex),
+			  0, NULL, 0 },
 			{ "anchor", SHIRUDO_JSON_T_STRING, p->anchor,
 			  sizeof(p->anchor), 0, NULL, 0 },
 			{ "anchor_digest", SHIRUDO_JSON_T_STRING,
@@ -1100,8 +1108,13 @@ int attest_verify(const char *evidence, size_t len,
 	    SHIRUDO_NV_INDEX, SHIRUDO_CHAIN_PCR, SHIRUDO_CHAIN_PHASE_PCR);
 	memcpy(bind, p->init.pcr_before, 32);
 	memcpy(bind + 32, p->init.phase_before, 32);
-	tpm_register_policy(SHIRUDO_CHAIN_PCR_MASK, bind, 2,
-			    branch_written, branch_init, policy);
+	rc = tpm_register_policy(SHIRUDO_CHAIN_PCR_MASK, bind, 2,
+				 p->init.writer_public,
+				 branch_written, branch_init, policy);
+	if (rc) {
+		say(&rep, false, "register: cannot compute the signed write policy");
+		goto out;
+	}
 	tpm_nv_name(SHIRUDO_NV_INDEX,
 		    SHIRUDO_TPM_REGISTER_ATTRS | SHIRUDO_TPM_NV_WRITTEN,
 		    policy, 32, expected_name);

@@ -242,10 +242,11 @@ int tpm_register_policy_final(const __u8 branch_written[32],
 	return 0;
 }
 
-void tpm_register_policy(__u32 pcr_mask,
-			 const __u8 *pcr_values, size_t n_values,
-			 __u8 branch_written[32],
-			 __u8 branch_init[32], __u8 policy[32])
+int tpm_register_policy(__u32 pcr_mask,
+			const __u8 *pcr_values, size_t n_values,
+			const __u8 writer_public[SHIRUDO_TPM_NV_RSA_BYTES],
+			__u8 branch_written[32],
+			__u8 branch_init[32], __u8 policy[32])
 {
 	static const __u8 zero[32];
 	__u8 pcr_digest[32], unwritten[32];
@@ -255,6 +256,7 @@ void tpm_register_policy(__u32 pcr_mask,
 	sha256_buffer(pcr_values, 32 * n_values, pcr_digest);
 	tpm_policy_pcr(unwritten, pcr_mask, pcr_digest, branch_init);
 	tpm_policy_or(branch_written, branch_init, policy);
+	return 0;
 }
 
 void tpm_nv_name(__u32 index, __u32 attrs,

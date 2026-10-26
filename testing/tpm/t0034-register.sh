@@ -24,6 +24,7 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 register_writer_start || exit 1
+WRITER=$(./$R writer-public) || exit 1
 mkdir -p "$WORK/keys"
 head -c 700 /dev/urandom >"$WORK/keys/cert.der"
 : >"$WORK/initrd-release"
@@ -73,9 +74,9 @@ test_expect_success 'init binds the register to PCRs 9 and 11 from the initrd an
 	echo "$init" >"$WORK/init" && echo "$name" >"$WORK/name"
 '
 
-test_expect_success 'predict names the register from the binding values alone' '
+test_expect_success 'predict names the register from the binding values and kernel writer' '
 	$S attest predict --cert="$WORK/keys/cert.der" --bind-pcr=9=$Z \
-		--bind-pcr=11=$PHASE >"$WORK/predict" &&
+		--bind-pcr=11=$PHASE --writer-public="$WRITER" >"$WORK/predict" &&
 	grep -qx "register_name: $(cat "$WORK/name")" "$WORK/predict" &&
 	grep -qx "pcr9_after_anchor: $(./$R pcr 9)" "$WORK/predict"
 '
@@ -170,16 +171,20 @@ test_expect_success 'a wrong nonce, key name, binding value or tampered value fa
 	grep -q "^FAIL: register: certified contents" "$WORK/report4"
 '
 
-# Root on the target defines an index of its own, bound to the debug and
-# application PCRs it can extend and reset at will, writes the init event
-# the operator expects into it, anchors it there and has the genuine
-# attestation key certify it in the real register's place. The evidence
-# is consistent in every value it carries; only the handle and the PCR
-# numbers, which the verifier must take from its own constants and not
-# from the document, give it away.
+# The pre-init fixture uses the kernel writer to certify a substitute
+# register bound to resettable PCRs. Even otherwise valid writer evidence
+# must not select the verifier's register handle or binding PCRs.
 test_expect_success 'a register of the target'"'"'s own, bound to PCRs it controls, is refused' '
 	nonce=0102030405060708090a0b0c0d0e0f10 &&
 	./$R forge 01818e01 16 23 "$(cat "$WORK/init")" $nonce >"$WORK/forged.json" &&
+	python3 - "$WORK/forged.json" "$WRITER" <<"PY" &&
+import json, sys
+evidence = json.load(open(sys.argv[1]))
+assert evidence["eventlog"][0]["nv_writer_public"] == sys.argv[2]
+assert evidence["register"]["nv_index"] == "0x01818E01"
+assert evidence["eventlog"][0]["pcr"] == 16
+assert evidence["eventlog"][0]["phase_pcr"] == 23
+PY
 	[ "$(py "import json; print(json.load(open(\"$WORK/forged.json\"))[\"register\"][\"value\"])")" = \
 		"$(sha "$Z$(cat "$WORK/init")")" ] &&
 	! $S attest verify --evidence="$WORK/forged.json" --nonce=$nonce \
@@ -348,6 +353,7 @@ inits = [json.loads(l) for l in open(sys.argv[1]) if json.loads(l)["type"] == "i
 assert len(inits) == 2, inits
 assert inits[0]["tpm_reset_count"] != inits[1]["tpm_reset_count"], inits
 assert inits[0]["bound_in"] == "initrd" and inits[1]["bound_in"] == "root", inits
+assert inits[0]["nv_writer_public"] == inits[1]["nv_writer_public"], inits
 PY
 '
 

@@ -121,14 +121,16 @@ int main(int argc, char **argv)
 		puthex(out, 32);
 		return 0;
 	}
-	if (strcmp(argv[1], "register-policy") == 0 && argc == 5) {
+	if (strcmp(argv[1], "register-policy") == 0 && argc == 6) {
 		__u8 w[32], i[32], p[32], values[64];
 
 		if (hex_decode(argv[3], values, 32) ||
-		    hex_decode(argv[4], values + 32, 32))
+		    hex_decode(argv[4], values + 32, 32) ||
+		    hex_decode(argv[5], public, sizeof(public)))
 			return 2;
-		tpm_register_policy((__u32)strtoul(argv[2], NULL, 0),
-				    values, 2, w, i, p);
+		if (tpm_register_policy((__u32)strtoul(argv[2], NULL, 0),
+					values, 2, public, w, i, p))
+			return 1;
 		puthex(w, 32);
 		puthex(i, 32);
 		puthex(p, 32);

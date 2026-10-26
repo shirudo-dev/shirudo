@@ -24,6 +24,7 @@
 #include "initrd.h"
 #include "log.h"
 #include "malloc.h"
+#include "nv_writer.h"
 #include "paths.h"
 #include "tpm.h"
 
@@ -187,24 +188,31 @@ static void bind_values(const __u8 pcr_before[32],
  * the written name is the one the record, the anchor and every later
  * comparison use.
  */
-static void register_expectation(const __u8 pcr_before[32],
-				 const __u8 phase_before[32],
-				 __u8 branch_written[32],
-				 __u8 branch_init[32],
-				 __u8 policy[32],
-				 __u8 name_unwritten[SHIRUDO_TPM_NAME_LEN],
-				 __u8 name_written[SHIRUDO_TPM_NAME_LEN])
+static int register_expectation(const __u8 pcr_before[32],
+				const __u8 phase_before[32],
+				const __u8 writer_public[SHIRUDO_TPM_NV_RSA_BYTES],
+				__u8 branch_written[32],
+				__u8 branch_init[32],
+				__u8 policy[32],
+				__u8 name_unwritten[SHIRUDO_TPM_NAME_LEN],
+				__u8 name_written[SHIRUDO_TPM_NAME_LEN])
 {
 	__u8 values[64];
+	int rc;
 
 	bind_values(pcr_before, phase_before, values);
-	tpm_register_policy(SHIRUDO_CHAIN_PCR_MASK, values, 2,
-			    branch_written, branch_init, policy);
+	rc = tpm_register_policy(SHIRUDO_CHAIN_PCR_MASK, values, 2, writer_public,
+				 branch_written, branch_init, policy);
+	if (rc) {
+		pr_err("tpm: compute signed register policy: %s", strerror(-rc));
+		return rc;
+	}
 	tpm_nv_name(SHIRUDO_NV_INDEX, SHIRUDO_TPM_REGISTER_ATTRS,
 		    policy, SHIRUDO_TPM_NV_DIGEST_LEN, name_unwritten);
 	tpm_nv_name(SHIRUDO_NV_INDEX,
 		    SHIRUDO_TPM_REGISTER_ATTRS | SHIRUDO_TPM_NV_WRITTEN,
 		    policy, SHIRUDO_TPM_NV_DIGEST_LEN, name_written);
+	return 0;
 }
 
 static bool name_equals(const struct tpm_nv_info *info,
@@ -233,6 +241,15 @@ static int register_define(struct shirudo_tpm *tpm, bool defined,
 out:
 	explicit_bzero(&cfg, sizeof(cfg));
 	return rc;
+}
+
+static int register_writer(struct shirudo_tpm *tpm,
+			   __u8 public[SHIRUDO_TPM_NV_RSA_BYTES])
+{
+	int rc;
+
+	rc = nv_writer_read(public);
+	return rc ? rc : tpm_nv_set_writer(tpm, public);
 }
 
 int chain_init(const __u8 event[32],
@@ -278,6 +295,26 @@ int chain_init(const __u8 event[32],
 	recorded = !rc && (!rec.have_reset_count ||
 			   rec.reset_count == info->reset_count);
 	if (recorded) {
+		rc = register_writer(tpm, info->writer_public);
+		if (rc)
+			goto out;
+		rc = register_expectation(rec.pcr_before, rec.phase_before,
+					  info->writer_public, branch_written,
+					  branch_init, policy, unwritten, written);
+		if (rc)
+			goto out;
+		if (!name_equals(&nv, written)) {
+			pr_err("tpm: recorded register has an obsolete policy; "
+			       "trusted reboot required");
+			rc = -EEXIST;
+			goto out;
+		}
+		if (!ct_eq(info->writer_public, rec.writer_public,
+			   sizeof(info->writer_public))) {
+			pr_err("tpm: recorded NV writer differs from the guarded key");
+			rc = -EKEYREJECTED;
+			goto out;
+		}
 		if (nv.defined && nv.written && name_equals(&nv, rec.name)) {
 			rc = tpm_nv_read(tpm, SHIRUDO_NV_INDEX,
 					 info->value);
@@ -314,10 +351,14 @@ int chain_init(const __u8 event[32],
 	if (rc)
 		goto out;
 	info->initrd = in_initrd();
-	register_expectation(info->pcr_before, info->phase_before,
-			     branch_written, branch_init, policy, unwritten,
-			     written);
-	rc = chain_anchor(written, info->anchor, sizeof(info->anchor));
+	rc = register_writer(tpm, info->writer_public);
+	if (rc)
+		goto out;
+	rc = register_expectation(info->pcr_before, info->phase_before,
+				  info->writer_public, branch_written,
+				  branch_init, policy, unwritten, written);
+	if (!rc)
+		rc = chain_anchor(written, info->anchor, sizeof(info->anchor));
 	if (rc)
 		goto out;
 
@@ -360,18 +401,24 @@ out:
 
 int chain_extend(const __u8 event[32], __u8 out_chain[32])
 {
+	__u8 writer_public[SHIRUDO_TPM_NV_RSA_BYTES];
 	__u8 branch_written[32], branch_init[32], policy[32], values[64];
 	struct shirudo_eventlog_init rec;
 	struct tpm_nv_info nv;
 	struct shirudo_tpm *tpm = NULL;
+	__u32 reset;
 	int rc;
 
 	rc = eventlog_boot_init(&rec);
 	if (rc)
 		return -ENODEV;		/* no register this boot */
 	bind_values(rec.pcr_before, rec.phase_before, values);
-	tpm_register_policy(SHIRUDO_CHAIN_PCR_MASK, values, 2,
-			    branch_written, branch_init, policy);
+	rc = tpm_register_policy(SHIRUDO_CHAIN_PCR_MASK, values, 2, rec.writer_public,
+				 branch_written, branch_init, policy);
+	if (rc) {
+		pr_err("tpm: compute signed register policy: %s", strerror(-rc));
+		return rc;
+	}
 
 	rc = tpm_open(&tpm);
 	if (rc)
@@ -387,6 +434,27 @@ int chain_extend(const __u8 event[32], __u8 out_chain[32])
 		pr_err("tpm: register 0x%08x is not the index init recorded "
 		       "(recreated?)", SHIRUDO_NV_INDEX);
 		rc = -EACCES;
+		goto out;
+	}
+	if (!ct_eq(nv.policy, policy, sizeof(policy))) {
+		pr_err("tpm: register write policy is obsolete or substituted");
+		rc = -EACCES;
+		goto out;
+	}
+	rc = tpm_reset_count(tpm, &reset);
+	if (rc)
+		goto out;
+	if (!rec.have_reset_count || reset != rec.reset_count) {
+		pr_err("tpm: register reset differs from the init record");
+		rc = -EACCES;
+		goto out;
+	}
+	rc = register_writer(tpm, writer_public);
+	if (rc)
+		goto out;
+	if (!ct_eq(writer_public, rec.writer_public, sizeof(writer_public))) {
+		pr_err("tpm: recorded NV writer differs from the guarded key");
+		rc = -EKEYREJECTED;
 		goto out;
 	}
 	rc = tpm_nv_extend(tpm, SHIRUDO_NV_INDEX, branch_written,
@@ -432,8 +500,10 @@ bool chain_bound(void)
 
 int chain_status(struct chain_status *st)
 {
-	struct tpm_nv_info nv;
+	__u8 branch_written[32], branch_init[32], policy[32], values[64];
+	__u8 expected[SHIRUDO_TPM_NAME_LEN];
 	struct shirudo_tpm *tpm = NULL;
+	struct tpm_nv_info nv;
 	__u32 reset_count = 0;
 	int rc;
 
@@ -460,6 +530,21 @@ int chain_status(struct chain_status *st)
 		       name_equals(&nv, st->init.name) &&
 		       (!st->init.have_reset_count ||
 			st->init.reset_count == reset_count);
+	if (st->anchored) {
+		bind_values(st->init.pcr_before, st->init.phase_before, values);
+		rc = tpm_register_policy(SHIRUDO_CHAIN_PCR_MASK, values, 2,
+					 st->init.writer_public, branch_written,
+					 branch_init, policy);
+		if (rc) {
+			pr_err("tpm: compute signed register policy: %s", strerror(-rc));
+			st->anchored = false;
+			goto out;
+		}
+		tpm_nv_name(SHIRUDO_NV_INDEX,
+			    SHIRUDO_TPM_REGISTER_ATTRS |
+			    SHIRUDO_TPM_NV_WRITTEN, policy, 32, expected);
+		st->anchored = name_equals(&nv, expected);
+	}
 out:
 	tpm_close(tpm);
 	return rc;

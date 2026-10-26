@@ -72,7 +72,7 @@ print(hashlib.sha256(digest + bytes.fromhex(\"0000016c00000136\")).hexdigest())
 
 test_expect_success 'register policy branches match independent vectors' '
 	v9=$(py "print(\"cd\"*32)") && v11=$(py "print(\"ef\"*32)") &&
-	out=$(./$H register-policy 0xa00 $v9 $v11) &&
+	out=$(./$H register-policy 0xa00 $v9 $v11 $MODULUS) &&
 	want=$(py "
 import hashlib
 def h(data):

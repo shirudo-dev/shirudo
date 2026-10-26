@@ -337,6 +337,7 @@ int eventlog_replay(__u8 out[32])
 
 static int init_line(const char *line, size_t len, bool is_init, void *ctx)
 {
+	char writer_public[2 * SHIRUDO_TPM_NV_RSA_BYTES + 1];
 	char pcr_before[2 * 32 + 1], name[2 * SHIRUDO_TPM_NAME_LEN + 1];
 	char phase_before[2 * 32 + 1], anchor[2 * 32 + 1], bound_in[8];
 	struct shirudo_eventlog_init *out = ctx;
@@ -355,20 +356,24 @@ static int init_line(const char *line, size_t len, bool is_init, void *ctx)
 		  sizeof(phase_before), 0, NULL, 0 },
 		{ "bound_in", SHIRUDO_JSON_T_STRING, bound_in, sizeof(bound_in),
 		  0, NULL, 0 },
+		{ "nv_writer_public", SHIRUDO_JSON_T_STRING, writer_public,
+		  sizeof(writer_public), 0, NULL, 0 },
 	};
 	bool have_reset_count;
 
 	if (!is_init)
 		return 0;
 	bound_in[0] = '\0';
-	if (json_parse(line, len, f, 7) || !f[0].seen || !f[1].seen ||
+	if (json_parse(line, len, f, 8) || !f[0].seen || !f[1].seen ||
 	    !f[2].seen || !f[3].seen || !f[5].seen || pcr < 0 || pcr >= 24 ||
 	    (f[4].seen && (reset_count < 0 || reset_count > UINT32_MAX)) ||
 	    strlen(name) != 2 * SHIRUDO_TPM_NAME_LEN ||
 	    hex_decode(pcr_before, out->pcr_before, 32) ||
 	    hex_decode(phase_before, out->phase_before, 32) ||
 	    hex_decode(name, out->name, SHIRUDO_TPM_NAME_LEN) ||
-	    hex_decode(anchor, out->anchor_digest, 32))
+	    hex_decode(anchor, out->anchor_digest, 32) || !f[7].seen ||
+	    hex_decode(writer_public, out->writer_public,
+		       sizeof(out->writer_public)))
 		return -EINVAL;
 	out->initrd = f[6].seen && !strcmp(bound_in, "initrd");
 	/*

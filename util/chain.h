@@ -72,6 +72,7 @@ int chain_anchor(const __u8 name[SHIRUDO_TPM_NAME_LEN],
 		 char *out, size_t cap);
 
 struct shirudo_chain_init_info {
+	__u8		writer_public[SHIRUDO_TPM_NV_RSA_BYTES];
 	bool		reused;		/* written and on record */
 	bool		initrd;		/* bound while the initrd ran */
 	__u32		reset_count;	/* the TPM's, for the record */

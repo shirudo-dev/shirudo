@@ -885,13 +885,14 @@ testing/fuzz/fuzz-tpm-wire: testing/fuzz/fuzz-tpm-wire.c $(FUZZ_BASE) \
                             util/tpm_wire.c util/crypto_openssl.c util/io.c \
                             $(FUZZ_SEAL)
 testing/fuzz/fuzz-attest: testing/fuzz/fuzz-attest.c $(FUZZ_BASE) \
-                          util/attest.c util/chain.c util/tpm.c \
+                          util/attest.c util/chain.c util/nv_writer.c util/tpm.c \
                           util/tpm_wire.c util/eventlog.c util/timefmt.c \
                           util/crypto_openssl.c util/io.c $(FUZZ_SEAL) \
                           util/config_attest.c util/config_update.c \
-                          util/config_measure.c util/initrd.c util/version_id.c
-testing/fuzz/fuzz-attest: FUZZ_CFLAGS += $(TSS2_CFLAGS)
-testing/fuzz/fuzz-attest: FUZZ_LIBS += $(TSS2_LIBS)
+                          util/config_measure.c util/initrd.c util/identity.c \
+                          util/keyring.c util/version_id.c $(LIBBPF_A)
+testing/fuzz/fuzz-attest: FUZZ_CFLAGS += $(TSS2_CFLAGS) $(LIBELF_CFLAGS)
+testing/fuzz/fuzz-attest: FUZZ_LIBS += $(TSS2_LIBS) $(LIBBPF_A) $(LIBELF_LIBS) $(ZLIB_LIBS)
 testing/fuzz/fuzz-eventlog: testing/fuzz/fuzz-eventlog.c $(FUZZ_BASE) \
                             util/eventlog.c util/timefmt.c $(FUZZ_SEAL) \
                             util/io.c util/crypto_openssl.c testing/fuzz/chain.c

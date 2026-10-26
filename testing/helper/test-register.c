@@ -110,7 +110,8 @@ static void puthex(const __u8 *b, size_t n)
 static int append_init(const __u8 event[32],
 		       const struct shirudo_chain_init_info *info)
 {
-	char buf[4096], ts[32], boot_id[64], nv_index[16], hex[256];
+	char buf[4096], ts[32], boot_id[64], nv_index[16];
+	char hex[2 * SHIRUDO_TPM_NV_RSA_BYTES + 1];
 	struct shirudo_json_emit e = { .buf = buf, .cap = sizeof(buf) };
 
 	eventlog_timestamp(ts, sizeof(ts));
@@ -135,6 +136,8 @@ static int append_init(const __u8 event[32],
 	json_kv_string(&e, "bound_in", info->initrd ? "initrd" : "root");
 	hex_encode(info->name, info->name_len, hex);
 	json_kv_string(&e, "nv_name", hex);
+	hex_encode(info->writer_public, sizeof(info->writer_public), hex);
+	json_kv_string(&e, "nv_writer_public", hex);
 	json_kv_string(&e, "anchor", info->anchor);
 	hex_encode(info->anchor_digest, 32, hex);
 	json_kv_string(&e, "anchor_digest", hex);
@@ -409,15 +412,20 @@ int main(int argc, char **argv)
 			return 2;
 		memcpy(values, rec.pcr_before, 32);
 		memcpy(values + 32, rec.phase_before, 32);
-		tpm_register_policy(SHIRUDO_CHAIN_PCR_MASK, values, 2,
-				    branch_written, branch_init,
-				    policy);
+		rc = tpm_register_policy(SHIRUDO_CHAIN_PCR_MASK, values, 2,
+					 rec.writer_public, branch_written, branch_init, policy);
+		if (rc) {
+			fprintf(stderr, "register policy: %s\n", strerror(-rc));
+			return 1;
+		}
 		if (tpm_open(&tpm))
 			return 1;
-		rc = tpm_nv_extend_first(tpm, SHIRUDO_NV_INDEX,
-					 SHIRUDO_CHAIN_PCR_MASK,
-					 branch_written, branch_init,
-					 event);
+		rc = tpm_nv_set_writer(tpm, rec.writer_public);
+		if (!rc)
+			rc = tpm_nv_extend_first(tpm, SHIRUDO_NV_INDEX,
+						 SHIRUDO_CHAIN_PCR_MASK,
+						 branch_written, branch_init,
+						 event);
 		tpm_close(tpm);
 		printf("rc=%d\n", rc);
 		return rc ? 1 : 0;
@@ -431,17 +439,18 @@ int main(int argc, char **argv)
 	 */
 	if (strcmp(argv[1], "forge") == 0 && argc == 7) {
 		struct shirudo_tpm_key ak = { .handle = 0 }, ek = { .handle = 0 };
-		struct shirudo_tpm_key ak_copy = {}, ek_copy = {};
-		struct shirudo_tpm_attestation quote = {}, certify = {};
 		char hex[2 * SHIRUDO_TPM_ATTEST_MAX + 1], buf[32 * 1024];
 		struct shirudo_json_emit e = { .buf = buf, .cap = sizeof(buf) };
-		__u8 branch_written[32], branch_init[32], policy[32];
+		struct shirudo_tpm_attestation quote = {}, certify = {};
 		__u8 values[24][32] = {}, before[64], anchor_digest[32];
-		char ts[32], boot_id[64], nv_index[16];
-		char anchor[SHIRUDO_CHAIN_ANCHOR_MAX];
-		size_t nonce_len = strlen(argv[6]) / 2;
-		struct shirudo_tpm *tpm = NULL;
+		__u8 branch_written[32], branch_init[32], policy[32];
 		__u32 index, pcr, phase, mask, quoted, reset = 0, i;
+		struct shirudo_tpm_key ak_copy = {}, ek_copy = {};
+		__u8 writer_public[SHIRUDO_TPM_NV_RSA_BYTES];
+		char ts[32], boot_id[64], nv_index[16];
+		size_t nonce_len = strlen(argv[6]) / 2;
+		char anchor[SHIRUDO_CHAIN_ANCHOR_MAX];
+		struct shirudo_tpm *tpm = NULL;
 		__u8 value[32], nonce[64];
 		struct tpm_nv_info nv;
 
@@ -455,18 +464,22 @@ int main(int argc, char **argv)
 		    nonce_len == 0 || nonce_len > sizeof(nonce) ||
 		    hex_decode(argv[6], nonce, nonce_len))
 			return 2;
+		if (nv_writer_read(writer_public))
+			return 1;
 		if (tpm_open(&tpm))
 			return 1;
-		rc = tpm_reset_count(tpm, &reset);
+		rc = tpm_nv_set_writer(tpm, writer_public);
+		if (!rc)
+			rc = tpm_reset_count(tpm, &reset);
 		if (!rc)
 			rc = tpm_pcr_read(tpm, pcr, before);
 		if (!rc)
 			rc = tpm_pcr_read(tpm, phase, before + 32);
-		if (!rc) {
-			tpm_register_policy(mask, before, 2, branch_written,
-					    branch_init, policy);
+		if (!rc)
+			rc = tpm_register_policy(mask, before, 2, writer_public,
+						 branch_written, branch_init, policy);
+		if (!rc)
 			rc = tpm_nv_define(tpm, index, policy, NULL, 0);
-		}
 		if (!rc)
 			rc = tpm_nv_extend_first(tpm, index, mask,
 						 branch_written, branch_init,
@@ -581,6 +594,8 @@ int main(int argc, char **argv)
 		json_kv_string(&e, "bound_in", "initrd");
 		hex_encode(nv.name, nv.name_len, hex);
 		json_kv_string(&e, "nv_name", hex);
+		hex_encode(writer_public, sizeof(writer_public), hex);
+		json_kv_string(&e, "nv_writer_public", hex);
 		json_kv_string(&e, "anchor", anchor);
 		hex_encode(anchor_digest, 32, hex);
 		json_kv_string(&e, "anchor_digest", hex);

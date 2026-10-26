@@ -997,6 +997,7 @@ static int append_init_event(const struct shirudo_measured_upatch *set,
 			     const __u8 init_digest[32],
 			     const struct shirudo_chain_init_info *info)
 {
+	char writer_hex[HEXLEN(SHIRUDO_TPM_NV_RSA_BYTES)];
 	char buf[64 * 1024];
 	struct shirudo_json_emit e = { .buf = buf, .cap = sizeof(buf) };
 	char cert_hex[HEXLEN(32)], set_hex[HEXLEN(32)], digest_hex[HEXLEN(32)];
@@ -1020,6 +1021,7 @@ static int append_init_event(const struct shirudo_measured_upatch *set,
 	hex_encode(info->name, SHIRUDO_TPM_NAME_LEN, name_hex);
 	hex_encode(info->anchor_digest, 32, anchor_hex);
 	hex_encode(info->value, 32, chain_hex);
+	hex_encode(info->writer_public, sizeof(info->writer_public), writer_hex);
 
 	json_obj_open(&e);
 	json_kv_int(&e, "schema", 2);
@@ -1057,6 +1059,7 @@ static int append_init_event(const struct shirudo_measured_upatch *set,
 	json_kv_string(&e, "bound_in",
 		       info->initrd ? "initrd" : "root");
 	json_kv_string(&e, "nv_name", name_hex);
+	json_kv_string(&e, "nv_writer_public", writer_hex);
 	json_kv_string(&e, "anchor", info->anchor);
 	json_kv_string(&e, "anchor_digest", anchor_hex);
 	json_kv_string(&e, "chain", chain_hex);

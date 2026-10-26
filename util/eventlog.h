@@ -51,6 +51,7 @@ int eventlog_replay(__u8 out[SHIRUDO_TPM_DIGEST_LEN]);
  * the last one names means the register was bound again.
  */
 struct shirudo_eventlog_init {
+	__u8		writer_public[SHIRUDO_TPM_NV_RSA_BYTES];
 	__u32		pcr;
 	bool		initrd;		/* bound while the initrd ran */
 	__u8		pcr_before[SHIRUDO_TPM_DIGEST_LEN];

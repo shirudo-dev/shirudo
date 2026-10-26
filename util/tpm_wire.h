@@ -101,11 +101,12 @@ void tpm_policy_or(const __u8 a[SHIRUDO_TPM_DIGEST_LEN],
  * PolicyNvWritten(NO) + PolicyPCR(mask, SHA-256(values))). The two
  * branch digests are what a session has to present to PolicyOR.
  */
-void tpm_register_policy(__u32 pcr_mask,
-			 const __u8 *pcr_values, size_t n_values,
-			 __u8 branch_written[32],
-			 __u8 branch_init[32],
-			 __u8 policy[32]);
+int tpm_register_policy(__u32 pcr_mask,
+			const __u8 *pcr_values, size_t n_values,
+			const __u8 writer_public[SHIRUDO_TPM_NV_RSA_BYTES],
+			__u8 branch_written[32],
+			__u8 branch_init[32],
+			__u8 policy[32]);
 
 /* Name of an NV index: nameAlg || SHA-256(TPMS_NV_PUBLIC). */
 void tpm_nv_name(__u32 index, __u32 attrs,

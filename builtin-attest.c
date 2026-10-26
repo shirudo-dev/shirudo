@@ -90,6 +90,7 @@ static const struct shirudo_help_item predict_options[] = {
 	{ "--event=<kind>:<name>=<hex>",
 	  "a load, unload, tree:<seq> or revoke:<fingerprint> event after boot" },
 	{ "--bind-pcr=<n>=<hex>",  "PCR 9 and 11 values at binding, for the register name" },
+	{ "--writer-public=<hex>", "init record's 384-byte RSA modulus (with --bind-pcr)" },
 };
 
 static const struct shirudo_help_section attest_help_sections[] = {
@@ -291,6 +292,7 @@ static int apply_event(const char *spec, __u8 chain[32])
 
 static int cmd_attest_predict(int argc, const char **argv)
 {
+	__u8 writer_public[SHIRUDO_TPM_NV_RSA_BYTES];
 	__u8 cert_sha[32], tree_root[32] = {}, set_digest[32], init[32];
 	__u8 cert_shas[SHIRUDO_KEYS_MAX][32];
 	size_t n_certs = 0;
@@ -298,7 +300,7 @@ static int cmd_attest_predict(int argc, const char **argv)
 	const char *events[EVENTS_MAX];
 	struct members m = {};
 	char hex[2 * SHIRUDO_TPM_NAME_LEN + 1];
-	bool have_cert = false, have_bind[2] = {};
+	bool have_cert = false, have_writer = false, have_bind[2] = {};
 	size_t n_events = 0, i;
 	int ret = 2;
 
@@ -333,6 +335,12 @@ static int cmd_attest_predict(int argc, const char **argv)
 			if (n_events >= EVENTS_MAX)
 				goto out;
 			events[n_events++] = a + 8;
+		} else if (!strncmp(a, "--writer-public=", 16)) {
+			if (hex_decode(a + 16, writer_public, sizeof(writer_public))) {
+				pr_err("attest predict: invalid RSA-3072 --writer-public");
+				goto out;
+			}
+			have_writer = true;
 		} else if (!strncmp(a, "--bind-pcr=", 11)) {
 			const char *value = NULL;
 			int slot = -1;
@@ -387,9 +395,16 @@ static int cmd_attest_predict(int argc, const char **argv)
 		__u8 name[SHIRUDO_TPM_NAME_LEN], anchor_digest[32];
 		char anchor[SHIRUDO_CHAIN_ANCHOR_MAX];
 
-		tpm_register_policy(SHIRUDO_CHAIN_PCR_MASK, bind[0], 2,
-				    branch_written, branch_init,
-				    policy);
+		if (!have_writer) {
+			pr_err("attest predict: --bind-pcr requires --writer-public");
+			goto out;
+		}
+		if (tpm_register_policy(SHIRUDO_CHAIN_PCR_MASK, bind[0], 2,
+					writer_public, branch_written, branch_init, policy)) {
+			pr_err("attest predict: cannot compute the signed write policy");
+			ret = 1;
+			goto out;
+		}
 		tpm_nv_name(SHIRUDO_NV_INDEX,
 			    SHIRUDO_TPM_REGISTER_ATTRS |
 			    SHIRUDO_TPM_NV_WRITTEN, policy, 32, name);
@@ -404,7 +419,7 @@ static int cmd_attest_predict(int argc, const char **argv)
 		chain_fold(bind[0], anchor_digest);
 		hex_encode(bind[0], 32, hex);
 		printf("pcr%u_after_anchor: %s\n", SHIRUDO_CHAIN_PCR, hex);
-	} else if (have_bind[0] || have_bind[1]) {
+	} else if (have_bind[0] || have_bind[1] || have_writer) {
 		pr_err("attest predict: --bind-pcr needs both %u and %u",
 		       SHIRUDO_CHAIN_PCR, SHIRUDO_CHAIN_PHASE_PCR);
 		goto out;
