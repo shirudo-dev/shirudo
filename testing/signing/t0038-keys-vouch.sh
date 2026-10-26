@@ -7,7 +7,7 @@
 # verifies under a member of the set, and the loader admits nothing
 # dropped in without one.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 S=../shirudo
 SHB=../tools/shirudo-build/shirudo-build

@@ -5,7 +5,7 @@
 # t1124 -- a signed CONFIG owns the trusted set, so live `keys add`
 # refuses changes and leaves the boot-enrolled membership intact.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./integration-lib.sh
 target_guard
 

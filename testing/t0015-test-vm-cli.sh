@@ -885,11 +885,14 @@ test_expect_success 'make -C testing test runs the complete pipeline in order' '
 
 test_expect_success 'operator and target runners have disjoint explicit scopes' '
 	grep -q "for t in t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
+	grep -q "for t in signing/t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
 	grep -q "for t in otel/t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
 	grep -q "bpm/t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
 	grep -q "tpm/t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
 	! grep -q "t1101" ../testing/run-tests.sh &&
 	for test_name in t1200-target-fixtures.sh t1107-load-unload.sh \
+		signing/t1123-keys.sh signing/t1124-keys-add.sh \
+		signing/t1126-keys-revoke.sh \
 		bpm/t1118-bpm-tree.sh tamperproof/t1140-verity-authority.sh \
 		tamperproof/t1154-verity-config.sh tamperproof/t1158-verity-interruption.sh
 	do

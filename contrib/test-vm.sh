@@ -1473,7 +1473,7 @@ log "booting $(basename "$KERNEL") with ${CPUS} CPUs and ${MEMORY} memory"
 # The bpf keyring is left open for init to enrol the certificate and
 # seal it, as a production initrd does.
 KERNEL_LSM_ARGS="lsm=bpf bpf.keyring_unsealed=1"
-KERNEL_LSM_ARGS+=" dm_verity.keyring_unsealed=1"
+KERNEL_LSM_ARGS+=" dm_verity.keyring_unsealed=1 initcall_debug ignore_loglevel"
 KERNEL_NET_DEVICE="virtio-net-pci,netdev=net0"
 
 # The virt machine has no if=virtio mapping, so its disks are explicit PCI

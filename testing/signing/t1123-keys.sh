@@ -7,7 +7,7 @@
 # init, so the bpf keyring holds two keys and a upatch signed by either
 # loads.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./integration-lib.sh
 target_guard
 

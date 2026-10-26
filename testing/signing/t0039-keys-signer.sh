@@ -7,7 +7,7 @@
 # no other, and a revoke event predicts the same digest the target
 # measures.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 S=../shirudo
 SHB=../tools/shirudo-build/shirudo-build

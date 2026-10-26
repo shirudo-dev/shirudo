@@ -126,6 +126,7 @@ TEST_VM_BUNDLE_SOURCES := $(sort $(wildcard \
 	$(ROOT)/systemd/*.timer $(ROOT)/testing/fixtures/*.c $(ROOT)/testing/fixtures/*.lua \
 	$(ROOT)/testing/fixtures/*.conf $(ROOT)/testing/fixtures/*.sh \
 	$(ROOT)/testing/fixtures/decoders/* \
+	$(ROOT)/testing/signing/*.sh \
 	$(ROOT)/upatches/kernel-obs/*.c $(ROOT)/upatches/kernel-obs/*.h $(ROOT)/upatches/kernel-obs/*.list \
 		$(ROOT)/upatches/kernel-obs/*.py $(ROOT)/upatches/kernel-obs/Beefile \
 	$(ROOT)/upatches/kernel-obs/decoders/*))

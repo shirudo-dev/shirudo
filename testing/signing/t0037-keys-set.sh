@@ -7,7 +7,7 @@
 # digest the init event covers, which attest predict must compute the
 # same way from the same certificates in any order.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 H=helper/test-keys
 SHB=../tools/shirudo-build/shirudo-build

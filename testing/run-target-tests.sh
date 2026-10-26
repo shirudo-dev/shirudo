@@ -40,6 +40,9 @@ for t in \
 	tamperproof/t1138-mode-objects.sh \
 	t1200-target-fixtures.sh \
 	t1122-initrd.sh \
+	signing/t1123-keys.sh \
+	signing/t1124-keys-add.sh \
+	signing/t1126-keys-revoke.sh \
 	tamperproof/t1105-siggate.sh \
 	t1133-upatch-arena-serializer.sh \
 	t1103-version-gate.sh \

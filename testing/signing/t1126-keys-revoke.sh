@@ -5,7 +5,7 @@
 # t1126 -- a signed CONFIG owns signer revocation. A live revoke is
 # refused without changing the boot-enrolled keyring or loaded upatch.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./integration-lib.sh
 target_guard
 
