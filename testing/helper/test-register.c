@@ -23,6 +23,7 @@
 #include "malloc.h"
 #include "paths.h"
 #include "tpm.h"
+#include "version.h"
 
 static void puthex(const __u8 *b, size_t n)
 {
@@ -75,7 +76,8 @@ static int append_init(const __u8 event[32],
 }
 
 static int append_event(const char *type, const char *name,
-			const __u8 event[32], const __u8 chain[32])
+			const __u8 payload[32], const __u8 event[32],
+			const __u8 chain[32])
 {
 	char buf[4096], ts[32], boot_id[64], nv_index[16], hex[65];
 	struct shirudo_json_emit e = { .buf = buf, .cap = sizeof(buf) };
@@ -94,6 +96,41 @@ static int append_event(const char *type, const char *name,
 	json_kv_string(&e, "boot_id", boot_id);
 	json_obj_open_key(&e, "upatch");
 	json_kv_string(&e, "name", name);
+	hex_encode(payload, 32, hex);
+	json_kv_string(&e, "payload_sha256", hex);
+	json_obj_close(&e);
+	hex_encode(chain, 32, hex);
+	json_kv_string(&e, "chain", hex);
+	json_obj_close(&e);
+	if (e.err)
+		return e.err;
+	return eventlog_append(buf);
+}
+
+static int append_tree(__s64 seq, const char *op, const char *id,
+		       const char *operation_digest, const __u8 event[32],
+		       const __u8 chain[32])
+{
+	char buf[4096], ts[32], boot_id[64], nv_index[16], hex[65];
+	struct shirudo_json_emit e = { .buf = buf, .cap = sizeof(buf) };
+
+	eventlog_timestamp(ts, sizeof(ts));
+	eventlog_boot_id(boot_id, sizeof(boot_id));
+	snprintf(nv_index, sizeof(nv_index), "0x%08X", SHIRUDO_NV_INDEX);
+	json_obj_open(&e);
+	json_kv_int(&e, "schema", 2);
+	json_kv_string(&e, "ts", ts);
+	json_kv_string(&e, "nv_index", nv_index);
+	json_kv_string(&e, "alg", "sha256");
+	hex_encode(event, 32, hex);
+	json_kv_string(&e, "digest", hex);
+	json_kv_string(&e, "type", "tree_op");
+	json_kv_string(&e, "boot_id", boot_id);
+	json_obj_open_key(&e, "tree");
+	json_kv_int(&e, "seq", seq);
+	json_kv_string(&e, "op", op);
+	json_kv_string(&e, "id", id);
+	json_kv_string(&e, "operation_digest", operation_digest);
 	json_obj_close(&e);
 	hex_encode(chain, 32, hex);
 	json_kv_string(&e, "chain", hex);
@@ -149,8 +186,26 @@ int main(int argc, char **argv)
 			return 1;
 		printf("value=");
 		puthex(chain, 32);
-		return append_event("upatch_load", argv[2], event, chain) ?
-		       1 : 0;
+		return append_event("upatch_load", argv[2], payload, event,
+				    chain) ? 1 : 0;
+	}
+	/* A tree operation, with the digest in the form the target records. */
+	if (strcmp(argv[1], "tree") == 0 && argc == 6) {
+		__u8 operation[32];
+		__s64 seq = atoi(argv[2]);
+
+		if (strncmp(argv[5], "sha256:", 7) ||
+		    hex_decode(argv[5] + 7, operation, 32))
+			return 2;
+		chain_tree_event(seq, operation, event);
+		rc = chain_extend(event, chain);
+		printf("rc=%d\n", rc);
+		if (rc)
+			return 1;
+		printf("value=");
+		puthex(chain, 32);
+		return append_tree(seq, argv[3], argv[4], argv[5], event,
+				   chain) ? 1 : 0;
 	}
 	if (strcmp(argv[1], "extend-raw") == 0 && argc == 3) {
 		if (hex_decode(argv[2], event, 32))
@@ -282,6 +337,185 @@ int main(int argc, char **argv)
 		tpm_close(tpm);
 		printf("rc=%d\n", rc);
 		return rc ? 1 : 0;
+	}
+	/*
+	 * The attack: a register of the target's own at another handle,
+	 * bound to PCRs the target can extend and reset at will, written
+	 * with the init event the operator expects, anchored into one of
+	 * those PCRs and certified by the genuine attestation key in the
+	 * real register's place.
+	 */
+	if (strcmp(argv[1], "forge") == 0 && argc == 7) {
+		struct shirudo_tpm_key ak = { .handle = 0 }, ek = { .handle = 0 };
+		struct shirudo_tpm_key ak_copy = {}, ek_copy = {};
+		struct shirudo_tpm_attestation quote = {}, certify = {};
+		char hex[2 * SHIRUDO_TPM_ATTEST_MAX + 1], buf[32 * 1024];
+		struct shirudo_json_emit e = { .buf = buf, .cap = sizeof(buf) };
+		__u8 branch_written[32], branch_init[32], policy[32];
+		__u8 values[24][32] = {}, before[64], anchor_digest[32];
+		char ts[32], boot_id[64], nv_index[16];
+		char anchor[SHIRUDO_CHAIN_ANCHOR_MAX];
+		size_t nonce_len = strlen(argv[6]) / 2;
+		struct shirudo_tpm *tpm = NULL;
+		__u32 index, pcr, phase, mask, quoted, reset = 0, i;
+		__u8 value[32], nonce[64];
+		struct tpm_nv_info nv;
+
+		index = (__u32)strtoul(argv[2], NULL, 16);
+		pcr = (__u32)atoi(argv[3]);
+		phase = (__u32)atoi(argv[4]);
+		mask = (1u << pcr) | (1u << phase);
+		quoted = SHIRUDO_ATTEST_PCR_DEFAULT | mask;
+		if (pcr > 23 || phase > 23 || pcr == phase ||
+		    hex_decode(argv[5], event, 32) ||
+		    nonce_len == 0 || nonce_len > sizeof(nonce) ||
+		    hex_decode(argv[6], nonce, nonce_len))
+			return 2;
+		if (tpm_open(&tpm))
+			return 1;
+		rc = tpm_reset_count(tpm, &reset);
+		if (!rc)
+			rc = tpm_pcr_read(tpm, pcr, before);
+		if (!rc)
+			rc = tpm_pcr_read(tpm, phase, before + 32);
+		if (!rc) {
+			tpm_register_policy(mask, before, 2, branch_written,
+					    branch_init, policy);
+			rc = tpm_nv_define(tpm, index, policy, NULL, 0);
+		}
+		if (!rc)
+			rc = tpm_nv_extend_first(tpm, index, mask,
+						 branch_written, branch_init,
+						 event);
+		if (!rc)
+			rc = tpm_nv_info(tpm, index, &nv);
+		if (!rc)
+			rc = chain_anchor(nv.name, anchor, sizeof(anchor));
+		if (!rc) {
+			shirudo_sha256(anchor, strlen(anchor), anchor_digest);
+			rc = tpm_pcr_extend(tpm, pcr, anchor_digest);
+		}
+		if (!rc)
+			rc = tpm_nv_read(tpm, index, value);
+		if (!rc)
+			rc = tpm_ak_create(tpm, &ak);
+		if (!rc)
+			rc = tpm_ek_create(tpm, false, &ek);
+		for (i = 0; !rc && i < 24; i++) {
+			if (quoted & (1u << i))
+				rc = tpm_pcr_read(tpm, i, values[i]);
+		}
+		if (!rc)
+			rc = tpm_quote(tpm, &ak, nonce, nonce_len, quoted,
+				       &quote);
+		if (!rc)
+			rc = tpm_nv_certify(tpm, &ak, index, nonce, nonce_len,
+					    &certify);
+		/* Flushing scrubs the key; keep the public parts. */
+		memcpy(&ak_copy, &ak, sizeof(ak_copy));
+		memcpy(&ek_copy, &ek, sizeof(ek_copy));
+		tpm_key_flush(tpm, &ek);
+		tpm_key_flush(tpm, &ak);
+		tpm_close(tpm);
+		if (rc) {
+			printf("rc=%d\n", rc);
+			return 1;
+		}
+
+		eventlog_timestamp(ts, sizeof(ts));
+		eventlog_boot_id(boot_id, sizeof(boot_id));
+		snprintf(nv_index, sizeof(nv_index), "0x%08X", index);
+		json_obj_open(&e);
+		json_kv_int(&e, "schema", 1);
+		json_kv_string(&e, "kind", "shirudo-attestation");
+		json_kv_string(&e, "version_id", shirudo_version_id);
+		json_kv_string(&e, "ts", ts);
+		json_kv_string(&e, "boot_id", boot_id);
+		hex_encode(nonce, nonce_len, hex);
+		json_kv_string(&e, "nonce", hex);
+		json_kv_string(&e, "pcr_bank", "sha256");
+		json_kv_int(&e, "pcr_mask", quoted);
+		json_arr_open(&e, "pcrs");
+		for (i = 0; i < 24; i++) {
+			if (!(quoted & (1u << i)))
+				continue;
+			json_obj_open(&e);
+			json_kv_int(&e, "index", i);
+			hex_encode(values[i], 32, hex);
+			json_kv_string(&e, "value", hex);
+			json_obj_close(&e);
+		}
+		json_arr_close(&e);
+		json_obj_open_key(&e, "ak");
+		hex_encode(ak_copy.public, ak_copy.public_len, hex);
+		json_kv_string(&e, "public", hex);
+		hex_encode(ak_copy.name, ak_copy.name_len, hex);
+		json_kv_string(&e, "name", hex);
+		json_obj_close(&e);
+		json_obj_open_key(&e, "ek");
+		json_kv_string(&e, "type", "ecc");
+		hex_encode(ek_copy.public, ek_copy.public_len, hex);
+		json_kv_string(&e, "public", hex);
+		hex_encode(ek_copy.name, ek_copy.name_len, hex);
+		json_kv_string(&e, "name", hex);
+		json_obj_close(&e);
+		json_obj_open_key(&e, "quote");
+		hex_encode(quote.attest, quote.attest_len, hex);
+		json_kv_string(&e, "attest", hex);
+		hex_encode(quote.signature, quote.signature_len, hex);
+		json_kv_string(&e, "signature", hex);
+		json_obj_close(&e);
+		json_obj_open_key(&e, "register");
+		json_kv_string(&e, "nv_index", nv_index);
+		json_kv_int(&e, "pcr", pcr);
+		hex_encode(nv.name, nv.name_len, hex);
+		json_kv_string(&e, "name", hex);
+		hex_encode(value, 32, hex);
+		json_kv_string(&e, "value", hex);
+		hex_encode(certify.attest, certify.attest_len, hex);
+		json_kv_string(&e, "attest", hex);
+		hex_encode(certify.signature, certify.signature_len, hex);
+		json_kv_string(&e, "signature", hex);
+		json_obj_close(&e);
+		json_arr_open(&e, "eventlog");
+		json_obj_open(&e);
+		json_kv_int(&e, "schema", 2);
+		json_kv_string(&e, "ts", ts);
+		json_kv_string(&e, "nv_index", nv_index);
+		json_kv_string(&e, "alg", "sha256");
+		hex_encode(event, 32, hex);
+		json_kv_string(&e, "digest", hex);
+		json_kv_string(&e, "type", "init");
+		json_kv_string(&e, "boot_id", boot_id);
+		json_kv_int(&e, "tpm_reset_count", reset);
+		json_kv_int(&e, "pcr", pcr);
+		hex_encode(before, 32, hex);
+		json_kv_string(&e, "pcr_before", hex);
+		json_kv_int(&e, "phase_pcr", phase);
+		hex_encode(before + 32, 32, hex);
+		json_kv_string(&e, "phase_before", hex);
+		json_kv_string(&e, "bound_in", "initrd");
+		hex_encode(nv.name, nv.name_len, hex);
+		json_kv_string(&e, "nv_name", hex);
+		json_kv_string(&e, "anchor", anchor);
+		hex_encode(anchor_digest, 32, hex);
+		json_kv_string(&e, "anchor_digest", hex);
+		hex_encode(value, 32, hex);
+		json_kv_string(&e, "chain", hex);
+		json_obj_close(&e);
+		json_arr_close(&e);
+		json_kv_null(&e, "credential");
+		json_kv_null(&e, "ek_certificate");
+		json_obj_open_key(&e, "logs");
+		json_kv_null(&e, "firmware");
+		json_kv_null(&e, "systemd");
+		json_obj_close(&e);
+		json_obj_close(&e);
+		if (e.err)
+			return 1;
+		fwrite(buf, 1, e.len, stdout);
+		fputc('\n', stdout);
+		return 0;
 	}
 	if (strcmp(argv[1], "evidence") == 0 && (argc == 3 || argc == 4)) {
 		struct shirudo_attest_challenge challenge = {};
