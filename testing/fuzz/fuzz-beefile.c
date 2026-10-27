@@ -58,6 +58,19 @@ int shirudo_build_package_unload(const char *name,
 	return -ENOSYS;
 }
 
+int shirudo_build_package_patch_rodata(const char *input, const char *output,
+				       const char *symbol, const __u8 *value,
+				       size_t value_len, const char *pkey_path,
+				       const char *cert_path)
+{
+	return -ENOSYS;
+}
+
+int shirudo_build_package_verify(const char *input, const char *cert_path)
+{
+	return -ENOSYS;
+}
+
 int LLVMFuzzerTestOneInput(const __u8 *data, size_t size)
 {
 	struct bpm_build_spec *spec = xcalloc(1, sizeof(*spec));

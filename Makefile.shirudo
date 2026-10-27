@@ -901,9 +901,9 @@ testing/fuzz/fuzz-otel: testing/fuzz/fuzz-otel.c $(FUZZ_BASE) \
                         util/upatch_maps_otel.c util/crypto_openssl.c \
                         util/tls_openssl.c util/io.c util/version_id.c
 testing/fuzz/fuzz-beefile: testing/fuzz/fuzz-beefile.c $(FUZZ_BASE) \
-                           tools/shirudo-build/bpm-build.c util/upatch.c \
-                           util/timefmt.c util/paths.c util/crypto_openssl.c \
-                           util/io.c util/version_id.c
+                           tools/shirudo-build/bpm-build.c $(FUZZ_PACKAGE) \
+                           util/upatch.c util/timefmt.c util/paths.c \
+                           util/version_id.c
 testing/fuzz/fuzz-oci-http: testing/fuzz/fuzz-oci-http.c $(FUZZ_BASE) \
                             $(FUZZ_OCI)
 testing/fuzz/fuzz-oci-ref: testing/fuzz/fuzz-oci-ref.c $(FUZZ_BASE) \
