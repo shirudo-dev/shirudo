@@ -126,7 +126,13 @@ out:
 	return rc;
 }
 
-static int download_package(const char *raw, const char *destination)
+/*
+ * Into the file open on fd at destination, or, without one, a file in
+ * the working directory named after the package. The name comes from
+ * the registry, so it is one component ending in .bee, opened as output
+ * root may ask for: never a sealed file nor one reached through a link.
+ */
+static int download_package(const char *raw, const char *destination, int fd)
 {
 	struct bpm_oci_client c = {};
 	struct bpm_descriptor layers[8];
@@ -134,7 +140,7 @@ static int download_package(const char *raw, const char *destination)
 	char repository[BPM_MAX_ENDPOINT], tag[BPM_MAX_NAME];
 	char url[PATH_MAX], filename[PATH_MAX], title[PATH_MAX];
 	char digest[65], package_name[BPM_MAX_NAME] = {};
-	int n_layers = 0, rc;
+	int n_layers = 0, out = fd, rc;
 
 	rc = bpm_oci_parse_pull_ref(raw, &c, repository, sizeof(repository),
 				    tag, sizeof(tag));
@@ -184,26 +190,30 @@ static int download_package(const char *raw, const char *destination)
 				goto out;
 			}
 		}
-		rc = bpm_oci_get_file(&c, url, BPM_PACKAGE_MEDIA, filename,
-				      layers[i].size);
-		if (rc)
-			goto out;
-		if (sha256_file_hex(filename, digest, sizeof(digest)) ||
-		    !bpm_digest_matches(layers[i].digest, digest)) {
-			rc = -EKEYREJECTED;
-			unlink(filename);
-			goto out;
-		}
-		if (layers[i].size >= 0) {
-			struct stat st;
-
-			if (stat(filename, &st) || st.st_size != layers[i].size) {
-				rc = -EKEYREJECTED;
-				unlink(filename);
+		if (!destination) {
+			out = seal_output_open(filename,
+					       O_WRONLY | O_CREAT | O_TRUNC,
+					       0644);
+			if (out < 0) {
+				rc = out;
 				goto out;
 			}
 		}
-		rc = 0;
+		rc = bpm_oci_get_file(&c, url, BPM_PACKAGE_MEDIA, out,
+				      layers[i].size);
+		if (!destination)
+			close(out);
+		if (!rc && (sha256_file_hex(filename, digest, sizeof(digest)) ||
+			    !bpm_digest_matches(layers[i].digest, digest)))
+			rc = -EKEYREJECTED;
+		if (!rc && layers[i].size >= 0) {
+			struct stat st;
+
+			if (stat(filename, &st) || st.st_size != layers[i].size)
+				rc = -EKEYREJECTED;
+		}
+		if (rc && !destination)
+			unlink(filename);
 		goto out;
 	}
 	rc = -EINVAL;
@@ -214,7 +224,7 @@ out:
 
 static int pull_package(const char *raw)
 {
-	return download_package(raw, NULL);
+	return download_package(raw, NULL, -1);
 }
 
 static int copy_file_ex(const char *src, const char *dst, mode_t mode,
@@ -406,9 +416,9 @@ static int print_package_readme(const char *source)
 		fd = mkstemp(temporary);
 		if (fd < 0)
 			return -errno;
-		close(fd);
 		archive = temporary;
-		rc = download_package(source, archive);
+		rc = download_package(source, archive, fd);
+		close(fd);
 		if (rc)
 			goto out;
 	}
@@ -553,8 +563,8 @@ static int key_source_file(const char *source, char *temp, size_t temp_sz)
 		fd = mkstemp(archive);
 		if (fd < 0)
 			return -errno;
+		rc = download_package(source, archive, fd);
 		close(fd);
-		rc = download_package(source, archive);
 		if (!rc)
 			rc = extract_package_cert(archive, temp, temp_sz);
 		unlink(archive);
@@ -909,7 +919,7 @@ static int package_install(const struct bpm_source *s, const struct bpm_index_en
 	struct bpm_buffer manifest = {};
 	char url[PATH_MAX], archive[PATH_MAX] = {}, dir[PATH_MAX], package_dir[PATH_MAX];
 	char digest[65];
-	int rc;
+	int fd, rc;
 	DIR *d;
 	struct dirent *de;
 	bool found_package = false, extracted = false;
@@ -984,10 +994,19 @@ static int package_install(const struct bpm_source *s, const struct bpm_index_en
 			rc = -ENAMETOOLONG;
 			goto out;
 		}
-		rc = bpm_oci_get_file(&c, url, BPM_PACKAGE_MEDIA, archive,
-				      layers[i].size);
-		if (rc)
+		fd = seal_open(archive, O_WRONLY | O_CREAT | O_TRUNC |
+			       O_NOFOLLOW, 0600);
+		if (fd < 0) {
+			rc = fd;
 			goto out;
+		}
+		rc = bpm_oci_get_file(&c, url, BPM_PACKAGE_MEDIA, fd,
+				      layers[i].size);
+		close(fd);
+		if (rc) {
+			unlink(archive);
+			goto out;
+		}
 		if (sha256_file_hex(archive, digest, sizeof(digest)) ||
 		    !bpm_digest_matches(layers[i].digest, digest)) {
 			rc = -EKEYREJECTED;
@@ -1474,8 +1493,20 @@ static int tree_write_report(const char *path, const struct shirudo_tree_state *
 	json_obj_close(&e);
 	if (e.err)
 		return e.err;
-	if (path)
-		return seal_write_file(path, buf, e.len, 0600);
+	if (path) {
+		int fd, rc;
+
+		fd = seal_output_open(path, O_WRONLY | O_CREAT | O_TRUNC,
+				      0600);
+		if (fd < 0)
+			return fd;
+		rc = write_complete(fd, buf, e.len);
+		if (!rc)
+			rc = write_complete(fd, "\n", 1);
+		if (close(fd) && !rc)
+			rc = -errno;
+		return rc;
+	}
 	printf("%s\n", buf);
 	return 0;
 }

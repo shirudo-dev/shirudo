@@ -49,6 +49,16 @@ int seal_mkdir_p(const char *path, mode_t mode);
 int seal_write_file(const char *path, const void *data, size_t len,
 		    mode_t mode);
 
+/*
+ * Open a file the caller names for shirudo to write: a report, a
+ * download, an export. Root may run shirudo with any path, and the seal
+ * lets shirudo write what it denies everyone else, so the file must be
+ * a regular one that carries no label, not be created under a labelled
+ * directory, and not be reached through a symbolic link. The truncation
+ * waits until the inode has been checked. -EPERM for a sealed target.
+ */
+int seal_output_open(const char *path, int flags, mode_t mode);
+
 /* Give the inode behind fd the label of its directory, open as dfd. */
 int seal_inherit(int dfd, int fd);
 

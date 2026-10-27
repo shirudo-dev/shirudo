@@ -65,6 +65,7 @@ for t in \
 	tamperproof/t1132-seal-scratch.sh \
 	tamperproof/t1125-key-permission.sh \
 	tamperproof/t1140-verity-authority.sh \
+	tamperproof/t1141-output-paths.sh \
 	tamperproof/t1142-archive-restore.sh \
 	tamperproof/t1143-attach-scope.sh \
 	tamperproof/t1144-signed-metadata.sh \

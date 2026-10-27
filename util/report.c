@@ -6,18 +6,22 @@
  */
 
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/utsname.h>
+#include <unistd.h>
 
 #include <shirudo/string.h>
 
+#include "io.h"
 #include "json.h"
 #include "log.h"
 #include "malloc.h"
 #include "paths.h"
 #include "report.h"
+#include "seal.h"
 
 int report_emit(const char *path, const struct shirudo_op_report *r)
 {
@@ -28,9 +32,8 @@ int report_emit(const char *path, const struct shirudo_op_report *r)
 	const char *vlog = r->verifier_log ? r->verifier_log : "";
 	size_t loglen = strlen(vlog);
 	size_t cap = loglen * 6 + 16384;	/* worst-case escape + slack */
+	int fd, rc = 0;
 	char *buf;
-	FILE *f;
-	int rc = 0;
 
 	if (strsprintf(nv_index, sizeof(nv_index), "0x%08X",
 		       SHIRUDO_NV_INDEX) < 0)
@@ -93,15 +96,16 @@ int report_emit(const char *path, const struct shirudo_op_report *r)
 		xfree(buf, cap);
 		return 0;
 	}
-	f = fopen(path, "w");
-	if (!f) {
-		rc = -errno;
-		pr_err("report: open %s: %s", path, strerror(errno));
+	fd = seal_output_open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (fd < 0) {
+		pr_err("report: open %s: %s", path, strerror(-fd));
 		xfree(buf, cap);
-		return rc;
+		return fd;
 	}
-	rc = fprintf(f, "%s\n", buf) < 0 ? -EIO : 0;
-	if (fclose(f) != 0 && !rc)
+	rc = write_complete(fd, buf, strlen(buf));
+	if (!rc)
+		rc = write_complete(fd, "\n", 1);
+	if (close(fd) != 0 && !rc)
 		rc = -errno;
 	if (rc)
 		pr_err("report: write %s: %s", path, strerror(-rc));
