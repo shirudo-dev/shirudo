@@ -627,6 +627,7 @@ TEST_HELPERS := $(VERITY_TEST_HELPERS) \
                 testing/helper/test-exec-churn \
 		testing/upatch/kernel-obs/exec/exec-paths
 TEST_HELPERS += testing/helper/test-nv-writer
+TEST_HELPERS += testing/helper/test-nv-writer-cleanup
 TEST_HELPERS += testing/helper/test-tpm-preopened
 
 testing/helper/test-json-parser: testing/helper/test-json-parser.c util/json.o util/hex.o \
@@ -666,6 +667,22 @@ REGISTER_LIBS := $(LIBCRYPTO_LIBS) $(LIBSSL_LIBS) $(TSS2_LIBS) \
 testing/helper/test-nv-writer: testing/helper/test-nv-writer.c $(REGISTER_OBJS)
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(REGISTER_LIBS)
+
+testing/fixtures/nv-writer-fault.bpf.o: testing/fixtures/nv-writer-fault.bpf.c \
+		testing/fixtures/nv-writer-fault.h $(VMLINUX_H) $(BPF_LIBBPF_HEADERS)
+	@printf '  CLANG   $@\n'
+	$(Q)$(CLANG_BPF) -I$(dir $(VMLINUX_H)) -I$(LIBBPF_VENDOR) -c $< -o $@
+
+testing/helper/test-nv-writer-cleanup: testing/helper/test-nv-writer-cleanup.c \
+		testing/fixtures/nv-writer-fault.h builtin-init.c \
+		$(filter-out $(call obj,builtin-init.o),$(BUILTIN_OBJS)) \
+		$(UTIL_OBJS) $(VERSION_OBJ) $(LIBBPF_A) \
+		testing/fixtures/nv-writer-fault.bpf.o
+	@printf '  CC      $@\n'
+	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< \
+		$(filter-out testing/fixtures/nv-writer-fault.bpf.o,$(filter %.o %.a,$^)) \
+		-Wl,--wrap=shirudo_image_runtime_root \
+		$(STATIC_LIBS) $(DYNAMIC_LIBS)
 
 testing/helper/test-tpm-preopened: testing/helper/test-tpm-preopened.c \
                                  $(REGISTER_OBJS)

@@ -856,6 +856,8 @@ out:
 	bpf_link__destroy(link_setx);
 	bpf_link__destroy(link_unlink);
 	bpf_object__close(obj);
+	if (err)
+		nv_writer_destroy(id.nv_writer_ring);
 	return err;
 }
 

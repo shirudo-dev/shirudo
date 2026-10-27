@@ -316,7 +316,10 @@ make -C "$REPO_ROOT" -j"$(nproc)" -f Makefile.shirudo \
 	PROFILE=target CONFIG_MK=config-target.mk verity-test-helpers
 
 install -d "$TMP_DIR/test-helpers/testing/helper" \
+	"$TMP_DIR/test-helpers/testing/fixtures" \
 	"$TMP_DIR/test-helpers/testing/upatch/kernel-obs/exec"
+install -m 0644 "$REPO_ROOT/testing/fixtures/nv-writer-fault.bpf.o" \
+	"$TMP_DIR/test-helpers/testing/fixtures/"
 while IFS= read -r helper; do
 	install -m 0755 "$REPO_ROOT/$helper" "$TMP_DIR/test-helpers/$helper"
 done <<'EOF'
@@ -330,6 +333,7 @@ testing/helper/tpmsim-cmd
 testing/helper/test-tpm-wire
 testing/helper/test-nv-cphash
 testing/helper/test-nv-writer
+testing/helper/test-nv-writer-cleanup
 testing/helper/test-tpm-preopened
 testing/helper/test-config
 testing/helper/test-bpf-load

@@ -353,6 +353,10 @@ if [[ "${TEST_VM_SUITE:-all}" == register ]]; then
 	(
 		cd testing
 		SHIRUDO_TEST_REGISTER_VM=1 \
+			SHIRUDO_TEST_NV_CERT="$BUNDLE/fixtures/cert.der" \
+			SHIRUDO_TEST_FAILURES_FILE=/mnt/shirudo-out/failed-tests \
+			sh tpm/t1128-nv-writer-cleanup.sh
+		SHIRUDO_TEST_REGISTER_VM=1 \
 			SHIRUDO_TEST_FAILURES_FILE=/mnt/shirudo-out/failed-tests \
 			sh tpm/t0034-register.sh
 		SHIRUDO_TEST_REGISTER_VM=1 \

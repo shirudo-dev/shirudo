@@ -19,6 +19,7 @@
 #include "crypto.h"
 #include "identity.h"
 #include "log.h"
+#include "macros.h"
 #include "malloc.h"
 #include "nv_writer.h"
 
@@ -41,9 +42,27 @@
 
 #define NV_WRITER_SIGN_INFO	"enc=pkcs1 hash=sha256"
 
+void nv_writer_destroy(key_serial_t ring)
+{
+	const key_serial_t parents[] = {
+		KEY_SPEC_USER_KEYRING, KEY_SPEC_SESSION_KEYRING,
+	};
+	size_t i;
+
+	if (ring <= 0)
+		return;
+	for (i = 0; i < ARRAY_SIZE(parents); i++) {
+		if (syscall(__NR_keyctl, KEYCTL_UNLINK, ring, parents[i], 0, 0) < 0 &&
+		    errno != ENOENT)
+			pr_err("nv writer: unlink ring %d from %d: %s",
+			       ring, parents[i], strerror(errno));
+	}
+}
+
 int nv_writer_create(key_serial_t *ring, key_serial_t *writer,
 		     __u8 public[SHIRUDO_TPM_NV_RSA_BYTES])
 {
+	key_serial_t writer_ring = 0, writer_key = 0;
 	PKCS8_PRIV_KEY_INFO *info = NULL;
 	EVP_PKEY_CTX *ctx = NULL;
 	int len = 0, rc = -EIO;
@@ -55,6 +74,8 @@ int nv_writer_create(key_serial_t *ring, key_serial_t *writer,
 	__u64 nonce;
 	long ret;
 
+	*ring = 0;
+	*writer = 0;
 	ctx = EVP_PKEY_CTX_new_from_name(NULL, "RSA", NULL);
 	if (!ctx || EVP_PKEY_keygen_init(ctx) <= 0 ||
 	    EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, 3072) <= 0 ||
@@ -92,24 +113,27 @@ int nv_writer_create(key_serial_t *ring, key_serial_t *writer,
 		      KEY_SPEC_SESSION_KEYRING);
 	if (ret < 0)
 		goto key_error;
-	*ring = (key_serial_t)ret;
-	if (syscall(__NR_keyctl, KEYCTL_SETPERM, *ring, NV_RING_WRITE, 0, 0) < 0 ||
-	    syscall(__NR_keyctl, KEYCTL_LINK, *ring, KEY_SPEC_USER_KEYRING, 0, 0) < 0)
+	writer_ring = (key_serial_t)ret;
+	if (syscall(__NR_keyctl, KEYCTL_SETPERM, writer_ring, NV_RING_WRITE, 0, 0) < 0 ||
+	    syscall(__NR_keyctl, KEYCTL_LINK, writer_ring, KEY_SPEC_USER_KEYRING, 0, 0) < 0)
 		goto key_error;
 	ret = syscall(__NR_add_key, "asymmetric", "shirudo.nv-writer",
-		      der, (size_t)len, *ring);
+		      der, (size_t)len, writer_ring);
 	if (ret < 0)
 		goto key_error;
-	*writer = (key_serial_t)ret;
-	if (syscall(__NR_keyctl, KEYCTL_SETPERM, *writer,
+	writer_key = (key_serial_t)ret;
+	if (syscall(__NR_keyctl, KEYCTL_SETPERM, writer_key,
 		    KEY_USR_VIEW | KEY_USR_SEARCH, 0, 0) < 0 ||
-	    syscall(__NR_keyctl, KEYCTL_RESTRICT_KEYRING, *ring, 0, 0, 0) < 0 ||
-	    syscall(__NR_keyctl, KEYCTL_SETPERM, *ring, NV_RING_READ, 0, 0) < 0)
+	    syscall(__NR_keyctl, KEYCTL_RESTRICT_KEYRING, writer_ring, 0, 0, 0) < 0 ||
+	    syscall(__NR_keyctl, KEYCTL_SETPERM, writer_ring, NV_RING_READ, 0, 0) < 0)
 		goto key_error;
+	*ring = writer_ring;
+	*writer = writer_key;
 	rc = 0;
 	goto out;
 key_error:
 	rc = -errno;
+	nv_writer_destroy(writer_ring);
 out:
 	xfree(der, len > 0 ? (size_t)len : 0);
 	PKCS8_PRIV_KEY_INFO_free(info);

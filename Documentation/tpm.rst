@@ -93,6 +93,8 @@ the signer in its lasting keyring with owner view/search permissions,
 then restricts and seals the ring.  Bootstrap is trusted: production
 runs in the measured initrd before untrusted workloads. The public key,
 private-key ID and keyring ID are frozen in the identity map before attachment.
+Failed writer creation or enforcement setup removes the writer's links
+from the user and session keyrings.
 There is no additional state key or mutable binding-attempt marker.
 The keyring is already available to later invocations;
 ``lsm/key_permission`` must be attached and pinned before initialization
