@@ -167,6 +167,62 @@ test_expect_success 'a wrong nonce, key name, binding value or tampered value fa
 	grep -q "^FAIL: register: certified contents" "$WORK/report4"
 '
 
+# Root on the target defines an index of its own, bound to the debug and
+# application PCRs it can extend and reset at will, writes the init event
+# the operator expects into it, anchors it there and has the genuine
+# attestation key certify it in the real register's place. The evidence
+# is consistent in every value it carries; only the handle and the PCR
+# numbers, which the verifier must take from its own constants and not
+# from the document, give it away.
+test_expect_success 'a register of the target'"'"'s own, bound to PCRs it controls, is refused' '
+	nonce=0102030405060708090a0b0c0d0e0f10 &&
+	./$R forge 01818e01 16 23 "$(cat "$WORK/init")" $nonce >"$WORK/forged.json" &&
+	[ "$(py "import json; print(json.load(open(\"$WORK/forged.json\"))[\"register\"][\"value\"])")" = \
+		"$(sha "$Z$(cat "$WORK/init")")" ] &&
+	! $S attest verify --evidence="$WORK/forged.json" --nonce=$nonce \
+		--ak-name="$(cat "$WORK/ak")" --ek-name="$(cat "$WORK/ek")" \
+		--cert="$WORK/keys/cert.der" --strict-anchor --require-initrd \
+		>"$WORK/report-forged" &&
+	grep -q "^FAIL: register: the document names index 0x01818E00 and PCRs 9 and 11" \
+		"$WORK/report-forged" &&
+	grep -q "^ok:   register: certified contents match the listed value" \
+		"$WORK/report-forged"
+'
+
+test_expect_success 'an event relabelled after the fact fails although the replay closes' '
+	nonce=0102030405060708090a0b0c0d0e0f10 &&
+	sed "s/\"type\":\"upatch_load\"/\"type\":\"upatch_unload\"/" \
+		"$WORK/evidence.json" >"$WORK/relabelled.json" &&
+	! $S attest verify --evidence="$WORK/relabelled.json" --nonce=$nonce \
+		--ak-name="$(cat "$WORK/ak")" --cert="$WORK/keys/cert.der" \
+		--allow-runtime-events >"$WORK/report-relabelled" &&
+	grep -q "^ok:   eventlog: 2 records replay to the certified value" \
+		"$WORK/report-relabelled" &&
+	grep -q "^FAIL: eventlog: event 1 (upatch_unload foo) digest does not derive from its fields" \
+		"$WORK/report-relabelled" &&
+	$S attest verify --evidence="$WORK/evidence.json" --nonce=$nonce \
+		--ak-name="$(cat "$WORK/ak")" --cert="$WORK/keys/cert.der" \
+		--allow-runtime-events >"$WORK/report-labelled" &&
+	! grep -q "does not derive" "$WORK/report-labelled"
+'
+
+test_expect_success 'a tree operation records its digest as the target writes it' '
+	nonce=0102030405060708090a0b0c0d0e0f10 &&
+	before=$(./$R read | field value) &&
+	op=$(py "print(\"cd\"*32)") &&
+	event=$(py "import hashlib; print(hashlib.sha256(b\"shirudo-tree\\0\" + (1).to_bytes(8, \"big\") + bytes.fromhex(\"$op\")).hexdigest())") &&
+	out=$(./$R tree 1 append shirudo-test-tree "sha256:$op") &&
+	echo "$out" | grep -qx "rc=0" &&
+	[ "$(echo "$out" | field value)" = "$(sha "$before$event")" ] &&
+	./$R evidence $nonce >"$WORK/evidence-tree.json" &&
+	$S attest verify --evidence="$WORK/evidence-tree.json" --nonce=$nonce \
+		--ak-name="$(cat "$WORK/ak")" --cert="$WORK/keys/cert.der" \
+		--allow-runtime-events >"$WORK/report-tree" &&
+	grep -qx "verdict: ok" "$WORK/report-tree" &&
+	grep -q "^ok:   eventlog: 3 records replay to the certified value" "$WORK/report-tree" &&
+	! grep -q "does not derive" "$WORK/report-tree"
+'
+
 test_expect_success 'a challenge needs a vouched-for endorsement key' '
 	! $S attest challenge --evidence="$WORK/evidence.json" \
 		--out="$WORK/challenge-none.json" >"$WORK/challenge-none.out" &&
@@ -204,6 +260,16 @@ test_expect_success 'a challenge made from the evidence activates on the target'
 	grep -qx "verdict: ok" "$WORK/report-cred" &&
 	grep -q "^ok:   attestation key: activated the credential" "$WORK/report-cred" &&
 	grep -q "^ok:   endorsement key: TCG default template" "$WORK/report-cred"
+'
+
+test_expect_success 'a credential expectation needs the pinned attestation key' '
+	nonce=1112 &&
+	$S attest verify --evidence="$WORK/evidence-cred.json" --nonce=$nonce \
+		--cert="$WORK/keys/cert.der" --allow-runtime-events \
+		--expect-credential="$(cat "$WORK/credential")" \
+		>/dev/null 2>"$WORK/cred-unpinned.err"; rc=$? &&
+	[ "$rc" = 2 ] &&
+	grep -q "give --ak-name" "$WORK/cred-unpinned.err"
 '
 
 test_expect_success 'a wrong credential, a tampered blob and a foreign challenge are refused' '
@@ -257,7 +323,7 @@ test_expect_success 'a recreated index is unwritable and no longer anchored' '
 
 test_expect_success 'init refuses a second binding before the next TPM reset' '
 	./$R init "$(cat "$WORK/init")" | grep -qx "rc=-17" &&
-	[ "$(wc -l <"$WORK/eventlog")" = 2 ] &&
+	[ "$(wc -l <"$WORK/eventlog")" = 3 ] &&
 	./$R status | grep -qx "rebound=0"
 '
 

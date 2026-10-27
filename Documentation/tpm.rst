@@ -414,7 +414,8 @@ checks, in order:
    its public area and that area is the TCG default template under
    the endorsement policy; with ``--ek-name`` it is the pinned key;
    with ``--expect-credential`` the document's ``credential`` equals
-   the value the challenge carried.
+   the value the challenge carried, which needs ``--ak-name``: the
+   credential proves where the pinned key lives, not which key signed.
 3. The quote: ECDSA signature by that key over the ``TPMS_ATTEST``,
    signer equal to the key's qualified name under the endorsement
    hierarchy, the nonce as extra data, the selection equal to
@@ -423,22 +424,31 @@ checks, in order:
 4. The register certification: the same signature, signer and nonce
    checks, the certified index name equal to the listed name, and the
    certified 32 bytes at offset 0 equal to the listed value.
-5. The binding: this boot has an ``init`` record; the name a register
-   bound to that record's ``pcr_before`` and ``phase_before`` must
-   have, computed in software from the handle, the attributes with
-   ``TPMA_NV_WRITTEN``, the policy and the size, equals both the
-   certified name and the recorded one.  Every ``--expect-bind-pcr``
-   value equals the recorded one for that PCR, so the operator pins
-   the ``enter-initrd`` phase value from the UKI, and
+5. The binding: this boot has an ``init`` record; the document names
+   the register's handle and PCRs 9 and 11, the verifier's own
+   constants and never the record's, since a target can define an
+   index of its own under a policy over PCRs it extends and resets at
+   will; the name a register bound to that record's ``pcr_before`` and
+   ``phase_before`` must have, computed in software from the handle,
+   the attributes with ``TPMA_NV_WRITTEN``, the policy and the size,
+   equals both the certified name and the recorded one.  Every
+   ``--expect-bind-pcr`` value equals the recorded one for that PCR, so
+   the operator pins the ``enter-initrd`` phase value from the UKI, and
    ``--require-initrd`` fails unless the record says the binding was
-   made while the initrd ran.
+   made while the initrd ran; the record is the target's word, so
+   ``--expect-bind-pcr=11`` is what proves it.
 6. The reset: the boot holds one init record for the reset count the
    last one names, that count is the one the certification carries,
    and the quote and the certification carry the same reset count and
    firmware version, so a register bound again after boot cannot pass
    as the boot's.
 7. The replay: this boot's records fold from zeros to the certified
-   value.
+   value, and every event after the ``init`` record carries the digest
+   its own fields produce: the name and payload of a load or unload,
+   the sequence number and operation digest of a tree operation, the
+   certificate digest of a revocation.  A record relabelled after the
+   fact still replays, since the digest is what was measured, and
+   fails here.
 8. The anchor: the record's anchor digest is the digest of the anchor
    string for the recorded name, and the quoted PCR 9 equals
    ``pcr_before`` extended by it.  When PCR 9 holds further

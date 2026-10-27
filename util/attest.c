@@ -426,6 +426,7 @@ struct record {
 	char	type[16];
 	char	label[SHIRUDO_UPATCH_NAME_MAX + 64];
 	__u8	digest[32];
+	bool	derived;	/* digest follows from the record's fields */
 };
 
 struct init_record {
@@ -478,10 +479,13 @@ struct parse {
 	__s64		rec_phase_pcr;
 	__s64		rec_reset;
 	char		upatch_name[SHIRUDO_UPATCH_NAME_MAX + 1];
+	char		upatch_payload_hex[65];
 	char		tree_id[SHIRUDO_UPATCH_NAME_MAX + 1];
 	char		tree_op[16];
+	char		tree_digest_hex[sizeof("sha256:") + 64];
 	__s64		tree_seq;
 	char		key_fingerprint[65];
+	char		key_sha_hex[65];
 	struct record	*recs;
 	size_t		n_recs;
 	__u32		inits;		/* init records this boot */
@@ -556,22 +560,49 @@ static int on_record(void *ctx)
 		memset(r, 0, sizeof(*r));
 		strscpy(r->type, "init", sizeof(r->type));
 		memcpy(r->digest, in->digest, 32);
-	} else if (!strncmp(p->type, "upatch_", 7)) {
+	} else if (!strcmp(p->type, "upatch_load") ||
+		   !strcmp(p->type, "upatch_unload")) {
+		bool load = p->type[7] == 'l';
+		__u8 payload[32], event[32];
+
 		strscpy(r->label, p->upatch_name, sizeof(r->label));
+		if (!hex_decode(p->upatch_payload_hex, payload, 32)) {
+			chain_upatch_event(load ? "shirudo-upatch" :
+					   "shirudo-unload", p->upatch_name,
+					   payload, event);
+			r->derived = ct_eq(event, r->digest, 32);
+		}
 	} else if (!strcmp(p->type, "tree_op")) {
+		__u8 operation[32], event[32];
+
 		if (strsprintf(r->label, sizeof(r->label), "%s %s seq %lld",
 			       p->tree_op, p->tree_id, (__s64)p->tree_seq) < 0)
 			return -E2BIG;
-	} else if (!strncmp(p->type, "key_", 4)) {
+		if (p->tree_seq > 0 &&
+		    !strncmp(p->tree_digest_hex, "sha256:", 7) &&
+		    !hex_decode(p->tree_digest_hex + 7, operation, 32)) {
+			chain_tree_event(p->tree_seq, operation, event);
+			r->derived = ct_eq(event, r->digest, 32);
+		}
+	} else if (!strcmp(p->type, "key_revoke")) {
+		__u8 sha[32], event[32];
+
 		strscpy(r->label, p->key_fingerprint, sizeof(r->label));
+		if (!hex_decode(p->key_sha_hex, sha, 32)) {
+			chain_key_event("shirudo-key-revoke", sha, event);
+			r->derived = ct_eq(event, r->digest, 32);
+		}
 	}
 	p->n_recs++;
 	/* Reset the per-element scratch the next element may not set. */
 	p->type[0] = '\0';
 	p->upatch_name[0] = '\0';
+	p->upatch_payload_hex[0] = '\0';
 	p->tree_id[0] = '\0';
 	p->tree_op[0] = '\0';
+	p->tree_digest_hex[0] = '\0';
 	p->key_fingerprint[0] = '\0';
+	p->key_sha_hex[0] = '\0';
 	p->anchor[0] = '\0';
 	p->bound_in[0] = '\0';
 	p->tree_seq = 0;
@@ -773,11 +804,16 @@ int attest_verify(const char *evidence, size_t len,
 		struct shirudo_json_field upatch_sub[] = {
 			{ "name", SHIRUDO_JSON_T_STRING, p->upatch_name,
 			  sizeof(p->upatch_name), 0, NULL, 0 },
+			{ "payload_sha256", SHIRUDO_JSON_T_STRING,
+			  p->upatch_payload_hex, sizeof(p->upatch_payload_hex),
+			  0, NULL, 0 },
 		};
 		struct shirudo_json_field key_sub[] = {
 			{ "fingerprint", SHIRUDO_JSON_T_STRING,
 			  p->key_fingerprint, sizeof(p->key_fingerprint), 0,
 			  NULL, 0 },
+			{ "cert_sha256", SHIRUDO_JSON_T_STRING, p->key_sha_hex,
+			  sizeof(p->key_sha_hex), 0, NULL, 0 },
 		};
 		struct shirudo_json_field tree_sub[] = {
 			{ "seq", SHIRUDO_JSON_T_INT, &p->tree_seq, 0, 0, NULL,
@@ -786,6 +822,9 @@ int attest_verify(const char *evidence, size_t len,
 			  sizeof(p->tree_op), 0, NULL, 0 },
 			{ "id", SHIRUDO_JSON_T_STRING, p->tree_id,
 			  sizeof(p->tree_id), 0, NULL, 0 },
+			{ "operation_digest", SHIRUDO_JSON_T_STRING,
+			  p->tree_digest_hex, sizeof(p->tree_digest_hex), 0,
+			  NULL, 0 },
 		};
 		struct shirudo_json_field rec_sub[] = {
 			{ "type", SHIRUDO_JSON_T_STRING, p->type,
@@ -1044,32 +1083,40 @@ int attest_verify(const char *evidence, size_t len,
 	 * register bound to the recorded PCR values has, which is what
 	 * makes a recreation impossible to pass off, and those values are
 	 * what the operator pins to tell an initrd binding from a later one.
+	 * The handle and the PCRs are the register's, never the document's:
+	 * taken from the record, a target could certify an index of its own
+	 * under a policy over PCRs it can extend and reset at will.
 	 */
 	say(&rep, p->init.present, "eventlog: this boot has an init record");
 	if (!p->init.present) {
 		rc = -EKEYREJECTED;
 		goto out;
 	}
+	say(&rep, reg_index == SHIRUDO_NV_INDEX &&
+	    (__u32)p->reg_pcr == SHIRUDO_CHAIN_PCR &&
+	    p->init.pcr == SHIRUDO_CHAIN_PCR &&
+	    p->init.phase_pcr == SHIRUDO_CHAIN_PHASE_PCR,
+	    "register: the document names index 0x%08X and PCRs %u and %u",
+	    SHIRUDO_NV_INDEX, SHIRUDO_CHAIN_PCR, SHIRUDO_CHAIN_PHASE_PCR);
 	memcpy(bind, p->init.pcr_before, 32);
 	memcpy(bind + 32, p->init.phase_before, 32);
-	tpm_register_policy((1u << p->init.pcr) |
-			    (1u << p->init.phase_pcr), bind, 2,
+	tpm_register_policy(SHIRUDO_CHAIN_PCR_MASK, bind, 2,
 			    branch_written, branch_init, policy);
-	tpm_nv_name(reg_index,
+	tpm_nv_name(SHIRUDO_NV_INDEX,
 		    SHIRUDO_TPM_REGISTER_ATTRS | SHIRUDO_TPM_NV_WRITTEN,
 		    policy, 32, expected_name);
-	say(&rep, (__u32)p->reg_pcr == p->init.pcr &&
-	    ct_eq(expected_name, reg_name, SHIRUDO_TPM_NAME_LEN) &&
+	say(&rep, ct_eq(expected_name, reg_name, SHIRUDO_TPM_NAME_LEN) &&
 	    ct_eq(expected_name, p->init.name, SHIRUDO_TPM_NAME_LEN),
 	    "register: public area is bound to PCRs %u and %u as recorded",
-	    p->init.pcr, p->init.phase_pcr);
+	    SHIRUDO_CHAIN_PCR, SHIRUDO_CHAIN_PHASE_PCR);
 	for (bit = 0; bit < 24; bit++) {
 		const __u8 *held;
 
 		if (!(expect->bind_expect_mask & (1u << bit)))
 			continue;
-		held = bit == p->init.pcr ? p->init.pcr_before :
-		       bit == p->init.phase_pcr ? p->init.phase_before : NULL;
+		held = bit == SHIRUDO_CHAIN_PCR ? p->init.pcr_before :
+		       bit == SHIRUDO_CHAIN_PHASE_PCR ? p->init.phase_before :
+		       NULL;
 		say(&rep, held && ct_eq(held, expect->bind_values[bit],
 					32),
 		    "binding: PCR %u held the expected value", bit);
@@ -1102,6 +1149,17 @@ int attest_verify(const char *evidence, size_t len,
 	say(&rep, ct_eq(chain, reg_value, 32),
 	    "eventlog: %zu record%s replay to the certified value", p->n_recs,
 	    p->n_recs == 1 ? "" : "s");
+	/*
+	 * A digest the record's own fields do not produce is a record
+	 * relabelled after the fact: the replay still closes, but what the
+	 * events say happened is not what was measured.
+	 */
+	for (i = 1; i < p->n_recs; i++) {
+		if (!p->recs[i].derived)
+			say(&rep, false, "eventlog: event %zu (%s %s) digest "
+			    "does not derive from its fields", i,
+			    p->recs[i].type, p->recs[i].label);
+	}
 
 	{
 		char anchor[SHIRUDO_CHAIN_ANCHOR_MAX];
@@ -1114,21 +1172,22 @@ int attest_verify(const char *evidence, size_t len,
 		    "anchor: record digest matches the index name");
 		memcpy(pcr_expected, p->init.pcr_before, 32);
 		chain_fold(pcr_expected, anchor_digest);
-		if (p->pcr_have & (1u << p->init.pcr)) {
+		if (p->pcr_have & (1u << SHIRUDO_CHAIN_PCR)) {
 			bool exact = ct_eq(pcr_expected,
-					   p->pcrs[p->init.pcr], 32);
+					   p->pcrs[SHIRUDO_CHAIN_PCR], 32);
 
 			if (exact || expect->strict_anchor)
 				say(&rep, exact, "anchor: PCR %u equals the "
 				    "recorded value extended by the anchor",
-				    p->init.pcr);
+				    SHIRUDO_CHAIN_PCR);
 			else
 				note(&rep, "anchor: PCR %u carries further "
 				     "measurements after the anchor; replay "
-				     "the logs to confirm it", p->init.pcr);
+				     "the logs to confirm it",
+				     SHIRUDO_CHAIN_PCR);
 		} else {
 			say(&rep, false, "anchor: PCR %u is not in the quote",
-			    p->init.pcr);
+			    SHIRUDO_CHAIN_PCR);
 		}
 	}
 

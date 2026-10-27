@@ -596,6 +596,16 @@ static int cmd_attest_verify(int argc, const char **argv)
 		       "describe the init event and need --cert");
 		goto out;
 	}
+	/*
+	 * The credential proves that the pinned attestation key sits beside
+	 * the endorsement key; recovered on the target, its value says
+	 * nothing about which key signed the evidence.
+	 */
+	if (x.have_credential && !x.have_ak_name) {
+		pr_err("attest verify: --expect-credential needs the key the "
+		       "challenge was made for; give --ak-name");
+		goto out;
+	}
 	if (!x.have_ak_name)
 		pr_warn("attest verify: no --ak-name; the signer is not "
 			"pinned");
