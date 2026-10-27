@@ -706,41 +706,49 @@ static int boot_keys_error(const char *step, int rc)
 static int enroll_config_key(void)
 {
 	__u8 *der = NULL;
+	const char *step = "read config verification certificate";
 	key_serial_t ring;
 	size_t size = 0;
 	int rc;
 
 	rc = keys_read_der(image.bootstrap.certificate, &der, &size);
 	if (rc)
-		return boot_keys_error("read config verification certificate", rc);
+		goto fail;
+	step = "lookup dm-verity keyring";
 	ring = shirudo_keyring_dm_verity_serial();
 	if (ring < 0) {
 		rc = (int)ring;
-		xfree(der, size);
-		return boot_keys_error("lookup dm-verity keyring", rc);
+		goto fail;
 	}
+	step = "check config certificate enrollment";
 	rc = keyring_holds_cert(ring, der, size);
-	if (rc < 0) {
-		xfree(der, size);
-		return boot_keys_error("check config certificate enrollment", rc);
-	}
-	if (!rc)
-		rc = shirudo_keyring_dm_verity_add_cert(der, size);
-	xfree(der, size);
 	if (rc < 0)
-		return boot_keys_error("add config verification certificate", rc);
+		goto fail;
+	if (!rc) {
+		step = "add config verification certificate";
+		rc = shirudo_keyring_dm_verity_add_cert(der, size);
+		if (rc < 0)
+			goto fail;
+	}
+	xfree(der, size);
+	step = "seal dm-verity keyring";
 	rc = shirudo_keyring_dm_verity_seal();
 	if (rc == -EEXIST)
 		return 0;
 	if (rc)
-		return boot_keys_error("seal dm-verity keyring", rc);
+		return boot_keys_error(step, rc);
 	return 0;
+
+fail:
+	xfree(der, size);
+	return boot_keys_error(step, rc);
 }
 
 /* The authenticated initrd validates the boot set before installing guards. */
 int shirudo_image_boot_keys(struct shirudo_trusted_set *set)
 {
 	struct shirudo_trusted_cert primary = { .primary = true };
+	const char *step = "mount runtime";
 	size_t i;
 	int rc;
 
@@ -748,39 +756,52 @@ int shirudo_image_boot_keys(struct shirudo_trusted_set *set)
 	image.boot_keys_open = true;
 	rc = mount_runtime(true);
 	if (rc)
-		return boot_keys_error("mount runtime", rc);
+		goto fail;
+	step = "enrol config certificate";
 	rc = enroll_config_key();
 	if (rc)
-		return boot_keys_error("enrol config certificate", rc);
+		goto fail;
+	step = "open config update state";
 	rc = open_update();
 	if (rc)
-		return boot_keys_error("open config update state", rc);
+		goto fail;
+	step = "select boot config";
 	rc = boot_target(&image.boot_target);
 	if (rc)
-		return boot_keys_error("select boot config", rc);
+		goto fail;
+	step = "prepare boot config";
 	rc = prepare_config(&image, &image.boot_target, true);
 	if (rc)
-		return boot_keys_error("prepare boot config", rc);
+		goto fail;
+	step = "validate BPF trust set";
 	rc = shirudo_keys_validate_image_set(SHIRUDO_RUNTIME_CERT_PATH,
 					     image.candidate_fd, set);
 	if (rc)
-		return boot_keys_error("validate BPF trust set", rc);
+		goto fail;
+
 	/* Guard loaders need the initial signer until activation. */
+	step = "digest primary certificate";
 	strscpy(primary.path, SHIRUDO_RUNTIME_CERT_PATH, sizeof(primary.path));
 	rc = keys_digest_file(primary.path, primary.sha256,
 			      primary.fingerprint);
 	if (rc)
-		return boot_keys_error("digest primary certificate", rc);
+		goto fail;
 	for (i = 0; i < set->n; i++)
 		if (!memcmp(set->certs[i].sha256, primary.sha256, 32))
 			break;
 	if (i == set->n) {
-		if (set->n == SHIRUDO_KEYS_MAX)
-			return -E2BIG;
+		if (set->n == SHIRUDO_KEYS_MAX) {
+			rc = -E2BIG;
+			step = "add runtime certificate to trusted set";
+			goto fail;
+		}
 		set->certs[set->n++] = primary;
 	}
 	image.boot_target_valid = true;
 	return 0;
+
+fail:
+	return boot_keys_error(step, rc);
 }
 
 int shirudo_image_boot_keys_close(void)

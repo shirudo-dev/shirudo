@@ -1302,81 +1302,95 @@ static int run_init(void)
 {
 	struct shirudo_measured_upatch *set = NULL;
 	struct shirudo_eventlog_init rec;
+	const char *stage = "private bpffs setup";
 	bool recorded;
 	size_t n = 0;
 	int rc;
 
 	rc = init_bpffs();
 	if (rc)
-		return init_phase_error(rc, "private bpffs setup");
+		goto fail;
 
+	stage = "BPF keyring initialization";
 	rc = init_keyring();
 	if (rc)
-		return init_phase_error(rc, "BPF keyring initialization");
+		goto fail;
+	stage = "closing the boot key image";
 	rc = shirudo_image_boot_keys_close();
 	if (rc)
-		return init_phase_error(rc, "closing the boot key image");
+		goto fail;
 
 	/* Seal writable state before the hooks attach, then adopt the initrd log. */
+	stage = "sealing persistent state before LSM attachment";
 	rc = seal_label_tree();
 	if (rc)
-		return init_phase_error(rc, "sealing persistent state");
+		goto fail;
+	stage = "adopting the pending eventlog";
 	rc = eventlog_adopt_pending();
 	if (rc)
-		return init_phase_error(rc, "adopting the pending eventlog");
+		goto fail;
 
+	stage = "loading enforcement";
 	rc = init_lsm();
 	if (rc)
-		return init_phase_error(rc, "loading enforcement");
+		goto fail;
 
+	stage = "sealing initialized state";
 	rc = seal_label_tree();
 	if (rc)
-		return init_phase_error(rc, "sealing initialized state");
+		goto fail;
+	stage = "mounting the authenticated runtime";
 	rc = shirudo_image_runtime_mount();
 	if (rc)
-		return init_phase_error(rc, "mounting the authenticated runtime");
+		goto fail;
+	stage = "loading authenticated boot settings";
 	rc = shirudo_image_boot();
 	if (rc)
-		return init_phase_error(rc, "loading authenticated boot settings");
+		goto fail;
+	stage = "loading trusted keys";
 	rc = keys_load(SHIRUDO_RUNTIME_DIR "/keys",
 		       SHIRUDO_KEYS_REVOKED_DIR, true, &enrolled);
 	if (rc)
-		return init_phase_error(rc, "loading trusted keys");
+		goto fail;
 
-	/*
-	 * The record is the eventlog's, which root can hide behind a mount;
-	 * the register is the TPM's, written once this boot by whoever bound
-	 * it. Either says the restore has happened.
-	 */
+	/* The eventlog and register jointly show whether this boot restored. */
+	stage = "checking the boot eventlog";
 	rc = eventlog_boot_init(&rec);
 	if (rc && rc != -ENOENT) {
 		pr_err("init: eventlog %s unreadable: %s", eventlog_path(),
 		       strerror(-rc));
-		return rc;
+		goto fail;
 	}
 	recorded = rc == 0 || chain_bound();
+
+	stage = "restoring boot upatches";
 	rc = boot_restore(recorded, &set, &n);
 	if (rc) {
 		pr_err("init: boot-restore failed; further changes "
 		       "and attestation remain blocked");
 		xfree(set, n * sizeof(*set));
-		return init_phase_error(rc, "restoring boot upatches");
+		goto fail;
 	}
 
+	stage = "binding the TPM register";
 	rc = chain_extend_init(set, n);
 	xfree(set, n * sizeof(*set));
 	if (rc) {
 		pr_err("init: incomplete -- LSM active and upatches "
 		       "loaded, but TPM register not advanced");
-		return init_phase_error(rc, "binding the TPM register");
+		goto fail;
 	}
 
+	stage = "completing authenticated boot";
 	rc = shirudo_image_boot_complete();
 	if (rc)
-		return init_phase_error(rc, "completing authenticated boot");
+		goto fail;
 
 	pr_info("init: complete (LSM active, writable state sealed)");
 	return 0;
+
+fail:
+	return init_phase_error(rc, stage);
 }
 
 int cmd_init(int argc, const char **argv)
