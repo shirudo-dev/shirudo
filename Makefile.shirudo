@@ -670,7 +670,7 @@ testing/helper/test-chain: testing/helper/test-chain.c $(REGISTER_OBJS)
 	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(REGISTER_LIBS)
 
 testing/helper/test-tpm-wire: testing/helper/test-tpm-wire.c util/tpm_wire.o util/hex.o \
-                        util/crypto_openssl.o util/io.o util/malloc.o util/log.o \
+                        util/crypto_openssl.o util/io.o util/seal.o util/malloc.o util/log.o \
                         util/string.o
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^ -lcrypto -lssl
@@ -684,7 +684,7 @@ testing/helper/tpmsim-cmd: testing/helper/tpmsim-cmd.c
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS_BASE) -Iinclude $(TPMSIM_CFLAGS) -o $@ $< $(TPMSIM_LIBS) -lcrypto
 
-testing/helper/test-config: testing/helper/test-config.c util/config.o util/io.o util/log.o util/hex.o \
+testing/helper/test-config: testing/helper/test-config.c util/config.o util/io.o util/seal.o util/log.o util/hex.o \
                             util/image_config.o util/string.o util/malloc.o
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^
@@ -762,7 +762,7 @@ testing/helper/test-upatch-decode: testing/helper/test-upatch-decode.c \
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(DYNAMIC_LIBS)
 
-testing/helper/test-exec-churn: testing/helper/test-exec-churn.c util/io.o util/malloc.o \
+testing/helper/test-exec-churn: testing/helper/test-exec-churn.c util/io.o util/seal.o util/malloc.o \
                                  util/log.o util/string.o
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^
@@ -773,7 +773,7 @@ testing/upatch/kernel-obs/exec/exec-paths: testing/upatch/kernel-obs/exec/exec_p
 
 testing/helper/test-config-image: testing/helper/test-config-image.c \
 		util/config_image.o util/crypto_openssl.o util/malloc.o \
-		util/io.o util/hex.o util/log.o \
+		util/io.o util/seal.o util/hex.o util/log.o \
 		util/string.o
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^ -lcrypto -lssl
@@ -797,7 +797,7 @@ testing/helper/test-image-keys: testing/helper/test-image-keys.c \
 testing/helper/test-image-config: testing/helper/test-image-config.c \
 		util/image_bootstrap.o util/hex.o util/config_measure.o \
 		util/crypto_openssl.o util/config.o util/image_config.o \
-		util/io.o util/log.o util/malloc.o \
+		util/io.o util/seal.o util/log.o util/malloc.o \
 		util/string.o
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(LIBCRYPTO_LIBS) $(LIBSSL_LIBS)
@@ -856,7 +856,8 @@ testing/fuzz/fuzz-oci-manifest: testing/fuzz/fuzz-oci-manifest.c \
 testing/fuzz/fuzz-bpm-index: testing/fuzz/fuzz-bpm-index.c \
                              $(FUZZ_BASE) $(FUZZ_PACKAGE)
 testing/fuzz/fuzz-tree: testing/fuzz/fuzz-tree.c $(FUZZ_BASE) \
-                        util/bpm_tree.c util/crypto_openssl.c util/io.c
+                        util/bpm_tree.c util/crypto_openssl.c util/io.c \
+                        $(FUZZ_SEAL)
 testing/fuzz/fuzz-upatch: testing/fuzz/fuzz-upatch.c $(FUZZ_BASE) \
                           util/upatch.c
 testing/fuzz/fuzz-prog-metadata: testing/fuzz/fuzz-prog-metadata.c \
@@ -866,7 +867,8 @@ testing/fuzz/fuzz-bpm-tar: testing/fuzz/fuzz-bpm-tar.c $(FUZZ_BASE) \
 testing/fuzz/fuzz-bpm-package: testing/fuzz/fuzz-bpm-package.c $(FUZZ_BASE) \
                                $(FUZZ_PACKAGE)
 testing/fuzz/fuzz-tpm-wire: testing/fuzz/fuzz-tpm-wire.c $(FUZZ_BASE) \
-                            util/tpm_wire.c util/crypto_openssl.c util/io.c
+                            util/tpm_wire.c util/crypto_openssl.c util/io.c \
+                            $(FUZZ_SEAL)
 testing/fuzz/fuzz-attest: testing/fuzz/fuzz-attest.c $(FUZZ_BASE) \
                           util/attest.c util/chain.c util/tpm.c \
                           util/tpm_wire.c util/eventlog.c util/timefmt.c \
@@ -894,12 +896,14 @@ testing/fuzz/fuzz-serializer: FUZZ_LIBS += $(LIBBPF_A) $(LIBELF_LIBS)
 testing/fuzz/fuzz-cms: testing/fuzz/fuzz-cms.c $(FUZZ_BASE) util/keys.c \
                        util/crypto_openssl.c util/io.c $(FUZZ_SEAL)
 testing/fuzz/fuzz-decoder: testing/fuzz/fuzz-decoder.c $(FUZZ_BASE) \
-                           util/upatch_decode.c util/upatch.c util/io.c
+                           util/upatch_decode.c util/upatch.c util/io.c \
+                           $(FUZZ_SEAL)
 testing/fuzz/fuzz-decoder: FUZZ_CFLAGS += $(LUAJIT_CFLAGS) -DSHIRUDO_HAVE_LUAJIT
 testing/fuzz/fuzz-decoder: FUZZ_LIBS += $(LUAJIT_LIBS)
 testing/fuzz/fuzz-otel: testing/fuzz/fuzz-otel.c $(FUZZ_BASE) \
                         util/upatch_maps_otel.c util/crypto_openssl.c \
-                        util/tls_openssl.c util/io.c util/version_id.c
+                        util/tls_openssl.c util/io.c util/version_id.c \
+                        $(FUZZ_SEAL)
 testing/fuzz/fuzz-beefile: testing/fuzz/fuzz-beefile.c $(FUZZ_BASE) \
                            tools/shirudo-build/bpm-build.c $(FUZZ_PACKAGE) \
                            util/upatch.c util/timefmt.c util/paths.c \
@@ -911,7 +915,8 @@ testing/fuzz/fuzz-oci-ref: testing/fuzz/fuzz-oci-ref.c $(FUZZ_BASE) \
 testing/fuzz/fuzz-registry-auth: testing/fuzz/fuzz-registry-auth.c \
                                  $(FUZZ_BASE) $(FUZZ_OCI)
 testing/fuzz/fuzz-config: testing/fuzz/fuzz-config.c $(FUZZ_BASE) \
-                          $(FUZZ_CONFIG) util/io.c util/bpm_source_config.c
+                          $(FUZZ_CONFIG) util/seal.c util/io.c \
+                          util/bpm_source_config.c
 FUZZ_TREE_STATE := util/bpm_tree_state.c util/io.c $(FUZZ_SEAL) \
                    util/kernel_build_id.c util/kernel_release.c \
                    util/crypto_openssl.c testing/fuzz/chain.c

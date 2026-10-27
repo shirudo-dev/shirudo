@@ -8,6 +8,7 @@
 #ifndef SHIRUDO_SEAL_H
 #define SHIRUDO_SEAL_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <sys/types.h>
 
@@ -24,8 +25,10 @@
 int seal_label(const char *path);
 
 /*
- * Label writable state before attaching the seal. Refuse non-file entries
- * and stop on the first failed label; partial sealing is an init failure.
+ * Label writable state before attaching the seal: everything on the
+ * first init, nothing afterwards, when an entry without the label or of
+ * a kind shirudo never makes is someone else's and is ignored. Stop on
+ * the first failed label; partial sealing is an init failure.
  */
 int seal_label_tree(void);
 
@@ -45,6 +48,16 @@ int seal_open(const char *path, int flags, mode_t mode);
 
 /* mkdir -p, every directory created labelled as its parent is. */
 int seal_mkdir_p(const char *path, mode_t mode);
+
+/*
+ * Open an entry of sealed state for reading, as shirudo's own: not
+ * through a symbolic link, and under a labelled directory only when it
+ * carries that label. -EPERM for a foreign entry.
+ */
+int seal_open_read(const char *path);
+
+/* Whether seal_open_read() would succeed. */
+bool seal_owns(const char *path);
 
 int seal_write_file(const char *path, const void *data, size_t len,
 		    mode_t mode);

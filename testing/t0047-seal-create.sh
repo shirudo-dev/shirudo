@@ -82,11 +82,33 @@ test_expect_success 'a symlink gets the label itself, its target untouched' '
 	./$H get "$W/plain/target" | grep -qx "label=none"
 '
 
-test_expect_success 'a directory that exists already is left as it is' '
+# What sits under a labelled directory without its label is someone
+# else's: never created under, written through or followed.
+test_expect_success 'a directory that exists already without the label is refused' '
 	mkdir "$W/sealed/old" &&
-	./$H mkdir "$W/sealed/old/new" | grep -qx "rc=0" &&
-	./$H get "$W/sealed/old" | grep -qx "label=none" &&
-	./$H get "$W/sealed/old/new" | grep -qx "label=none"
+	! ./$H mkdir "$W/sealed/old/new" | grep -qx "rc=0" &&
+	test ! -e "$W/sealed/old/new" &&
+	./$H get "$W/sealed/old" | grep -qx "label=none"
+'
+
+test_expect_success 'a file that exists already without the label is refused' '
+	echo keep >"$W/sealed/foreign" &&
+	! ./$H open "$W/sealed/foreign" x | grep -qx "rc=0" &&
+	[ "$(cat "$W/sealed/foreign")" = keep ] &&
+	./$H get "$W/sealed/foreign" | grep -qx "label=none"
+'
+
+test_expect_success 'a symbolic link under a labelled directory is not followed' '
+	echo keep >"$W/plain/elsewhere" &&
+	ln -s "$W/plain/elsewhere" "$W/sealed/away" &&
+	! ./$H open "$W/sealed/away" x | grep -qx "rc=0" &&
+	./$H write "$W/sealed/away" x | grep -qx "rc=0" &&
+	test ! -L "$W/sealed/away" &&
+	./$H get "$W/sealed/away" | grep -qx "label=$LABEL" &&
+	[ "$(cat "$W/plain/elsewhere")" = keep ] &&
+	ln -s "$W/plain" "$W/sealed/dir" &&
+	! ./$H mkdir "$W/sealed/dir/new" | grep -qx "rc=0" &&
+	test ! -e "$W/plain/new"
 '
 
 test_done

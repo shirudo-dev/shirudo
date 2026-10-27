@@ -160,10 +160,18 @@ T3  Tampering with shirudo's files and process
     preserve operations on files the caller cannot read. Scratch allocation
     failure also requires authority.
     New inodes inherit their parent's label in the creation transaction
-    when the parent has a cached seal mark. Shirudo's writers hold the
-    parent directory open to populate and retain that mark. Directory
-    eviction and foreign link or rename operations remain subject to
-    residual risk 15; existing writable references are not revoked.
+    when the parent has a cached seal mark, and a marked directory takes
+    new entries from shirudo alone: ``inode_create``, ``inode_mkdir``,
+    ``inode_symlink``, ``inode_mknod``, ``inode_link`` and a rename into
+    it require the caller's authority, so root brings in neither an
+    inode with contents nor a link for shirudo to follow. Shirudo's
+    writers hold the parent directory open to populate and retain that
+    mark, open nothing in sealed state through a symbolic link, and take
+    no entry without the label for shirudo's own: ``init`` labels the
+    tree on its first run and afterwards ignores a foreign entry rather
+    than labelling, following, restoring or failing on it. Directory
+    eviction remains subject to residual risk 15; existing writable
+    references are not revoked.
     The authority the seal grants shirudo is not root's to aim: a path
     root names for shirudo to write, a report, an export, evidence or
     a download, is opened as output, never a labelled inode, never
@@ -217,9 +225,9 @@ T5  Silent state change
     unreachable for the moment, leaves a register that claims more
     than happened and never a detach it does not know; a re-run of
     ``init`` restores nothing once this boot's init event is on
-    record, and refuses ``tampered`` for an archived artifact that is
-    not loaded, since root can rename a signed artifact into the
-    archive and nothing would measure it.  An eventlog
+    record, refuses ``tampered`` for an archived artifact that carries
+    the label but is not loaded, and ignores one without the label,
+    which someone else brought in and nothing would measure.  An eventlog
     that would overflow refuses ``eventlog_full`` before anything
     happens.  Every state-changing command reads the register first and
     refuses ``tampered`` when ``--expect-chain`` disagrees or the index
@@ -491,11 +499,13 @@ Each of these is known, documented and bounded; none is silent.
     it has seen since the inode came into memory: one opened, one
     relabelled, or one created under a marked parent.  shirudo opens a
     directory before creating in it and puts the label on afterwards
-    where the kernel could not. Another process creating under a labelled
-    directory the seal has not seen since the inode was evicted gets an
-    unlabelled inode, as every creation did before, until the next
-    ``init`` labels the tree.  Rename and link bring an existing inode
-    in without creating one, so they bring it in unlabelled.
+    where the kernel could not. While the mark is absent another process
+    can create under a labelled directory, or rename or link an inode
+    with its contents into it, and the entry carries no label: shirudo
+    opens sealed state without following a symbolic link, refuses an
+    entry under a labelled directory that lacks the label, and ``init``
+    ignores it rather than labelling it, so such an entry is inert until
+    root removes it.
 
 Deferred mitigations
 ~~~~~~~~~~~~~~~~~~~~
@@ -509,11 +519,9 @@ the separator, and measuring the anchor through ``systemd-pcrextend`` so
 systemd's measurement log explains it (residual risk 11); signed PCR
 policies for the kernel and initrd PCRs so a verifier needs no golden
 values; an in-kernel detach so the pin removal is signed BPF rather
-than userspace (residual risk 1); and refusing creation, rename
-and link into a labelled directory from any process but shirudo, which
-would keep foreign entries out of the tree altogether, and a
-``d_instantiate`` hook the BPF LSM can sleep in, which would mark a
-directory the moment its dentry is bound (residual risk 15).
+than userspace (residual risk 1); and a ``d_instantiate`` hook the BPF
+LSM can sleep in, which would mark a directory the moment its dentry is
+bound and close the eviction gap (residual risk 15).
 
 6) Out of scope
 ---------------

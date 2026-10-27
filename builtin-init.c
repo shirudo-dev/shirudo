@@ -908,15 +908,22 @@ static int boot_restore(bool recorded,
 			rc = -ENAMETOOLONG;
 			goto next;
 		}
-		if (upatch_open(path, &u) == 0) {
-			memcpy(set[cnt].name, u.hdr.name,
-			       SHIRUDO_UPATCH_NAME_MAX);
-			set[cnt].name[SHIRUDO_UPATCH_NAME_MAX] = '\0';
-			hex_encode(u.hdr.payload_sha256,
-				   SHIRUDO_UPATCH_PAYLOAD_HASH_LEN,
-				   set[cnt].payload_hex);
-			upatch_close(&u);
+		if (!seal_owns(path)) {
+			pr_warn("boot-restore: %s is not shirudo's own "
+				"(foreign entry); ignored", names[i]->d_name);
+			goto next;
 		}
+		if (upatch_open(path, &u) != 0) {
+			pr_warn("boot-restore: %s is not an artifact shirudo "
+				"archived (foreign entry); ignored",
+				names[i]->d_name);
+			goto next;
+		}
+		memcpy(set[cnt].name, u.hdr.name, SHIRUDO_UPATCH_NAME_MAX);
+		set[cnt].name[SHIRUDO_UPATCH_NAME_MAX] = '\0';
+		hex_encode(u.hdr.payload_sha256, SHIRUDO_UPATCH_PAYLOAD_HASH_LEN,
+			   set[cnt].payload_hex);
+		upatch_close(&u);
 		fd = upatch_open_first_link(set[cnt].name);
 		if (fd >= 0) {
 			close(fd);

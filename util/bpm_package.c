@@ -6,6 +6,7 @@
  */
 
 #include <errno.h>
+#include <fcntl.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -13,6 +14,7 @@
 #include <string.h>
 #include <strings.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <zlib.h>
 #include <openssl/bio.h>
 #include <openssl/evp.h>
@@ -27,6 +29,7 @@
 #include "bpm_tree.h"
 #include "crypto.h"
 #include "hex.h"
+#include "io.h"
 #include "json.h"
 #include "log.h"
 #include "macros.h"
@@ -613,7 +616,7 @@ int bpm_pkg_extract(const char *archive, const char *dest)
 				break;
 		} else if (type == '0') {
 			char parent[PATH_MAX];
-			FILE *fp;
+			int fd;
 
 			strscpy(parent, path, sizeof(parent));
 			slash = strrchr(parent, '/');
@@ -623,9 +626,9 @@ int bpm_pkg_extract(const char *archive, const char *dest)
 				if (rc)
 					break;
 			}
-			fp = fopen(path, "wb");
-			if (!fp) {
-				rc = -errno;
+			fd = seal_open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
+			if (fd < 0) {
+				rc = fd;
 				break;
 			}
 			remain = size;
@@ -634,16 +637,17 @@ int bpm_pkg_extract(const char *archive, const char *dest)
 				size_t want = remain > sizeof(buf) ? sizeof(buf) : (size_t)remain;
 
 				n = gzread(gz, buf, (__u32)want);
-				if (n <= 0 || fwrite(buf, 1, (size_t)n, fp) != (size_t)n) {
+				if (n <= 0 || write_complete(fd, buf, (size_t)n)) {
 					rc = -EIO;
 					break;
 				}
 				remain -= (size_t)n;
 			}
-			fclose(fp);
+			if (!rc && fchmod(fd, 0644))
+				rc = -errno;
+			close(fd);
 			if (rc)
 				break;
-			chmod(path, 0644);
 		} else {
 			rc = -EPERM;
 			break;

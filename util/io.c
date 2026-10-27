@@ -16,6 +16,9 @@
 #include "log.h"
 #include "malloc.h"
 #include "paths.h"
+#include "seal.h"
+
+static bool under(const char *path, const char *dir);
 
 int write_complete(int fd, const void *buf, size_t len)
 {
@@ -44,9 +47,12 @@ int read_file(const char *path, size_t max, void *out, size_t *len)
 	size_t left;
 	int fd, rc;
 
-	fd = open(path, O_RDONLY | O_CLOEXEC);
+	if (under(path, SHIRUDO_VAR_LIB))
+		fd = seal_open_read(path);
+	else
+		fd = open(path, O_RDONLY | O_CLOEXEC);
 	if (fd < 0)
-		return -errno;
+		return fd == -1 ? -errno : fd;
 	if (fstat(fd, &st) != 0) {
 		rc = -errno;
 		goto out;
