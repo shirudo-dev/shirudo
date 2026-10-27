@@ -27,6 +27,10 @@ struct shirudo_upatch {
 	const struct shirudo_upatch_decoder_blob *decoder_blob;
 	__u32				decoder_blob_len;
 	__u32				nr_decoders;
+	const char			*signed_name;	/* SHIRUDO_UPATCH_NAME_MAX */
+	const __u8			*signed_attach;
+	__u32				signed_attach_len;
+	const __u8			*signed_unload_payload;	/* 32 bytes */
 };
 
 struct upatch_decoder_view {
@@ -68,6 +72,18 @@ int upatch_decoder_view(const struct shirudo_upatch *u, __u32 idx,
 			struct upatch_decoder_view *out);
 
 /*
+ * The signed sections, NULL where the data carries none: the name,
+ * NUL-padded to SHIRUDO_UPATCH_NAME_MAX like the header's; the attach
+ * metadata of a load; the payload digest an unload directive expects.
+ * A load or unload refuses what it needs and does not find; inspection
+ * shows what there is.
+ */
+const char *upatch_signed_name(const struct shirudo_upatch *u);
+const void *upatch_signed_attach(const struct shirudo_upatch *u,
+				 __u32 *len);
+const __u8 *upatch_signed_unload_payload(const struct shirudo_upatch *u);
+
+/*
  * Validate an externally-provided upatch name: non-empty, doesn't
  * start with '.', and matches [A-Za-z0-9._-]+. Rejects anything that
  * could escape the bpffs / on-disk path namespace.
@@ -94,9 +110,8 @@ struct shirudo_prog_spec {
 };
 
 /*
- * The program metadata of a load upatch, which the loader signature does
- * not cover: parsed strictly into one spec per program, target_fd -1.
- * 0 or -errno; free with prog_specs_free().
+ * The attach metadata of a load upatch, parsed strictly into one spec
+ * per program, target_fd -1. 0 or -errno; free with prog_specs_free().
  */
 int prog_specs_parse(const void *metadata, __u32 metadata_len,
 		     __u32 nr_progs, struct shirudo_prog_spec **out);

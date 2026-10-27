@@ -72,13 +72,16 @@ static int make_decoder(bool metric, bool counter, bool snapshot,
 	size_t entries_end = sizeof(struct shirudo_upatch_decoder_blob) +
 		sizeof(struct shirudo_upatch_decoder_entry);
 	size_t decoder_len = entries_end + source_len;
-	size_t data_len = decoder_len +
-		sizeof(struct shirudo_upatch_decoder_trailer);
+	size_t dir_off = (decoder_len + 7) & ~(size_t)7;
+	size_t data_len = dir_off +
+		sizeof(struct shirudo_upatch_signed_section) +
+		sizeof(struct shirudo_upatch_signed_trailer);
 	size_t loader_off = sizeof(struct shirudo_upatch_header);
 	size_t sig_off = loader_off + sizeof(struct bpf_insn);
 	size_t data_off = sig_off + 1;
 	size_t file_len = data_off + data_len;
-	struct shirudo_upatch_decoder_trailer trailer = {};
+	struct shirudo_upatch_signed_section section = {};
+	struct shirudo_upatch_signed_trailer trailer = {};
 	struct shirudo_upatch_decoder_entry entry = {};
 	struct shirudo_upatch_decoder_blob blob = {};
 	struct shirudo_upatch_header header = {};
@@ -132,11 +135,16 @@ static int make_decoder(bool metric, bool counter, bool snapshot,
 	entry.source_len = htole32(source_len);
 	memcpy(file + data_off + sizeof(blob), &entry, sizeof(entry));
 	memcpy(file + data_off + entries_end, source, source_len);
-	trailer.magic = htole32(SHIRUDO_UPATCH_DECODER_TRAILER_MAGIC);
-	trailer.version = htole32(SHIRUDO_UPATCH_DECODER_VERSION);
-	trailer.decoder_off = htole32(0);
-	trailer.decoder_len = htole32(decoder_len);
-	memcpy(file + data_off + decoder_len, &trailer, sizeof(trailer));
+	section.tag = htole32(SHIRUDO_UPATCH_SECTION_DECODERS);
+	section.off = htole32(0);
+	section.len = htole32(decoder_len);
+	memcpy(file + data_off + dir_off, &section, sizeof(section));
+	trailer.magic = htole32(SHIRUDO_UPATCH_SIGNED_TRAILER_MAGIC);
+	trailer.version = htole32(SHIRUDO_UPATCH_SIGNED_VERSION);
+	trailer.dir_off = htole32(dir_off);
+	trailer.nr_sections = htole32(1);
+	memcpy(file + data_off + dir_off + sizeof(section), &trailer,
+	       sizeof(trailer));
 
 	rc = write_complete(fd, file, file_len);
 	if (close(fd) != 0 && rc == 0)

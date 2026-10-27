@@ -151,8 +151,10 @@ Build.  ``shirudo build fix.bpf.c -o fix.upatch`` compiles the source
 with ``clang -target bpf -O2 -g``, opens the object with libbpf, calls
 ``bpf_object__gen_loader()`` with ``gen_hash`` set and
 ``bpf_object__load()`` to produce the loader instructions and data,
-CMS-signs ``loader_insns || data``, and writes the ``.upatch``
-container with the name, the payload SHA-256 and the attach metadata.
+appends the name, the attach metadata and the decoders to the data as
+signed sections, CMS-signs ``loader_insns || data``, and writes the
+``.upatch`` container with the name and the payload SHA-256 in its
+header.
 A pre-compiled ``.bpf.o`` is accepted as input too.  ``shirudo build --unload
 <name>`` emits an unload directive instead: the same container with
 flag bit 0 set, carrying the compiled ``bpf/unload.c`` template
@@ -201,8 +203,10 @@ the persisted ``.upatch``: a process stopped between the two leaves a
 register that says more than happened, never a detach it does not
 know.  A missing pin is ``already_unloaded`` and extends nothing.  The kernel's
 ``bpf_sys_bpf()`` allowlist has no detach or unlink command, which is
-why the detach is not inside the signed BPF; what that costs the trust
-model is residual risk 1 in the threat model.
+why the detach is not inside the signed BPF; the target name and the
+expected payload are signed sections of the directive, so what that
+costs the trust model is the moment of the detach alone, residual risk
+1 in the threat model.
 
 Attach kinds.  The attach metadata selects a raw tracepoint attach
 (``tp_btf``, ``fentry``/``fexit``, ``lsm``), kprobe and kretprobe,

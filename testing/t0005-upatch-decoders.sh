@@ -159,7 +159,12 @@ src, root = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
 original = bytearray(src.read_bytes())
 data_off, data_len = struct.unpack_from("<II", original, 328)
 trailer = data_off + data_len - 16
-decoder_off, decoder_len = struct.unpack_from("<II", original, trailer + 8)
+dir_off, nr = struct.unpack_from("<II", original, trailer + 8)
+for i in range(nr):
+    tag, _, off, length = struct.unpack_from("<IIII", original,
+                                             data_off + dir_off + 16 * i)
+    if tag == 0x42444344:
+        section, decoder_off, decoder_len = data_off + dir_off + 16 * i, off, length
 blob, entry = data_off + decoder_off, data_off + decoder_off + 16
 def write(name, changes):
     data = bytearray(original)
@@ -167,7 +172,7 @@ def write(name, changes):
         struct.pack_into(fmt, data, off, value)
     (root / name).write_bytes(data)
 write("bad-decoder-trailer", [(trailer, "<I", 0)])
-write("bad-decoder-offset", [(trailer + 8, "<I", 0xffffffff)])
+write("bad-decoder-offset", [(section + 8, "<I", 0xffffffff)])
 write("bad-decoder-count", [(blob + 8, "<I", 0xffffffff)])
 write("bad-decoder-source-range",
       [(entry + 192, "<I", decoder_len), (entry + 196, "<I", 1)])
