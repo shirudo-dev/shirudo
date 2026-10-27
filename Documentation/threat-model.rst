@@ -190,8 +190,16 @@ T5  Silent state change
     with the index name right after that write, so nothing that runs
     later can bind, an index undefined and recreated at runtime cannot
     be written again, and one recreated under another policy has a name
-    the eventlog does not know.  A load whose extension fails
-    reports ``tpm_error`` rather than succeeding unmeasured; an eventlog
+    the eventlog does not know.  A load whose extension fails is
+    undone, pins and archive, and reports ``tpm_error`` rather than
+    running unmeasured; an unload or purge is measured before it
+    detaches, so a process stopped between the two, or a TPM made
+    unreachable for the moment, leaves a register that claims more
+    than happened and never a detach it does not know; a re-run of
+    ``init`` restores nothing once this boot's init event is on
+    record, and refuses ``tampered`` for an archived artifact that is
+    not loaded, since root can rename a signed artifact into the
+    archive and nothing would measure it.  An eventlog
     that would overflow refuses ``eventlog_full`` before anything
     happens.  Every state-changing command reads the register first and
     refuses ``tampered`` when ``--expect-chain`` disagrees or the index

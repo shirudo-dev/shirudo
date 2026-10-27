@@ -2021,12 +2021,13 @@ static int append_upatch_event(const char *type, const char *name,
 /*
  * Each operator operation is its own register event, where boot restore
  * coalesces into one. A missing TPM or register is an error, never an
- * unmeasured success: init guarantees the register exists.
+ * unmeasured success: init guarantees the register exists. *measured
+ * tells a failure after the register moved from one before it.
  */
 static int upatch_chain_event(const char *tag, const char *type,
 			      const char *op, const char *name,
 			      const __u8 payload[32], const char *reason,
-			      char out_chain[65])
+			      char out_chain[65], bool *measured)
 {
 	__u8 event[32], chain[32];
 	char chain_hex[65];
@@ -2034,6 +2035,8 @@ static int upatch_chain_event(const char *tag, const char *type,
 
 	if (out_chain)
 		out_chain[0] = '\0';
+	if (measured)
+		*measured = false;
 	chain_upatch_event(tag, name, payload, event);
 
 	rc = chain_extend(event, chain);
@@ -2055,6 +2058,8 @@ static int upatch_chain_event(const char *tag, const char *type,
 		       "reconcile", op);
 		return rc;
 	}
+	if (measured)
+		*measured = true;
 	rc = append_upatch_event(type, name, payload, event, reason);
 	if (rc) {
 		pr_err("upatch %s: eventlog append failed after extend -- "
@@ -2301,6 +2306,21 @@ static int wipe_dir_flat(const char *dir)
 	return 0;
 }
 
+/* Whether the upatch has its pin directory, loaded or part way there. */
+static bool upatch_is_pinned(const char *name)
+{
+	char dir[PATH_MAX];
+	char bpffs_name[SHIRUDO_UPATCH_BPFFS_NAME_MAX + 1];
+	struct stat st;
+
+	if (upatch_bpffs_name(bpffs_name, sizeof(bpffs_name), name))
+		return false;
+	if (strsprintf(dir, sizeof(dir), "%s/%s", SHIRUDO_BPFFS_UPATCHES_DIR,
+		       bpffs_name) < 0)
+		return false;
+	return stat(dir, &st) == 0;
+}
+
 /* Unlinking the link pin drops its last reference, which detaches. */
 static int remove_pin_dir(const char *name)
 {
@@ -2362,6 +2382,26 @@ static int stage_upatch(const char *src, char *staged, size_t sz)
 	return rc;
 }
 
+/* Take a load the register did not record back out: pins, then archive. */
+static void unload_unmeasured(const char *name)
+{
+	char persisted[PATH_MAX];
+	int rc;
+
+	rc = remove_pin_dir(name);
+	if (!rc && strsprintf(persisted, sizeof(persisted), "%s/%s.upatch",
+			      SHIRUDO_UPATCHES_DIR, name) >= 0 &&
+	    unlink(persisted) != 0 && errno != ENOENT)
+		rc = -errno;
+	if (rc)
+		pr_err("upatch load: %s is loaded but not measured and could "
+		       "not be undone: %s; operator must reconcile", name,
+		       strerror(-rc));
+	else
+		pr_err("upatch load: %s was not measured; the load was undone",
+		       name);
+}
+
 static int cmd_upatch_load(int argc, const char **argv)
 {
 	const char *file, *expect_chain, *expect_version_id, *report;
@@ -2370,7 +2410,7 @@ static int cmd_upatch_load(int argc, const char **argv)
 	__u8 payload[SHIRUDO_UPATCH_PAYLOAD_HASH_LEN];
 	struct shirudo_upatch u;
 	struct shirudo_op_report rep = { .op = "upatch_load", .phase = "done" };
-	bool no_precheck, no_version_check, have_id = false;
+	bool no_precheck, no_version_check, have_id = false, measured;
 	int rc, ret = 1;
 
 	for (int i = 1; i < argc; i++) {
@@ -2443,7 +2483,10 @@ static int cmd_upatch_load(int argc, const char **argv)
 	/*
 	 * Persist before measuring: the archive is the intent boot restore
 	 * replays, and an event for an upatch that will not survive a reboot
-	 * would drift from it.
+	 * would drift from it. A load the register then refuses to take is
+	 * undone, pins and archive, so that no upatch runs unmeasured; a
+	 * caller who stops this process first gets the same at the next
+	 * init, which refuses to restore what the register does not cover.
 	 */
 	rc = persist_upatch(file, name);
 	if (rc) {
@@ -2454,9 +2497,13 @@ static int cmd_upatch_load(int argc, const char **argv)
 	}
 
 	if (upatch_chain_event("shirudo-upatch", "upatch_load", "load",
-			       name, payload, NULL, rep.chain_after) != 0) {
-		rep_fail(&rep, "tpm_extend", "tpm_error", EIO,
-			 "chain extend failed");
+			       name, payload, NULL, rep.chain_after,
+			       &measured) != 0) {
+		if (!measured)
+			unload_unmeasured(name);
+		rep_fail(&rep, "tpm_extend", "tpm_error", EIO, measured ?
+			 "eventlog append failed after the extend" :
+			 "chain extend failed; the load was undone");
 		goto done;
 	}
 	rep.ok = true;
@@ -2595,8 +2642,7 @@ static int cmd_upatch_unload(int argc, const char **argv)
 		}
 	}
 
-	rc = remove_pin_dir(name);
-	if (rc == -ENOENT) {
+	if (!upatch_is_pinned(name)) {
 		if (unlink(persisted) != 0 && errno != ENOENT)
 			pr_warn("upatch unload: could not remove %s: %s",
 				persisted, strerror(errno));
@@ -2609,11 +2655,28 @@ static int cmd_upatch_unload(int argc, const char **argv)
 		ret = 0;
 		goto done;
 	}
+
+	/*
+	 * Measured before it happens: a detach the register does not know
+	 * is what a caller who stops this process, or the TPM's path, at
+	 * the right moment would get. The other way round, a detach that
+	 * fails after the event leaves a shield the register says is gone,
+	 * which the next status reports and the operator can repeat.
+	 */
+	if (upatch_chain_event("shirudo-unload", "upatch_unload", "unload",
+			       name, payload, NULL, rep.chain_after,
+			       NULL) != 0) {
+		rep_fail(&rep, "tpm_extend", "tpm_error", EIO,
+			 "chain extend failed; nothing detached");
+		goto done;
+	}
+
+	rc = remove_pin_dir(name);
 	if (rc) {
-		pr_err("upatch unload: failed to remove pin for %s: %s",
-		       name, strerror(-rc));
+		pr_err("upatch unload: measured, but failed to remove the pin "
+		       "for %s: %s; repeat the unload", name, strerror(-rc));
 		rep_fail(&rep, "pin", "detach_failed", -rc,
-			 "pin removal failed");
+			 "pin removal failed after the event was measured");
 		goto done;
 	}
 	pr_info("upatch unload: detached + unpinned %s", name);
@@ -2621,13 +2684,6 @@ static int cmd_upatch_unload(int argc, const char **argv)
 	if (unlink(persisted) != 0 && errno != ENOENT)
 		pr_warn("upatch unload: could not remove %s: %s",
 			persisted, strerror(errno));
-
-	if (upatch_chain_event("shirudo-unload", "upatch_unload", "unload",
-			       name, payload, NULL, rep.chain_after) != 0) {
-		rep_fail(&rep, "tpm_extend", "tpm_error", EIO,
-			 "chain extend failed");
-		goto done;
-	}
 	rep.ok = true;
 	rep.phase = "done";
 	rep.tpm_present = rep.chain_after[0] != '\0';
@@ -2667,13 +2723,21 @@ int shirudo_upatch_purge(const char *name, const char *reason)
 	memcpy(payload, u.hdr.payload_sha256, sizeof(payload));
 	upatch_close(&u);
 
-	rc = remove_pin_dir(name);
-	if (rc && rc != -ENOENT) {
-		pr_err("upatch purge: failed to remove pin for %s: %s", name,
-		       strerror(-rc));
-		return rc;
+	/* As for unload: the event first, then the detach it describes. */
+	loaded = upatch_is_pinned(name);
+	if (loaded) {
+		rc = upatch_chain_event("shirudo-unload", "upatch_unload",
+					"purge", name, payload, reason, NULL,
+					NULL);
+		if (rc)
+			return rc;
+		rc = remove_pin_dir(name);
+		if (rc) {
+			pr_err("upatch purge: measured, but failed to remove "
+			       "the pin for %s: %s", name, strerror(-rc));
+			return rc;
+		}
 	}
-	loaded = rc == 0;
 	if (unlink(persisted) != 0 && errno != ENOENT) {
 		pr_err("upatch purge: could not remove %s: %s", persisted,
 		       strerror(errno));
@@ -2681,11 +2745,7 @@ int shirudo_upatch_purge(const char *name, const char *reason)
 	}
 	pr_audit("upatch purge: name=%s reason=%s %s", name, reason,
 		 loaded ? "detached" : "archive_only");
-	if (!loaded)
-		return 0;
-	rc = upatch_chain_event("shirudo-unload", "upatch_unload", "purge",
-				name, payload, reason, NULL);
-	return rc ? rc : 1;
+	return loaded ? 1 : 0;
 }
 
 /* Package installs take the same path as the upatch commands. */
