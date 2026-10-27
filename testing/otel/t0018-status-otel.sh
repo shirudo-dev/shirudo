@@ -55,14 +55,22 @@ PY
 '
 
 test_expect_success 'keepalive status severities and structured body are deterministic' '
+	work=$(mktemp -d) || return 1
 	for status in ok degraded init-pending lsm-off tampered
 	do
-		rm -f otel.port otel.body otel.meta
-		python3 ../helper/otel-mock.py success otel.port otel.body otel.meta &
+		python3 ../helper/otel-mock.py success "$work/port" "$work/body" \
+			"$work/meta" &
 		server=$!
-		i=0; while test ! -s otel.port && test "$i" -lt 100; do i=$((i+1)); sleep .02; done
-		port=$(cat otel.port) && "$H" send-status "http://127.0.0.1:$port" "$status" && wait "$server" &&
-		python3 - "$status" otel.body <<'\''PY'\'' || return 1
+		trap "kill $server 2>/dev/null || true; wait $server 2>/dev/null || true; rm -rf $work" EXIT
+		i=0
+		while test ! -s "$work/port" && test "$i" -lt 100; do
+			sleep .02
+			i=$((i + 1))
+		done
+		port=$(cat "$work/port") &&
+		"$H" send-status "http://127.0.0.1:$port" "$status" &&
+		wait "$server" &&
+		python3 - "$status" "$work/body" <<'\''PY'\'' || return 1
 import json, sys
 status = sys.argv[1]
 record = json.load(open(sys.argv[2]))["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0]
@@ -78,6 +86,7 @@ attrs = {item["key"]: item["value"] for item in record["attributes"]}
 assert attrs["shirudo.status"]["stringValue"] == status
 assert attrs["shirudo.tamper_attempts"]["intValue"] == "2"
 PY
+		rm -f "$work/port" "$work/body" "$work/meta" || return 1
 	done
 '
 
