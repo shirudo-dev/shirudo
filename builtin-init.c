@@ -1234,6 +1234,13 @@ static void initrd_leave(void)
 			strerror(errno));
 }
 
+/* A step that fails without a word of its own is still named here. */
+static int step_failed(const char *step, int rc)
+{
+	pr_err("init: %s: %s", step, strerror(-rc));
+	return rc;
+}
+
 static int run_init(void)
 {
 	struct shirudo_measured_upatch *set = NULL;
@@ -1242,37 +1249,39 @@ static int run_init(void)
 
 	rc = init_bpffs();
 	if (rc)
-		return rc;
+		return step_failed("private bpffs and run directory", rc);
 
 	rc = init_keyring();
 	if (!rc)
 		rc = shirudo_image_boot_keys_close();
 	if (rc)
-		return rc;
+		return step_failed("trust anchors and boot images", rc);
 
 	/* Seal writable state before the hooks attach, then adopt the initrd log. */
 	rc = seal_label_tree();
 	if (rc)
-		return rc;
+		return step_failed("writable state labels", rc);
 	rc = eventlog_adopt_pending();
 	if (rc)
-		return rc;
+		return step_failed("adopting the initrd record", rc);
 
 	rc = init_lsm();
 	if (rc)
-		return rc;
+		return step_failed("enforcement hooks", rc);
 
 	rc = seal_label_tree();
 	if (rc)
-		return rc;
+		return step_failed("writable state labels", rc);
 	rc = shirudo_image_runtime_mount();
-	if (!rc)
-		rc = shirudo_image_boot();
-	if (!rc)
-		rc = keys_load(SHIRUDO_RUNTIME_DIR "/keys",
-			       SHIRUDO_KEYS_REVOKED_DIR, true, &enrolled);
 	if (rc)
-		return rc;
+		return step_failed("runtime image", rc);
+	rc = shirudo_image_boot();
+	if (rc)
+		return step_failed("config image", rc);
+	rc = keys_load(SHIRUDO_RUNTIME_DIR "/keys", SHIRUDO_KEYS_REVOKED_DIR,
+		       true, &enrolled);
+	if (rc)
+		return step_failed("trusted keys", rc);
 
 	rc = boot_restore(&set, &n);
 	if (rc) {
@@ -1292,7 +1301,7 @@ static int run_init(void)
 
 	rc = shirudo_image_boot_complete();
 	if (rc)
-		return rc;
+		return step_failed("config activation record", rc);
 
 	pr_info("init: complete (LSM active, writable state sealed)");
 	return 0;
