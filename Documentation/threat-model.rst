@@ -124,6 +124,14 @@ T2  Detaching or replacing enforcement
     and leaves ``LINK_CREATE``, ``RAW_TRACEPOINT_OPEN`` and ``OBJ_PIN``
     to a task authorized by successful runtime exec. Root cannot re-attach a vetted program
     at a site its signer never meant it for, nor pin objects of its own.
+    The site a load attaches at is partly the caller's to arrange, and
+    root runs ``shirudo upatch load``: a cgroup_skb program under a
+    cgroup namespace root or a bind mount of a subtree, a netfilter
+    program in a network namespace of the caller's own and a kprobe
+    opened through a sysfs that names another PMU would each be
+    measured as loaded while guarding nothing or the wrong thing, so
+    the load compares the link the kernel reports with the attach
+    metadata before pinning it and refuses ``attach_scope_mismatch``.
     The links are kept alive by pins in the private bpffs;
     ``inode_unlink`` and ``inode_rename`` there require that authority.
     The VFS unlinks a rename's victim without ``inode_unlink``, so both

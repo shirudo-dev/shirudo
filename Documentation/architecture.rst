@@ -173,7 +173,11 @@ Load.  ``shirudo upatch load fix.upatch`` on the target:
    loads the payload program, which the kernel checks against the
    loader's ``excl_prog_hash``;
 5. attaches the payload (``BPF_LINK_CREATE`` or
-   ``BPF_RAW_TRACEPOINT_OPEN``), pins the link at
+   ``BPF_RAW_TRACEPOINT_OPEN``), checks that the link the kernel
+   reports is at the site the metadata names (the root cgroup of the
+   initial cgroup namespace, the initial network namespace, the kprobe
+   symbol and offset, the uprobe offsets) and refuses
+   ``attach_scope_mismatch`` otherwise, pins the link at
    ``/run/shirudo/bpffs/upatches/<name>/link`` and every map under
    ``maps/`` beside it, and records the payload digest as the
    ``security.bpf.shirudo.payload`` xattr on the pin directory;
@@ -662,6 +666,9 @@ kernel release, and the NV index and chain value after the operation.
 The categories are ``ok``, ``tampered``, ``keyring_missing``,
 ``lsm_denied``, ``signature_rejected``, ``signature_unsupported``,
 ``verifier_rejected``, ``parser_rejected``, ``btf_mismatch``,
+``attach_target_missing``, ``binary_mismatch``,
+``attach_scope_mismatch`` (the link the kernel made is not at the site
+the metadata names: another cgroup, network namespace or PMU),
 ``payload_mismatch``, ``already_unloaded``, ``detach_failed``,
 ``tpm_error``, ``eventlog_full``, ``kernel_abi_unsupported``,
 ``init_prereqs_missing``, ``version_mismatch`` and ``unknown``.

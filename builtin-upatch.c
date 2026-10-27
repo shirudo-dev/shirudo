@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/file.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/xattr.h>
@@ -1131,6 +1132,101 @@ static int prog_attach_for_spec(int prog_fd,
 	}
 }
 
+/* The initial network namespace's cookie, NET_NS_INIT_ID in linux/nsfs.h. */
+#define SHIRUDO_NET_NS_INIT_COOKIE	7ULL
+/* The root of the unified cgroup hierarchy. */
+#define SHIRUDO_ROOT_CGROUP_ID		1ULL
+#ifndef SO_NETNS_COOKIE
+#define SO_NETNS_COOKIE			71
+#endif
+
+/* A netfilter link hooks the caller's network namespace. */
+static int netns_initial(void)
+{
+	socklen_t len = sizeof(__u64);
+	__u64 cookie = 0;
+	int fd, rc;
+
+	fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+	if (fd < 0)
+		return -errno;
+	rc = getsockopt(fd, SOL_SOCKET, SO_NETNS_COOKIE, &cookie, &len) ?
+	     -errno : 0;
+	close(fd);
+	if (rc)
+		return rc;
+	return cookie == SHIRUDO_NET_NS_INIT_COOKIE ? 0 : -EXDEV;
+}
+
+/*
+ * The site a kprobe, uprobe, cgroup or netfilter program attaches at is
+ * named by the caller, and the caller's cgroup namespace and mount of
+ * the cgroup tree, network namespace and sysfs are root's to arrange:
+ * a cgroup_skb program attached under a namespace root or a bind mount
+ * of a subtree guards a corner, a netfilter program in a namespace of
+ * its own guards nothing, a kprobe opened through a sysfs that names
+ * another PMU lands elsewhere, and each is measured as loaded. What the
+ * kernel reports about the link is compared with the spec before the
+ * link is pinned; -EXDEV when they differ.
+ */
+static int link_matches_spec(int link_fd,
+			     const struct shirudo_prog_spec *spec)
+{
+	char func[SHIRUDO_UPATCH_ATTACH_TARGET_MAX] = {};
+	struct bpf_link_info info = {};
+	__u32 len = sizeof(info);
+	bool ret;
+
+	if (spec->kind == SHIRUDO_UPATCH_ATTACH_KPROBE ||
+	    spec->kind == SHIRUDO_UPATCH_ATTACH_KRETPROBE) {
+		info.perf_event.kprobe.func_name = ptr_to_u64(func);
+		info.perf_event.kprobe.name_len = sizeof(func);
+	}
+	if (bpf_link_get_info_by_fd(link_fd, &info, &len))
+		return -errno;
+	if (info.type == BPF_LINK_TYPE_CGROUP)
+		return info.cgroup.cgroup_id == SHIRUDO_ROOT_CGROUP_ID ?
+		       0 : -EXDEV;
+	switch (spec->kind) {
+	case SHIRUDO_UPATCH_ATTACH_CGROUP_SKB_INGRESS:
+	case SHIRUDO_UPATCH_ATTACH_CGROUP_SKB_EGRESS:
+		return -EXDEV;
+	case SHIRUDO_UPATCH_ATTACH_NETFILTER_IPV6_PRE_ROUTING:
+		if (info.type != BPF_LINK_TYPE_NETFILTER ||
+		    info.netfilter.pf != NFPROTO_IPV6 ||
+		    info.netfilter.hooknum != NF_INET_PRE_ROUTING ||
+		    info.netfilter.priority != NF_IP6_PRI_RAW_BEFORE_DEFRAG)
+			return -EXDEV;
+		return netns_initial();
+	case SHIRUDO_UPATCH_ATTACH_KPROBE:
+	case SHIRUDO_UPATCH_ATTACH_KRETPROBE:
+		ret = spec->kind == SHIRUDO_UPATCH_ATTACH_KRETPROBE;
+		if (info.type != BPF_LINK_TYPE_PERF_EVENT ||
+		    info.perf_event.type != (ret ? BPF_PERF_EVENT_KRETPROBE :
+						   BPF_PERF_EVENT_KPROBE) ||
+		    info.perf_event.kprobe.name_len > sizeof(func) ||
+		    info.perf_event.kprobe.offset != spec->offset ||
+		    strcmp(func, spec->target))
+			return -EXDEV;
+		return 0;
+	case SHIRUDO_UPATCH_ATTACH_UPROBE_MULTI:
+		if (info.type != BPF_LINK_TYPE_UPROBE_MULTI ||
+		    info.uprobe_multi.count != spec->nr_uprobe_offsets)
+			return -EXDEV;
+		return 0;
+	case SHIRUDO_UPATCH_ATTACH_FMOD_RET:
+		if (info.type != BPF_LINK_TYPE_TRACING ||
+		    info.tracing.attach_type != BPF_MODIFY_RETURN)
+			return -EXDEV;
+		return 0;
+	default:
+		if (info.type != BPF_LINK_TYPE_RAW_TRACEPOINT &&
+		    info.type != BPF_LINK_TYPE_TRACING)
+			return -EXDEV;
+		return 0;
+	}
+}
+
 static int obj_pin(int fd, const char *path)
 {
 	union bpf_attr attr = {};
@@ -1303,6 +1399,16 @@ static int attach_and_pin_progs(const struct shirudo_loader_ctx *cx,
 				       i, attach_kind_name(spec->kind),
 				       strerror(-link_fd));
 			rc = link_fd;
+			goto out;
+		}
+		/* Unpinned, a closed link detaches. */
+		rc = link_matches_spec(link_fd, spec);
+		if (rc) {
+			pr_err("attach prog %u (%s %s): the link is not at "
+			       "the site the metadata names: %s", i,
+			       attach_kind_name(spec->kind), spec->target,
+			       strerror(-rc));
+			close(link_fd);
 			goto out;
 		}
 		rc = obj_pin(link_fd, pin);
@@ -1818,6 +1924,8 @@ static int upatch_apply(const char *path, bool verify_only,
 			cat = "attach_target_missing";
 		else if (e == ESTALE)
 			cat = "binary_mismatch";
+		else if (e == EXDEV)
+			cat = "attach_scope_mismatch";
 		else if (e == EOPNOTSUPP)
 			cat = "kernel_abi_unsupported";
 		else if (e == EACCES || e == EPERM)
