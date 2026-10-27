@@ -328,6 +328,11 @@ the caller's committed task authority. Runtime and config files use dm-verity
 and receive no seal writes.
 Only an authorized caller may set the exact seal xattr, including on an
 unlabelled inode. A binary carrying a copied label gains no authority.
+A path the caller names for shirudo to write (``--report``, ``--out``,
+``--json``, a ``bpm pull``) is opened by ``seal_output_open()``: a
+regular file without a label, not created under a labelled directory,
+not reached through a symbolic link, so root cannot point the authority
+at sealed state.
 
 A label of any size, or an error reading it, requires caller authority,
 except for ``ENODATA``, ``EOPNOTSUPP``, ``EACCES`` and ``EPERM``. The latter

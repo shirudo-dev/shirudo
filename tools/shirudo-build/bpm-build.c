@@ -1752,14 +1752,11 @@ static int build_download_package(const char *reference, char *path)
 			rc = -errno;
 			goto out;
 		}
-		if (close(fd)) {
-			rc = -errno;
-			fd = -1;
-			goto out;
-		}
-		fd = -1;
-		rc = bpm_oci_get_file(&client, url, BPM_PACKAGE_MEDIA, path,
+		rc = bpm_oci_get_file(&client, url, BPM_PACKAGE_MEDIA, fd,
 				      layers[i].size);
+		if (close(fd) && !rc)
+			rc = -errno;
+		fd = -1;
 		if (rc)
 			goto out;
 		rc = build_read_file(path, &body, &body_len, BPM_BUILD_MAX_FILE);

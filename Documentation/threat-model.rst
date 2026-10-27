@@ -164,6 +164,12 @@ T3  Tampering with shirudo's files and process
     parent directory open to populate and retain that mark. Directory
     eviction and foreign link or rename operations remain subject to
     residual risk 15; existing writable references are not revoked.
+    The authority the seal grants shirudo is not root's to aim: a path
+    root names for shirudo to write, a report, an export, evidence or
+    a download, is opened as output, never a labelled inode, never
+    created under a labelled directory and never through a symbolic
+    link, and a registry download goes into the descriptor shirudo
+    opened rather than a name reopened later.
     Ptrace and perf allocation checks deny against tasks already marked
     when those hooks run. Concurrent perf attachment and exec remain a
     separate, untested `race investigation <https://github.com/shirudo-dev/shirudo/issues/11>`__.

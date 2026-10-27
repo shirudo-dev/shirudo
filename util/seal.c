@@ -177,6 +177,60 @@ int seal_inherit_path(const char *path)
 	return 0;
 }
 
+/* 1 for a label of any size, 0 for none, -errno when unreadable. */
+static int seal_fsealed(int fd)
+{
+	if (fgetxattr(fd, SHIRUDO_XATTR_NAME, NULL, 0) >= 0)
+		return 1;
+	return errno == ENODATA || errno == ENOTSUP ? 0 : -errno;
+}
+
+int seal_output_open(const char *path, int flags, mode_t mode)
+{
+	const char *name;
+	struct stat st;
+	int dfd, fd, rc;
+
+	dfd = seal_open_parent(path, &name);
+	if (dfd < 0)
+		return dfd;
+	rc = seal_fsealed(dfd);
+	if (rc)
+		goto out_dir;
+	fd = openat(dfd, name, (flags & ~O_TRUNC) | O_NOFOLLOW | O_CLOEXEC,
+		    mode);
+	if (fd < 0) {
+		rc = -errno;
+		goto out_dir;
+	}
+	if (fstat(fd, &st)) {
+		rc = -errno;
+		goto out_fd;
+	}
+	if (!S_ISREG(st.st_mode)) {
+		rc = -EINVAL;
+		goto out_fd;
+	}
+	rc = seal_fsealed(fd);
+	if (rc)
+		goto out_fd;
+	if ((flags & O_TRUNC) && ftruncate(fd, 0)) {
+		rc = -errno;
+		goto out_fd;
+	}
+	close(dfd);
+	return fd;
+out_fd:
+	close(fd);
+out_dir:
+	close(dfd);
+	if (rc > 0) {
+		pr_err("%s: refusing to write sealed state", path);
+		rc = -EPERM;
+	}
+	return rc;
+}
+
 int seal_open(const char *path, int flags, mode_t mode)
 {
 	const char *name;

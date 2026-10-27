@@ -118,9 +118,13 @@ int bpm_oci_get_memory(struct bpm_oci_client *c, const char *url,
 		       const char *accept, struct bpm_buffer *out);
 int bpm_oci_get_blob(struct bpm_oci_client *c, const char *url,
 		     const char *accept, struct bpm_buffer *out);
-/* At most size bytes, the size the manifest declares; -EFBIG beyond. */
+/*
+ * Into the caller's descriptor, emptied first: at most size bytes, the
+ * size the manifest declares, -EFBIG beyond. What a failure leaves in
+ * the file is the caller's to remove.
+ */
 int bpm_oci_get_file(struct bpm_oci_client *c, const char *url,
-		     const char *accept, const char *path, __s64 size);
+		     const char *accept, int fd, __s64 size);
 int bpm_oci_push_blob(struct bpm_oci_client *c, const char *repository,
 		      const void *body, size_t body_len, const char *media,
 		      struct bpm_descriptor *out);

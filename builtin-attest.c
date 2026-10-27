@@ -34,6 +34,7 @@
 #include "util/macros.h"
 #include "util/malloc.h"
 #include "util/paths.h"
+#include "util/seal.h"
 #include "util/upatch.h"
 
 #define EVIDENCE_MAX		SHIRUDO_JSON_MAX_BYTES
@@ -711,15 +712,20 @@ static int cmd_attest_challenge(int argc, const char **argv)
 		goto out;
 	}
 	{
-		int fd = open(out_path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC,
-			      0600);
+		int fd = seal_output_open(out_path,
+					  O_WRONLY | O_CREAT | O_TRUNC, 0600);
 
-		if (fd < 0 || write_complete(fd, doc, len) ||
+		if (fd < 0) {
+			pr_err("attest challenge: open %s: %s", out_path,
+			       strerror(-fd));
+			ret = 1;
+			goto out;
+		}
+		if (write_complete(fd, doc, len) ||
 		    write_complete(fd, "\n", 1) || close(fd)) {
 			pr_err("attest challenge: write %s: %s", out_path,
 			       strerror(errno));
-			if (fd >= 0)
-				close(fd);
+			close(fd);
 			ret = 1;
 			goto out;
 		}
@@ -806,15 +812,17 @@ static int cmd_attest_evidence(int argc, const char **argv)
 		return 1;
 	}
 	if (out_path) {
-		int fd = open(out_path,
-			      O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+		int fd = seal_output_open(out_path,
+					  O_WRONLY | O_CREAT | O_TRUNC, 0600);
 
-		if (fd < 0 || write_complete(fd, doc, len) ||
-		    write_complete(fd, "\n", 1) || close(fd)) {
+		if (fd < 0) {
+			pr_err("attest: open %s: %s", out_path, strerror(-fd));
+			rc = fd;
+		} else if (write_complete(fd, doc, len) ||
+			   write_complete(fd, "\n", 1) || close(fd)) {
 			pr_err("attest: write %s: %s", out_path,
 			       strerror(errno));
-			if (fd >= 0)
-				close(fd);
+			close(fd);
 			rc = -EIO;
 		}
 	} else if (fwrite(doc, 1, len, stdout) != len ||
