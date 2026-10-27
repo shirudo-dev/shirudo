@@ -72,6 +72,7 @@
 #define SHIRUDO_INODE_SETXATTR_LINK_PIN	SHIRUDO_BPFFS_DIR "/bpf2_inode_setxattr_link"
 #define SHIRUDO_INODE_RMXATTR_LINK_PIN	SHIRUDO_BPFFS_DIR "/bpf2_inode_removexattr_link"
 #define SHIRUDO_KEY_PERMISSION_LINK_PIN	SHIRUDO_BPFFS_DIR "/bpf2_key_permission_link"
+#define SHIRUDO_TPM_COMMAND_LINK_PIN	SHIRUDO_BPFFS_DIR "/bpf2_tpm_command_link"
 #define SHIRUDO_TASK_PRCTL_LINK_PIN	SHIRUDO_BPFFS_DIR "/bpf2_task_prctl_link"
 #define SHIRUDO_BPRM_CHECK_LINK_PIN	SHIRUDO_BPFFS_DIR "/bpf2_bprm_check_security_link"
 #define SHIRUDO_SEAL_FILE_OPEN_PIN	SHIRUDO_BPFFS_DIR "/seal_file_open_link"

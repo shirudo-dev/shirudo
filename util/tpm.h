@@ -27,7 +27,11 @@ int tpm_open(struct shirudo_tpm **out);
 int tpm_open_quiet(struct shirudo_tpm **out);
 void tpm_close(struct shirudo_tpm *t);
 
+int tpm_writer_create(struct shirudo_tpm *t,
+		      const __u8 seed[SHIRUDO_TPM_DIGEST_LEN],
+		      __u8 public[SHIRUDO_TPM_NV_RSA_BYTES]);
 int tpm_nv_set_writer(struct shirudo_tpm *t,
+		      const __u8 seed[SHIRUDO_TPM_DIGEST_LEN],
 		      const __u8 public[SHIRUDO_TPM_NV_RSA_BYTES]);
 
 int tpm_pcr_read(struct shirudo_tpm *t, __u32 pcr,
@@ -62,8 +66,8 @@ struct tpm_nv_info {
  * the first write of a boot the init branch, which TPM2_PolicyPCR
  * only satisfies while the anchoring PCR still holds the value the
  * policy was computed from, every later one the written branch.
- * Both branches require the kernel-held writer's command-bound
- * signature; extending requires nv_set_writer first.
+ * Both branches require the TPM writer's command-bound signature;
+ * extending requires nv_set_writer first.
  */
 int tpm_nv_info(struct shirudo_tpm *t, __u32 index,
 		struct tpm_nv_info *info);

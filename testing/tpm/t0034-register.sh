@@ -23,15 +23,15 @@ cleanup() {
 	exit "$result"
 }
 trap cleanup EXIT HUP INT TERM
+export SHIRUDO_TPM_TCTI="cmd:$SIM $WORK/tpm"
+export SHIRUDO_EVENTLOG_PATH="$WORK/eventlog"
+export SHIRUDO_KEYS_DIR="$WORK/keys"
+export SHIRUDO_INITRD_RELEASE="$WORK/initrd-release"
 register_writer_start || exit 1
 WRITER=$(./$R writer-public) || exit 1
 mkdir -p "$WORK/keys"
 head -c 700 /dev/urandom >"$WORK/keys/cert.der"
 : >"$WORK/initrd-release"
-export SHIRUDO_TPM_TCTI="cmd:$SIM $WORK/tpm"
-export SHIRUDO_EVENTLOG_PATH="$WORK/eventlog"
-export SHIRUDO_KEYS_DIR="$WORK/keys"
-export SHIRUDO_INITRD_RELEASE="$WORK/initrd-release"
 
 py() { python3 -c "$1"; }
 sha() { py "import hashlib; print(hashlib.sha256(bytes.fromhex(\"$1\")).hexdigest())"; }

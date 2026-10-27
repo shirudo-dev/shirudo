@@ -250,17 +250,17 @@ out:
 static int register_writer(struct shirudo_tpm *tpm,
 			   __u8 public[SHIRUDO_TPM_NV_RSA_BYTES])
 {
+	__u8 seed[32];
 	int rc;
 
-	rc = nv_writer_read(public);
-	return rc ? rc : tpm_nv_set_writer(tpm, public);
+	rc = nv_writer_read(seed, public);
+	return rc ? rc : tpm_nv_set_writer(tpm, seed, public);
 }
 
 /*
- * The device the TCTI opens is root's to replace, and an emulator can
- * carry an index with the recorded name, policy and reset count, since
- * the init record is readable; the attestation key's name takes this
- * TPM's endorsement seed, which no emulator has.
+ * A different attestation key has a different Name, but the Name is
+ * public and a substitute transport can replay it. Remote evidence
+ * still needs a valid signature from the pinned key.
  */
 int chain_tpm_bound(struct shirudo_tpm *tpm)
 {

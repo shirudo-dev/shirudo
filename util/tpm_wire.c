@@ -154,7 +154,7 @@ int tpm_policy_or(const __u8 a[32], const __u8 b[32], __u8 out[32])
 }
 
 /*
- * This fixed TPMT_PUBLIC adds a 24-byte prefix to the public-key bytes.
+ * The primary's fixed TPMT_PUBLIC adds a 24-byte prefix to the modulus.
  * It excludes the outer TPM2B_PUBLIC size field.
  */
 void tpm_writer_public(const __u8 modulus[SHIRUDO_TPM_NV_RSA_BYTES],
@@ -162,7 +162,7 @@ void tpm_writer_public(const __u8 modulus[SHIRUDO_TPM_NV_RSA_BYTES],
 {
 	tpm_put16(out, SHIRUDO_TPM_ALG_RSA);	/* type */
 	tpm_put16(out + 2, SHIRUDO_TPM_ALG_SHA256);	/* nameAlg */
-	tpm_put32(out + 4, 0x00040000);	/* TPMA_OBJECT_SIGN_ENCRYPT */
+	tpm_put32(out + 4, SHIRUDO_TPM_WRITER_ATTRS);
 	tpm_put16(out + 8, 0);		/* Empty authPolicy: size only. */
 	tpm_put16(out + 10, SHIRUDO_TPM_ALG_NULL);	/* symmetric.algorithm */
 	tpm_put16(out + 12, SHIRUDO_TPM_ALG_RSASSA);	/* scheme.scheme */

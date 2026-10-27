@@ -11,6 +11,7 @@
 struct shirudo_tpm {
 	TSS2_TCTI_CONTEXT	*tcti;
 	ESYS_CONTEXT		*esys;
+	__u8			writer_seed[SHIRUDO_TPM_DIGEST_LEN];
 	__u8			writer_public[SHIRUDO_TPM_NV_RSA_BYTES];
 	bool			writer_set;
 };
@@ -25,7 +26,9 @@ int tpm_policy_session_start(struct shirudo_tpm *t, ESYS_TR *session);
 int tpm_policy_session_finish(struct shirudo_tpm *t, ESYS_TR session,
 			      const __u8 expected[SHIRUDO_TPM_DIGEST_LEN]);
 int tpm_writer_load(struct shirudo_tpm *t,
-		    const __u8 public[SHIRUDO_TPM_NV_RSA_BYTES], ESYS_TR *key);
+		    const __u8 seed[SHIRUDO_TPM_DIGEST_LEN],
+		    const __u8 expected_public[SHIRUDO_TPM_NV_RSA_BYTES],
+		    ESYS_TR *key);
 int tpm_writer_prepare(struct shirudo_tpm *t, ESYS_TR session,
 		       const __u8 name[SHIRUDO_TPM_NAME_LEN],
 		       const __u8 event[SHIRUDO_TPM_DIGEST_LEN],

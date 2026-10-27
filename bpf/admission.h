@@ -4,6 +4,8 @@
 #ifndef SHIRUDO_BPF_ADMISSION_H
 #define SHIRUDO_BPF_ADMISSION_H
 
+#include <bpf/bpf_endian.h>
+
 /*
  * BPF mutations require a task marked by successful exec from the runtime
  * image. Verified signed loaders perform their own calls in kernel context.
@@ -271,41 +273,15 @@ static __always_inline int shirudo_bpffs_guard(__u32 target_dev,
 }
 
 /*
- * NV-key search can sign or invalidate even when possessed. Do not count
- * search denials: ordinary keyring traversal probes use that permission.
- */
-static __always_inline int handle_nv_sig_key(const struct shirudo_sb_id *id,
-					     enum key_need_perm need)
-{
-	if (need == KEY_NEED_VIEW || shirudo_task_is_self(id))
-		return 0;
-	if (need == KEY_NEED_SEARCH)
-		return -EACCES;
-	return shirudo_tamper_deny(SHIRUDO_TAMPER_KEYRING, -EACCES);
-}
-
-static __always_inline int handle_nv_keyring(const struct shirudo_sb_id *id,
-					     enum key_need_perm need)
-{
-	if (need == KEY_NEED_VIEW || need == KEY_NEED_READ ||
-	    shirudo_task_is_self(id))
-		return 0;
-	if (need == KEY_NEED_SEARCH)
-		return -EACCES;
-	return shirudo_tamper_deny(SHIRUDO_TAMPER_KEYRING, -EACCES);
-}
-
-/*
  * The trust anchors in the kernel's keyrings: the bpf and dm-verity
  * keyrings init froze and the keys they hold. Root owns both with write
  * and setattr permission, so without this hook a single keyctl could
  * unlink, clear, revoke or invalidate the certificates every load and
  * every config root is verified against. Deny those needs to every
- * task but shirudo. A
- * search is denied only through an unpossessed reference, which is
- * how keyctl reaches a key by serial to invalidate it; the kernel
- * verifies a signature by searching the keyring it possesses, and
- * that stays open to every loader.
+ * task but shirudo. A search is denied only through an unpossessed
+ * reference, which is how keyctl reaches a key by serial to invalidate
+ * it; the kernel verifies a signature by searching the keyring it
+ * possesses, and that stays open to every loader.
  */
 SEC("lsm/key_permission")
 int BPF_PROG(shirudo_lsm_key_permission, key_ref_t key_ref,
@@ -324,11 +300,6 @@ int BPF_PROG(shirudo_lsm_key_permission, key_ref_t key_ref,
 		return 0;
 	key = (struct key *)((unsigned long)key_ref & ~1UL);
 	serial = BPF_CORE_READ(key, serial);
-	if (serial == id->nv_writer_key)
-		return handle_nv_sig_key(id, need);
-	if (serial == id->nv_writer_ring)
-		return handle_nv_keyring(id, need);
-
 	switch (need) {
 	case KEY_NEED_WRITE:
 	case KEY_NEED_SEARCH:
@@ -353,6 +324,38 @@ int BPF_PROG(shirudo_lsm_key_permission, key_ref_t key_ref,
 		return 0;
 	return shirudo_task_is_self(id) ? 0 :
 	       shirudo_tamper_deny(SHIRUDO_TAMPER_KEYRING, -EACCES);
+}
+
+/*
+ * A TPM signature alone cannot change Shirudo's NV register. Restrict
+ * extension of its frozen index while leaving unrelated TPM signing alone.
+ */
+SEC("lsm/tpm_command")
+int BPF_PROG(shirudo_lsm_tpm_command, struct file *file,
+	     const __u8 *command, size_t command_len, int ret)
+{
+	struct shirudo_sb_id *id;
+	__u32 code, index;
+
+	(void)file;
+	if (ret)
+		return ret;
+	if (command_len < 10 ||
+	    bpf_probe_read_kernel(&code, sizeof(code), command + 6))
+		return shirudo_tamper_deny(SHIRUDO_TAMPER_TPM_EXTEND,
+					   -EACCES);
+	if (bpf_ntohl(code) != SHIRUDO_TPM_CC_NV_EXTEND)
+		return 0;
+	if (command_len < 18 ||
+	    bpf_probe_read_kernel(&index, sizeof(index), command + 14))
+		return shirudo_tamper_deny(SHIRUDO_TAMPER_TPM_EXTEND,
+					   -EACCES);
+	id = shirudo_policy();
+	if (!id || (bpf_ntohl(index) == id->nv_index &&
+		    !shirudo_task_is_self(id)))
+		return shirudo_tamper_deny(SHIRUDO_TAMPER_TPM_EXTEND,
+					   -EACCES);
+	return 0;
 }
 
 /*

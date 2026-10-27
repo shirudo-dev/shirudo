@@ -8,11 +8,9 @@
  */
 
 #include <errno.h>
-#include <linux/keyctl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/syscall.h>
 #include <unistd.h>
 
 #include <bpf/bpf.h>
@@ -32,27 +30,17 @@
 #include "tpm.h"
 #include "version.h"
 
-/* Provision real kernel signing authority before the VM attaches its LSM. */
+/* Record the TPM writer's public identity before the VM attaches its LSM. */
 static int writer_create(void)
 {
 	struct bpf_map_create_opts opts = { .sz = sizeof(opts) };
 	struct shirudo_identity id = {};
-	int fd, rc, unlink_rc;
+	int fd, rc;
 	__u32 zero = 0;
-	long ret;
 
-	rc = nv_writer_create(&id.nv_writer_ring, &id.nv_writer_key,
-			      id.nv_writer_public);
+	rc = nv_writer_create(id.nv_writer_seed, id.nv_writer_public);
 	if (rc)
 		goto out;
-	errno = 0;
-	ret = syscall(__NR_keyctl, KEYCTL_SETPERM, id.nv_writer_ring, 0x3f3f0000L, 0, 0);
-	if (ret != -1 || errno != EACCES) {
-		fprintf(stderr, "writer keyring permissions were not sealed: %ld/%d\n",
-			ret, errno);
-		rc = ret < 0 ? -errno : -EPROTO;
-		goto out;
-	}
 	fd = bpf_map_create(BPF_MAP_TYPE_ARRAY, "shirudo_test_id", sizeof(zero),
 			    sizeof(id), 1, &opts);
 	if (fd < 0) {
@@ -66,34 +54,17 @@ static int writer_create(void)
 	if (!rc)
 		return 0;
 out:
-	if (id.nv_writer_ring > 0) {
-		unlink_rc = keyring_unlink_key(KEY_SPEC_USER_KEYRING, id.nv_writer_ring);
-		if (unlink_rc)
-			fprintf(stderr, "unlink protocol-test writer: %s\n",
-				strerror(-unlink_rc));
-	}
-	fprintf(stderr, "kernel writer setup: %s\n", strerror(-rc));
+	fprintf(stderr, "TPM writer setup: %s\n", strerror(-rc));
 	return 1;
 }
 
 static int writer_remove(void)
 {
-	struct shirudo_identity id = {};
-	int rc;
-
-	rc = identity_read(&id);
-	if (rc) {
-		fprintf(stderr, "kernel writer identity: %s\n", strerror(-rc));
-		return 1;
-	}
 	if (unlink(SHIRUDO_IDENTITY_PIN)) {
 		perror("unlink protocol-test identity");
 		return 1;
 	}
-	rc = keyring_unlink_key(KEY_SPEC_USER_KEYRING, id.nv_writer_ring);
-	if (rc)
-		fprintf(stderr, "unlink protocol-test writer: %s\n", strerror(-rc));
-	return rc ? 1 : 0;
+	return 0;
 }
 
 static void puthex(const __u8 *b, size_t n)
@@ -228,8 +199,9 @@ int main(int argc, char **argv)
 		return writer_remove();
 	if (!strcmp(argv[1], "writer-public") && argc == 2) {
 		__u8 public[SHIRUDO_TPM_NV_RSA_BYTES];
+		__u8 seed[32];
 
-		if (nv_writer_read(public))
+		if (nv_writer_read(seed, public))
 			return 1;
 		puthex(public, sizeof(public));
 		return 0;
@@ -405,10 +377,13 @@ int main(int argc, char **argv)
 		__u8 branch_written[32], branch_init[32], policy[32];
 		struct shirudo_eventlog_init rec;
 		struct shirudo_tpm *tpm = NULL;
-		__u8 values[64];
+		__u8 writer_public[SHIRUDO_TPM_NV_RSA_BYTES];
+		__u8 writer_seed[32], values[64];
 
 		if (hex_decode(argv[2], event, 32) ||
-		    eventlog_boot_init(&rec))
+		    eventlog_boot_init(&rec) ||
+		    nv_writer_read(writer_seed, writer_public) ||
+		    memcmp(writer_public, rec.writer_public, sizeof(writer_public)))
 			return 2;
 		memcpy(values, rec.pcr_before, 32);
 		memcpy(values + 32, rec.phase_before, 32);
@@ -420,7 +395,7 @@ int main(int argc, char **argv)
 		}
 		if (tpm_open(&tpm))
 			return 1;
-		rc = tpm_nv_set_writer(tpm, rec.writer_public);
+		rc = tpm_nv_set_writer(tpm, writer_seed, writer_public);
 		if (!rc)
 			rc = tpm_nv_extend_first(tpm, SHIRUDO_NV_INDEX,
 						 SHIRUDO_CHAIN_PCR_MASK,
@@ -448,6 +423,7 @@ int main(int argc, char **argv)
 		struct shirudo_tpm_key ak_copy = {}, ek_copy = {};
 		__u8 writer_public[SHIRUDO_TPM_NV_RSA_BYTES];
 		char ts[32], boot_id[64], nv_index[16];
+		__u8 writer_seed[SHIRUDO_TPM_DIGEST_LEN];
 		size_t nonce_len = strlen(argv[6]) / 2;
 		char anchor[SHIRUDO_CHAIN_ANCHOR_MAX];
 		struct shirudo_tpm *tpm = NULL;
@@ -464,11 +440,11 @@ int main(int argc, char **argv)
 		    nonce_len == 0 || nonce_len > sizeof(nonce) ||
 		    hex_decode(argv[6], nonce, nonce_len))
 			return 2;
-		if (nv_writer_read(writer_public))
+		if (nv_writer_read(writer_seed, writer_public))
 			return 1;
 		if (tpm_open(&tpm))
 			return 1;
-		rc = tpm_nv_set_writer(tpm, writer_public);
+		rc = tpm_nv_set_writer(tpm, writer_seed, writer_public);
 		if (!rc)
 			rc = tpm_reset_count(tpm, &reset);
 		if (!rc)

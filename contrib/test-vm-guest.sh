@@ -347,15 +347,11 @@ if [[ "${TEST_VM_SUITE:-all}" == register ]]; then
 		log "register protocol tests must precede production initialization"
 		exit 1
 	}
-	log "running register protocol tests with a real kernel writer"
+	log "running register protocol tests with a TPM writer"
 	: >/mnt/shirudo-out/failed-tests
 	: >/mnt/shirudo-out/failed-suites
 	(
 		cd testing
-		SHIRUDO_TEST_REGISTER_VM=1 \
-			SHIRUDO_TEST_NV_CERT="$BUNDLE/fixtures/cert.der" \
-			SHIRUDO_TEST_FAILURES_FILE=/mnt/shirudo-out/failed-tests \
-			sh tpm/t1128-nv-writer-cleanup.sh
 		SHIRUDO_TEST_REGISTER_VM=1 \
 			SHIRUDO_TEST_FAILURES_FILE=/mnt/shirudo-out/failed-tests \
 			sh tpm/t0034-register.sh

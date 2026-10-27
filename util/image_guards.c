@@ -122,6 +122,9 @@ shirudo_gate_guards[SHIRUDO_GATE_HOOK_COUNT] = {
 	[SHIRUDO_GUARD_KEY_PERMISSION] = {
 		"shirudo_lsm_key_permission", SHIRUDO_KEY_PERMISSION_LINK_PIN,
 	},
+	[SHIRUDO_GUARD_TPM_COMMAND] = {
+		"shirudo_lsm_tpm_command", SHIRUDO_TPM_COMMAND_LINK_PIN,
+	},
 	[SHIRUDO_GUARD_BPF_MAP] = {
 		"shirudo_lsm_bpf_map", SHIRUDO_LSM_BPF_MAP_LINK_PIN,
 	},

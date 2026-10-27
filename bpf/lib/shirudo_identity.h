@@ -17,13 +17,13 @@ struct shirudo_sb_id {
 	__u32	n_keys;
 	__s32	key_serials[SHIRUDO_IDENTITY_KEYS_MAX];
 	__u8	runtime_root[32];
-	__s32	nv_writer_ring;
-	__s32	nv_writer_key;
+	__u8	nv_writer_seed[32];
 	__u8	nv_writer_public[SHIRUDO_TPM_NV_RSA_BYTES];
 	__u8	ak_name[SHIRUDO_TPM_NAME_LEN];
 	__u32	ak_name_len;
 	__s32	dm_verity_ring;
 	__s32	dm_verity_key;
+	__u32	nv_index;
 };
 
 struct {

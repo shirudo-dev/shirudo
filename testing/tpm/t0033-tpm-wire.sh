@@ -13,7 +13,7 @@ H=helper/test-tpm-wire
 Z=0000000000000000000000000000000000000000000000000000000000000000
 
 py() { python3 -c "$1"; }
-PUB=$(py 'import struct; print((struct.pack(">HHIHHHHHIH", 1, 11, 0x40000, 0, 16, 20, 11, 3072, 65537, 384) + bytes.fromhex("80" + "00"*382 + "01")).hex())')
+PUB=$(py 'import struct; print((struct.pack(">HHIHHHHHIH", 1, 11, 0x40072, 0, 16, 20, 11, 3072, 65537, 384) + bytes.fromhex("80" + "00"*382 + "01")).hex())')
 MODULUS=$(py 'print("80" + "00"*382 + "01")')
 
 test_expect_success 'the writer public area fixes RSA-3072, RSASSA and SHA-256' '

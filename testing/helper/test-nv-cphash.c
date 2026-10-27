@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /* Copyright (c) 2026 Authors of shirudo */
 
+#include <errno.h>
 #include <stdbool.h>
-#include <linux/keyctl.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/random.h>
 
 #include "tpm_internal.h"
 #include "crypto.h"
-#include "nv_writer.h"
 
 #define TEST_NV_INDEX	0x01818E01u
 
@@ -56,8 +56,41 @@ out:
 	return rc;
 }
 
+static int sign_digest(ESYS_CONTEXT *esys, ESYS_TR writer,
+		       const __u8 digest[32],
+		       __u8 signature[SHIRUDO_TPM_NV_RSA_BYTES])
+{
+	TPMT_TK_HASHCHECK validation = {
+		.tag = TPM2_ST_HASHCHECK,
+		.hierarchy = TPM2_RH_NULL,
+	};
+	TPMT_SIG_SCHEME scheme = { .scheme = TPM2_ALG_RSASSA };
+	TPMT_SIGNATURE *signed_digest = NULL;
+	TPM2B_DIGEST input = { .size = 32 };
+	int rc = 1;
+
+	scheme.details.rsassa.hashAlg = TPM2_ALG_SHA256;
+	memcpy(input.buffer, digest, input.size);
+	if (tpm_failed(Esys_Sign(esys, writer, ESYS_TR_PASSWORD,
+				 ESYS_TR_NONE, ESYS_TR_NONE, &input,
+				 &scheme, &validation, &signed_digest), "Sign"))
+		goto out;
+	if (!signed_digest || signed_digest->sigAlg != TPM2_ALG_RSASSA ||
+	    signed_digest->signature.rsassa.hash != TPM2_ALG_SHA256 ||
+	    signed_digest->signature.rsassa.sig.size != SHIRUDO_TPM_NV_RSA_BYTES) {
+		fprintf(stderr, "Sign returned an unexpected signature\n");
+		goto out;
+	}
+	memcpy(signature, signed_digest->signature.rsassa.sig.buffer,
+	       SHIRUDO_TPM_NV_RSA_BYTES);
+	rc = 0;
+out:
+	Esys_Free(signed_digest);
+	return rc;
+}
+
 static int authorize(struct shirudo_tpm *t, ESYS_TR writer, ESYS_TR nv,
-		     key_serial_t key, const __u8 event[32], const __u8 policy[32],
+		     const __u8 event[32], const __u8 policy[32],
 		     ESYS_TR *session, __u8 saved[SHIRUDO_TPM_NV_RSA_BYTES],
 		     enum signature_fault fault)
 {
@@ -83,7 +116,7 @@ static int authorize(struct shirudo_tpm *t, ESYS_TR writer, ESYS_TR nv,
 	if (fault == SIGNATURE_REPLAY) {
 		memcpy(signature, saved, sizeof(signature));
 	} else {
-		if (nv_writer_sign_key(key, authorization.digest, signature))
+		if (sign_digest(t->esys, writer, authorization.digest, signature))
 			goto out;
 		if (fault == SIGNATURE_CORRUPT)
 			signature[0] ^= 1;
@@ -119,19 +152,27 @@ int main(void)
 	ESYS_TR writer = ESYS_TR_NONE;
 	struct shirudo_tpm *t = NULL;
 	ESYS_CONTEXT *esys = NULL;
-	key_serial_t ring = 0, key = 0;
 	ESYS_TR nv = ESYS_TR_NONE;
+	__u8 writer_seed[32];
 	__u8 policy[32], zero[32] = {};
 	bool defined = false;
+	ssize_t got;
 	int rc = 1, err;
 	TSS2_RC trc;
 
 	if (tpm_open(&t))
 		goto out;
 	esys = t->esys;
-	err = nv_writer_create(&ring, &key, writer_public);
+	do {
+		got = getrandom(writer_seed, sizeof(writer_seed), 0);
+	} while (got < 0 && errno == EINTR);
+	if (got != sizeof(writer_seed)) {
+		perror("getrandom");
+		goto out;
+	}
+	err = tpm_writer_create(t, writer_seed, writer_public);
 	if (err) {
-		fprintf(stderr, "create kernel NV writer: %s\n", strerror(-err));
+		fprintf(stderr, "create TPM NV writer: %s\n", strerror(-err));
 		goto out;
 	}
 	if (tpm_policy_signed(zero, writer_public, policy)) {
@@ -139,14 +180,14 @@ int main(void)
 		goto out;
 	}
 	tpm_policy_command_code(policy, SHIRUDO_TPM_CC_NV_EXTEND, policy);
-	if (tpm_writer_load(t, writer_public, &writer) ||
+	if (tpm_writer_load(t, writer_seed, writer_public, &writer) ||
 	    tpm_nv_define(t, TEST_NV_INDEX, policy, NULL, 0))
 		goto out;
 	defined = true;
 	if (tpm_failed(Esys_TR_FromTPMPublic(esys, TEST_NV_INDEX, ESYS_TR_NONE,
 					     ESYS_TR_NONE, ESYS_TR_NONE, &nv),
 		       "TR_FromTPMPublic") ||
-	    authorize(t, writer, nv, key, seed.buffer, policy,
+	    authorize(t, writer, nv, seed.buffer, policy,
 		      &session, signature, SIGNATURE_VALID) ||
 	    tpm_failed(Esys_NV_Extend(esys, nv, nv, session, ESYS_TR_NONE,
 				      ESYS_TR_NONE, &seed), "NV_Extend(seed)") ||
@@ -156,7 +197,7 @@ int main(void)
 					     ESYS_TR_NONE, ESYS_TR_NONE, &nv),
 		       "TR_FromTPMPublic") ||
 	    read_value(esys, nv, before) ||
-	    authorize(t, writer, nv, key, event_a.buffer, policy,
+	    authorize(t, writer, nv, event_a.buffer, policy,
 		      &session, signature, SIGNATURE_VALID))
 		goto out;
 	trc = Esys_NV_Extend(esys, nv, nv, session, ESYS_TR_NONE, ESYS_TR_NONE, &event_b);
@@ -171,10 +212,10 @@ int main(void)
 		fprintf(stderr, "rejected NV_Extend changed the scratch value\n");
 		goto out;
 	}
-	if (authorize(t, writer, nv, key, event_a.buffer, policy,
+	if (authorize(t, writer, nv, event_a.buffer, policy,
 		      &session, signature, SIGNATURE_REPLAY) ||
 	    flush(esys, &session) ||
-	    authorize(t, writer, nv, key, event_a.buffer, policy,
+	    authorize(t, writer, nv, event_a.buffer, policy,
 		      &session, signature, SIGNATURE_CORRUPT) ||
 	    flush(esys, &session) || read_value(esys, nv, after))
 		goto out;
@@ -182,7 +223,7 @@ int main(void)
 		fprintf(stderr, "replayed or corrupt signature changed the scratch value\n");
 		goto out;
 	}
-	if (authorize(t, writer, nv, key, event_a.buffer, policy,
+	if (authorize(t, writer, nv, event_a.buffer, policy,
 		      &session, signature, SIGNATURE_VALID) ||
 	    tpm_failed(Esys_NV_Extend(esys, nv, nv, session, ESYS_TR_NONE,
 				      ESYS_TR_NONE, &event_a), "NV_Extend(A)") ||
@@ -205,13 +246,6 @@ out:
 			rc = 1;
 	}
 	tpm_close(t);
-	if (ring > 0) {
-		err = keyring_unlink_key(KEY_SPEC_USER_KEYRING, ring);
-		if (err) {
-			fprintf(stderr, "unlink scratch writer keyring: %s\n", strerror(-err));
-			rc = 1;
-		}
-	}
 	if (!rc) {
 		puts("PolicySigned: replay and corruption rejected; value unchanged");
 		puts("cpHash: authorized A; rejected B unchanged; extended A; scratch index removed");

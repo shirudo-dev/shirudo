@@ -23,14 +23,14 @@ cleanup() {
 	exit "$result"
 }
 trap cleanup EXIT HUP INT TERM
-register_writer_start || exit 1
-mkdir -m 700 "$WORK/config" "$WORK/keys"
-head -c 700 /dev/urandom >"$WORK/keys/cert.der"
-: >"$WORK/initrd-release"
 export SHIRUDO_TPM_TCTI="cmd:$SIM $WORK/tpm"
 export SHIRUDO_EVENTLOG_PATH="$WORK/eventlog"
 export SHIRUDO_KEYS_DIR="$WORK/keys"
 export SHIRUDO_INITRD_RELEASE="$WORK/initrd-release"
+register_writer_start || exit 1
+mkdir -m 700 "$WORK/config" "$WORK/keys"
+head -c 700 /dev/urandom >"$WORK/keys/cert.der"
+: >"$WORK/initrd-release"
 NONCE=0102030405060708090a0b0c0d0e0f10
 ROOT_A=$(python3 -c 'print("41" * 32)')
 ROOT_B=$(python3 -c 'print("42" * 32)')
