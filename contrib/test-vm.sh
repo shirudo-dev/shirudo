@@ -761,6 +761,20 @@ save_failure_logs()
 	fi
 }
 
+print_memory_summary()
+{
+	local report
+
+	if [[ -s "$RUN_DIR/result/boot-memory" ]]; then
+		report="$(tr '\n' ' ' <"$RUN_DIR/result/boot-memory")"
+		summary_log "guest memory: ${report% }"
+	fi
+	if [[ -s "$HOST_MEMORY_REPORT" ]]; then
+		report="$(tr '\n' ' ' <"$HOST_MEMORY_REPORT")"
+		summary_log "host QEMU memory: ${report% }"
+	fi
+}
+
 format_elapsed()
 {
 	local elapsed="$1"
@@ -1634,20 +1648,6 @@ capture_host_memory_report()
 		fi
 	} >"$report"
 	HOST_MEMORY_REPORT="$report"
-}
-
-print_memory_summary()
-{
-	local report
-
-	if [[ -s "$RUN_DIR/result/boot-memory" ]]; then
-		report="$(tr '\n' ' ' <"$RUN_DIR/result/boot-memory")"
-		summary_log "guest memory: ${report% }"
-	fi
-	if [[ -s "$HOST_MEMORY_REPORT" ]]; then
-		report="$(tr '\n' ' ' <"$HOST_MEMORY_REPORT")"
-		summary_log "host QEMU memory: ${report% }"
-	fi
 }
 
 if [[ "$VM_MODE" == interactive ]]; then
