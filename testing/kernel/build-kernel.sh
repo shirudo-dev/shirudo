@@ -254,6 +254,9 @@ if [ "$APPLY_PATCHES" = 1 ] && [ "$KEEP_SRC" = 0 ]; then
 		log "applying $(basename "$p")"
 		if ! GIT_COMMITTER_NAME=shirudo GIT_COMMITTER_EMAIL=shirudo@build-kernel \
 		     GIT_COMMITTER_DATE="$AM_DATE" git -C "$SRC" am --quiet --3way "$p"; then
+			log "patch conflict details for $(basename "$p"):"
+			git -C "$SRC" status --short >&2
+			git -C "$SRC" diff --cc >&2
 			git -C "$SRC" am --abort || true
 			die "patch does not apply to $REF: $p"
 		fi
