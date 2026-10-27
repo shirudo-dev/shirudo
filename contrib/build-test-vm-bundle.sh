@@ -593,6 +593,9 @@ build_fixture otel-backend.bpf.c shirudo-test-otel-backend "$FIXTURE_WORK/truste
 build_fixture serialized-metric.bpf.c shirudo-test-serialized-metric "$FIXTURE_WORK/trusted"
 build_fixture arena-tree-serializer.bpf.c shirudo-test-arena-tree "$FIXTURE_WORK/trusted"
 build_fixture uprobe-multi.bpf.c shirudo-test-uprobe-multi "$FIXTURE_WORK/trusted"
+build_fixture scope-netfilter.bpf.c shirudo-test-scope-netfilter "$FIXTURE_WORK/trusted"
+build_fixture scope-cgroup.bpf.c shirudo-test-scope-cgroup "$FIXTURE_WORK/trusted"
+build_fixture scope-kprobe.bpf.c shirudo-test-scope-kprobe "$FIXTURE_WORK/trusted"
 build_fixture basic.bpf.c shirudo-test-foreign "$FIXTURE_WORK/foreign"
 build_fixture basic.bpf.c shirudo-test-own-keyring "$FIXTURE_WORK/own"
 build_obs_fixture "$FIXTURE_WORK/trusted"
@@ -633,6 +636,16 @@ observability_payload="$($REPO_ROOT/shirudo upatch info \
 observability_anomaly_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/kernel-obs-cred-anomaly.upatch" --json |
 	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+for scope in netfilter cgroup kprobe; do
+	scope_payload="$($REPO_ROOT/shirudo upatch info \
+		"$TMP_DIR/fixtures/shirudo-test-scope-$scope.upatch" --json |
+		python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+	"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
+		"shirudo-test-scope-$scope" --payload-sha256 "$scope_payload" \
+		-o "$TMP_DIR/fixtures/shirudo-test-scope-$scope.unload.upatch" \
+		--key "$FIXTURE_WORK/trusted/signing_key.pem" \
+		--cert "$FIXTURE_WORK/trusted/cert.der"
+done
 "$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
 	shirudo-test-basic --payload-sha256 "$basic_payload" \
 	-o "$TMP_DIR/fixtures/shirudo-test-basic.unload.upatch" \
