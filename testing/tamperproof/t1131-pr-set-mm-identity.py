@@ -75,13 +75,13 @@ class ShirudoIdentity(ctypes.Structure):
                 ("n_keys", ctypes.c_uint32),
                 ("key_serials", ctypes.c_int32 * 16),
                 ("runtime_root", ctypes.c_uint8 * 32),
-                ("nv_writer_ring", ctypes.c_int32),
-                ("nv_writer_key", ctypes.c_int32),
+                ("nv_writer_seed", ctypes.c_uint8 * 32),
                 ("nv_writer_public", ctypes.c_uint8 * 384),
                 ("ak_name", ctypes.c_uint8 * 34),
                 ("ak_name_len", ctypes.c_uint32),
                 ("dm_verity_ring", ctypes.c_int32),
-                ("dm_verity_key", ctypes.c_int32)]
+                ("dm_verity_key", ctypes.c_int32),
+                ("nv_index", ctypes.c_uint32)]
 
 
 def assert_frozen_runtime():
@@ -114,6 +114,7 @@ def assert_frozen_runtime():
     value = ShirudoIdentity.from_buffer_copy(buffer.raw)
     assert info.value_size == ctypes.sizeof(ShirudoIdentity), info.value_size
     assert any(value.runtime_root), "runtime hash missing"
+    assert value.nv_index, "NV index missing"
     executable = os.path.realpath(SHIRUDO)
     runtime = os.path.realpath(RUNTIME)
     assert os.path.commonpath((executable, runtime)) == runtime, executable

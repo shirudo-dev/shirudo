@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /* Copyright (c) 2026 Authors of shirudo */
 
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -29,6 +30,7 @@ static int unauthorized_extend(struct shirudo_tpm *tpm)
 	__u8 before[32], after[32];
 	ESYS_TR nv = ESYS_TR_NONE;
 	TSS2_RC trc;
+	int saved_errno;
 	int rc = 1;
 
 	if (eventlog_boot_init(&rec)) {
@@ -60,11 +62,13 @@ static int unauthorized_extend(struct shirudo_tpm *tpm)
 	if (tpm_failed(Esys_PolicyOR(tpm->esys, session, ESYS_TR_NONE, ESYS_TR_NONE,
 				     ESYS_TR_NONE, &branches), "PolicyOR"))
 		goto out;
+	errno = 0;
 	trc = Esys_NV_Extend(tpm->esys, nv, nv, session, ESYS_TR_NONE,
 			     ESYS_TR_NONE, &event);
-	if (trc != (TPM2_RC_POLICY_FAIL | TPM2_RC_S | TPM2_RC_1)) {
-		fprintf(stderr, "unsigned NV_Extend: expected policy failure, got 0x%08x\n",
-			(__u32)trc);
+	saved_errno = errno;
+	if (trc != TSS2_TCTI_RC_IO_ERROR || saved_errno != EACCES) {
+		fprintf(stderr, "unsigned NV_Extend: expected LSM denial, got 0x%08x/%d\n",
+			(__u32)trc, saved_errno);
 		goto out;
 	}
 	if (tpm_nv_read(tpm, SHIRUDO_NV_INDEX, after))
@@ -81,7 +85,7 @@ out:
 	if (nv != ESYS_TR_NONE && tpm_failed(Esys_TR_Close(tpm->esys, &nv), "TR_Close"))
 		rc = 1;
 	if (!rc)
-		puts("inherited-TPM: unsigned NV_Extend rejected by TPM; value unchanged");
+		puts("inherited-TPM: unsigned NV_Extend rejected by LSM; value unchanged");
 	return rc;
 }
 

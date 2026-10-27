@@ -628,6 +628,7 @@ TEST_HELPERS := $(VERITY_TEST_HELPERS) \
                 testing/helper/test-upatch-link-lockdown \
                 testing/helper/test-exec-churn \
 		testing/upatch/kernel-obs/exec/exec-paths
+TEST_HELPERS += testing/helper/test-nv-writer
 TEST_HELPERS += testing/helper/test-keyring-seal
 TEST_HELPERS += testing/helper/test-tpm-preopened
 

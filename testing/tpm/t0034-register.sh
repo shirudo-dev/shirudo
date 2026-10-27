@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 #
-# t0034 -- register lifecycle with a real kernel writer in a pre-init VM.
+# t0034 -- register lifecycle with a TPM-held writer in a pre-init VM.
 
 cd "$(dirname "$0")/.."
 . ./test-lib.sh
@@ -11,7 +11,7 @@ R=./helper/test-register
 SIM=$(pwd)/helper/tpmsim-cmd
 S=./helper/test-register-cli
 . ./tpm/register-lib.sh
-[ "$(id -u)" = 0 ] && [ -x "$SIM" ] && [ -x "$R" ] && [ -x "$S" ] || {
+[ "$(id -u)" = 0 ] && [ -x "$SIM" ] && [ -x "$R" ] && [ -x "$S" ] && [ -x ./helper/test-nv-cphash ] && [ -x ./helper/test-nv-writer ] || {
 	echo "register VM requires root and the built TPM helpers" >&2
 	exit 1
 }
@@ -41,6 +41,18 @@ PAYLOAD=$(py "print(\"ab\"*32)")
 ENTER=$(py "import hashlib; print(hashlib.sha256(b\"enter-initrd\").hexdigest())")
 LEAVE=$(py "import hashlib; print(hashlib.sha256(b\"leave-initrd\").hexdigest())")
 PHASE=$(sha "$Z$ENTER")
+
+test_expect_success 'an unrestricted TPM signing request succeeds before the guard' '
+	./helper/test-nv-writer sign-allowed "$SHIRUDO_TPM_TCTI"
+'
+
+test_expect_success 'TPM signatures bind the nonce and exact NV command' '
+	./helper/test-nv-cphash >"$WORK/cphash.log" &&
+	grep -qx "PolicySigned: replay and corruption rejected; value unchanged" \
+		"$WORK/cphash.log" &&
+	grep -qx "cpHash: authorized A; rejected B unchanged; extended A; scratch index removed" \
+		"$WORK/cphash.log"
+'
 
 test_expect_success 'attest names a register that is not bound yet' '
 	! $S attest --nonce=00 >/dev/null 2>"$WORK/attest-unbound.err" &&
@@ -74,7 +86,7 @@ test_expect_success 'init binds the register to PCRs 9 and 11 from the initrd an
 	echo "$init" >"$WORK/init" && echo "$name" >"$WORK/name"
 '
 
-test_expect_success 'predict names the register from the binding values and kernel writer' '
+test_expect_success 'predict names the register from the binding values and TPM writer' '
 	$S attest predict --cert="$WORK/keys/cert.der" --bind-pcr=9=$Z \
 		--bind-pcr=11=$PHASE --writer-public="$WRITER" >"$WORK/predict" &&
 	grep -qx "register_name: $(cat "$WORK/name")" "$WORK/predict" &&
