@@ -65,13 +65,46 @@ _Static_assert(sizeof(struct shirudo_upatch_header) ==
 	       SHIRUDO_UPATCH_HEADER_SIZE, "unexpected upatch header padding");
 
 /*
- * Optional decoder metadata embedded inside the signature-covered data
- * section. BPF programs declare a shirudo_decoder_manifest in .rodata;
- * shirudo-build resolves and embeds the decoder source before signing.
+ * The signed sections: what the target needs beyond the loader and its
+ * data, appended to the data section before signing so the kernel's
+ * signature check covers them, and located through a trailer in the
+ * data's last 16 bytes. The loader ignores the bytes behind its own.
+ * A LOAD carries its name and its attach metadata, an UNLOAD directive
+ * the name of its target and the payload digest it expects, and a LOAD
+ * carries decoders when its programs declare any.
+ */
+#define SHIRUDO_UPATCH_SIGNED_TRAILER_MAGIC	0x52544753u	/* "SGTR" le */
+#define SHIRUDO_UPATCH_SIGNED_VERSION		1u
+#define SHIRUDO_UPATCH_SIGNED_SECTIONS_MAX	8u
+
+enum shirudo_upatch_section_tag {
+	SHIRUDO_UPATCH_SECTION_NAME	= 0x454d414eu,	/* "NAME" le */
+	SHIRUDO_UPATCH_SECTION_ATTACH	= 0x4d475055u,	/* "UPGM" le */
+	SHIRUDO_UPATCH_SECTION_UNLOAD	= 0x444c4e55u,	/* "UNLD" le */
+	SHIRUDO_UPATCH_SECTION_DECODERS	= 0x42444344u,	/* "DCDB" le */
+};
+
+struct shirudo_upatch_signed_section {
+	__u32		tag;		/* enum shirudo_upatch_section_tag */
+	__u32		reserved;	/* zero */
+	__u32		off;		/* from the start of data */
+	__u32		len;
+};
+
+struct shirudo_upatch_signed_trailer {
+	__u32		magic;		/* SHIRUDO_UPATCH_SIGNED_TRAILER_MAGIC */
+	__u32		version;	/* SHIRUDO_UPATCH_SIGNED_VERSION */
+	__u32		dir_off;	/* the section directory, from the start of data */
+	__u32		nr_sections;
+};
+
+/*
+ * Decoders embedded inside the signature-covered data section. BPF
+ * programs declare a shirudo_decoder_manifest in .rodata; shirudo-build
+ * resolves and embeds the decoder source before signing.
  */
 #define SHIRUDO_DECODER_MANIFEST_MAGIC	0x44434544u	/* "DECD" le */
 #define SHIRUDO_UPATCH_DECODER_MAGIC	0x42444344u	/* "DCDB" le */
-#define SHIRUDO_UPATCH_DECODER_TRAILER_MAGIC 0x52544344u /* "DCTR" le */
 #define SHIRUDO_UPATCH_DECODER_VERSION	1u
 #define SHIRUDO_UPATCH_DECODER_LANG_LUA	1u
 #define SHIRUDO_UPATCH_DECODER_INPUT_MAP_V1	1u
@@ -116,22 +149,13 @@ struct shirudo_upatch_decoder_blob {
 	struct shirudo_upatch_decoder_entry decoders[];
 };
 
-struct shirudo_upatch_decoder_trailer {
-	__u32		magic;
-	__u32		version;
-	__u32		decoder_off;
-	__u32		decoder_len;
-};
-
 /*
- * Optional metadata format for LOAD upatches. This tells the target how
- * each program should be attached after the signed loader has created it.
+ * The attach metadata of a LOAD upatch, its ATTACH section: how the
+ * target attaches each program after the signed loader has created it.
  * Programs without a special attach kind use RAW_TRACEPOINT, preserving
- * the original attach_btf_id behavior.
- *
- * Metadata is not signature-covered in the v1 container format. The program
- * bytes are still hash-locked by the signed loader; this blob is attach
- * policy for the target to validate before creating links.
+ * the original attach_btf_id behavior. The program bytes are hash-locked
+ * by the signed loader; the site a kprobe, uprobe, cgroup or netfilter
+ * program attaches at comes from here, which is why it is signed.
  */
 #define SHIRUDO_UPATCH_ATTACH_TARGET_MAX	128u
 #define SHIRUDO_UPATCH_PROG_MAGIC	0x4d475055u	/* "UPGM" le */

@@ -620,43 +620,69 @@ static int build_decoder_blob(const struct decoder_set *set,
 	return 0;
 }
 
+struct signed_section {
+	__u32		tag;
+	const void	*data;
+	__u32		len;
+};
+
+/*
+ * data || sections, each at an 8-byte boundary || directory || trailer.
+ * The loader addresses nothing past its own data, so the sections are
+ * invisible to it and the kernel signs them with the rest.
+ */
 static int compose_signed_data(const void *data, __u32 data_len,
-			       const void *decoder_blob,
-			       __u32 decoder_blob_len,
-			       void **out, __u32 *out_len)
+			       const struct signed_section *sections,
+			       __u32 nr_sections, void **out, __u32 *out_len)
 {
-	struct shirudo_upatch_decoder_trailer trailer = {};
-	__u64 payload_len, total;
-	__u32 pad_len;
-	char *buf;
+	struct shirudo_upatch_signed_trailer trailer = {};
+	__u64 total = data_len, dir_off;
+	__u8 *buf;
+	__u32 i;
 
 	*out = NULL;
-	*out_len = data_len;
-	if (!decoder_blob_len)
-		return 0;
-	payload_len = (__u64)data_len + decoder_blob_len;
-	pad_len = (__u32)((8 - (payload_len & 7)) & 7);
-	total = payload_len + pad_len;
-	total += sizeof(trailer);
+	*out_len = 0;
+	if (nr_sections == 0 ||
+	    nr_sections > SHIRUDO_UPATCH_SIGNED_SECTIONS_MAX)
+		return -EINVAL;
+	for (i = 0; i < nr_sections; i++) {
+		total = (total + 7) & ~7ULL;
+		total += sections[i].len;
+	}
+	dir_off = (total + 7) & ~7ULL;
+	total = dir_off +
+		(__u64)nr_sections *
+		sizeof(struct shirudo_upatch_signed_section) +
+		sizeof(trailer);
 	if (total > UINT32_MAX)
 		return -EOVERFLOW;
-	buf = xmalloc((size_t)total);
+	buf = xcalloc(1, (size_t)total);
 	if (!buf)
 		return -ENOMEM;
 	if (data_len)
 		memcpy(buf, data, data_len);
-	memcpy(buf + data_len, decoder_blob, decoder_blob_len);
-	memset(buf + data_len + decoder_blob_len, 0, pad_len);
+	total = data_len;
+	for (i = 0; i < nr_sections; i++) {
+		struct shirudo_upatch_signed_section s = {};
 
-	trailer.magic = htole32(SHIRUDO_UPATCH_DECODER_TRAILER_MAGIC);
-	trailer.version = htole32(SHIRUDO_UPATCH_DECODER_VERSION);
-	trailer.decoder_off = htole32(data_len);
-	trailer.decoder_len = htole32(decoder_blob_len);
-	memcpy(buf + data_len + decoder_blob_len + pad_len, &trailer,
-	       sizeof(trailer));
+		total = (total + 7) & ~7ULL;
+		memcpy(buf + total, sections[i].data, sections[i].len);
+		s.tag = htole32(sections[i].tag);
+		s.off = htole32((__u32)total);
+		s.len = htole32(sections[i].len);
+		memcpy(buf + dir_off + i * sizeof(s), &s, sizeof(s));
+		total += sections[i].len;
+	}
+	trailer.magic = htole32(SHIRUDO_UPATCH_SIGNED_TRAILER_MAGIC);
+	trailer.version = htole32(SHIRUDO_UPATCH_SIGNED_VERSION);
+	trailer.dir_off = htole32((__u32)dir_off);
+	trailer.nr_sections = htole32(nr_sections);
+	total = dir_off +
+		(__u64)nr_sections * sizeof(struct shirudo_upatch_signed_section);
+	memcpy(buf + total, &trailer, sizeof(trailer));
 
 	*out = buf;
-	*out_len = (__u32)total;
+	*out_len = (__u32)(total + sizeof(trailer));
 	return 0;
 }
 
@@ -1077,21 +1103,19 @@ static void unregister_target_attach_types(int handler_ids[2])
  */
 static int finalize_object(struct bpf_object *obj, const char *out_path,
 			   const char *upatch_name, __u32 flags,
-			   const void *meta, __u32 meta_len,
-			   const char *src_path,
+			   const __u8 *unload_payload, const char *src_path,
 			   const char *pkey_path, const char *cert_path)
 {
 	LIBBPF_OPTS(gen_loader_opts, opts);
-	__u32 loader_off, sig_off, data_off, data_len, meta_off;
-	__u32 write_meta_len = meta_len, attach_meta_len = 0;
-	__u32 decoder_blob_len = 0, signed_data_len = 0;
+	struct signed_section sections[SHIRUDO_UPATCH_SIGNED_SECTIONS_MAX];
+	__u32 loader_off, sig_off, data_off, data_len, attach_meta_len = 0;
+	__u32 decoder_blob_len = 0, signed_data_len = 0, nr_sections = 0;
+	char signed_name[SHIRUDO_UPATCH_NAME_MAX] = {};
 	__u32 nr_maps = 0, nr_progs = 0;
 	struct shirudo_upatch_header hdr;
 	struct decoder_set decoders = {};
 	struct shirudo_sign_io sio = {};
-	const void *signed_data = NULL;
-	const void *write_meta = meta;
-	void *signed_data_buf = NULL;
+	void *signed_data = NULL;
 	void *decoder_blob = NULL;
 	__u32 nr_decoders = 0;
 	void *attach_meta = NULL;
@@ -1125,8 +1149,6 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 					  &attach_meta, &attach_meta_len);
 		if (err)
 			goto out;
-		write_meta = attach_meta;
-		write_meta_len = attach_meta_len;
 
 		err = collect_decoder_manifests(obj, src_path, upatch_name,
 						&decoders);
@@ -1155,12 +1177,35 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 		err = -EOVERFLOW;
 		goto out;
 	}
-	err = compose_signed_data(opts.data, (__u32)opts.data_sz,
-				  decoder_blob, decoder_blob_len,
-				  &signed_data_buf, &signed_data_len);
+	/*
+	 * The name the pin, the archive and the register event carry, the
+	 * attach sites, the unload target: signed with the data, since the
+	 * header is not.
+	 */
+	strscpy(signed_name, upatch_name, sizeof(signed_name));
+	sections[nr_sections++] = (struct signed_section){
+		SHIRUDO_UPATCH_SECTION_NAME, signed_name, sizeof(signed_name),
+	};
+	if (flags & SHIRUDO_DIRECTIVE_UNLOAD) {
+		sections[nr_sections++] = (struct signed_section){
+			SHIRUDO_UPATCH_SECTION_UNLOAD, unload_payload,
+			SHIRUDO_UPATCH_PAYLOAD_HASH_LEN,
+		};
+	} else {
+		sections[nr_sections++] = (struct signed_section){
+			SHIRUDO_UPATCH_SECTION_ATTACH, attach_meta,
+			attach_meta_len,
+		};
+		if (decoder_blob_len)
+			sections[nr_sections++] = (struct signed_section){
+				SHIRUDO_UPATCH_SECTION_DECODERS, decoder_blob,
+				decoder_blob_len,
+			};
+	}
+	err = compose_signed_data(opts.data, (__u32)opts.data_sz, sections,
+				  nr_sections, &signed_data, &signed_data_len);
 	if (err)
 		goto out;
-	signed_data = signed_data_buf ? signed_data_buf : opts.data;
 
 	sig_buf = xmalloc(SHIRUDO_MAX_SIG_SIZE);
 	if (!sig_buf) {
@@ -1183,14 +1228,13 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 	sig_off    = loader_off + opts.insns_sz;
 	data_off   = sig_off + (__u32)sio.signature_sz;
 	data_len   = signed_data_len;
-	meta_off   = data_off + data_len;
 
 	pack_header(&hdr, upatch_name, SHIRUDO_UPATCH_TYPE_BPF, flags,
 		    sio.payload_sha256,
 		    loader_off, opts.insns_sz,
 		    sig_off, (__u32)sio.signature_sz,
-		    write_meta_len ? meta_off : 0, write_meta_len,
-		    data_len ? data_off : 0, data_len,
+		    0, 0,
+		    data_off, data_len,
 		    1u * 1024u * 1024u,
 		    nr_maps, nr_progs);
 
@@ -1205,10 +1249,8 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 		err = write_complete(fd, opts.insns, opts.insns_sz);
 	if (!err)
 		err = write_complete(fd, sig_buf, sio.signature_sz);
-	if (!err && data_len)
+	if (!err)
 		err = write_complete(fd, signed_data, data_len);
-	if (!err && write_meta_len)
-		err = write_complete(fd, write_meta, write_meta_len);
 	if (!err && fsync(fd) != 0)
 		err = -errno;
 	close(fd);
@@ -1218,17 +1260,17 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 		goto out;
 	}
 
-	pr_info("wrote %s (insns=%u sig=%zu data=%u meta=%u maps=%u "
+	pr_info("wrote %s (insns=%u sig=%zu data=%u sections=%u maps=%u "
 		"progs=%u decoders=%u name=%s%s)",
 		out_path, opts.insns_sz, sio.signature_sz, data_len,
-		write_meta_len, nr_maps, nr_progs, nr_decoders,
+		nr_sections, nr_maps, nr_progs, nr_decoders,
 		upatch_name,
 		(flags & SHIRUDO_DIRECTIVE_UNLOAD) ? " UNLOAD" : "");
 out:
 	if (fd >= 0)
 		close(fd);
 	free_decoder_set(&decoders);
-	xfree(signed_data_buf, signed_data_len);
+	xfree(signed_data, signed_data_len);
 	xfree(decoder_blob, decoder_blob_len);
 	xfree(sig_buf, SHIRUDO_MAX_SIG_SIZE);
 	bpf_object__close(obj);
@@ -1258,8 +1300,8 @@ int shirudo_build_package_load(const char *bpf_o, const char *src_path,
 		unregister_target_attach_types(handler_ids);
 		return err;
 	}
-	err = finalize_object(obj, out_path, upatch_name, 0,
-			      NULL, 0, src_path, pkey_path, cert_path);
+	err = finalize_object(obj, out_path, upatch_name, 0, NULL, src_path,
+			      pkey_path, cert_path);
 	unregister_target_attach_types(handler_ids);
 	return err;
 }
@@ -1321,14 +1363,11 @@ int shirudo_build_package_unload(const char *upatch_name,
 	}
 
 	/*
-	 * Carry the target's expected payload_sha256 as metadata so the
-	 * target can compute the unload chain event (and a future
-	 * payload_mismatch check) without parsing the loader data blob.
-	 * The metadata is not signature-covered; tampering only produces
-	 * a chain value the operator's expectation rejects.
+	 * The target reads the name and the expected payload from the
+	 * signed sections, not from the loader's .rodata, which it has no
+	 * portable way to locate in the data blob.
 	 */
 	return finalize_object(obj, out_upatch, upatch_name,
-			       SHIRUDO_DIRECTIVE_UNLOAD,
-			       payload_sha256, 32,
+			       SHIRUDO_DIRECTIVE_UNLOAD, payload_sha256,
 			       NULL, pkey_path, cert_path);
 }

@@ -114,53 +114,28 @@ static bool has_nul(const char *s, size_t n)
 	return memchr(s, '\0', n);
 }
 
-/*
- * Parse the optional signed decoder blob. Advisory for now: malformed
- * decoder metadata is treated as absent so old upatches and ordinary
- * gen_loader data remain readable by `upatch info`.
- */
-static void parse_decoders(struct shirudo_upatch *u)
+/* The DECODERS section: entries and sources within the blob. */
+static bool parse_decoders(struct shirudo_upatch *u, const __u8 *bp,
+			   __u32 decoder_len)
 {
-	const __u8 *data, *trp, *bp;
-	__u32 magic, version, decoder_off, decoder_len, nr_decoders;
+	__u32 nr_decoders;
 	__u64 entries_end;
 	size_t i;
 
-	if (u->hdr.data_len < sizeof(struct shirudo_upatch_decoder_trailer))
-		return;
-
-	data = u->map + u->hdr.data_off;
-	trp = data + u->hdr.data_len -
-	      sizeof(struct shirudo_upatch_decoder_trailer);
-	magic = rd_le32(trp);
-	if (magic != SHIRUDO_UPATCH_DECODER_TRAILER_MAGIC)
-		return;
-	version = rd_le32(trp + 4);
-	if (version != SHIRUDO_UPATCH_DECODER_VERSION)
-		return;
-
-	decoder_off = rd_le32(trp + 8);
-	decoder_len = rd_le32(trp + 12);
 	if (decoder_len < sizeof(struct shirudo_upatch_decoder_blob))
-		return;
-	if ((__u64)decoder_off + decoder_len >
-	    (__u64)u->hdr.data_len -
-	    sizeof(struct shirudo_upatch_decoder_trailer))
-		return;
-
-	bp = data + decoder_off;
+		return false;
 	if (rd_le32(bp) != SHIRUDO_UPATCH_DECODER_MAGIC ||
 	    rd_le32(bp + 4) != SHIRUDO_UPATCH_DECODER_VERSION)
-		return;
+		return false;
 
 	nr_decoders = rd_le32(bp + 8);
 	if (nr_decoders == 0)
-		return;
+		return false;
 	entries_end = sizeof(struct shirudo_upatch_decoder_blob) +
 		      (__u64)nr_decoders *
 		      sizeof(struct shirudo_upatch_decoder_entry);
 	if (entries_end > decoder_len)
-		return;
+		return false;
 
 	/* The blob sits behind the signature, so entries are unaligned. */
 	for (i = 0; i < nr_decoders; i++) {
@@ -173,24 +148,113 @@ static void parse_decoders(struct shirudo_upatch *u)
 		    !has_nul(d.map, sizeof(d.map)) ||
 		    !has_nul(d.source, sizeof(d.source)) ||
 		    !has_nul(d.entrypoint, sizeof(d.entrypoint)))
-			return;
+			return false;
 		if (le32toh(d.language) == 0 ||
 		    le32toh(d.api_version) == 0 ||
 		    le32toh(d.input_format) == 0 ||
 		    le32toh(d.export_signal) == 0)
-			return;
+			return false;
 
 		source_off = le32toh(d.source_off);
 		source_len = le32toh(d.source_len);
 		if (source_len == 0 || source_off < entries_end ||
 		    source_off > decoder_len ||
 		    source_len > decoder_len - source_off)
-			return;
+			return false;
 	}
 
 	u->decoder_blob = (const void *)bp;
 	u->decoder_blob_len = decoder_len;
 	u->nr_decoders = nr_decoders;
+	return true;
+}
+
+static void forget_signed_sections(struct shirudo_upatch *u)
+{
+	u->decoder_blob = NULL;
+	u->decoder_blob_len = 0;
+	u->nr_decoders = 0;
+	u->signed_name = NULL;
+	u->signed_attach = NULL;
+	u->signed_attach_len = 0;
+	u->signed_unload_payload = NULL;
+}
+
+/*
+ * The signed sections behind the loader data. Each lies below the
+ * directory, the directory below the trailer, and each tag appears
+ * once; a directory that breaks any of that is taken for none, so a
+ * load or unload refuses for what it then lacks.
+ */
+static void parse_signed_sections(struct shirudo_upatch *u)
+{
+	struct shirudo_upatch_signed_trailer tr;
+	__u32 i, nr, dir_off, seen = 0;
+	const __u8 *data, *dir;
+	__u64 end;
+
+	if (u->hdr.data_len < sizeof(tr))
+		return;
+	data = u->map + u->hdr.data_off;
+	memcpy(&tr, data + u->hdr.data_len - sizeof(tr), sizeof(tr));
+	if (le32toh(tr.magic) != SHIRUDO_UPATCH_SIGNED_TRAILER_MAGIC ||
+	    le32toh(tr.version) != SHIRUDO_UPATCH_SIGNED_VERSION)
+		return;
+	nr = le32toh(tr.nr_sections);
+	dir_off = le32toh(tr.dir_off);
+	end = u->hdr.data_len - sizeof(tr);
+	if (nr == 0 || nr > SHIRUDO_UPATCH_SIGNED_SECTIONS_MAX ||
+	    dir_off > end ||
+	    (__u64)nr * sizeof(struct shirudo_upatch_signed_section) >
+	    end - dir_off)
+		return;
+	dir = data + dir_off;
+	for (i = 0; i < nr; i++) {
+		struct shirudo_upatch_signed_section s;
+		__u32 tag, off, len, bit;
+
+		memcpy(&s, dir + i * sizeof(s), sizeof(s));
+		tag = le32toh(s.tag);
+		off = le32toh(s.off);
+		len = le32toh(s.len);
+		if (le32toh(s.reserved) || off > dir_off ||
+		    len > dir_off - off)
+			goto reject;
+		switch (tag) {
+		case SHIRUDO_UPATCH_SECTION_NAME:
+			bit = 1;
+			if (len != SHIRUDO_UPATCH_NAME_MAX)
+				goto reject;
+			u->signed_name = (const char *)data + off;
+			break;
+		case SHIRUDO_UPATCH_SECTION_ATTACH:
+			bit = 2;
+			if (len == 0)
+				goto reject;
+			u->signed_attach = data + off;
+			u->signed_attach_len = len;
+			break;
+		case SHIRUDO_UPATCH_SECTION_UNLOAD:
+			bit = 4;
+			if (len != SHIRUDO_UPATCH_PAYLOAD_HASH_LEN)
+				goto reject;
+			u->signed_unload_payload = data + off;
+			break;
+		case SHIRUDO_UPATCH_SECTION_DECODERS:
+			bit = 8;
+			if (!parse_decoders(u, data + off, len))
+				goto reject;
+			break;
+		default:
+			goto reject;
+		}
+		if (seen & bit)
+			goto reject;
+		seen |= bit;
+	}
+	return;
+reject:
+	forget_signed_sections(u);
 }
 
 int upatch_open(const char *path, struct shirudo_upatch *out)
@@ -238,7 +302,7 @@ int upatch_open(const char *path, struct shirudo_upatch *out)
 		upatch_close(out);
 		return rc;
 	}
-	parse_decoders(out);
+	parse_signed_sections(out);
 	return 0;
 }
 
@@ -248,10 +312,24 @@ void upatch_close(struct shirudo_upatch *u)
 		munmap((void *)u->map, u->map_size);
 		u->map = NULL;
 		u->map_size = 0;
-		u->decoder_blob = NULL;
-		u->decoder_blob_len = 0;
-		u->nr_decoders = 0;
+		forget_signed_sections(u);
 	}
+}
+
+const char *upatch_signed_name(const struct shirudo_upatch *u)
+{
+	return u->map ? u->signed_name : NULL;
+}
+
+const void *upatch_signed_attach(const struct shirudo_upatch *u, __u32 *len)
+{
+	*len = u->map ? u->signed_attach_len : 0;
+	return u->map ? u->signed_attach : NULL;
+}
+
+const __u8 *upatch_signed_unload_payload(const struct shirudo_upatch *u)
+{
+	return u->map ? u->signed_unload_payload : NULL;
 }
 
 const void *upatch_loader(const struct shirudo_upatch *u)

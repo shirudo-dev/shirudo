@@ -27,14 +27,15 @@ static int expect_attach(const struct shirudo_upatch *u, __u32 kind,
 	struct shirudo_upatch_prog_metadata md;
 	struct shirudo_upatch_prog_entry prog;
 	const __u8 *raw;
+	__u32 len;
 
 	if (u->hdr.nr_progs != 1)
 		return fail("unexpected metadata prog count");
-	if (u->hdr.metadata_len != sizeof(md) + sizeof(prog))
-		return fail("unexpected metadata length");
-	raw = upatch_metadata(u);
+	raw = upatch_signed_attach(u, &len);
 	if (!raw)
-		return fail("missing metadata");
+		return fail("missing signed metadata");
+	if (len != sizeof(md) + sizeof(prog))
+		return fail("unexpected metadata length");
 	memcpy(&md, raw, sizeof(md));
 	memcpy(&prog, raw + sizeof(md), sizeof(prog));
 	if (le32toh(md.magic) != SHIRUDO_UPATCH_PROG_MAGIC ||
@@ -68,14 +69,15 @@ static int expect_serializer(const struct shirudo_upatch *u)
 	bool arena = false, error = false;
 	const __u8 *raw;
 	size_t i;
+	__u32 len;
 
 	if (u->hdr.nr_maps != 4 || u->hdr.nr_progs != 2)
 		return fail("unexpected map/prog counts");
-	if (u->hdr.metadata_len != sizeof(md) + sizeof(progs))
-		return fail("unexpected metadata length");
-	raw = upatch_metadata(u);
+	raw = upatch_signed_attach(u, &len);
 	if (!raw)
-		return fail("missing metadata");
+		return fail("missing signed metadata");
+	if (len != sizeof(md) + sizeof(progs))
+		return fail("unexpected metadata length");
 	memcpy(&md, raw, sizeof(md));
 	memcpy(progs, raw + sizeof(md), sizeof(progs));
 	if (le32toh(md.magic) != SHIRUDO_UPATCH_PROG_MAGIC ||
@@ -105,13 +107,13 @@ static int expect_uprobe_multi(const struct shirudo_upatch *u,
 	struct shirudo_upatch_prog_metadata md;
 	struct shirudo_upatch_prog_entry prog;
 	const __u8 *raw, *cursor, *end;
-	__u32 path_len, build_id_len, nr_offsets, i;
+	__u32 path_len, build_id_len, nr_offsets, len, i;
 	__u64 previous = 0;
 
 	if (u->hdr.nr_progs != 1)
 		return fail("unexpected metadata prog count");
-	raw = upatch_metadata(u);
-	if (!raw || u->hdr.metadata_len < sizeof(md) + sizeof(prog) +
+	raw = upatch_signed_attach(u, &len);
+	if (!raw || len < sizeof(md) + sizeof(prog) +
 	    sizeof(targets) + sizeof(record))
 		return fail("missing uprobe metadata");
 	memcpy(&md, raw, sizeof(md));
@@ -127,7 +129,7 @@ static int expect_uprobe_multi(const struct shirudo_upatch *u,
 	    strcmp(prog.target, pattern) != 0)
 		return fail("uprobe program entry mismatch");
 	cursor = raw + sizeof(md) + sizeof(prog);
-	end = raw + u->hdr.metadata_len;
+	end = raw + len;
 	memcpy(&targets, cursor, sizeof(targets));
 	if (le32toh(targets.magic) != SHIRUDO_UPATCH_UPROBE_TARGET_MAGIC ||
 	    le32toh(targets.version) != SHIRUDO_UPATCH_UPROBE_TARGET_VERSION ||

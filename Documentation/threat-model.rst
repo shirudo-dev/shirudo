@@ -180,12 +180,18 @@ T3  Tampering with shirudo's files and process
 
 T4  Substituting artifacts
     The signature covers the loader instructions and data, so the kernel
-    refuses a modified loader.  An unload directive is itself a signed
+    refuses a modified loader.  The name an artifact loads under, the
+    sites its programs attach at and the target an unload directive
+    names and the payload it expects there ride in signed sections of
+    the data, so the kernel refuses an edited one and the target
+    refuses a header that disagrees with them; a load takes its attach
+    sites from nowhere else.  An unload directive is itself a signed
     loader and goes through the same ``BPF_PROG_LOAD``.  Before
     detaching, shirudo compares the live pin's payload xattr, which only
-    shirudo can write, against the directive's expected payload, and
-    refuses ``payload_mismatch`` on disagreement or when the xattr is
-    unreadable.
+    shirudo can write, against the directive's signed expected payload,
+    and refuses ``payload_mismatch`` on disagreement or when the xattr
+    is unreadable, so a directive detaches the upatch its signer made
+    it for and no other.
 
 T5  Silent state change
     Every init, load, unload and tree operation extends this boot's
@@ -355,13 +361,13 @@ T12 Interrupted image activation
 
 Each of these is known, documented and bounded; none is silent.
 
-1.  The unload directive's target name and expected payload live in
-    unsigned metadata.  The kernel's ``bpf_sys_bpf()`` cannot detach or
-    unlink, so the detach runs in userspace, and root can repoint a
-    signed directive at another upatch loaded under the same key, or
-    edit the expected payload to match it.  ``payload_mismatch`` catches
-    honest substitution; closing this fully needs an in-kernel detach so
-    the compare runs against signed ``.rodata``.
+1.  The detach runs in userspace: the kernel's ``bpf_sys_bpf()`` cannot
+    detach or unlink.  The directive's target name and expected payload
+    are signed, so root cannot repoint a directive at another upatch;
+    what root keeps is the moment, since every directive the operator
+    published, in a package beside its load, is root's to apply at any
+    time, and the register records each application.  An in-kernel
+    detach would make the whole lifecycle signed BPF.
 
 2.  ``CAP_SYS_RESOURCE`` can rewrite ``mm->exe_file``. The task mark is
     independent of that field, and ``task_prctl`` denies those operations to
@@ -496,8 +502,8 @@ values of each boot and systemd-aware verifiers find it in PCR 9 before
 the separator, and measuring the anchor through ``systemd-pcrextend`` so
 systemd's measurement log explains it (residual risk 11); signed PCR
 policies for the kernel and initrd PCRs so a verifier needs no golden
-values; an in-kernel detach so the unload compare runs against
-signed ``.rodata`` (residual risk 1); and refusing creation, rename
+values; an in-kernel detach so the pin removal is signed BPF rather
+than userspace (residual risk 1); and refusing creation, rename
 and link into a labelled directory from any process but shirudo, which
 would keep foreign entries out of the tree altogether, and a
 ``d_instantiate`` hook the BPF LSM can sleep in, which would mark a

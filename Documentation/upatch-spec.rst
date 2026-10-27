@@ -47,16 +47,18 @@ Artifacts are small in practice.
                 +-------------------------------------------+
                 | signature      (CMS/PKCS#7, detached)     |
                 +-------------------------------------------+
-                | data           (signature-covered)        |  optional
+                | data           (signature-covered)        |
+                |   loader data                             |
+                |   signed sections, directory, trailer     |
                 +-------------------------------------------+
                 | metadata                                  |  optional
                 +-------------------------------------------+
 
 The writer emits the sections in this order, but a reader must rely
 only on the header offsets, never on adjacency.  ``loader_insns``
-begins at offset 360, immediately after the header.  ``data`` and
-``metadata`` are optional; an absent section
-has its ``*_off`` set to 0.
+begins at offset 360, immediately after the header.  ``metadata`` is
+optional and the writer no longer emits it; an absent section has its
+``*_off`` set to 0.  ``data`` always ends with the signed sections.
 
 3) Header
 ---------
@@ -130,7 +132,8 @@ with ``data``.
 For an UNLOAD directive (``flags & DIRECTIVE_UNLOAD``) the loader is not
 a gen_loader output but the compiled bytes of the small hand-written
 ``bpf/unload.c`` template, parameterised through its ``.rodata`` with
-the target name and the expected ``payload_sha256``.
+the target name and the expected ``payload_sha256``; the target reads
+both from the signed ``NAME`` and ``UNLD`` sections instead.
 
 signature
 ~~~~~~~~~
@@ -158,27 +161,50 @@ data
 
 The bytes of ``gen_loader_opts.data``: the blob the loader instructions
 reference (the program BTF, ``.rodata`` and map initial values,
-relocation inputs, ...).  The loader is parameterised by this data, so
-it must travel with the instructions.  Absent (``data_off == 0``) only
-for artifacts with no such data.  Writers may append a decoder blob and
-trailer; generated loaders ignore the trailing bytes because all their
-offsets refer to the original prefix.
+relocation inputs, ...), followed by the signed sections.  The loader
+is parameterised by its data, so it must travel with the instructions;
+it ignores the bytes behind it because all its offsets refer to the
+original prefix, and the kernel signs the whole section, so what the
+target needs beyond the loader rides there, covered.
 
-Signed decoder trailer.  A BPF source declares
-``struct shirudo_decoder_manifest`` in ``.rodata``.  At build time
-shirudo resolves and embeds each referenced decoder source before
-signing ``loader_insns || data``, so the decoders are signature-covered.
-The final 16 bytes of ``data`` are:
+Signed sections.  Each section is placed at an 8-byte boundary after
+the loader data, then a directory of 16-byte entries, then a 16-byte
+trailer that ends ``data``:
 
 ==========  ====  =====================  ====================================
 offset      size  field                  meaning
 ==========  ====  =====================  ====================================
-+0          4     magic                  ``0x52544344`` (``"DCTR"`` LE)
++0          4     magic                  ``0x52544753`` (``"SGTR"`` LE)
 +4          4     version                ``1``
-+8          4     decoder_off            offset from the start of ``data``
-+12         4     decoder_len            decoder blob length
++8          4     dir_off                directory offset from the start of ``data``
++12         4     nr_sections            directory entries, 1 to 8
 ==========  ====  =====================  ====================================
 
+Each directory entry:
+
+==========  ====  =====================  ====================================
+offset      size  field                  meaning
+==========  ====  =====================  ====================================
++0          4     tag                    ``"NAME"``, ``"UPGM"``, ``"UNLD"`` or
+                                         ``"DCDB"`` as little-endian u32
++4          4     reserved               zero
++8          4     off                    section offset from the start of ``data``
++12         4     len                    section length
+==========  ====  =====================  ====================================
+
+Every section lies before the directory, and every tag appears at most
+once.  ``NAME`` (256 bytes, NUL-padded) is the upatch name of a LOAD
+and the target name of an UNLOAD directive; the header's ``name`` must
+equal it.  ``UPGM`` is the attach metadata of a LOAD, described below.
+``UNLD`` (32 bytes) is the ``payload_sha256`` an UNLOAD directive
+expects the loaded upatch to carry.  ``DCDB`` is the decoder blob.  A
+reader takes a directory that breaks any of this for none, and a load
+or unload then refuses for what it lacks.
+
+Decoders.  A BPF source declares ``struct shirudo_decoder_manifest`` in
+``.rodata``.  At build time shirudo resolves and embeds each referenced
+decoder source in the ``DCDB`` section before signing
+``loader_insns || data``, so the decoders are signature-covered.
 The blob starts with magic ``0x42444344`` (``"DCDB"`` LE), a version, a
 decoder count and a reserved word.  Each 200-byte entry holds the
 language, API version, input format, fixed-size upatch, map, source
@@ -300,7 +326,7 @@ For LOAD artifacts and UNLOAD directives alike this is the SHA-256 of
 covers.  At load, shirudo recomputes it.  For a loaded upatch it is also
 recorded as the ``security.bpf.shirudo.payload`` xattr on the pin
 directory.  An UNLOAD directive's expected target digest is carried
-separately in its loader ``.rodata`` and in its metadata.
+separately in its ``UNLD`` section, and in its loader ``.rodata``.
 
 It also lets ``shirudo upatch list`` and ``status`` identify an artifact
 without parsing the instruction stream.
@@ -308,22 +334,27 @@ without parsing the instruction stream.
 7) What is signed
 -----------------
 
-The CMS signature covers ``loader_insns || data``.  ``metadata`` is not
-signed.  The integrity model is therefore:
+The CMS signature covers ``loader_insns || data``, the signed sections
+included.  The header and ``metadata`` are not signed.  The integrity
+model is therefore:
 
 - the loader instructions and loader data are signature-verified by
   the kernel before anything runs;
 - the payload program is separately hash-locked by the loader's
   ``excl_prog_hash`` and checked by the kernel at ``BPF_PROG_LOAD``;
-- decoder sources are signature-covered because they are appended
-  inside ``data`` before signing;
-- ``metadata`` is advisory.  Tampering with a LOAD artifact's attach
-  metadata changes where the hash-verified program is attached, not
-  what it contains, and the target validates the blob before creating
-  links.  Tampering with an UNLOAD directive's metadata can only
-  produce a chain value the operator's expectation rejects, or a
-  ``payload_mismatch``; the residual that remains is risk 1 in
-  `threat-model <threat-model.rst>`__.
+- the name, the attach metadata, the unload target and the decoder
+  sources are signature-covered because they are appended inside
+  ``data`` before signing.  A load takes the attach sites from the
+  signed ``UPGM`` section and refuses an artifact without one; an
+  unload takes the target name and expected payload from the signed
+  ``NAME`` and ``UNLD`` sections, so a directive detaches the upatch
+  its signer made it for and no other.  Both refuse a header whose
+  ``name`` differs from the signed one, since the pin directory, the
+  archive copy, ``status`` and the package tooling read the header;
+- the rest of the header is advisory.  Its ``payload_sha256`` must
+  equal the digest of the signed bytes, which the target recomputes;
+  ``nr_maps`` and ``nr_progs`` must agree with the attach metadata, and
+  a loader whose descriptors disagree fails at attach.
 
 8) Versioning and compatibility
 -------------------------------
@@ -331,9 +362,9 @@ signed.  The integrity model is therefore:
 ``version`` is ``1``.  The format grows additively without a version
 bump:
 
-- a signed decoder blob may be appended inside ``data`` and located by
-  the trailer at its end.  Older loaders ignore the additional bytes;
-  older readers treat them as opaque loader data;
+- the signed sections are appended inside ``data`` and located by the
+  trailer at its end.  Loaders ignore the additional bytes; a new tag
+  is a new section, and a reader refuses a tag it does not know;
 - the 360-byte header includes ``type`` and ``reserved1`` after
   ``reserved0``;
 - ``reserved0`` and ``reserved1`` are zero in every file a writer
@@ -354,10 +385,13 @@ match, before trusting any offset.
    section starts at or after the 360-byte header;
 4. ``loader_insns_len`` and ``signature_len`` are non-zero, and
    ``reserved0`` and ``reserved1`` are zero;
-5. decoders are parsed only if ``data`` ends with a matching trailer,
-   all blob and entry bounds fit, fixed strings are NUL-terminated, and
-   every source range stays inside the blob.  Malformed decoder
-   metadata is treated as absent by offline inspection.
+5. the signed sections are parsed only if ``data`` ends with a matching
+   trailer, the directory and every section lie within ``data`` in that
+   order, every tag is known and appears once, ``NAME`` is 256 bytes
+   and ``UNLD`` 32, and the decoder blob's entry bounds fit, its fixed
+   strings are NUL-terminated and every source range stays inside it.
+   A directory that fails any of this is treated as absent by offline
+   inspection, and a load or unload refuses the artifact.
 
 10) Production and consumption
 ------------------------------

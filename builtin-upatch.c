@@ -279,10 +279,12 @@ static const struct shirudo_help upatch_get_help = {
 static int cmd_upatch_info(int argc, const char **argv)
 {
 	char name[SHIRUDO_UPATCH_NAME_MAX + 1];	/* not NUL-term on disk */
+	const __u8 *unload_payload;
 	struct shirudo_upatch u;
 	const char *path = NULL;
 	bool json = false;
 	int i, rc, ret = 1;
+	__u32 attach_len;
 
 	for (i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "--json") == 0) {
@@ -315,6 +317,8 @@ static int cmd_upatch_info(int argc, const char **argv)
 
 	memcpy(name, u.hdr.name, sizeof(u.hdr.name));
 	name[SHIRUDO_UPATCH_NAME_MAX] = '\0';
+	upatch_signed_attach(&u, &attach_len);
+	unload_payload = upatch_signed_unload_payload(&u);
 
 	if (json) {
 		size_t cap = 8192 + (size_t)u.nr_decoders * 768;
@@ -345,6 +349,19 @@ static int cmd_upatch_info(int argc, const char **argv)
 		json_kv_int(&e, "data_len", u.hdr.data_len);
 		json_kv_int(&e, "log_buf_sz", u.hdr.log_buf_sz);
 		json_kv_int(&e, "file_size", (__s64)u.map_size);
+		if (upatch_signed_name(&u)) {
+			memcpy(name, upatch_signed_name(&u), sizeof(u.hdr.name));
+			json_kv_string(&e, "signed_name", name);
+		} else {
+			json_kv_null(&e, "signed_name");
+		}
+		json_kv_int(&e, "attach_metadata_len", attach_len);
+		if (unload_payload) {
+			hex_encode(unload_payload, 32, payload_hex);
+			json_kv_string(&e, "unload_payload_sha256", payload_hex);
+		} else {
+			json_kv_null(&e, "unload_payload_sha256");
+		}
 		json_arr_open(&e, "decoders");
 		for (__u32 j = 0; j < u.nr_decoders; j++) {
 			struct upatch_decoder_view d;
@@ -406,6 +423,25 @@ static int cmd_upatch_info(int argc, const char **argv)
 	printf("\nSignature:\n");
 	printf("  %-22s %u\n", "Offset:", u.hdr.signature_off);
 	printf("  %-22s %u bytes\n", "Length:", u.hdr.signature_len);
+
+	printf("\nSigned sections:\n");
+	if (upatch_signed_name(&u)) {
+		memcpy(name, upatch_signed_name(&u), sizeof(u.hdr.name));
+		printf("  %-22s %s\n", "Name:", name);
+	} else {
+		printf("  %-22s (none)\n", "Name:");
+	}
+	if (attach_len)
+		printf("  %-22s %u bytes\n", "Attach metadata:", attach_len);
+	else
+		printf("  %-22s (none)\n", "Attach metadata:");
+	if (unload_payload) {
+		printf("  %-22s ", "Unload payload:");
+		print_sha256_hex(unload_payload);
+		printf("\n");
+	} else {
+		printf("  %-22s (none)\n", "Unload payload:");
+	}
 
 	printf("\nDecoders:\n");
 	if (!upatch_has_decoders(&u)) {
@@ -1714,6 +1750,18 @@ static int upatch_apply(const char *path, bool verify_only,
 		rc = 1;
 		goto out;
 	}
+	/* The header's copy of the name is what everything else reads. */
+	if (!upatch_signed_name(&u) ||
+	    memcmp(upatch_signed_name(&u), u.hdr.name,
+		   SHIRUDO_UPATCH_NAME_MAX)) {
+		pr_err("upatch: the name of '%s' is not signature-covered or "
+		       "differs from the signed one; rebuild the artifact",
+		       upatch_name);
+		rep_fail(rep, "parse", "parser_rejected", 0,
+			 "name not signed");
+		rc = 1;
+		goto out;
+	}
 
 	/*
 	 * The signature authorises the load, but payload_sha256 is what the pin
@@ -1737,15 +1785,30 @@ static int upatch_apply(const char *path, bool verify_only,
 	}
 
 	/*
-	 * Program metadata is intentionally outside the loader signature, so
-	 * parse it strictly and bind every uprobe target to its recorded GNU
-	 * build ID before loading any BPF program. Open target fds stay live
-	 * through link creation to prevent pathname replacement races.
+	 * The attach metadata is signed with the data, which the kernel has
+	 * not verified yet at this point: parsing it strictly here keeps a
+	 * malformed artifact from the keyring, the load that follows keeps
+	 * a forged one from the sites it names. Every uprobe target is bound
+	 * to its recorded GNU build ID before any BPF program loads, and the
+	 * open target fds stay live through link creation to prevent
+	 * pathname replacement races.
 	 */
 	if (!verify_only) {
-		rc = prog_specs_parse(upatch_metadata(&u),
-				      u.hdr.metadata_len,
-				      u.hdr.nr_progs, &prog_specs);
+		const void *attach;
+		__u32 attach_len;
+
+		attach = upatch_signed_attach(&u, &attach_len);
+		if (!attach) {
+			pr_err("upatch: the attach metadata of '%s' is not "
+			       "signature-covered; rebuild the artifact",
+			       upatch_name);
+			rep_fail(rep, "parse", "parser_rejected", 0,
+				 "attach metadata not signed");
+			rc = 1;
+			goto out;
+		}
+		rc = prog_specs_parse(attach, attach_len, u.hdr.nr_progs,
+				      &prog_specs);
 		if (rc) {
 			pr_err("upatch program metadata rejected: %s",
 			       strerror(-rc));
@@ -2634,6 +2697,7 @@ static int cmd_upatch_unload(int argc, const char **argv)
 {
 	const char *file, *expect_chain, *expect_version_id, *report;
 	char name[SHIRUDO_UPATCH_NAME_MAX + 1] = {};
+	char staged[PATH_MAX] = {};
 	char persisted[PATH_MAX];
 	__u8 payload[SHIRUDO_UPATCH_PAYLOAD_HASH_LEN] = {};
 	struct shirudo_upatch u;
@@ -2657,6 +2721,20 @@ static int cmd_upatch_unload(int argc, const char **argv)
 	if (version_gate(expect_version_id, no_version_check, &rep, "unload") != 0)
 		goto done;
 
+	/*
+	 * Read once, as a load is: the target and the payload the kernel's
+	 * signature check covers must be the bytes read back after it, and
+	 * a file of root's is root's to rewrite between the two.
+	 */
+	rc = stage_upatch(file, staged, sizeof(staged));
+	if (rc) {
+		pr_err("upatch unload: read %s: %s", file, strerror(-rc));
+		rep_fail(&rep, "parse", "parser_rejected", -rc,
+			 "cannot read .upatch");
+		goto done;
+	}
+	file = staged;
+
 	rc = upatch_open(file, &u);
 	if (rc) {
 		pr_err("open %s: %s", file, strerror(-rc));
@@ -2672,13 +2750,25 @@ static int cmd_upatch_unload(int argc, const char **argv)
 		upatch_close(&u);
 		goto done;
 	}
+	/*
+	 * The target's name and the payload it is expected to carry are the
+	 * directive's signed sections; the header's name must be the same,
+	 * since status and the package tooling read it.
+	 */
+	if (!upatch_signed_name(&u) || !upatch_signed_unload_payload(&u) ||
+	    memcmp(upatch_signed_name(&u), u.hdr.name,
+		   SHIRUDO_UPATCH_NAME_MAX)) {
+		pr_err("upatch unload: the target of %s is not "
+		       "signature-covered or differs from the header; rebuild "
+		       "the directive", rep.path);
+		rep_fail(&rep, "parse", "parser_rejected", 0,
+			 "directive target not signed");
+		upatch_close(&u);
+		goto done;
+	}
 	memcpy(name, u.hdr.name, SHIRUDO_UPATCH_NAME_MAX);
 	name[SHIRUDO_UPATCH_NAME_MAX] = '\0';
-	if (u.hdr.metadata_len == sizeof(payload))
-		memcpy(payload, upatch_metadata(&u), sizeof(payload));
-	else
-		pr_warn("upatch unload: directive carries no payload metadata; "
-			"chain event uses zeros");
+	memcpy(payload, upatch_signed_unload_payload(&u), sizeof(payload));
 	upatch_close(&u);
 	rep.name = name;
 	hex_encode(payload, sizeof(payload), rep.payload_hex);
@@ -2713,40 +2803,33 @@ static int cmd_upatch_unload(int argc, const char **argv)
 	}
 
 	/*
-	 * The live value is the xattr bpf2 guards; the expected one is the
-	 * directive's unsigned metadata, so this catches an honest
-	 * substitution, not an attacker editing both. A pin whose value
-	 * cannot be read is refused; no pin at all is the already-unloaded
-	 * case below.
+	 * The live value is the xattr bpf2 guards; the expected one is
+	 * signed, so a directive detaches the upatch its signer made it
+	 * for and nothing else. A pin whose value cannot be read is refused;
+	 * no pin at all is the already-unloaded case below.
 	 */
 	{
-		__u8 zero[SHIRUDO_UPATCH_PAYLOAD_HASH_LEN] = {};
 		__u8 live[SHIRUDO_UPATCH_PAYLOAD_HASH_LEN];
 		int xrc;
 
-		if (memcmp(payload, zero, sizeof(payload)) == 0) {
-			pr_warn("upatch unload: directive carries no expected "
-				"payload; skipping payload_mismatch check");
-		} else {
-			xrc = get_pin_payload(name, live);
-			if (xrc == 0) {
-				if (!ct_eq(live, payload, sizeof(payload))) {
-					pr_err("upatch unload: payload_mismatch -- the "
-					       "upatch loaded under '%s' is not what the "
-					       "directive expects; refusing", name);
-					rep_fail(&rep, "pin", "payload_mismatch", EPERM,
-						 "loaded payload does not match directive");
-					goto done;
-				}
-				pr_info("upatch unload: payload matches for '%s'", name);
-			} else if (xrc != -ENOENT) {
-				pr_err("upatch unload: cannot read the payload "
-				       "recorded for '%s': %s; refusing", name,
-				       strerror(-xrc));
-				rep_fail(&rep, "pin", "payload_mismatch", -xrc,
-					 "payload xattr unreadable");
+		xrc = get_pin_payload(name, live);
+		if (xrc == 0) {
+			if (!ct_eq(live, payload, sizeof(payload))) {
+				pr_err("upatch unload: payload_mismatch -- the "
+				       "upatch loaded under '%s' is not what the "
+				       "directive expects; refusing", name);
+				rep_fail(&rep, "pin", "payload_mismatch", EPERM,
+					 "loaded payload does not match directive");
 				goto done;
 			}
+			pr_info("upatch unload: payload matches for '%s'", name);
+		} else if (xrc != -ENOENT) {
+			pr_err("upatch unload: cannot read the payload "
+			       "recorded for '%s': %s; refusing", name,
+			       strerror(-xrc));
+			rep_fail(&rep, "pin", "payload_mismatch", -xrc,
+				 "payload xattr unreadable");
+			goto done;
 		}
 	}
 
@@ -2806,6 +2889,8 @@ done:
 		       rep.err,
 		       rep.err ? strerror(rep.err) : "none",
 		       rep.message[0] ? rep.message : "(none)");
+	if (staged[0])
+		unlink(staged);
 	if (report)
 		report_emit(report, &rep);
 	report_free(&rep);
