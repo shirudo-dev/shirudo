@@ -342,7 +342,59 @@ int BPF_PROG(shirudo_seal_inode_unlink, struct inode *dir,
 	return ret ? ret : seal_dentry(dentry, SHIRUDO_TAMPER_SEAL_UNLINK);
 }
 
-/* Protect both the source and an existing destination of a rename. */
+/*
+ * A sealed directory takes new entries from shirudo alone. The label a
+ * creation inherits stops writes to the new inode, but a rename or a
+ * link brings an inode in with its contents, and a symbolic link sends
+ * whoever follows it elsewhere. The mark stands in for the label these
+ * hooks cannot read.
+ */
+static __always_inline int seal_dir_entry(struct inode *dir)
+{
+	if (!bpf_inode_storage_get(&seal_dir_marks, dir, NULL, 0))
+		return 0;
+	return seal_caller(SHIRUDO_TAMPER_SEAL_ENTRY);
+}
+
+SEC("lsm/inode_create")
+int BPF_PROG(shirudo_seal_inode_create, const struct mnt_idmap *idmap,
+	     struct inode *dir, struct dentry *dentry, umode_t mode, int ret)
+{
+	return ret ? ret : seal_dir_entry(dir);
+}
+
+SEC("lsm/inode_mkdir")
+int BPF_PROG(shirudo_seal_inode_mkdir, const struct mnt_idmap *idmap,
+	     struct inode *dir, struct dentry *dentry, umode_t mode, int ret)
+{
+	return ret ? ret : seal_dir_entry(dir);
+}
+
+SEC("lsm/inode_symlink")
+int BPF_PROG(shirudo_seal_inode_symlink, const struct mnt_idmap *idmap,
+	     struct inode *dir, struct dentry *dentry, const char *old_name,
+	     int ret)
+{
+	return ret ? ret : seal_dir_entry(dir);
+}
+
+SEC("lsm/inode_mknod")
+int BPF_PROG(shirudo_seal_inode_mknod, const struct mnt_idmap *idmap,
+	     struct inode *dir, struct dentry *dentry, umode_t mode, dev_t dev,
+	     int ret)
+{
+	return ret ? ret : seal_dir_entry(dir);
+}
+
+SEC("lsm/inode_link")
+int BPF_PROG(shirudo_seal_inode_link, const struct mnt_idmap *idmap,
+	     struct dentry *old_dentry, struct inode *dir,
+	     struct dentry *new_dentry, int ret)
+{
+	return ret ? ret : seal_dir_entry(dir);
+}
+
+/* Protect the source, the destination directory and an existing target. */
 SEC("lsm.s/inode_rename")
 int BPF_PROG(shirudo_seal_inode_rename, struct inode *old_dir,
 	     struct dentry *old_dentry, struct inode *new_dir,
@@ -354,6 +406,9 @@ int BPF_PROG(shirudo_seal_inode_rename, struct inode *old_dir,
 	if (ret)
 		return ret;
 	err = seal_dentry(old_dentry, SHIRUDO_TAMPER_SEAL_RENAME);
+	if (err)
+		return err;
+	err = seal_dir_entry(new_dir);
 	if (err)
 		return err;
 	if (!target)

@@ -2,16 +2,16 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 #
-# t1142 -- an artifact renamed into the archive after the register was
+# t1142 -- an artifact brought into the archive after the register was
 # bound. Rename brings an inode into a sealed directory without creating
-# one, so root can place any operator-signed .upatch there; a re-run of
-# init used to restore it, attached and pinned, without a register event,
-# since this boot's init event was already on record. init must now
-# refuse the restore and leave the artifact unloaded, also when the
-# state directory is hidden behind a mount that carries no eventlog, and
-# must not take a root file system for the initramfs because root wrote
-# /etc/initrd-release. Cleaned up through the artifact's own unload
-# directive, which removes the archive copy.
+# one, so root used to place any operator-signed .upatch there and a
+# re-run of init restored it, attached and pinned, without a register
+# event. The seal now refuses the rename; one that slips in while the
+# directory's mark is evicted carries no label, and init leaves it alone
+# instead of labelling, following or restoring it. The restore also
+# must not take a state directory hidden behind a mount that carries no
+# eventlog for the real one, nor a root file system for the initramfs
+# because root wrote /etc/initrd-release.
 
 cd "$(dirname "$0")/.."
 . ./integration-lib.sh
@@ -37,6 +37,7 @@ restore() {
 	[ ! -e "$STAGE/cert-planted" ] || rm -f "$CERT" || true
 	rmdir -p /sysroot/var/lib/shirudo 2>/dev/null || true
 	"$SHIRUDO_BIN" upatch unload "$UNLOAD" --no-precheck >/dev/null 2>&1 || true
+	rm -f "$ARCHIVE/$NAME.upatch"
 	rm -rf "$STAGE"
 	"$SHIRUDO_BIN" init >/dev/null 2>&1 || true
 }
@@ -48,23 +49,52 @@ chain() {
 }
 CHAIN=$(chain)
 
-test_expect_success 'root can rename a signed artifact into the archive' '
+counter() {
+	"$SHIRUDO_BIN" status --json 2>/dev/null |
+		python3 -c "import json,sys; print(json.load(sys.stdin)[\"tamper_attempts\"][\"counters\"][\"SealEntry\"])"
+}
+
+# Rename while the directory's mark is evicted, the gap the seal keeps
+# (residual risk 15); the entry comes in unlabelled.
+plant() {
+	i=0
+	while [ "$i" -lt 8 ]; do
+		sync && echo 2 >/proc/sys/vm/drop_caches &&
+			mv "$1" "$2" 2>/dev/null && return 0
+		i=$((i + 1))
+	done
+	return 1
+}
+
+labelled() {
+	python3 -c "import os,sys
+try:
+    os.getxattr(sys.argv[1], \"security.bpf.shirudo\", follow_symlinks=False)
+except OSError:
+    sys.exit(1)" "$1"
+}
+
+test_expect_success 'root cannot rename a signed artifact into the archive' '
+	before=$(counter) &&
 	mkdir -p "$STAGE" && cp "$LOAD" "$STAGE/$NAME.upatch" &&
-	mv "$STAGE/$NAME.upatch" "$ARCHIVE/$NAME.upatch" &&
-	[ -e "$ARCHIVE/$NAME.upatch" ]
+	! mv "$STAGE/$NAME.upatch" "$ARCHIVE/$NAME.upatch" 2>/dev/null &&
+	[ ! -e "$ARCHIVE/$NAME.upatch" ] &&
+	[ "$(counter)" -gt "$before" ]
 '
 
-test_expect_success 'a re-run of init refuses to restore it unmeasured' '
-	! "$SHIRUDO_BIN" init >/dev/null 2>"$STAGE/init.err" &&
-	grep -q "archived but not loaded after the register was bound" \
+test_expect_success 'one that slips in while the mark is evicted is ignored by init' '
+	plant "$STAGE/$NAME.upatch" "$ARCHIVE/$NAME.upatch" &&
+	! labelled "$ARCHIVE/$NAME.upatch" &&
+	"$SHIRUDO_BIN" init >/dev/null 2>"$STAGE/init.err" &&
+	grep -q "$NAME.upatch is not shirudo.s own (foreign entry); ignored" \
 		"$STAGE/init.err" &&
 	[ ! -e "$PIN" ] &&
+	! labelled "$ARCHIVE/$NAME.upatch" &&
 	[ "$(chain)" = "$CHAIN" ]
 '
 
-test_expect_success 'the unload directive removes the planted copy and init completes again' '
-	"$SHIRUDO_BIN" upatch unload "$UNLOAD" --no-precheck --report=- 2>/dev/null |
-		report_field category | grep -qx already_unloaded &&
+test_expect_success 'the foreign entry is root'"'"'s to remove' '
+	rm "$ARCHIVE/$NAME.upatch" &&
 	[ ! -e "$ARCHIVE/$NAME.upatch" ] &&
 	"$SHIRUDO_BIN" init >/dev/null 2>&1 &&
 	[ "$(chain)" = "$CHAIN" ]

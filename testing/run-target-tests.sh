@@ -69,6 +69,7 @@ for t in \
 	tamperproof/t1142-archive-restore.sh \
 	tamperproof/t1143-attach-scope.sh \
 	tamperproof/t1144-signed-metadata.sh \
+	tamperproof/t1145-foreign-entries.sh \
 	tamperproof/t1150-verity-devices.sh \
 	tamperproof/t1151-verity-process.sh \
 	tamperproof/t1153-verity-hidden.sh \

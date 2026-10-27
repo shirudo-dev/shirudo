@@ -324,7 +324,10 @@ Filesystem seal. Initialization labels existing state under
 marks a protected target; its public value does not authorize a caller.
 The ``file_open`` (for write), ``inode_unlink``, ``inode_rename``,
 ``inode_setattr``, ``inode_setxattr`` and ``inode_removexattr`` hooks require
-the caller's committed task authority. Runtime and config files use dm-verity
+the caller's committed task authority, and so do ``inode_create``,
+``inode_mkdir``, ``inode_symlink``, ``inode_mknod``, ``inode_link`` and a
+rename into a marked directory: a sealed directory takes new entries from
+shirudo alone. Runtime and config files use dm-verity
 and receive no seal writes.
 Only an authorized caller may set the exact seal xattr, including on an
 unlabelled inode. A binary carrying a copied label gains no authority.
@@ -348,10 +351,12 @@ cannot sleep to read the parent xattr, so it uses an inode-storage directory
 mark populated by directory opens, post-xattr hooks and directory creation
 under a marked parent. Shirudo's writers hold an open parent directory and
 create files relative to it; they also apply the label after creation when
-the kernel could not. Cached marks can be absent after inode eviction, and
-link or rename can introduce an existing unlabelled inode. This does not
-authorize every directory-entry change against the parent or revoke
-existing writable descriptors and mappings.
+the kernel could not. Cached marks can be absent after inode eviction, when
+a creation, link or rename can introduce an unlabelled inode; shirudo opens
+sealed state without following symbolic links, refuses an entry under a
+labelled directory that lacks the label, and ``init`` ignores such an entry
+instead of labelling it. Existing writable descriptors and mappings are not
+revoked.
 
 ``ptrace_access_check`` and ``perf_event_alloc`` deny against tasks already
 marked when those hooks run. The perf allocation check is not serialized with

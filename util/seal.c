@@ -41,10 +41,20 @@ int seal_label(const char *path)
  */
 static dev_t seal_root_dev;
 static int seal_walk_error;
+static bool seal_first_init;
 
+static ssize_t seal_lget(const char *path, char label[SEAL_LABEL_LEN]);
+
+/*
+ * The first init labels what the install left; from then on everything
+ * shirudo makes is labelled as it is made, so an entry without the label,
+ * or one of a kind shirudo never makes, came from someone else: it is
+ * left alone, never labelled, followed or read as shirudo's own.
+ */
 static int seal_label_cb(const char *path, const struct stat *sb,
 			 int typeflag, struct FTW *ftwbuf)
 {
+	char label[SEAL_LABEL_LEN];
 	int rc;
 
 	(void)typeflag;
@@ -57,10 +67,18 @@ static int seal_label_cb(const char *path, const struct stat *sb,
 	 */
 	if (sb->st_dev != seal_root_dev)
 		return 0;
-	if (!S_ISREG(sb->st_mode) && !S_ISDIR(sb->st_mode))
-		rc = -EINVAL;
-	else
-		rc = seal_label(path);
+	if (!S_ISREG(sb->st_mode) && !S_ISDIR(sb->st_mode)) {
+		pr_warn("seal: %s is not a file or directory of shirudo's "
+			"(foreign entry); ignored", path);
+		return 0;
+	}
+	if (!seal_first_init) {
+		if (seal_lget(path, label) <= 0)
+			pr_warn("seal: %s carries no label (foreign entry); "
+				"ignored", path);
+		return 0;
+	}
+	rc = seal_label(path);
 	if (rc) {
 		pr_err("seal: label %s: %s", path, strerror(-rc));
 		seal_walk_error = rc;
@@ -71,12 +89,14 @@ static int seal_label_cb(const char *path, const struct stat *sb,
 
 int seal_label_tree(void)
 {
+	char label[SEAL_LABEL_LEN];
 	struct stat st;
 
 	if (stat(SHIRUDO_VAR_LIB, &st) != 0)
 		return -errno;
 	seal_root_dev = st.st_dev;
 	seal_walk_error = 0;
+	seal_first_init = seal_lget(SHIRUDO_VAR_LIB, label) <= 0;
 	if (nftw(SHIRUDO_VAR_LIB, seal_label_cb, 16, FTW_PHYS | FTW_MOUNT) != 0)
 		return seal_walk_error ? seal_walk_error : -errno;
 	return 0;
@@ -107,6 +127,79 @@ static ssize_t seal_lget(const char *path, char label[SEAL_LABEL_LEN])
 					SEAL_LABEL_LEN));
 }
 
+/*
+ * Whether the inode behind fd is of the directory open as dfd: under a
+ * labelled directory an entry must carry the same label, so a file or
+ * directory someone renamed or linked in, or made while the seal could
+ * not label it, is refused rather than taken for shirudo's own. 0 when
+ * it is, or the directory carries no label, -EPERM when it is not.
+ */
+static int seal_same(int dfd, int fd)
+{
+	char parent[SEAL_LABEL_LEN], own[SEAL_LABEL_LEN];
+	ssize_t plen, olen;
+
+	plen = seal_fget(dfd, parent);
+	if (plen <= 0)
+		return (int)plen;
+	olen = seal_fget(fd, own);
+	if (olen < 0)
+		return (int)olen;
+	if (olen == plen && !memcmp(parent, own, (size_t)plen))
+		return 0;
+	return -EPERM;
+}
+
+/*
+ * Open a directory by walking its components, following no symbolic
+ * link and taking no foreign entry for shirudo's own; with create, make
+ * what is missing, labelled as its parent is.
+ */
+static int seal_open_dir(const char *path, bool create, mode_t mode)
+{
+	char buf[PATH_MAX], *comp, *save;
+	int dfd, nfd, rc = 0;
+	bool created;
+
+	if (strscpy(buf, path, sizeof(buf)) < 0)
+		return -ENAMETOOLONG;
+	dfd = open(buf[0] == '/' ? "/" : ".",
+		   O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	if (dfd < 0)
+		return -errno;
+	for (comp = strtok_r(buf, "/", &save); comp;
+	     comp = strtok_r(NULL, "/", &save)) {
+		created = create && mkdirat(dfd, comp, mode) == 0;
+		if (create && !created && errno != EEXIST) {
+			rc = -errno;
+			break;
+		}
+		nfd = openat(dfd, comp, O_RDONLY | O_DIRECTORY | O_NOFOLLOW |
+			     O_CLOEXEC);
+		if (nfd < 0) {
+			rc = -errno;
+			if (rc == -ELOOP || rc == -ENOTDIR)
+				pr_err("%s: %s is not a directory of shirudo's "
+				       "(foreign entry in sealed state)", path,
+				       comp);
+			break;
+		}
+		rc = created ? seal_inherit(dfd, nfd) : seal_same(dfd, nfd);
+		if (rc == -EPERM)
+			pr_err("%s: %s carries no label (foreign entry in "
+			       "sealed state); refusing", path, comp);
+		close(dfd);
+		dfd = nfd;
+		if (rc)
+			break;
+	}
+	if (rc) {
+		close(dfd);
+		return rc;
+	}
+	return dfd;
+}
+
 static int seal_open_parent(const char *path, const char **name)
 {
 	const char *slash = strrchr(path, '/');
@@ -117,6 +210,8 @@ static int seal_open_parent(const char *path, const char **name)
 	if (!slash) {
 		*name = path;
 		fd = open(".", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+		if (fd < 0)
+			return -errno;
 	} else {
 		len = slash == path ? 1 : (size_t)(slash - path);
 		if (len >= sizeof(dir))
@@ -124,10 +219,10 @@ static int seal_open_parent(const char *path, const char **name)
 		memcpy(dir, path, len);
 		dir[len] = '\0';
 		*name = slash + 1;
-		fd = open(dir, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+		fd = seal_open_dir(dir, false, 0);
+		if (fd < 0)
+			return fd;
 	}
-	if (fd < 0)
-		return -errno;
 	if (!**name) {
 		close(fd);
 		return -EINVAL;
@@ -239,54 +334,78 @@ int seal_open(const char *path, int flags, mode_t mode)
 	dfd = seal_open_parent(path, &name);
 	if (dfd < 0)
 		return dfd;
-	fd = openat(dfd, name, flags | O_CLOEXEC, mode);
-	if (fd < 0) {
+	fd = openat(dfd, name, (flags & ~(O_CREAT | O_TRUNC)) | O_NOFOLLOW |
+		    O_CLOEXEC, mode);
+	if (fd >= 0) {
+		if (flags & O_EXCL) {
+			rc = -EEXIST;
+		} else {
+			rc = seal_same(dfd, fd);
+			if (rc == -EPERM)
+				pr_err("%s: carries no label (foreign entry "
+				       "in sealed state); refusing", path);
+			if (!rc && (flags & O_TRUNC) && ftruncate(fd, 0))
+				rc = -errno;
+		}
+	} else if (errno == ENOENT && (flags & O_CREAT)) {
+		fd = openat(dfd, name, flags | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
+			    mode);
+		rc = fd < 0 ? -errno : seal_inherit(dfd, fd);
+	} else {
 		rc = -errno;
-		close(dfd);
-		return rc;
+		if (rc == -ELOOP)
+			pr_err("%s: is a symbolic link (foreign entry in "
+			       "sealed state); refusing", path);
 	}
-	rc = seal_inherit(dfd, fd);
 	close(dfd);
 	if (rc) {
-		close(fd);
+		if (fd >= 0)
+			close(fd);
 		return rc;
 	}
 	return fd;
 }
 
+int seal_open_read(const char *path)
+{
+	const char *name;
+	int dfd, fd, rc;
+
+	dfd = seal_open_parent(path, &name);
+	if (dfd < 0)
+		return dfd;
+	fd = openat(dfd, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+	rc = fd < 0 ? -errno : seal_same(dfd, fd);
+	close(dfd);
+	if (rc) {
+		if (fd >= 0)
+			close(fd);
+		if (rc == -EPERM || rc == -ELOOP)
+			pr_err("%s: not shirudo's own (foreign entry in sealed "
+			       "state); refusing to read it", path);
+		return rc;
+	}
+	return fd;
+}
+
+bool seal_owns(const char *path)
+{
+	int fd = seal_open_read(path);
+
+	if (fd < 0)
+		return false;
+	close(fd);
+	return true;
+}
+
 int seal_mkdir_p(const char *path, mode_t mode)
 {
-	char buf[PATH_MAX], *comp, *save;
-	int dfd, nfd, rc = 0;
-	bool created;
+	int fd = seal_open_dir(path, true, mode);
 
-	if (strscpy(buf, path, sizeof(buf)) < 0)
-		return -ENAMETOOLONG;
-	dfd = open(buf[0] == '/' ? "/" : ".",
-		   O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-	if (dfd < 0)
-		return -errno;
-	for (comp = strtok_r(buf, "/", &save); comp;
-	     comp = strtok_r(NULL, "/", &save)) {
-		created = mkdirat(dfd, comp, mode) == 0;
-		if (!created && errno != EEXIST) {
-			rc = -errno;
-			break;
-		}
-		nfd = openat(dfd, comp, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-		if (nfd < 0) {
-			rc = -errno;
-			break;
-		}
-		if (created)
-			rc = seal_inherit(dfd, nfd);
-		close(dfd);
-		dfd = nfd;
-		if (rc)
-			break;
-	}
-	close(dfd);
-	return rc;
+	if (fd < 0)
+		return fd;
+	close(fd);
+	return 0;
 }
 
 int seal_write_file(const char *path, const void *data, size_t len,
