@@ -461,7 +461,10 @@ an operator predicts its value from the certificate and the installed
 set alone (``shirudo attest predict``); no history is needed.  If any
 re-apply fails the register is not written and ``status`` reports
 ``degraded``.  A re-run of ``init`` finds the register bound and on
-record and leaves it alone; one that finds the recorded register gone
+record and leaves it alone, and restores nothing: an archived artifact
+that is not loaded by then, which root can arrange by renaming a
+signed artifact into the archive, is refused ``tampered`` rather than
+attached without an event; one that finds the recorded register gone
 refuses ``tampered`` until the next TPM reset.
 
 Measurement register.  The measurement lives in a TPM 2.0 NV index
