@@ -300,8 +300,9 @@ and the node labels, is opened from the verified root descriptor with
 ``/proc/self/fd`` names in particular are not used for them.
 bpffs and keyring guards. The identity map contains the bpffs and run-device
 numbers, runtime root hash, BPF keyring kind and serial, enrolled key
-serials, the NV writer's public key and key serials, and the name of the
-TPM's attestation key, which every later TPM handle is compared against.
+serials, the selected NV index, the NV writer's public modulus and
+nonsecret input, and the name of the TPM's attestation key, which
+every later TPM handle is compared against.
 It is written and frozen before the admission gates attach.
 The task map is seeded with the authenticated bootstrap task, then frozen
 against userspace writes. Runtime exec and fork hooks maintain its marks.
@@ -463,12 +464,17 @@ it never retries the previous boot's PCR extension. The
 deferred TPM writer limitation.
 
 The boot-scoped NV writer is separate from the operator's artifact key.
-Trusted initialization imports it into a sealed kernel keyring and freezes
-its public key and key IDs into the identity map.  The mandatory key guard
-permits signing only from tasks with authenticated runtime authority.
-The key survives switch-root and TPM resets within that
-kernel boot.  `The TPM design <tpm.rst#write-policy>`__ describes its
-provisioning, command-bound signatures and process-integrity assumptions.
+Trusted initialization creates its private key inside the TPM and freezes
+its public modulus and the nonsecret 32-byte input needed to recreate it.
+Each one-shot command checks the recreated key, signs the exact NV
+extension and flushes the handle. The input is not an access control:
+another process may recreate the key and ask the TPM to sign. The
+``tpm_command`` LSM hook instead denies an untrusted ``TPM2_NV_Extend``
+to Shirudo's selected NV index. The selected index is frozen during
+initialization. Other TPM signing and PCR extension remain available.
+A TPM reset in the same host boot keeps the writer identity; a TPM Clear
+does not. `The TPM design <tpm.rst#write-policy>`__ describes the policy
+and the remaining limits.
 
 7) Target state
 ---------------

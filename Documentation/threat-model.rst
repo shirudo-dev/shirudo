@@ -267,14 +267,14 @@ T5  Silent state change
     adopts the initrd's record without it, and two adopters both found
     the record missing and appended it twice.  ``shirudo status`` replays this boot's records and flags
     a register it cannot explain.  There is no unmeasured mode: a target
-    without a TPM 2.0 does not initialise.  The TPM behind the device
-    path is root's to replace in a mount namespace of its own, and an
-    emulator there can carry an index of the recorded name, policy and
-    reset count, since the init record is readable; every TPM handle a
-    command takes first recreates the attestation key and compares its
-    name with the one ``init`` froze in the identity map, which takes
-    the endorsement seed no emulator has, and refuses another TPM
-    before the register is read or written.  An init run from the initrd
+    without a TPM 2.0 does not initialise. Root can replace the TPM
+    device path in its own mount namespace. Shirudo compares the
+    attestation key Name returned by that device with the one frozen at
+    init. This rejects a different Name but cannot authenticate the
+    device by itself: a fake transport can replay the public Name.
+    A remote verifier requires evidence signed by the pinned TPM key;
+    an emulator alone cannot produce that signature. An init run from
+    the initrd
     leaves its record under ``/run``, labelled, until the root's run
     appends it; a record forged or altered there fails the replay like
     any other.  The init record carries
@@ -284,24 +284,35 @@ T5  Silent state change
     records for one reset, so the history a register holds cannot be
     restarted by rebinding it.
 
-    Both policy branches require a command-bound signature from the
-    kernel-held boot writer, guarded by ``lsm/key_permission`` using
-    the committed runtime task mark. The `TPM design <tpm.rst#write-policy>`__
-    specifies provisioning and authorization.  Under the process-integrity
-    assumptions below, this prevents an attacker from appending an expected
-    positive event without doing the operation, even with a fabricated
-    exported eventlog.  The private key never lives in the eventlog, a
-    regular file or a readable BPF map.
-    Trusted initialization, TPM identity and approved boot measurements
-    remain prerequisites.  The NV Name commits to the writer's public
-    key, not proof of its custody.      Trusted initialization briefly handles the private key and scrubs
-    it after import; later process
-    memory disclosures do not expose reusable writer authority.
-    Injected code can still request signatures.  Kernel memory
-    disclosure, privileged kernel tracing and hibernation exposure
-    remain outside the key API's protection.  RSA authorization is
-    classical.  Existing process-security and executable-integrity
-    assumptions, including residual risks 2 and 5, still apply.
+    Both policy branches require a signature over the exact
+    ``TPM2_NV_Extend`` command from a TPM-held boot writer. Its private
+    key never leaves the TPM, but the input used to recreate it is not
+    secret. Root may recreate the writer and obtain a signature. A
+    signature alone cannot alter the register: the TPM must receive an
+    ``NV_Extend`` for Shirudo's index.
+
+    The companion kernel passes copied command bytes and their declared
+    length to ``tpm_command`` before submission. Shirudo's BPF program
+    compares the ``NV_Extend`` index with the selected index frozen at
+    init, and refuses that command unless the caller has the committed
+    runtime task mark. It checks both TPM device nodes, including
+    inherited descriptors. Other signing, extensions to other NV
+    indices, and systemd's PCR extension remain available. Under the
+    process-integrity assumptions below, root cannot append an
+    expected positive event to Shirudo's register without doing the
+    operation, even with a fabricated exported eventlog.
+    `The TPM design <tpm.rst#write-policy>`__ gives the command checks.
+
+    The NV Name commits to the writer's public key, not proof of TPM
+    custody. Owner authorization may be configured for primary
+    creation, but it is not a substitute for the LSM index check.
+    Kernel memory disclosure alone does not reveal the writer private
+    key. Injected code in an authorized task can still extend the
+    register. Kernel code execution and direct TPM access that bypasses
+    the kernel driver remain trusted-kernel failures. RSA
+    authorization is classical. Existing process and executable
+    integrity assumptions, including residual risks 2 and 5, still
+    apply.
 
 T6  The boot window
     Enforcement is BPF and does not survive a reboot by itself.
@@ -502,7 +513,7 @@ Each of these is known, documented and bounded; none is silent.
     not prove who appended the digest or that the operation completed.
     The separate measurement-spoofing investigation is not fixed by image
     mode. Static PCRs prevent runtime reset, not unauthorized extends.
-    The upatch NV register requires the guarded boot writer, but owner
+    The upatch NV register has its own extension guard, but owner
     undefinition and PCR interference can still deny service. Restricting
     config PCR writers and handling operation/measurement ordering remain
     separate work; no IMA integration is added.

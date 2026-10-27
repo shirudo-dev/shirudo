@@ -149,8 +149,9 @@ initrd eventlog record. After boot, using the runtime invocation::
 
 Check ``mode: production``, ``keyring_mode: bpf``, ``tpm.bound_in: initrd``,
 consistent config state and an upatch register matching its eventlog. A TPM is
-mandatory. For a development software TPM, put ``tpm.tcti`` in authenticated
-runtime configuration; target environment overrides are refused.
+mandatory. The authenticated target uses the kernel TPM device so its
+NV extension commands pass through the LSM. Host-side TPM tests can use
+a software TPM TCTI; target environment overrides are refused.
 
 5) Load and unload a local artifact
 -----------------------------------
@@ -382,8 +383,8 @@ the initrd and the anchor.  Neither command needs the other machine.
 
 ``tpm2_reachable`` (pre-flight), ``tpm_error``
     No TPM 2.0, or the measurement register cannot be bound.  Check
-    ``/dev/tpmrm0``, ``tpm.tcti`` for a software TPM, and
-    ``tpm.owner_auth`` on a TPM with an owner password.
+    ``/dev/tpmrm0`` and ``tpm.owner_auth`` on a TPM with an
+    owner password. Host-side software TPM tests may set ``tpm.tcti``.
 
 ``verifier_rejected``
     Read the verifier log in the ``--report`` document and rebuild

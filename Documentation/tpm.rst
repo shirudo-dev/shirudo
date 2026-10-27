@@ -13,7 +13,7 @@ target without believing anything the target says about itself.  This
 document describes both as implemented, how they relate to systemd's
 NvPCRs, which the register is modelled on, and what they do not yet
 do.  The code is authoritative: ``util/chain.c`` (register and event
-digests), ``util/nv_writer.c`` (kernel-held writer),
+digests), ``util/nv_writer.c`` (writer identity),
 ``util/tpm.c`` (libtss2 calls), ``util/tpm_wire.c`` (policy
 digests, names and the TPM wire structures, used by both sides),
 ``util/eventlog.c``, ``util/attest.c`` and ``builtin-attest.c``.
@@ -74,55 +74,66 @@ The write policy is ``PolicyOR(written, init)``, followed by
   nothing that runs after it.
 
 Both branches require an RSA-3072 RSASSA-PKCS1-v1_5 signature with
-SHA-256 from this boot's kernel-held NV writer key.  The signature
+SHA-256 from this boot's TPM-held NV writer key.  The signature
 covers the live session's nonempty TPM nonce, a zero expiration,
 the SHA-256 command hash and the fixed reference
 ``shirudo-nv-writer-v1``.  The command hash covers ``NV_Extend``, both
 handle Names and the marshalled event.  The first write uses the
 unwritten Name; subsequent writes use the written Name.  The TPM
-checks that exact command hash when executing the extend.  A caller
-with a pre-opened or passed TPM descriptor cannot authorize a new
-extend without the guarded signing operation.  Public appends would permit fabricated positive events:
-measuring an expected load is not proof that the load happened.
+checks that exact command hash when executing the extend. A signature
+alone does not change the register. A caller must also submit
+``TPM2_NV_Extend`` to Shirudo's index, which the BPF LSM guard restricts.
+Public appends would permit fabricated positive events: measuring an
+expected load is not proof that the load happened.
 
-Startup hardening locks all current and future process mappings before
-command dispatch.  Trusted initialization generates the key, imports
-PKCS#8 into a kernel ``asymmetric`` key and scrubs its temporary copies;
-the mapping locks remain active until process exit.  Bootstrap creates
-the signer in its lasting keyring with owner view/search permissions,
-then restricts and seals the ring.  Bootstrap is trusted: production
-runs in the measured initrd before untrusted workloads. The public key,
-private-key ID and keyring ID are frozen in the identity map before
-attachment, with the name of the attestation key.
-Failed writer creation or enforcement setup removes the writer's links
-from the user and session keyrings.
-There is no additional state key or mutable binding-attempt marker.
-The keyring is already available to later invocations;
-``lsm/key_permission`` must be attached and pinned before initialization
-completes and untrusted workloads run.
-The mandatory guard checks committed runtime task authority, never a
-public label or mutable executable pointer. Search is refused even for
-possessed NV keys: that permission authorizes signing or invalidation.
-These denials are not counted because ordinary keyring traversal also
-requests search.  The asymmetric key has no private-payload read operation.
+Trusted initialization creates an RSA-3072 primary key in the local
+TPM's owner hierarchy. It gives ``CreatePrimary`` a random 32-byte
+input and freezes that input and the resulting public modulus in the
+identity map. The private key never leaves the TPM. The fixed public
+template requires ``fixedTPM``, ``fixedParent``,
+``sensitiveDataOrigin``, ``userWithAuth`` and ``sign``, with
+RSASSA/SHA-256 and exponent 65537. The public area and Name must
+match that template and modulus. The initrd freezes this identity
+before attaching the TPM command guard. The input is not secret:
+another process may recreate the same key and ask the TPM to sign.
+Shirudo protects the extension command, not access to the signer.
 
-The key survives switch-root and a TPM reset during the same kernel
-boot.  Later
-one-shot invocations hold only the public key and request signatures
-through ``KEYCTL_PKEY_SIGN``.  Sessions and external public-key handles
-are flushed after use.  Expiration zero does not impose a time limit:
-an outstanding signature remains bound to its live session and exact
-command until that session is destroyed.
+Each later one-shot invocation recreates the primary from the frozen
+input, checks its public area and Name, asks the TPM to sign the
+command-bound authorization, and flushes the handle. The owner hierarchy
+authorization comes from authenticated ``tpm.owner_auth`` when it is
+set. The same input recreates the same key after a TPM reset in the same
+host boot. A new host boot chooses a new input. A TPM Clear changes the
+owner seed and makes the old identity unusable, so Shirudo fails closed.
+No persistent TPM slot or private-key file is needed.
 
-The authenticated runtime and process guards protect the code that can
-request signatures. The static target does not load host libraries or
-OpenSSL provider configuration, and runtime exec rejects traced callers.
-Code that compromises an authorized task can still use the signing
-operation without extracting the private key.
-Kernel memory disclosure, privileged kernel tracing,
-hibernation images and compromise during key generation remain outside
-the protection of the key API.  RSA authorization is classical, unlike
-the operator's ML-DSA-87 artifact signatures.
+The companion kernel's ``tpm_command`` LSM hook passes a copy of
+each userspace TPM command and its declared header length before the
+command is sent or queued. It covers writes to ``/dev/tpm0`` and
+``/dev/tpmrm0``, including a descriptor opened before enforcement or
+inherited by another process. Shirudo's BPF program checks the index
+handle in ``TPM2_NV_Extend`` against the selected NV index frozen at
+init. It refuses that command to a task without authenticated runtime
+authority, including a command too short to identify its index.
+The default index is ``SHIRUDO_NV_INDEX``; a build may select another,
+and the guard reads the selected value from the frozen identity map.
+Extensions to other NV indices, TPM signing, and systemd's PCR
+extensions remain available. A signature made with Shirudo's writer
+key is therefore not enough to change its register. The guard must
+be attached and pinned before untrusted workloads start.
+
+Every executable intentionally added to the verified runtime image gets
+the same task authority. Code running in such a task can extend
+Shirudo's register, so ``--extra-binary`` adds an authorized writer.
+The static target does not load host libraries or OpenSSL provider
+configuration, and runtime exec rejects traced callers. A kernel memory
+read alone cannot extract the TPM private key. Kernel code execution,
+direct hardware access around the TPM driver, and compromise of an
+authorized task remain outside this guard. The eventlog's public key
+does not by itself prove TPM custody to a remote verifier. RSA
+authorization is classical, unlike the operator's ML-DSA-87 artifact
+signatures. A live session nonce and exact command hash prevent reuse
+of an old authorization for a different extension.
 
 The index's TPM name is the SHA-256 of its public area (handle, name
 algorithm, attributes, policy digest, size), prefixed with the
@@ -226,17 +237,21 @@ history.
 TPM access
 ~~~~~~~~~~
 
-The TCTI is ``SHIRUDO_TPM_TCTI`` in the environment, else ``tpm.tcti``
-in ``shirudo.conf``, else ``device:/dev/tpmrm0``, the kernel resource
-manager.  Initialization requires the trusted local TPM channel
-described above.  Register writes send command-bound signatures, not
-the writer's private key.  The device behind the path is root's to
-replace, so every handle a command takes first recreates the
-attestation key and compares its name with the one ``init`` froze in
-the identity map; a substitute TPM is refused before the register is
-read or written, and cannot forge evidence signed by the operator's
-pinned attestation key either.  The selected transport
-implementation remains part of shirudo's trusted process code.
+An authenticated-image target takes the TCTI from ``tpm.tcti``
+in authenticated configuration, or defaults to ``device:/dev/tpmrm0``,
+the kernel resource manager. It accepts only a device TCTI so
+commands pass through the kernel guard, and refuses environment
+overrides. Host-side tests without an active target image may use
+``SHIRUDO_TPM_TCTI`` to select a software TPM. Register writes
+send command-bound signatures, not private-key bytes.
+
+The device path alone does not authenticate the TPM behind it. Before
+reading or writing the register, Shirudo recreates the attestation key
+and compares its Name with the one ``init`` froze in the identity map.
+This rejects a different reported Name, but the Name is public: a fake
+transport could replay it. Remote verification requires signed evidence
+from the pinned attestation key. The selected transport implementation
+remains part of Shirudo's trusted process code.
 
 Migration requires an updated target and initrd, a
 trusted reboot, and the updated operator verifier.  The new policy
@@ -670,10 +685,10 @@ context and the deferred mitigations the plan.
 ----------
 
 ``make -C testing test-tgt-register`` runs ``testing/tpm/t0034-register.sh``
-in a dedicated pre-init KVM guest.  It provisions a real kernel signing
-key and freezes its public metadata in a BPF identity map; no signing
-or keyring implementation is replaced.  The libtpms command transport
-controls PCR phases and TPM resets while the guest kernel and writer
+in a dedicated pre-init KVM guest. It creates the TPM-held writer
+and freezes its nonsecret input and public modulus in a BPF identity
+map. The libtpms command transport controls PCR phases and TPM resets
+while the guest kernel and writer
 survive.  This preserves lifecycle, attestation and credential-activation
 coverage, including index recreation, the closed first-write window,
 reset recovery and late binding.  It is a protocol test before the LSM
@@ -697,7 +712,7 @@ implementation, without a TPM.
 Post-init integration tests run only against a real kernel in the KVM
 guest with swtpm attached through ``/dev/tpmrm0``
 (``make -C testing test-tgt``).  There is no software signing fixture:
-the guest uses the production kernel-held writer and installed
+the guest uses the production TPM-held writer and installed
 ``shirudo`` binary.  ``testing/tpm/t1108-tpm-chain.sh`` exercises measured
 loads and unloads, initialization reuse, prediction, attestation,
 credential activation and rejection of forged writer evidence.
@@ -706,35 +721,33 @@ production runtime's certificate selection.
 ``make -C testing test-tgt`` also exercises the
 production initrd and switch-root path in ``testing/t1122-initrd.sh``.
 
-``testing/helper/test-nv-cphash`` creates a separate kernel-held key with
-the production provisioning function and signs through ``keyctl``.
-It reuses the production TPM connection, NV lifecycle, kernel signing
-and signed-policy helpers; only the invalid inputs and assertions are
-test-specific.  Production still selects its signing key from the
-frozen identity, and the guard test checks that the shared signing
-primitive cannot bypass that key's LSM protection.
-It tests nonce and command binding directly through ESYS on a scratch
-NV index in the guest.  Replayed and corrupted signatures must fail
-without changing NV.  ``PolicySigned`` accepts an authorization for
-event A; extending event B must fail without changing the value.  A
-fresh session then extends A and the test checks the exact result,
-removes the scratch index and unlinks its temporary keyring.
-No linker wrapping, software private-key files or production
-fault-injection hooks are used.
+``testing/helper/test-nv-cphash`` creates a separate TPM-resident writer
+with the production provisioning function. It tests nonce and command
+binding directly through ESYS on a scratch NV index. Both the pre-init
+and protected target VMs run it; the guard allows this separate index.
+Replayed and corrupted signatures must fail without changing NV. ``PolicySigned`` accepts an authorization for event A; extending
+event B must fail without changing the value. A fresh session then
+extends A and the test checks the exact result and removes the scratch
+index. No software private-key file or production fault-injection hook
+is used.
 
-``testing/tpm/t1127-nv-writer.sh`` exercises the actual kernel key guard,
-including public-key inspection in the init record and refused private-key reads,
-signing, updates, permission changes, revocation and invalidation.
-Its identity lookup opens the frozen map read-only, as
-required by the map-FD guard.
-Separately, ``testing/helper/test-tpm-preopened`` opens a TPM connection
-after initialization and forks an unrelated writer which inherits it.
-The child submits the former public ``PolicyNvWritten``/``PolicyOR``
-sequence directly through ESYS, without requesting a kernel signature.
-``NV_Extend`` must return the TPM's session-1 policy failure, and reads
-before and after must succeed with identical values.  A userspace
-``EACCES`` or transport failure does not pass this test.  This exercises
-an inherited connection, not a descriptor opened before LSM attachment.
+``testing/tpm/t1127-nv-writer.sh`` compares the writer's public modulus
+with the init record. It checks that untrusted root cannot directly
+extend Shirudo's register through either TPM device, whether the write
+blocks, is nonblocking, or uses an inherited connection. A short
+``NV_Extend`` command is also refused. Unrelated TPM signing, another
+NV index and PCR extension remain available. The test verifies that
+trusted loads and unloads still change the register, while a denied
+extension leaves it unchanged.
+
+``testing/helper/test-tpm-preopened`` opens a TPM connection after
+initialization and forks an unrelated process which inherits it.
+The child submits a direct ``NV_Extend`` for Shirudo's index.
+The LSM must refuse the command with ``EACCES``, and reads before and
+after must return the same register value. A TPM policy error or
+transport failure does not pass this test. The connection is inherited
+after LSM attachment; this test does not open a descriptor before
+attachment.
 
 Configuration image measurements
 ================================
@@ -768,5 +781,5 @@ consistency without operator approval. Neither this replay nor a static
 PCR proves that only the trusted updater issued the TPM command: direct
 measurement writers can record a selection without the corresponding
 operation. Restricting writers remains separate work for the config PCR;
-the upatch NV register requires the guarded writer described above.
+the upatch NV register has the extension guard described above.
 No IMA integration is added.

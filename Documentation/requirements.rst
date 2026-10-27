@@ -96,11 +96,13 @@ fixture.
    * - ``CONFIG_CRYPTO_SHA256``
      - ``excl_prog_hash``, ``payload_sha256``, the measurement register
        and the eventlog digests.
-   * - ``CONFIG_PKCS8_PRIVATE_KEY_PARSER=y``, ``CONFIG_CRYPTO_RSA=y``
-     - Import and RSASSA-PKCS1-v1_5/SHA-256 signing with the
-       kernel-held RSA-3072 NV writer key.  The TPM must also support
-       RSA-3072 public-key loading and RSASSA/SHA-256 verification;
-       there is no RSA-2048 or alternative-algorithm fallback.
+   * - Kernel ``tpm_command`` LSM hook
+     - The hook passes a copied command and its declared length before
+       submission through either TPM device node. Shirudo refuses an
+       untrusted ``TPM2_NV_Extend`` to its frozen NV index, including
+       through an inherited descriptor. It allows other TPM signing
+       and PCR extension. The TPM must create and use RSA-3072
+       RSASSA/SHA-256 primary keys; there is no RSA-2048 fallback.
    * - ``CONFIG_TCG_TPM`` plus a TPM driver (``CONFIG_TCG_TIS``,
        ``CONFIG_TCG_CRB``, or the platform's virtual TPM)
      - The measurement register and the attestation key.  A TPM 2.0 is
@@ -317,9 +319,9 @@ since the libguestfs appliance resolves names through DNS alone.
        post-quantum today, so the evidence is classical.
    * - NV write authorization
      - RSA-3072 RSASSA-PKCS1-v1_5 with SHA-256 through
-       ``PolicySigned``.  The kernel holds the private key and shirudo
-       holds the public key in the frozen identity map to provision the TPM with
-       for each session.
+       ``PolicySigned``. The TPM holds the private key. Shirudo freezes
+       the public modulus and the input used to recreate the same
+       primary key during this boot.
    * - TLS (registries, OTLP and S3 export)
      - TLS 1.3 on every libcurl client in both profiles.  Hybrid ML-KEM
        groups (X25519MLKEM768, SecP256r1MLKEM768) are required unless
@@ -379,13 +381,14 @@ an exec clears them and the operator helper applies its own hardening.
   LuaJIT, glibc, libm and the compiler runtime statically as a PIE, so it
   runs on a distribution whose own OpenSSL predates ML-DSA and reaches
   the TPM from an initrd that holds no tpm2-tss shared objects.
-* A TPM 2.0 exposed as ``/dev/tpmrm0`` (discrete, firmware or cloud
-  vTPM), or a software TPM reachable through ``tpm.tcti``.  TPM 1.2 is
-  refused; there is no opt-out.
+* A TPM 2.0 exposed through the kernel device TCTI (discrete,
+  firmware or cloud vTPM). Authenticated-image targets use that path so
+  the LSM can check NV extension commands. Host tests may use a software
+  TPM through another TCTI. TPM 1.2 is refused; there is no opt-out.
 * ``systemd`` 256 or newer for the boot units and the timers:
   ``shirudo-initrd.service`` orders itself after ``tpm2.target``, which
   an older systemd does not have, and ``init`` could then run before
-  the TPM is there.  The test suite runs systemd 259.  A systemd-based
+  the TPM is there. The test suite runs systemd 259. A systemd-based
   initrd (dracut) for the production configuration, with
   ``systemd-pcrphase-initrd.service``, which measures ``enter-initrd``
   and ``leave-initrd`` into PCR 11: the register's binding closes when
@@ -459,8 +462,8 @@ suites when validating a deployment.
 * ``make -C testing test-tgt-register`` additionally needs libtpms
   development headers on the build host (``libtpms-dev`` on Debian and
   Ubuntu).  The prepared guest installs libtpms and the command TCTI
-  runtime.  Signing uses the guest's real kernel keyring, not a software
-  signing replacement.
+  runtime. The guest uses the TPM-held NV writer and the kernel TPM
+  device, not a software signing replacement.
 * ``make -C testing fuzz`` builds the parsers' libFuzzer targets with
   ``clang`` and needs its fuzzer and sanitizer runtime
   (``libclang-rt-<version>-dev`` on Debian and Ubuntu).
