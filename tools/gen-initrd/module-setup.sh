@@ -97,6 +97,7 @@ install() {
 	fi
 	[[ -r $conf ]] || return 1
 	inst_simple "$conf" /etc/shirudo/shirudo.conf || return 1
+	inst_multiple mount || return 1
 	# dracut keeps the owner of what it copies, and init refuses keys
 	# and configuration another user could change.
 	chown -R 0:0 "$initdir/etc/shirudo" || return 1

@@ -1265,8 +1265,15 @@ static int initrd_enter(void)
 		       strerror(errno));
 		return -errno;
 	}
-	rc = statvfs(SHIRUDO_VAR_LIB, &state) ? -errno :
-		(state.f_flag & ST_RDONLY ? -EROFS : 0);
+	if (statvfs(SHIRUDO_VAR_LIB, &state)) {
+		rc = -errno;
+		pr_err("initrd: statvfs %s: %s", src, strerror(-rc));
+	} else if (state.f_flag & ST_RDONLY) {
+		rc = -EROFS;
+		pr_err("initrd: %s is read-only", src);
+	} else {
+		rc = 0;
+	}
 	if (rc) {
 		umount2(SHIRUDO_VAR_LIB, MNT_DETACH);
 		return rc;

@@ -33,6 +33,7 @@ RequiresMountsFor=/sysroot/var/lib/shirudo
 Type=oneshot
 RemainAfterExit=yes
 KeyringMode=inherit
+ExecStartPre=/usr/bin/mount -o remount,rw /sysroot
 ExecStart=@bindir@/shirudo init
 
 [Install]

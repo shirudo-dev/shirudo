@@ -28,8 +28,9 @@ commands, `architecture <architecture.rst>`__ for the LSM flow and
   static SHA-256 PCR for config measurements. See
   `requirements <requirements.rst>`__ for the exact kernel requirements,
   including disabled 32-bit compatibility.
-* ``/sysroot/var/lib/shirudo`` mounted writable before Shirudo starts. If
-  state is on a separate filesystem, mount it in the initrd too. Config
+* ``/sysroot/var/lib/shirudo`` mounted writable before Shirudo starts.
+  ``shirudo-initrd.service`` remounts ``/sysroot`` read-write; if state is on
+  a separate filesystem, mount it read-write in the initrd too. Config
   selections and cached bundles must be durable before PCR extension.
 * ``systemd-pcrphase-initrd.service`` and its ``enter-initrd`` measurement
   before Shirudo binds its upatch register. A direct QEMU kernel/initrd boot
