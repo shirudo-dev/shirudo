@@ -35,7 +35,8 @@ jobs:
           CC: gcc-15
           HOSTCC: gcc-15
           HOSTCXX: g++-15
-        run: make -C testing bpf-next
+        # Temporary until bpf-next includes the dm-verity keyring identifier commit.
+        run: make -C testing bpf-next KERNEL_PATCHES=.github/patches/1041fca2ee8a9236255c5819d685ec34e89b4928.patch
 
       - name: Upload kernel artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -64,7 +65,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Build Amazon Linux kernel RPM artifacts
-        run: make -C testing bpf-next PACKAGE_FORMAT=rpm
+        run: make -C testing bpf-next KERNEL_PATCHES=.github/patches/1041fca2ee8a9236255c5819d685ec34e89b4928.patch PACKAGE_FORMAT=rpm
 
       - name: Upload Amazon Linux kernel artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
