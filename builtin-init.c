@@ -847,9 +847,15 @@ out:
  * All or nothing: one failure leaves init incomplete and the register
  * unextended. On a re-run an upatch already pinned this boot with the
  * archived payload is counted and left alone; loading it again would
- * only attach a second link to fail at the pin.
+ * only attach a second link to fail at the pin. Once this boot's init
+ * event is on record the restore has happened and the register covers
+ * what it loaded, so an archived artifact that is not loaded cannot be
+ * applied any more: nothing would measure it. It was renamed into the
+ * archive since, or left behind by an unload cut short, and either is
+ * for the operator to resolve.
  */
-static int boot_restore(struct shirudo_measured_upatch **out_set, size_t *out_n)
+static int boot_restore(bool recorded,
+			struct shirudo_measured_upatch **out_set, size_t *out_n)
 {
 	struct shirudo_measured_upatch *set = NULL;
 	struct dirent **names = NULL;
@@ -923,6 +929,14 @@ static int boot_restore(struct shirudo_measured_upatch **out_set, size_t *out_n)
 			pr_info("boot-restore: %s already loaded",
 				set[cnt].name);
 			cnt++;
+			goto next;
+		}
+		if (recorded) {
+			pr_err("boot-restore: %s is archived but not loaded "
+			       "after the register was bound this boot "
+			       "(tampered); unload it or reboot",
+			       names[i]->d_name);
+			rc = -EPERM;
 			goto next;
 		}
 		if (shirudo_upatch_apply(path) != 0) {
@@ -1247,6 +1261,8 @@ static int init_phase_error(int rc, const char *phase)
 static int run_init(void)
 {
 	struct shirudo_measured_upatch *set = NULL;
+	struct shirudo_eventlog_init rec;
+	bool recorded;
 	size_t n = 0;
 	int rc;
 
@@ -1287,7 +1303,14 @@ static int run_init(void)
 	if (rc)
 		return init_phase_error(rc, "loading trusted keys");
 
-	rc = boot_restore(&set, &n);
+	rc = eventlog_boot_init(&rec);
+	if (rc && rc != -ENOENT) {
+		pr_err("init: eventlog %s unreadable: %s", eventlog_path(),
+		       strerror(-rc));
+		return rc;
+	}
+	recorded = rc == 0;
+	rc = boot_restore(recorded, &set, &n);
 	if (rc) {
 		pr_err("init: boot-restore failed; further changes "
 		       "and attestation remain blocked");
