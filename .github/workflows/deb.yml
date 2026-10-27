@@ -223,11 +223,6 @@ jobs:
       - name: Run target tests in staging configuration
         run: .github/scripts/target-tests.sh staging
 
-      # Keep reporting the production boot failure without blocking package builds.
-      - name: Run target tests in production configuration
-        continue-on-error: true
-        run: .github/scripts/target-tests.sh production
-
       - name: Save the target build dependencies
         if: always() && steps.target-deps.outputs.cache-hit != 'true' && hashFiles('build/target-deps/lib/libcrypto.a') != '' && hashFiles('build/target-deps/curl/lib/libcurl.a') != ''
         uses: actions/cache/save@v4

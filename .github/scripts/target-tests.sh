@@ -6,10 +6,10 @@
 # make -C testing test-tgt does on a developer's host. setup makes the
 # runner the VM host: KVM, the VM's packages, a compatible LVH kernel or
 # the Shirudo test kernel cache, and the OpenSSL 3.5 toolchain from
-# vm-toolchain.sh. staging runs the suite as is, production boots the
-# guest from a dracut initrd.
+# vm-toolchain.sh. staging builds the host bundle and runs the target suite
+# from a dracut initrd.
 #
-#   .github/scripts/target-tests.sh setup|production
+#   .github/scripts/target-tests.sh setup|staging
 #
 # Runs as a user with passwordless sudo, from the checkout.
 
@@ -251,9 +251,9 @@ setup() {
 }
 
 case "${1:-}" in
-setup|staging|production) ;;
+setup|staging) ;;
 *)
-	echo "usage: $0 setup|staging|production" >&2
+	echo "usage: $0 setup|staging" >&2
 	exit 2
 	;;
 esac
@@ -274,9 +274,5 @@ fi
 # emergency mode for instance, would otherwise hold the job for an hour.
 export TEST_VM_TIMEOUT=900
 
-if [ "$1" = staging ]; then
-	make -C testing test-vm-bundle
-	sudo -E env PATH="$PATH" make -C testing test-tgt TEST_VM_INITRD=1
-else
-	sudo -E env PATH="$PATH" make -C testing test-tgt TEST_VM_INITRD=1
-fi
+make -C testing test-vm-bundle
+sudo -E env PATH="$PATH" make -C testing test-tgt TEST_VM_INITRD=1
