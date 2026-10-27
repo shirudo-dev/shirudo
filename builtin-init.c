@@ -16,11 +16,14 @@
 #include <string.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
+#include <sys/statfs.h>
 #include <sys/statvfs.h>
 #include <sys/syscall.h>
 #include <sys/sysmacros.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include <linux/magic.h>
 
 #include <bpf/bpf.h>
 #include <bpf/libbpf.h>
@@ -1206,10 +1209,22 @@ static void usage(void)
 static int initrd_enter(void)
 {
 	struct statvfs state;
+	struct statfs root;
 	char src[PATH_MAX];
 	struct stat st;
 	int rc;
 
+	/*
+	 * /etc/initrd-release is root's to create on the root file system;
+	 * the initramfs is not. Binding a tree of root's over the state
+	 * directory is what a run from the root file system would do here.
+	 */
+	if (statfs("/", &root) != 0)
+		return -errno;
+	if (root.f_type != TMPFS_MAGIC && root.f_type != RAMFS_MAGIC) {
+		pr_err("initrd: the root file system is not an initramfs");
+		return -ENOTBLK;
+	}
 	if (strsprintf(src, sizeof(src), "%s%s", sysroot(),
 		       SHIRUDO_VAR_LIB) < 0)
 		return -ENAMETOOLONG;
@@ -1299,13 +1314,18 @@ static int run_init(void)
 	if (rc)
 		return step_failed("trusted keys", rc);
 
+	/*
+	 * The record is the eventlog's, which root can hide behind a mount;
+	 * the register is the TPM's, written once this boot by whoever bound
+	 * it. Either says the restore has happened.
+	 */
 	rc = eventlog_boot_init(&rec);
 	if (rc && rc != -ENOENT) {
 		pr_err("init: eventlog %s unreadable: %s", eventlog_path(),
 		       strerror(-rc));
 		return rc;
 	}
-	recorded = rc == 0;
+	recorded = rc == 0 || chain_bound();
 	rc = boot_restore(recorded, &set, &n);
 	if (rc) {
 		pr_err("init: boot-restore failed; further changes "
