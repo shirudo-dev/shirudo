@@ -70,11 +70,13 @@ void tls_ca_cleanup(struct shirudo_tls_ca *ca);
 
 /*
  * shirudo's TLS policy for every libcurl handle it opens: TLS 1.3 only
- * and hybrid ML-KEM key exchange only (X25519MLKEM768, with the P-256
- * hybrid as fallback), so neither a version downgrade nor a classical
- * group can be negotiated. ca may be NULL; otherwise it is the extra
- * trust anchor fed to the SSL_CTX callback. Returns 0 or a negative
- * errno; callers must not connect when it fails.
+ * and hybrid ML-KEM key exchange by default. Exact hosts in
+ * tls.classical_hosts may also negotiate classical groups, from the
+ * immutable runtime config on targets or root-managed host config on
+ * operator commands. This setting does not change certificate
+ * verification. ca may be NULL; otherwise it
+ * is the extra trust anchor fed to the SSL_CTX callback. Returns 0 or a
+ * negative errno; callers must not connect when it fails.
  */
 int tls_curl_policy(CURL *curl, struct shirudo_tls_ca *ca);
 

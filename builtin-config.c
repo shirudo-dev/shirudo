@@ -113,6 +113,13 @@ int cmd_config(int argc, const char **argv)
 		printf("# tpm.tcti = (unset -- using device:/dev/tpmrm0)\n\n");
 	}
 
+	printf("# Exact DNS hosts that may use classical TLS key exchange.\n"
+	       "# Targets honor this only from the immutable runtime image;\n"
+	       "# operators use the root-managed /etc/shirudo/shirudo.conf.\n"
+	       "# Leave empty for hybrid-only TLS.\n");
+	printf("tls.classical_hosts = %s\n\n",
+	       cfg.tls_classical_hosts);
+
 	printf("# Periodic `shirudo upatch map --all` export. Empty JSON and\n"
 	       "# OTLP destinations leave the installed timer idle. Every emitted\n"
 	       "# map must carry a signed Lua decoder declaring log or metric.\n"
@@ -132,5 +139,5 @@ int cmd_config(int argc, const char **argv)
 	printf("map_export.otlp_max_bytes = %u\n",
 	       cfg.map_export_otlp_max_bytes);
 
-	return cfg.map_export_valid ? 0 : 1;
+	return cfg.map_export_valid && cfg.tls_classical_hosts_valid ? 0 : 1;
 }

@@ -408,8 +408,16 @@ the initrd and the anchor.  Neither command needs the other machine.
 Registry fetch failures
     Check the ``oci://`` endpoint, the ``BPM_OCI_*`` environment, the
     certificate registered under ``/etc/shirudo/bpm``, and that the
-    registry offers TLS 1.3 with a hybrid ML-KEM group; shirudo never
-    falls back to classical TLS.
+    registry offers TLS 1.3 with a hybrid ML-KEM group.  For registries
+    that do not, add their exact hostnames as a comma-separated list in
+    ``tls.classical_hosts`` in ``/etc/shirudo/shirudo.conf`` on the
+    operator.  For a target, the
+    setting must be in the immutable runtime image's config.  This does
+    not change certificate verification, but permits classical key
+    exchange with no post-quantum confidentiality.  Hybrid-only policy
+    remains active for every other host::
+
+        tls.classical_hosts = ghcr.io,quay.io
 
 The `operations <operations.rst>`__ guide has the full table of
 categories with the action for each, and the recovery procedures.

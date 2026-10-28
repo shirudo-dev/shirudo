@@ -642,9 +642,19 @@ format specification's companion section below.
 Registry access honours ``BPM_OCI_SCHEME``, ``BPM_OCI_CA_FILE``,
 ``BPM_OCI_USERNAME``/``BPM_OCI_PASSWORD``, ``REGISTRY_AUTH_FILE`` and
 ``DOCKER_CONFIG``.  Every libcurl client in shirudo speaks TLS 1.3 with
-a hybrid ML-KEM key exchange only (X25519MLKEM768, SecP256r1MLKEM768);
-there is no classical fallback.  The registry is untrusted: it can
-withhold or replay a signed publication, it cannot forge one.
+a hybrid ML-KEM key exchange by default (X25519MLKEM768,
+SecP256r1MLKEM768).  ``tls.classical_hosts`` in
+``/etc/shirudo/shirudo.conf`` opts exact HTTPS DNS names into classical
+key exchange, for example ``ghcr.io,quay.io``.  Operator commands read
+this key from the root-managed host config; target commands read it only
+from the immutable runtime image's config.  The list rejects wildcards
+and IP addresses, and redirects are checked against each destination
+host.  TLS 1.3 and certificate verification remain unchanged.  Shirudo
+warns if an opted-in connection negotiates a non-hybrid group.  An empty
+list requires hybrid exchange everywhere.  A classical exception
+weakens transport confidentiality for that host, but signed publications
+remain authenticated and cannot be forged by the registry, which can
+still withhold or replay them.
 
 Tree publication format.  The ``stable`` manifest has two layers, the
 publication and its detached CMS signature.  The publication is::

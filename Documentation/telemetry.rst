@@ -279,9 +279,12 @@ compresses the body.
 
 TLS.  Like every libcurl client in shirudo, the exporter speaks TLS 1.3
 with a hybrid ML-KEM key exchange only (X25519MLKEM768,
-SecP256r1MLKEM768); a collector that offers only classical groups is
-refused.  ``OTEL_EXPORTER_OTLP_CERTIFICATE`` names a CA bundle,
-``OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE`` and
+SecP256r1MLKEM768) by default; a collector that offers only classical
+groups is refused unless its exact DNS hostname is listed in
+``tls.classical_hosts`` in the immutable runtime config.  See the BPM
+transport notes for the format and scope of that opt-in.
+``OTEL_EXPORTER_OTLP_CERTIFICATE``
+names a CA bundle; ``OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE`` and
 ``OTEL_EXPORTER_OTLP_CLIENT_KEY`` a client certificate for mutual TLS.
 Cleartext ``http://`` is allowed only to loopback.  ``--otel-insecure``
 (``map_export.otel_insecure``) permits cleartext to other hosts and
@@ -375,9 +378,12 @@ pipeline that lands logs and metrics in ClickHouse and Splunk::
           processors: [batch]
           exporters: [clickhouse, splunk_hec]
 
-The collector must offer a hybrid ML-KEM group; Go's TLS stack, which
-the collector uses, enables X25519MLKEM768 by default since Go 1.24.
-Terminate TLS in a proxy that does if a build cannot.
+Go's TLS stack, which the collector uses, enables X25519MLKEM768 by
+default since Go 1.24.  If using the classical-host setting, the
+collector hostname must be listed explicitly in the runtime image; the
+transport then lacks
+post-quantum confidentiality.  Otherwise, terminate TLS in a proxy that
+offers a hybrid group if a build cannot.
 
 ClickHouse.  The ``clickhouse`` exporter stores each log record with
 its ``Body``, ``SeverityNumber``, ``ResourceAttributes`` and

@@ -316,11 +316,12 @@ since the libguestfs appliance resolves names through DNS alone.
        holds the public key in the frozen identity map to provision the TPM with
        for each session.
    * - TLS (registries, OTLP and S3 export)
-     - TLS 1.3 only with hybrid ML-KEM key exchange only
-       (X25519MLKEM768, SecP256r1MLKEM768), on every libcurl client in
-       both profiles.  A server that offers only classical groups is
-       refused; there is no fallback.  Server certificates are whatever
-       the registry or collector presents.
+     - TLS 1.3 on every libcurl client in both profiles.  Hybrid ML-KEM
+       groups (X25519MLKEM768, SecP256r1MLKEM768) are required unless
+       an exact host is opted in through ``tls.classical_hosts`` in the
+       root-managed operator config or immutable target runtime config.
+       The exception does not change certificate verification.  Server
+       certificates are whatever the registry or collector presents.
 
 4) Operator host
 ----------------

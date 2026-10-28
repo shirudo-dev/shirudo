@@ -17,6 +17,7 @@
 
 #define SHIRUDO_OWNER_AUTH_MAX	256
 #define SHIRUDO_TPM_TCTI_MAX	256
+#define SHIRUDO_TLS_HOSTS_MAX	1024
 #define SHIRUDO_MAP_EXPORT_PATH_MAX	4096
 #define SHIRUDO_MAP_EXPORT_ENDPOINT_MAX	2048
 #define SHIRUDO_MAP_EXPORT_URI_MAX	2048
@@ -36,6 +37,9 @@ struct shirudo_config {
 	 * overrides it.
 	 */
 	char		tpm_tcti[SHIRUDO_TPM_TCTI_MAX];
+	/* Exact DNS names that may negotiate classical TLS key exchange. */
+	bool		tls_classical_hosts_valid;
+	char		tls_classical_hosts[SHIRUDO_TLS_HOSTS_MAX];
 	/* Empty sinks are idle. */
 	bool		map_export_valid;
 	char		map_export_json_path[SHIRUDO_MAP_EXPORT_PATH_MAX];

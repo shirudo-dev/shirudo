@@ -428,8 +428,22 @@ the version with other digests is refused, so a published version
 cannot be replaced.  Credentials and transport come from
 ``BPM_OCI_USERNAME`` and ``BPM_OCI_PASSWORD``, ``REGISTRY_AUTH_FILE``
 or ``DOCKER_CONFIG``, ``BPM_OCI_CA_FILE`` for a private CA and
-``BPM_OCI_SCHEME=http`` for a cleartext local registry; TLS is 1.3 with
-hybrid ML-KEM key exchange only.
+``BPM_OCI_SCHEME=http`` for a cleartext local registry.  HTTPS uses TLS
+1.3 and hybrid ML-KEM key exchange by default.  To use a registry that
+does not support hybrid groups, set ``tls.classical_hosts`` to an exact,
+comma-separated DNS hostname list in the operator's root-managed
+``/etc/shirudo/shirudo.conf``.  For target pulls, put the key in the
+immutable runtime image's ``etc/shirudo/shirudo.conf``; updateable config
+images cannot set it.  For example::
+
+    tls.classical_hosts = ghcr.io,quay.io
+
+Wildcards and IP addresses are rejected, and each redirect destination
+must be listed separately.  This setting does not change certificate
+verification; shirudo warns if the negotiated group is not one of the
+advertised hybrid groups.  It applies to all shirudo libcurl clients,
+including OTLP and S3.  Classical key exchange does not provide
+post-quantum transport confidentiality.
 
 The upatch tree
 ~~~~~~~~~~~~~~~

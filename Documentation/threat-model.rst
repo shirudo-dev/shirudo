@@ -317,8 +317,12 @@ T7  The delivery path
     in that signed index; a tree publication is signed, carries
     per-operation digests and sequence continuity, and a ``delete`` is
     accepted only for an id loaded from the same tree.  TLS is 1.3 with
-    hybrid ML-KEM only, so the transport is not the weak link even
-    though it is not the trust anchor.
+    hybrid ML-KEM by default.  ``tls.classical_hosts`` in operator or
+    immutable target runtime config can opt exact HTTPS DNS hosts into
+    classical key exchange; for those hosts,
+    transport confidentiality is not post-quantum.  Certificate checks
+    and signed artifact verification remain in force, but a registry can
+    still withhold or replay signed data.
 
 T8  Quantum-capable adversaries against the trust anchor
     Signing is ML-DSA-87 (FIPS 204) only: ``genkey`` makes nothing else,
@@ -515,9 +519,12 @@ Each of these is known, documented and bounded; none is silent.
 
 9.  Classical pieces outside the boundary: WebPKI server certificates
     on registries and collectors (they authenticate the transport, not
-    the artifacts), and the attestation key, which is ECDSA P-256
-    because TPMs sign with nothing post-quantum today.  The evidence is
-    therefore classical even though the artifacts it describes are not.
+    the artifacts); transport confidentiality for any host opted into
+    ``tls.classical_hosts``; and the attestation key, which is
+    ECDSA P-256 because TPMs sign with nothing post-quantum today.  For
+    an opted-in host, recorded traffic may be exposed to a future
+    quantum-capable adversary.  The evidence is therefore classical
+    even though the artifacts it describes are not.
 
 10. Endorsement key trust.  Credential activation ties the attestation
     key to the endorsement key in the evidence, and the endorsement

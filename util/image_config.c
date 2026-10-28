@@ -210,7 +210,8 @@ int shirudo_image_config_validate(int root_fd)
 		rc = -ENAMETOOLONG;
 	if (!rc) {
 		rc = config_load_path(&candidate, path);
-		if (!rc && !candidate.map_export_valid)
+		if (!rc && (!candidate.map_export_valid ||
+			    !candidate.tls_classical_hosts_valid))
 			rc = -EINVAL;
 		explicit_bzero(&candidate, sizeof(candidate));
 	}
@@ -239,7 +240,8 @@ int shirudo_image_config_set(const struct shirudo_config *bootstrap,
 			return -ENAMETOOLONG;
 		}
 		rc = config_load_path(&candidate, path);
-		if (rc || !candidate.map_export_valid) {
+		if (rc || !candidate.map_export_valid ||
+		    !candidate.tls_classical_hosts_valid) {
 			close(fd);
 			return rc ? rc : -EINVAL;
 		}
@@ -248,6 +250,11 @@ int shirudo_image_config_set(const struct shirudo_config *bootstrap,
 		candidate.tpm_owner_auth_len = bootstrap->tpm_owner_auth_len;
 		memcpy(candidate.tpm_tcti, bootstrap->tpm_tcti,
 		       sizeof(candidate.tpm_tcti));
+		memcpy(candidate.tls_classical_hosts,
+		       bootstrap->tls_classical_hosts,
+		       sizeof(candidate.tls_classical_hosts));
+		candidate.tls_classical_hosts_valid =
+			bootstrap->tls_classical_hosts_valid;
 	}
 	if (config_fd >= 0)
 		close(config_fd);

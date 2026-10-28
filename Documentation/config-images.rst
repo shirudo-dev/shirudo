@@ -97,10 +97,18 @@ certificate inside the image. Other absolute paths and traversal are refused.
 Tree publications are verified against the runtime image's initial BPF
 certificate. Repository indexes use their configured repository certificate.
 
-The initial BPF certificate and TPM configuration belong in the runtime
-image. Config settings that try to override bootstrap settings are refused.
-Unknown settings, invalid values and inconsistent export limits are rejected
-before the config PCR is extended.
+The initial BPF certificate, TPM configuration and
+``tls.classical_hosts`` policy belong in the runtime image's
+``etc/shirudo/shirudo.conf``. For example::
+
+    tls.classical_hosts = ghcr.io,quay.io
+
+The target reads this policy from the immutable runtime image; operator
+commands read it from the root-managed host config. The updateable config
+image cannot set or change ``tls.classical_hosts``. More generally, attempts
+to override settings owned by the runtime bootstrap are rejected. Shirudo
+rejects these and other invalid config images before extending the config
+PCR.
 Config images must not contain symbolic links or special files.
 
 Writable state still includes downloaded upatch archives, repository

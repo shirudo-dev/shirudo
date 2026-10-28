@@ -62,10 +62,93 @@ static bool set_string(char *dst, size_t cap, const char *val)
 	return strscpy(dst, val, cap) >= 0;
 }
 
+static bool numeric_dns_label(const char *label, size_t len)
+{
+	size_t i = 0;
+	bool hex = len > 2 && label[0] == '0' &&
+		   (label[1] == 'x' || label[1] == 'X');
+
+	if (!len)
+		return false;
+	if (hex)
+		i = 2;
+	for (; i < len; i++) {
+		__u8 c = label[i];
+
+		if (c >= '0' && c <= '9')
+			continue;
+		if (hex && ((c >= 'a' && c <= 'f') ||
+			    (c >= 'A' && c <= 'F')))
+			continue;
+		return false;
+	}
+	return !hex || i > 2;
+}
+
+static bool tls_dns_name_valid(const char *name)
+{
+	size_t len = strlen(name), label_len = 0, label_start = 0;
+	bool numeric_address = true;
+	size_t i;
+
+	if (!len || len > 253)
+		return false;
+	for (i = 0; i < len; i++) {
+		__u8 c = name[i];
+
+		if (c == '.') {
+			if (!label_len || label_len > 63 || name[i - 1] == '-')
+				return false;
+			if (!numeric_dns_label(name + label_start, label_len))
+				numeric_address = false;
+			label_start = i + 1;
+			label_len = 0;
+			continue;
+		}
+		if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+		      (c >= '0' && c <= '9') || c == '-') ||
+		    (!label_len && c == '-'))
+			return false;
+		label_len++;
+	}
+	if (!label_len || label_len > 63 || name[len - 1] == '-')
+		return false;
+	if (!numeric_dns_label(name + label_start, label_len))
+		numeric_address = false;
+	return !numeric_address;
+}
+
+static bool tls_classical_hosts_valid(const char *value)
+{
+	const char *host = value;
+
+	if (!*value)
+		return true;
+	while (*host) {
+		const char *end = strchr(host, ',');
+		size_t len = end ? (size_t)(end - host) : strlen(host);
+		char name[254];
+
+		if (!len || len >= sizeof(name))
+			return false;
+		memcpy(name, host, len);
+		name[len] = '\0';
+		if (!tls_dns_name_valid(name))
+			return false;
+		if (!end)
+			break;
+		host = end + 1;
+		if (!*host)
+			return false;
+	}
+	return true;
+}
+
 static void config_defaults(struct shirudo_config *cfg)
 {
 	*cfg = (struct shirudo_config){};
 	cfg->map_export_valid = true;
+	cfg->tls_classical_hosts_valid = true;
 	cfg->map_export_otel_retries = 3;
 	cfg->map_export_log_record_max_bytes = SHIRUDO_MAP_EXPORT_LOG_RECORD_MAX_DEFAULT;
 	cfg->map_export_otlp_max_bytes = SHIRUDO_MAP_EXPORT_OTLP_MAX_DEFAULT;
@@ -173,6 +256,14 @@ int config_load_path(struct shirudo_config *cfg, const char *path)
 				else
 					strscpy(cfg->tpm_tcti, val,
 						sizeof(cfg->tpm_tcti));
+			} else if (strcmp(key, "tls.classical_hosts") == 0) {
+				if (!set_string(cfg->tls_classical_hosts,
+						sizeof(cfg->tls_classical_hosts), val) ||
+				    !tls_classical_hosts_valid(val)) {
+					cfg->tls_classical_hosts_valid = false;
+					pr_warn("config: tls.classical_hosts: invalid exact "
+						"DNS host list");
+				}
 			} else if (strcmp(key, "map_export.json_path") == 0) {
 				if (!set_string(cfg->map_export_json_path,
 						sizeof(cfg->map_export_json_path), val))
@@ -228,9 +319,13 @@ int config_load_path(struct shirudo_config *cfg, const char *path)
 			} else {
 				if (strncmp(key, "map_export.", 11) == 0)
 					map_export_bad(cfg, key, val, "unknown key");
-				else
+				else if (strncmp(key, "tls.", 4) == 0) {
+					cfg->tls_classical_hosts_valid = false;
+					pr_warn("config: %s: unknown TLS setting", key);
+				} else {
 					pr_warn("config: unknown key '%s' (ignored)",
 						key);
+				}
 			}
 		}
 		if (ferror(f) && !rc)
