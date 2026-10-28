@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 H=${SHIRUDO_TEST_IMAGE_KEYS_HELPER:-$(pwd)/helper/test-image-keys}
 SHB=../tools/shirudo-build/shirudo-build
