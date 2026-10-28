@@ -12,7 +12,7 @@
 # an ML-DSA key of a smaller parameter set than ML-DSA-87.
 # Needs clang and shirudo-build; the ML-DSA cases need OpenSSL >= 3.5.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
 S=../shirudo

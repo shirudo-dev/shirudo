@@ -9,7 +9,7 @@ this review.
 
 | ID | Mechanism case | Status | Existing test | Planned assertion or notes |
 |---|---|---|---|---|
-| UI-01 | Operator signing accepts ML-DSA-87 and rejects RSA | Covered | `t0029-mldsa-sign.sh` | Keep the algorithm rejection, CMS structure, size, signed-content verification and tamper rejection checks. |
+| UI-01 | Operator signing accepts ML-DSA-87 and rejects RSA | Covered | `signing/t0029-mldsa-sign.sh` | Keep the algorithm rejection, CMS structure, size, signed-content verification and tamper rejection checks. |
 | UI-02 | Malformed `.upatch` files fail cleanly | Covered | `t0004-upatch-parse.sh` | Empty, truncated, random, bogus-magic, missing-file and directory inputs must fail without a signal. |
 | UI-03 | Reader validates file size, structured header and section bounds | Covered | `t0004-upatch-parse.sh` | Oversized file, unsupported version, both reserved words, zero required lengths, header overlap, and out-of-file or overflowing ranges fail cleanly; a structured control parses. |
 | UI-04 | Valid signed decoder metadata is reported and executed | Covered | `t0005-upatch-decoders.sh` | Keep metadata fields, JSON output, OTLP value conversion, instruction and memory limits, and invalid UTF-8 checks. |

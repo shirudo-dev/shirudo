@@ -9,7 +9,7 @@
 # algorithm; on older toolchains genkey must refuse with an upgrade hint.
 # A --force that cannot put the new pair in place leaves the old one.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
 SHIRUDO=${SHIRUDO_GENKEY_TEST_BINARY:-../shirudo}
