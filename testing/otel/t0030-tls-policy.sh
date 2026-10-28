@@ -11,7 +11,7 @@
 # see X25519MLKEM768 offered and select it. The s_server cases need an
 # OpenSSL >= 3.5 (skipped otherwise); the first runs everywhere.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
 S=${SHIRUDO:-../shirudo}

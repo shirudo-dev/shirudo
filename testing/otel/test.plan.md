@@ -2,7 +2,7 @@
 
 ## Scope
 
-This plan records coverage for OpenTelemetry export across host-side serialization and transport, target map export, status keepalives, systemd/package wiring, and the shared TLS policy. Tests live primarily in `testing/otel/`; related coverage includes `testing/t0030-tls-policy.sh`, `testing/upatch/t0005-upatch-decoders.sh`, and `testing/fuzz/fuzz-otel.c`.
+This plan records coverage for OpenTelemetry export across host-side serialization and transport, target map export, status keepalives, systemd/package wiring, and the shared TLS policy. Tests live primarily in `testing/otel/`; related coverage includes `testing/otel/t0030-tls-policy.sh`, `testing/upatch/t0005-upatch-decoders.sh`, and `testing/fuzz/fuzz-otel.c`.
 
 ## Coverage
 
@@ -21,7 +21,7 @@ This plan records coverage for OpenTelemetry export across host-side serializati
 | Target service and timer | Installed map-export service delivers decoder-backed maps; slow collector fixture checks the timer does not overlap an active export. |
 | Serialized metrics | Two serializer pages, repeated peek, drain, subsequent empty interval, reload reset, and service export of decoder-backed cumulative metrics. |
 | Services and packaging | Static service/timer ordering, conditions, environment file, command, cadence, install paths, operator exclusion, and Debian/RPM scriptlets. |
-| TLS policy | `testing/t0030-tls-policy.sh` covers shared TLS policy; OTEL host tests independently check certificate verification and insecure mode where TLS prerequisites are available. |
+| TLS policy | `testing/otel/t0030-tls-policy.sh` covers shared TLS policy; OTEL host tests independently check certificate verification and insecure mode where TLS prerequisites are available. |
 
 ## Remaining gaps
 
@@ -38,4 +38,4 @@ These are coverage opportunities, not findings that the implementation is incorr
 
 ## Test commands
 
-Host coverage is selected by `testing/run-tests.sh` (`testing/otel/t0[0-9][0-9]-*.sh`). Target integration scripts `t1115`, `t1116`, and `t1117` require an initialized test VM and fixtures in `SHIRUDO_TEST_FIXTURES_DIR`. The shared TLS test is `testing/t0030-tls-policy.sh`. Run with the repository's documented `make -C testing test-op` and target harness when runtime validation is requested.
+Host coverage is selected by `testing/run-tests.sh` (`testing/otel/t0[0-9][0-9]-*.sh`). Target integration scripts `t1115`, `t1116`, and `t1117` require an initialized test VM and fixtures in `SHIRUDO_TEST_FIXTURES_DIR`. The shared TLS test is `testing/otel/t0030-tls-policy.sh`. Run with the repository's documented `make -C testing test-op` and target harness when runtime validation is requested.
