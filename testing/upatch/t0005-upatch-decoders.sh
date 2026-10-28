@@ -9,7 +9,7 @@
 # throwaway key, and exercises the decoder through the test helper.
 # Needs clang + shirudo-build (skips otherwise).
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
 S=../shirudo

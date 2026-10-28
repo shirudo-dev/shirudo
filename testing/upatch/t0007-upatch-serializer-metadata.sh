@@ -8,7 +8,7 @@
 # offline. Full load/read is covered by integration environments with
 # BPF_MAP_TYPE_ARENA support.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
 SHB=../tools/shirudo-build/shirudo-build

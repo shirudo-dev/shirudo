@@ -44,13 +44,13 @@ for t in \
 	signing/t1124-keys-add.sh \
 	signing/t1126-keys-revoke.sh \
 	tamperproof/t1105-siggate.sh \
-	t1133-upatch-arena-serializer.sh \
-	t1103-version-gate.sh \
-	t1104-payload-mismatch.sh \
-	t1107-load-unload.sh \
+	upatch/t1133-upatch-arena-serializer.sh \
+	upatch/t1103-version-gate.sh \
+	upatch/t1104-payload-mismatch.sh \
+	upatch/t1107-load-unload.sh \
 	tpm/t1108-tpm-chain.sh \
-	t1111-upatch-get.sh \
-	t1114-uprobe-multi.sh \
+	upatch/t1111-upatch-get.sh \
+	upatch/t1114-uprobe-multi.sh \
 	bpm/t1118-bpm-tree.sh \
 	bpm/t1119-bpm-tree-sequential.sh \
 	bpm/t1120-bpm-tree-delete.sh \

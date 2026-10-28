@@ -5,7 +5,7 @@
 # t0006 -- offline coverage for upatch map type labels and generic-read
 # policy. Arena maps must be visible but require a serializer.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
 H=helper/test-upatch-map-types

@@ -8,7 +8,7 @@
 # directive's signature still verifies (operator key); only the payload
 # binding is wrong. Non-destructive: the pin survives.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./integration-lib.sh
 target_guard
 

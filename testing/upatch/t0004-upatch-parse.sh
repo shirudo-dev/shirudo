@@ -7,7 +7,7 @@
 # input cleanly (non-zero exit, never a crash). Driven through the real
 # core binary's read-only `upatch info`; needs no root, kernel, or clang.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
 S=../shirudo

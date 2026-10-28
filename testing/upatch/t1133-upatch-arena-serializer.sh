@@ -4,7 +4,7 @@
 #
 # t1133 -- real target arena serializer pagination and error result.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./integration-lib.sh
 target_guard
 command -v python3 >/dev/null 2>&1 || test_skip_all "no python3"

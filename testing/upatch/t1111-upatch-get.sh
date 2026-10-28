@@ -7,7 +7,7 @@
 # installed). Builds + loads a marker fentry upatch, asserts `get` shows
 # the marker source, then unloads + cleans up on EXIT.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./integration-lib.sh
 target_guard
 

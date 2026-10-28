@@ -4,7 +4,7 @@
 #
 # t0012 -- netfilter upatches carry explicit IPv6 pre-routing metadata.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
 SHB=../tools/shirudo-build/shirudo-build

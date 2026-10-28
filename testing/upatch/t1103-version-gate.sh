@@ -9,7 +9,7 @@
 # the op then fails later for a different reason on the bogus path).
 # Non-destructive.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./integration-lib.sh
 target_guard
 

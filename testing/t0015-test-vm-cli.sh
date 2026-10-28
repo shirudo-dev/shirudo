@@ -906,16 +906,20 @@ test_expect_success 'make -C testing test runs the complete pipeline in order' '
 
 test_expect_success 'operator and target runners have disjoint explicit scopes' '
 	grep -q "for t in t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
+	grep -q "for t in upatch/t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
 	grep -q "for t in signing/t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
 	grep -q "for t in otel/t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
 	grep -q "bpm/t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
 	grep -q "tpm/t0\[0-9\]\[0-9\]\[0-9\]-\*.sh" ../testing/run-tests.sh &&
 	! grep -q "t1101" ../testing/run-tests.sh &&
-	for test_name in t1200-target-fixtures.sh t1107-load-unload.sh \
+	for test_name in t1200-target-fixtures.sh upatch/t1107-load-unload.sh \
 		signing/t1123-keys.sh signing/t1124-keys-add.sh \
 		signing/t1126-keys-revoke.sh \
 		bpm/t1118-bpm-tree.sh tamperproof/t1140-verity-authority.sh \
-		tamperproof/t1154-verity-config.sh tamperproof/t1158-verity-interruption.sh
+		tamperproof/t1154-verity-config.sh tamperproof/t1158-verity-interruption.sh \
+		upatch/t1103-version-gate.sh upatch/t1104-payload-mismatch.sh \
+		upatch/t1111-upatch-get.sh upatch/t1114-uprobe-multi.sh \
+		upatch/t1133-upatch-arena-serializer.sh
 	do
 		grep -q "$test_name" ../testing/run-target-tests.sh || return 1
 	done

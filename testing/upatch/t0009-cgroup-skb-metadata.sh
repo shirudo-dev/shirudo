@@ -4,7 +4,7 @@
 #
 # t0009 -- cgroup_skb upatches carry explicit attach metadata.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
 SHB=../tools/shirudo-build/shirudo-build

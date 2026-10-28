@@ -4,7 +4,7 @@
 #
 # t0008 -- paged serializer and detailed map JSON output shape.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
 H=helper/test-upatch-serializer-pages

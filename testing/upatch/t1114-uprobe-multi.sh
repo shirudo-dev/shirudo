@@ -4,7 +4,7 @@
 #
 # t1114 -- live uprobe.multi coverage using host-built target fixtures.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./integration-lib.sh
 target_guard
 

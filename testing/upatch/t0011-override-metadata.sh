@@ -5,7 +5,7 @@
 # t0011 -- override-capable kprobe/fmod_ret upatches carry attach metadata
 # that lets the target create the right link type.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
 SHB=../tools/shirudo-build/shirudo-build

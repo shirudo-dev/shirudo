@@ -4,7 +4,7 @@
 #
 # t1107 -- load/unload happy path using a host-built fixture.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./integration-lib.sh
 target_guard
 

@@ -5,7 +5,7 @@
 # t0010 -- unsupported network attach kinds are rejected with Shirudo-specific
 # diagnostics.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
 SHB=../tools/shirudo-build/shirudo-build

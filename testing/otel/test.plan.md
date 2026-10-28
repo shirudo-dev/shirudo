@@ -2,7 +2,7 @@
 
 ## Scope
 
-This plan records coverage for OpenTelemetry export across host-side serialization and transport, target map export, status keepalives, systemd/package wiring, and the shared TLS policy. Tests live primarily in `testing/otel/`; related coverage includes `testing/t0030-tls-policy.sh`, `testing/t0005-upatch-decoders.sh`, and `testing/fuzz/fuzz-otel.c`.
+This plan records coverage for OpenTelemetry export across host-side serialization and transport, target map export, status keepalives, systemd/package wiring, and the shared TLS policy. Tests live primarily in `testing/otel/`; related coverage includes `testing/t0030-tls-policy.sh`, `testing/upatch/t0005-upatch-decoders.sh`, and `testing/fuzz/fuzz-otel.c`.
 
 ## Coverage
 
