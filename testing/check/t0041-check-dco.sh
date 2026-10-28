@@ -6,7 +6,7 @@
 # commit needs, the forms it rejects, the author the sign-off must come
 # from and the merge commits it skips, on a throwaway repository.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 command -v git >/dev/null 2>&1 || test_skip_all "git not installed"
 S=$(cd .. && pwd)/.github/scripts/check-dco.sh

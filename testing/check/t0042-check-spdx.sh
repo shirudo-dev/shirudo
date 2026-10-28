@@ -7,7 +7,7 @@
 # BPF object compiles and a Beefile ships, the licences vendored C may
 # carry, on a throwaway repository, and the tree itself.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 command -v git >/dev/null 2>&1 || test_skip_all "git not installed"
 ROOT=$(cd .. && pwd)

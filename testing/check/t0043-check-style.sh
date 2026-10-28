@@ -10,7 +10,7 @@
 # string copies it refuses and the list of what stays enabled, on a
 # throwaway repository.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 command -v git >/dev/null 2>&1 || test_skip_all "git not installed"
 command -v perl >/dev/null 2>&1 || test_skip_all "perl not installed"

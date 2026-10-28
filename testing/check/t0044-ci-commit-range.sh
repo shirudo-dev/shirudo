@@ -6,7 +6,7 @@
 # pull request, a push and a force push hand to a checker, on a throwaway
 # repository.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 command -v git >/dev/null 2>&1 || test_skip_all "git not installed"
 S=$(cd .. && pwd)/.github/scripts/ci-commit-range.sh
