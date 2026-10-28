@@ -9,7 +9,7 @@
 # reports the counters as absent, not as an error, where init has not
 # run.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
 S=../shirudo

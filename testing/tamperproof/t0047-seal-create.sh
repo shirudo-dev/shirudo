@@ -10,7 +10,7 @@
 # The labelled cases need root on a file system with security xattrs
 # and are skipped without.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 H=helper/test-seal
 LABEL=94442b45cfcdc59aabc2a91364ed2ae129418e05a5c1985231b9c032e673f469

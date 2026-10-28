@@ -9,7 +9,7 @@
 # A pending config activation is reboot-pending, and a config its records
 # cannot vouch for is tampered.
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 . ./test-lib.sh
 
 H=helper/test-conditions
