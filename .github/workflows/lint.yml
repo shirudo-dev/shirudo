@@ -58,4 +58,4 @@ jobs:
         run: .github/scripts/ci-commit-range.sh .github/scripts/check-style.sh
 
       - name: Test the checker against the fetched copy
-        run: sh testing/t0043-check-style.sh
+        run: sh testing/check/t0043-check-style.sh
