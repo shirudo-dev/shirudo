@@ -18,6 +18,7 @@
 #include "image_config.h"
 #include "keyring.h"
 #include "keys.h"
+#include "log.h"
 #include "malloc.h"
 #include "paths.h"
 
@@ -109,14 +110,29 @@ int shirudo_keys_validate_image_set(const char *primary, int root_fd,
 	int rc;
 
 	rc = shirudo_image_config_validate(root_fd);
-	if (!rc)
-		rc = revocations(root_fd, false, false);
-	if (rc)
+	if (rc) {
+		pr_err("image trust set: validate config image: %s",
+		       strerror(-rc));
 		return rc;
+	}
+	rc = revocations(root_fd, false, false);
+	if (rc) {
+		pr_err("image trust set: validate revocations: %s",
+		       strerror(-rc));
+		return rc;
+	}
 	rc = shirudo_keys_load_image_root(primary, root_fd, true, set);
-	if (!rc && (!set->n || set->n_unvouched))
-		rc = -EKEYREJECTED;
-	return rc;
+	if (rc) {
+		pr_err("image trust set: load certificates: %s",
+		       strerror(-rc));
+		return rc;
+	}
+	if (!set->n || set->n_unvouched) {
+		pr_err("image trust set: reject set with %zu certificates and %zu unvouched",
+		       set->n, set->n_unvouched);
+		return -EKEYREJECTED;
+	}
+	return 0;
 }
 
 int shirudo_keys_check_image_set(const struct shirudo_trusted_set *set)

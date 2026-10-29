@@ -20,6 +20,7 @@
 #include "crypto.h"
 #include "hex.h"
 #include "io.h"
+#include "log.h"
 #include "keys.h"
 #include "macros.h"
 #include "malloc.h"
@@ -677,8 +678,11 @@ int shirudo_keys_load_image_root(const char *primary, int root_fd,
 	int keys_fd, rc;
 
 	keys_fd = open_beneath(root_fd, "keys", O_RDONLY | O_DIRECTORY);
-	if (keys_fd < 0)
+	if (keys_fd < 0) {
+		pr_err("image trust set: open config image keys/: %s",
+		       strerror(-keys_fd));
 		return keys_fd;
+	}
 	rc = shirudo_keys_load_image_at(primary, keys_fd, with_trusted, set);
 	close(keys_fd);
 	return rc;
