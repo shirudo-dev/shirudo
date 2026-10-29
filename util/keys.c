@@ -627,6 +627,8 @@ static int load_set_at(const char *primary, int keys_fd, const char *display,
 	rc = set_add(set, primary, sha256, fingerprint, NULL, NULL, 0);
 	if (rc)
 		return rc;
+	if (keys_fd == -ENOENT)
+		return 0;
 	revoked_fd = open_beneath(keys_fd, "revoked", O_RDONLY | O_DIRECTORY);
 	set->n_revoked = count_der_at(revoked_fd);
 	if (with_trusted) {
@@ -678,13 +680,14 @@ int shirudo_keys_load_image_root(const char *primary, int root_fd,
 	int keys_fd, rc;
 
 	keys_fd = open_beneath(root_fd, "keys", O_RDONLY | O_DIRECTORY);
-	if (keys_fd < 0) {
+	if (keys_fd < 0 && keys_fd != -ENOENT) {
 		pr_err("image trust set: open config image keys/: %s",
 		       strerror(-keys_fd));
 		return keys_fd;
 	}
 	rc = shirudo_keys_load_image_at(primary, keys_fd, with_trusted, set);
-	close(keys_fd);
+	if (keys_fd >= 0)
+		close(keys_fd);
 	return rc;
 }
 
