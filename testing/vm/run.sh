@@ -514,6 +514,7 @@ start_user_unit()
 	systemctl --user stop "$unit" >/dev/null 2>&1 || true
 	systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
 	systemd-run --user --unit="$unit" --collect \
+		--working-directory="$RUN_DIR" \
 		--property=KillMode=mixed \
 		--property="StandardOutput=append:$log_path" \
 		--property="StandardError=append:$log_path" \
@@ -635,8 +636,8 @@ run_console()
 	[[ -S "$RUN_DIR/console.sock" ]] ||
 		die "VM '$VM_NAME' has no serial console socket"
 	log "attaching to VM console: $VM_NAME (Ctrl-] detaches)"
-	exec socat 'STDIO,raw,echo=0,escape=0x1d' \
-		"UNIX-CONNECT:${RUN_DIR}/console.sock"
+	cd "$RUN_DIR" || die "cannot enter $RUN_DIR"
+	exec socat 'STDIO,raw,echo=0,escape=0x1d' UNIX-CONNECT:console.sock
 }
 
 ssh_options()
@@ -1481,20 +1482,21 @@ EOF
 
 make_seed
 
+cd "$RUN_DIR" || die "cannot enter $RUN_DIR"
 chmod 0700 "$RUN_DIR/tpm"
 if user_systemd_available; then
 	SWTPM_UNIT_FILE="${RUN_DIR}/swtpm.unit"
 	SWTPM_UNIT="shirudo-vm-${VM_NAME}-swtpm.service"
 	start_user_unit "$SWTPM_UNIT" "$RUN_DIR/swtpm.log" \
 		swtpm socket --tpmstate "dir=${RUN_DIR}/tpm,mode=0700" \
-			--ctrl "type=unixio,path=${SWTPM_SOCKET}" \
+			--ctrl "type=unixio,path=tpm/swtpm-sock" \
 			--tpm2 --log "file=${RUN_DIR}/swtpm.log,level=20"
 	printf '%s\n' "$SWTPM_UNIT" >"$SWTPM_UNIT_FILE"
 	SWTPM_PID="$(user_unit_pid "$SWTPM_UNIT")" || die "could not determine swtpm systemd PID"
 	printf '%s\n' "$SWTPM_PID" >"$SWTPM_PIDFILE"
 else
 	swtpm socket --tpmstate "dir=${RUN_DIR}/tpm,mode=0700" \
-		--ctrl "type=unixio,path=${SWTPM_SOCKET}" \
+		--ctrl "type=unixio,path=tpm/swtpm-sock" \
 		--tpm2 --log "file=${RUN_DIR}/swtpm.log,level=20" \
 		--pid "file=${SWTPM_PIDFILE}" --daemon
 fi
@@ -1548,10 +1550,10 @@ QEMU_ARGS=(
 	-virtfs "local,id=shirudo-src,path=${REPO_ROOT},mount_tag=shirudo-src,security_model=none,readonly=on" \
 	-virtfs "local,id=shirudo-bundle,path=${TEST_VM_HOST_BUNDLE},mount_tag=shirudo-bundle,security_model=none,readonly=on" \
 	-virtfs "local,id=shirudo-out,path=${RUN_DIR}/result,mount_tag=shirudo-out,security_model=none" \
-	-chardev "socket,id=chrtpm,path=${SWTPM_SOCKET}" \
+	-chardev "socket,id=chrtpm,path=tpm/swtpm-sock" \
 	-tpmdev emulator,id=tpm0,chardev=chrtpm \
 	-device "$TPM_DEVICE" \
-	-chardev "socket,id=console,path=${RUN_DIR}/console.sock,server=on,wait=off,logfile=${RUN_DIR}/console.log,logappend=on" \
+	-chardev "socket,id=console,path=console.sock,server=on,wait=off,logfile=${RUN_DIR}/console.log,logappend=on" \
 	-serial chardev:console \
 	-display none \
 	-monitor none \
