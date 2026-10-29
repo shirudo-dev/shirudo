@@ -14,7 +14,7 @@ permissions:
 jobs:
   deb:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
@@ -42,7 +42,7 @@ jobs:
           path: build/lvh-target-deps
           key: lvh-target-deps-kind-bpf-next-20260603.072225-${{ hashFiles('.github/scripts/lvh-target-deps.sh') }}
 
-      - name: Build the tarball, deb and target rpm packages and run shirudo in LVH VM
+      - name: Build installer tarballs and deb package in LVH VM
         uses: cilium/little-vm-helper@f86d344aca812dda5aef167867a9a0a90ca6cca5 # v0.0.31
         with:
           test-name: shirudo-apt
@@ -55,55 +55,8 @@ jobs:
           cpu: 4
           mem: 8G
           cmd: |
-            grep -qw bpf /sys/kernel/security/lsm
-            grep -aq 'signature_size' /sys/kernel/btf/vmlinux || {
-              echo 'kernel BTF lacks bpf_attr.signature_size; needs a signed-BPF capable bpf-next kernel' >&2
-              exit 1
-            }
             cd /host
-
-            apt-get update
-            apt-get install -y --no-install-recommends \
-              build-essential \
-              ca-certificates \
-              clang \
-              cryptsetup-bin \
-              e2fsprogs \
-              llvm \
-              python3 \
-              pkg-config \
-              autoconf \
-              autoconf-archive \
-              automake \
-              doxygen \
-              libacl1-dev \
-              libftdi1-dev \
-              libini-config-dev \
-              libssl-dev \
-              libfido2-dev \
-              libtss2-dev \
-              libelf-dev \
-              zlib1g-dev \
-              libzstd-dev \
-              libcurl4-openssl-dev \
-              libjson-c-dev \
-              libtool \
-              libtool-bin \
-              libltdl-dev \
-              libusb-1.0-0-dev \
-              libluajit-5.1-dev \
-              uuid-dev \
-              dpkg-dev \
-              rpm \
-              curl \
-              binutils \
-              file \
-              jq \
-              git
-
-            git config --global --add safe.directory /host
-
-            sh .github/scripts/lvh-target-deps.sh
+            sh .github/scripts/lvh-prepare.sh
 
             cd /host
 
@@ -114,8 +67,8 @@ jobs:
             deb_version=\$(printf '%s' "\$SHIRUDO_CI_VERSION" | \
               sed 's/^v//; s/[^A-Za-z0-9.+:~-]/./g; /^[0-9]/!s/^/0~/')
             test -n "\$deb_version"
-            # Every package target starts from make clean, which also removes
-            # the other families' outputs, so stash each result as it is built.
+            # Each package target starts with make clean, so preserve these
+            # outputs before bindeb-pkg removes them.
             mkdir -p /tmp/shirudo-packages
             make -C packaging bintar-pkg \
               SHIRUDO_GIT_DESCRIBE='printenv SHIRUDO_CI_VERSION' \
@@ -123,9 +76,7 @@ jobs:
               SHIRUDO_TARGET_PKG_CONFIG_PATH=/tmp/shirudo-curl/lib/pkgconfig:/tmp/shirudo-openssl/lib/pkgconfig \
               SHIRUDO_TARGET_STATIC_LIBDIR=/tmp/shirudo-target-deps/lib
             cp shirudo.tar.gz shirudo-static.tar.gz /tmp/shirudo-packages/
-            # The operator package ships vmlinux.h for the target kernel; the
-            # Fedora job below builds against this bpf-next one, not its host's.
-            cp vendor/linux/vmlinux.h /tmp/shirudo-packages/vmlinux.h
+            cp vendor/linux/vmlinux.h /tmp/shirudo-packages/
 
             # Both installers relocate under DESTDIR and carry static PIE.
             for tarball in shirudo.tar.gz shirudo-static.tar.gz; do
@@ -149,26 +100,13 @@ jobs:
 
             sh .github/scripts/check-static-target.sh shirudo-target
 
-            # The target rpm is fully static and portable, so it is
-            # built here; the operator rpm links the distribution's shared
-            # libraries and is built natively in the Fedora job below.
-            make -C packaging binrpm-pkg PKG_ROLES=target \
-              PKG_RAW_VERSION="\$SHIRUDO_CI_VERSION" \
-              SHIRUDO_GIT_DESCRIBE='printenv SHIRUDO_CI_VERSION' \
-              TARGET_DEPS_PREBUILT=1 \
-              SHIRUDO_TARGET_PKG_CONFIG_PATH=/tmp/shirudo-curl/lib/pkgconfig:/tmp/shirudo-openssl/lib/pkgconfig \
-              SHIRUDO_TARGET_STATIC_LIBDIR=/tmp/shirudo-target-deps/lib
-            rpm -qpi shirudo-target-*.rpm
-            rpm -qp --scripts shirudo-target-*.rpm | grep -q 'systemctl enable shirudo.service'
-            cp shirudo-target-*.rpm /tmp/shirudo-packages/
             cp /tmp/shirudo-packages/* .
 
             # An SPDX SBOM beside every package, from the dependency builds
             # the binaries linked.
             SHIRUDO_TARGET_PKG_CONFIG_PATH=/tmp/shirudo-curl/lib/pkgconfig:/tmp/shirudo-openssl/lib/pkgconfig \
             SHIRUDO_TARGET_STATIC_LIBDIR=/tmp/shirudo-target-deps/lib \
-              .github/scripts/gen-sbom.sh shirudo-*.deb shirudo-target-*.rpm \
-              shirudo.tar.gz shirudo-static.tar.gz
+              .github/scripts/gen-sbom.sh shirudo-*.deb
 
             apt-get update
             apt-get install -y /host/shirudo-operator_*.deb
@@ -201,15 +139,6 @@ jobs:
             shirudo-*.deb.spdx.json
           if-no-files-found: error
 
-      - name: Upload target rpm package
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: shirudo-rpm-target
-          path: |
-            shirudo-target-*.rpm
-            shirudo-target-*.rpm.spdx.json
-          if-no-files-found: error
-
       - name: Upload installer tarballs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -221,6 +150,90 @@ jobs:
             shirudo-static.tar.gz.spdx.json
           if-no-files-found: error
 
+  rpm-target:
+    outputs:
+      version: ${{ steps.build-version.outputs.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Determine build version
+        id: build-version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$REF_TYPE" = tag ]; then
+            version=$REF_NAME
+          else
+            version=$(git describe --tags --always --dirty)
+          fi
+          mkdir -p build
+          printf '%s\n' "$version" > build/ci-version
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the LVH static target dependencies
+        id: lvh-target-deps
+        uses: actions/cache/restore@v4
+        with:
+          path: build/lvh-target-deps
+          key: lvh-target-deps-kind-bpf-next-20260603.072225-${{ hashFiles('.github/scripts/lvh-target-deps.sh') }}
+
+      - name: Build the target RPM and BPF header in LVH
+        uses: cilium/little-vm-helper@f86d344aca812dda5aef167867a9a0a90ca6cca5 # v0.0.31
+        with:
+          test-name: shirudo-rpm-target
+          image: kind
+          image-version: bpf-next-20260603.072225
+          kernel-version: bpf-next-main
+          host-mount: ${{ github.workspace }}
+          images-folder-parent: ${{ github.workspace }}/../lvh
+          install-dependencies: true
+          cpu: 4
+          mem: 8G
+          cmd: |
+            set -eu
+            cd /host
+            sh .github/scripts/lvh-prepare.sh
+
+            export SHIRUDO_CI_VERSION="\$(cat build/ci-version)"
+            test -n "\$SHIRUDO_CI_VERSION"
+
+            make -C packaging binrpm-pkg PKG_ROLES=target \
+              PKG_RAW_VERSION="\$SHIRUDO_CI_VERSION" \
+              SHIRUDO_GIT_DESCRIBE='printenv SHIRUDO_CI_VERSION' \
+              TARGET_DEPS_PREBUILT=1 \
+              SHIRUDO_TARGET_PKG_CONFIG_PATH=/tmp/shirudo-curl/lib/pkgconfig:/tmp/shirudo-openssl/lib/pkgconfig \
+              SHIRUDO_TARGET_STATIC_LIBDIR=/tmp/shirudo-target-deps/lib
+
+            cp vendor/linux/vmlinux.h .
+            rpm -qpi shirudo-target-*.rpm
+            rpm -qp --scripts shirudo-target-*.rpm | grep -q 'systemctl enable shirudo.service'
+            SHIRUDO_TARGET_PKG_CONFIG_PATH=/tmp/shirudo-curl/lib/pkgconfig:/tmp/shirudo-openssl/lib/pkgconfig \
+            SHIRUDO_TARGET_STATIC_LIBDIR=/tmp/shirudo-target-deps/lib \
+              .github/scripts/gen-sbom.sh shirudo-target-*.rpm
+
+      - name: Save the LVH static target dependencies
+        if: always() && steps.lvh-target-deps.outputs.cache-hit != 'true' && hashFiles('build/lvh-target-deps/lib/libcrypto.a') != '' && hashFiles('build/lvh-target-deps/curl/lib/libcurl.a') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: build/lvh-target-deps
+          key: ${{ steps.lvh-target-deps.outputs.cache-primary-key }}
+
+      - name: Upload target RPM package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: shirudo-rpm-target
+          path: |
+            shirudo-target-*.rpm
+            shirudo-target-*.rpm.spdx.json
+          if-no-files-found: error
+
       - name: Upload the bpf-next vmlinux.h
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -229,8 +242,9 @@ jobs:
           if-no-files-found: error
 
   rpm-operator:
-    needs: deb
+    needs: rpm-target
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     container:
       image: fedora:44
       options: --ulimit memlock=-1:-1
@@ -261,16 +275,9 @@ jobs:
 
       - name: Build the operator rpm natively
         env:
-          REF_TYPE: ${{ github.ref_type }}
-          REF_NAME: ${{ github.ref_name }}
+          SHIRUDO_CI_VERSION: ${{ needs.rpm-target.outputs.version }}
         run: |
           git config --global --add safe.directory "$PWD"
-          if [ "$REF_TYPE" = tag ]; then
-            version=$REF_NAME
-          else
-            version=$(git describe --tags --always --dirty)
-          fi
-          export SHIRUDO_CI_VERSION="$version"
           make -C packaging binrpm-pkg PKG_ROLES=operator \
             BPF_VMLINUX_H="$PWD/bpf-next/vmlinux.h" \
             PKG_RAW_VERSION="$SHIRUDO_CI_VERSION" \
@@ -321,6 +328,7 @@ jobs:
     if: github.event_name == 'push' && github.ref_type == 'tag'
     needs: [deb, rpm-operator]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
 
