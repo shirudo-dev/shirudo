@@ -15,6 +15,9 @@ path the kernel accepts from userspace: a signed loader. This page explains
 what the author writes, what the build adds around it, what the target does
 with it, and what an upatch cannot do.
 
+We use the name "upatch" as an easier-to-type representation of "µpatch" or 
+"micropatch". 
+
 BPF program
 -----------
 

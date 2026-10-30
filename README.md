@@ -11,7 +11,7 @@
 [![License](https://img.shields.io/badge/license-BSD--2--Clause-blue.svg)](LICENSE)
 
 shirudo ("shields", JP) is an eBPF security platform for the agentic era.
-It ships eBPF "live patches", called upatches, to Linux targets without a
+It ships eBPF "live patches", called upatches ("micropatches"), to Linux targets without a
 reboot, and it makes sure a target runs only the eBPF programs its operator signed.
 upatches can harden or patch the kernel itself or userspace applications;
 the goal is on-the-fly security visibility, patching and attack-surface
