@@ -488,12 +488,11 @@ static __always_inline bool shirudo_task_has_seccomp(struct task_struct *task)
 
 SEC("lsm.s/bprm_creds_for_exec")
 int BPF_PROG(shirudo_seal_bprm_creds_for_exec,
-	     struct linux_binprm *bprm, int ret)
+	     struct linux_binprm *bprm __attribute__((__unused__)), int ret)
 {
 	struct task_struct *task = bpf_get_current_task_btf();
 	struct shirudo_task_policy *policy;
 
-	(void)bprm;
 	if (ret)
 		return ret;
 	policy = bpf_task_storage_get(&policy_map, task, NULL,

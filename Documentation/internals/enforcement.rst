@@ -419,10 +419,10 @@ when the record it needs is missing.
      - No task storage leaves the task without authority.
    * - ``lsm.s/bprm_creds_for_exec``, ``lsm.s/bprm_check_security``,
        ``lsm.s/bprm_committed_creds`` (``seal``)
-     - Reset, accumulate and commit the policy bitset from the original
-       executable and each interpreter. An absent policy or a file system
-       without xattrs contributes zero bits; a malformed or unreadable
-       policy xattr refuses exec.
+     - Seed with the task's committed bits, accumulate the original
+       executable and each interpreter, then commit. An absent policy or
+       a file system without xattrs contributes zero bits; a malformed
+       or unreadable policy xattr refuses exec.
      - ``EACCES``
      - Uncounted
      - Failed exec leaves committed policy unchanged.

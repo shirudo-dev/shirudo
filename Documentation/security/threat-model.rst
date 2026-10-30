@@ -659,13 +659,14 @@ returns the label (U12).
 
 Executables may carry ``security.bpf.shirudo.policy``, an 8-byte
 target-native ``__u64`` bitset. During exec, the seal ORs the value from
-the original file and each interpreter into ``policy_map``. ``ENODATA``
-or ``EOPNOTSUPP`` means no policy; malformed or unreadable values refuse
-exec.
-Successful exec commits the accumulated bits, an unlabeled exec clears
-them, failed exec preserves the previous value, and children inherit the
-committed value. The xattr remains on the inode, and only a task with
-runtime authority may set, update or remove it (``SealLabel``).
+the original file and each interpreter into ``policy_map``. Only
+``ENODATA`` or ``EOPNOTSUPP`` means no policy; malformed or unreadable
+values refuse exec.
+The candidate starts with the task's committed bits, so successful exec
+accumulates policy bits and an unlabeled exec preserves the existing
+value. Failed exec preserves the previous value, and children inherit
+the committed value. The xattr remains on the inode, and only a task
+with runtime authority may set, update or remove it (``SealLabel``).
 
 The seal keeps a mark in inode storage on every labeled directory it
 has seen since the inode came into memory. A new inode under a marked
