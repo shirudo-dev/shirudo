@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 400" width="760" height="400" font-family="sans-serif" role="img" aria-labelledby="t">
-  <title id="t">Binding the measurement register: the PCR 9 and 11 values enter the write policy, the policy defines the NV extend index, and the index name is anchored in PCR 9</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 433" width="900" height="433" font-family="sans-serif" role="img" aria-labelledby="t">
+  <title id="t">Binding the measurement register: PCRs 9 and 11 enter the write policy, and the initialized NV index's public fields determine the anchor extended into PCR 9</title>
   <style>@media (prefers-color-scheme: dark) { [fill="#5d6675"] { fill: #b4bcc7; } }</style>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -11,16 +11,16 @@
     <rect x="20" y="140" width="210" height="110" rx="6"/>
     <rect x="280" y="30" width="260" height="180" rx="6"/>
     <rect x="280" y="250" width="260" height="70" rx="6"/>
-    <rect x="575" y="30" width="165" height="140" rx="6"/>
-    <rect x="575" y="205" width="165" height="125" rx="6"/>
+    <rect x="575" y="30" width="305" height="132" rx="6"/>
+    <rect x="575" y="205" width="305" height="155" rx="6"/>
   </g>
   <g fill="none" stroke="#8a93a0" stroke-width="1.5" marker-end="url(#arrow)">
     <line x1="230" y1="70" x2="278" y2="70"/>
     <line x1="230" y1="175" x2="278" y2="175"/>
     <line x1="540" y1="90" x2="573" y2="90"/>
     <line x1="410" y1="250" x2="410" y2="212"/>
-    <line x1="657" y1="170" x2="657" y2="203"/>
-    <polyline points="657,330 657,365 125,365 125,252"/>
+    <line x1="728" y1="162" x2="728" y2="203"/>
+    <polyline points="728,360 728,390 125,390 125,252"/>
   </g>
   <g fill="#5d6675" font-size="12">
     <text x="32" y="52" font-weight="bold" font-size="13">PCR 11</text>
@@ -37,7 +37,7 @@
     <text x="292" y="74">PolicyOR of two branches:</text>
     <text x="304" y="94">written: PolicyNvWritten(YES)</text>
     <text x="304" y="114">init: PolicyNvWritten(NO)</text>
-    <text x="304" y="132">and PolicyPCR(9, 11)</text>
+    <text x="332" y="132">and PolicyPCR(9, 11)</text>
     <text x="292" y="156">then PolicySigned(writer key)</text>
     <text x="292" y="176">then PolicyCommandCode(NV_Extend)</text>
     <text x="292" y="198" font-size="11">digest = the index's authPolicy</text>
@@ -47,36 +47,40 @@
     <text x="292" y="310">signs nonce and command hash</text>
 
     <text x="587" y="52" font-weight="bold" font-size="13">NV index</text>
-    <text x="587" y="72">0x01818E00</text>
-    <text x="587" y="92" font-size="11">TPM_NT_EXTEND</text>
-    <text x="587" y="108" font-size="11">POLICYWRITE</text>
-    <text x="587" y="124" font-size="11">ORDERLY</text>
-    <text x="587" y="140" font-size="11">CLEAR_STCLEAR</text>
-    <text x="587" y="160" font-size="11">Name = H(public area)</text>
+    <text x="587" y="72" font-size="11"><tspan font-weight="bold">Handle:</tspan> 0x01818E00</text>
+    <text x="587" y="90" font-size="11"><tspan font-weight="bold">Type:</tspan> TPM_NT_EXTEND</text>
+    <text x="587" y="108" font-weight="bold" font-size="11">Attributes</text>
+    <text x="599" y="123" font-size="11">POLICYWRITE</text>
+    <text x="599" y="136" font-size="11">ORDERLY</text>
+    <text x="599" y="149" font-size="11">CLEAR_STCLEAR</text>
 
     <text x="587" y="227" font-weight="bold" font-size="13">Anchor</text>
-    <text x="587" y="247">nvpcr-init:shirudo:</text>
-    <text x="587" y="263">0x1818e00:&lt;written</text>
-    <text x="587" y="279">Name&gt;</text>
-    <text x="587" y="303" font-size="11">its SHA-256 extends</text>
-    <text x="587" y="319" font-size="11">PCR 9</text>
+    <g font-family="monospace" font-size="11">
+      <text x="587" y="249">SHA-256(</text>
+      <text x="599" y="265">"nvpcr-init:shirudo:0x1818e00:"</text>
+      <text x="599" y="281">|| hex(0x000B || SHA-256(</text>
+      <text x="611" y="297">handle || hash algorithm ID</text>
+      <text x="611" y="313">|| written attributes || 0x0020</text>
+      <text x="611" y="329">|| policy digest || size</text>
+      <text x="599" y="345">)))</text>
+    </g>
   </g>
   <g fill="none" stroke="#8a93a0" stroke-width="1.2">
     <circle cx="254" cy="58" r="9"/>
     <circle cx="254" cy="163" r="9"/>
     <circle cx="557" cy="76" r="9"/>
-    <circle cx="672" cy="187" r="9"/>
-    <circle cx="390" cy="350" r="9"/>
+    <circle cx="743" cy="183" r="9"/>
+    <circle cx="390" cy="375" r="9"/>
   </g>
   <g fill="#5d6675" font-size="11" text-anchor="middle">
     <text x="254" y="62">1</text>
     <text x="254" y="167">1</text>
     <text x="557" y="80">2</text>
-    <text x="672" y="191">3</text>
-    <text x="390" y="354">4</text>
+    <text x="743" y="187">3</text>
+    <text x="390" y="379">4</text>
   </g>
   <g fill="#5d6675" font-size="11">
     <text x="418" y="236">signs</text>
-    <text x="406" y="388" text-anchor="middle">PCR_Extend(9, SHA-256(anchor)) closes the init branch</text>
+    <text x="450" y="418" text-anchor="middle">PCR_Extend(9, anchor) closes the init branch</text>
   </g>
 </svg>
