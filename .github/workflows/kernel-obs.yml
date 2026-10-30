@@ -142,7 +142,7 @@ jobs:
           kernel-version: bpf-next-main
           host-mount: ${{ github.workspace }}
           images-folder-parent: ${{ github.workspace }}/../lvh
-          install-dependencies: true
+          install-dependencies: false
           cpu: 4
           mem: 8G
           cmd: |
@@ -190,7 +190,7 @@ jobs:
           kernel-version: bpf-next-main
           host-mount: ${{ github.workspace }}
           images-folder-parent: ${{ github.workspace }}/../lvh
-          install-dependencies: true
+          install-dependencies: false
           cpu: 4
           mem: 8G
           cmd: |
