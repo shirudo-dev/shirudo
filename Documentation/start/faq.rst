@@ -11,6 +11,12 @@ FAQ
 Short answers to the questions newcomers ask most, each with the page
 that explains it.
 
+What is an upatch?
+------------------
+
+A signed BPF program that shirudo loads into the running kernel without a
+reboot. See :doc:`/upatches/learn/concepts`.
+
 Is shirudo ready for production?
 --------------------------------
 
