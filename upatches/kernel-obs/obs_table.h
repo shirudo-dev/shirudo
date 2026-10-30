@@ -39,7 +39,7 @@ struct OBS_FN(entry) {
 	OBS_T_VAL val;
 };
 
-struct OBS_FN(state) {
+struct OBS_FN(table_state) {
 	__u32 next_slot;
 	__u32 overflow;
 	__u64 since_ns;
@@ -48,12 +48,12 @@ struct OBS_FN(state) {
 };
 
 enum {
-	OBS_FN(STATE_PAGES) = (sizeof(struct OBS_FN(state)) + 4095) / 4096,
+	OBS_FN(STATE_PAGES) = (sizeof(struct OBS_FN(table_state)) + 4095) / 4096,
 };
 
-static struct OBS_FN(state) __arena *OBS_FN(states)[2];
-static struct OBS_FN(state) __arena *OBS_FN(active);
-static struct OBS_FN(state) __arena *OBS_FN(drain);
+static struct OBS_FN(table_state) __arena *OBS_FN(states)[2];
+static struct OBS_FN(table_state) __arena *OBS_FN(active);
+static struct OBS_FN(table_state) __arena *OBS_FN(drain);
 static __u32 OBS_FN(lost);
 
 static int OBS_T_EMIT(struct shirudo_serial_chunk *chunk, __u32 off,
@@ -63,7 +63,8 @@ static int OBS_T_EMIT(struct shirudo_serial_chunk *chunk, __u32 off,
  * The barrier keeps clang from turning the loop into a memset, which
  * the BPF backend cannot lower for arena memory.
  */
-static __always_inline void OBS_FN(clear)(struct OBS_FN(state) __arena *state)
+static __always_inline void
+OBS_FN(clear)(struct OBS_FN(table_state) __arena *state)
 {
 	__u32 i;
 
@@ -78,7 +79,7 @@ static __always_inline void OBS_FN(clear)(struct OBS_FN(state) __arena *state)
 
 static __always_inline int OBS_FN(init)(__u64 now)
 {
-	struct OBS_FN(state) __arena *state;
+	struct OBS_FN(table_state) __arena *state;
 	int i;
 
 	if (OBS_FN(active))
@@ -101,7 +102,7 @@ static __always_inline int OBS_FN(init)(__u64 now)
 static __always_inline struct OBS_FN(entry) __arena *
 OBS_FN(touch)(const OBS_T_KEY *key, int *status)
 {
-	struct OBS_FN(state) __arena *state = OBS_FN(active);
+	struct OBS_FN(table_state) __arena *state = OBS_FN(active);
 	struct OBS_FN(entry) __arena *e;
 	__u32 b, idx, head, i;
 
@@ -152,8 +153,8 @@ OBS_FN(touch)(const OBS_T_KEY *key, int *status)
 
 static __always_inline void OBS_FN(flip)(__u64 now)
 {
-	struct OBS_FN(state) __arena *cur = OBS_FN(active);
-	struct OBS_FN(state) __arena *spare = OBS_FN(drain);
+	struct OBS_FN(table_state) __arena *cur = OBS_FN(active);
+	struct OBS_FN(table_state) __arena *spare = OBS_FN(drain);
 	__u32 n;
 
 	if (!cur || !spare)
@@ -230,8 +231,8 @@ static __always_inline int OBS_FN(chunk_meta)(__u32 key, __u32 flags,
 }
 
 static __always_inline int
-OBS_FN(emit_header)(const struct OBS_FN(state) __arena *state, __u32 hdr_flags,
-		    __u64 now)
+OBS_FN(emit_header)(const struct OBS_FN(table_state) __arena *state,
+		    __u32 hdr_flags, __u64 now)
 {
 	struct shirudo_serial_chunk *chunk;
 	__u32 off, used;
@@ -262,7 +263,7 @@ OBS_FN(emit_header)(const struct OBS_FN(state) __arena *state, __u32 hdr_flags,
 }
 
 struct OBS_FN(emit_ctx) {
-	struct OBS_FN(state) __arena *state;
+	struct OBS_FN(table_state) __arena *state;
 	__u32 start;
 	__u32 used;
 	__u32 output_slots;
@@ -313,7 +314,7 @@ SEC("syscall")
 int OBS_CAT(shirudo_serialize__, OBS_T_MAP)(struct shirudo_serialize_ctx *ctx)
 {
 	struct OBS_FN(emit_ctx) emit = {};
-	struct OBS_FN(state) __arena *state;
+	struct OBS_FN(table_state) __arena *state;
 	__u32 flags = 0, hdr_flags = 0, total_chunks, page_bytes, scan, i;
 	__u64 now = obs_now();
 	bool peek;
