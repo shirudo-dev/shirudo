@@ -15,6 +15,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include <sys/xattr.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -52,6 +53,101 @@ static int check_mark(const char *pin, int expected)
 	close(pidfd);
 	close(fd);
 	return ret;
+}
+
+static int read_policy(const char *pin, __u64 *active)
+{
+	struct shirudo_task_policy policy = {};
+	union bpf_attr attr = {};
+	int fd, pidfd, rc;
+
+	pidfd = syscall(SYS_pidfd_open, getpid(), 0);
+	if (pidfd < 0)
+		return -errno;
+	attr.pathname = (uintptr_t)pin;
+	attr.file_flags = BPF_F_RDONLY;
+	fd = syscall(SYS_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
+	if (fd < 0) {
+		rc = -errno;
+		close(pidfd);
+		return rc;
+	}
+	memset(&attr, 0, sizeof(attr));
+	attr.map_fd = fd;
+	attr.key = (uintptr_t)&pidfd;
+	attr.value = (uintptr_t)&policy;
+	rc = syscall(SYS_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) ?
+		-errno : 0;
+	close(fd);
+	close(pidfd);
+	if (!rc)
+		*active = policy.active;
+	return rc;
+}
+
+static int parse_policy(const char *text, __u64 *value)
+{
+	char *end;
+	__u64 parsed;
+
+	errno = 0;
+	parsed = strtoull(text, &end, 0);
+	if (errno || end == text || *end)
+		return -EINVAL;
+	*value = (__u64)parsed;
+	return 0;
+}
+
+static int set_policy(const char *path, const char *text)
+{
+	__u64 value;
+
+	if (parse_policy(text, &value))
+		return 2;
+	return setxattr(path, "security.bpf.shirudo.policy", &value,
+			sizeof(value), 0) ? 1 : 0;
+}
+
+static int check_policy(const char *text)
+{
+	__u64 expected, active = 0;
+
+	if (parse_policy(text, &expected) ||
+	    read_policy("/run/shirudo/bpffs/policy_map", &active))
+		return 1;
+	return active != expected;
+}
+
+static int check_policy_env(void)
+{
+	const char *expected = getenv("SHIRUDO_EXPECTED_POLICY");
+
+	return !expected || check_policy(expected);
+}
+
+static int fork_exec_policy_env(void)
+{
+	const char *path = getenv("SHIRUDO_POLICY_CHILD");
+	const char *parent = getenv("SHIRUDO_POLICY_PARENT");
+	const char *expected = getenv("SHIRUDO_POLICY_CHILD_EXPECTED");
+	char *const child_argv[] = { (char *)path, NULL };
+	pid_t child;
+	int status;
+
+	if (!path || !parent || !expected || check_policy(parent))
+		return 1;
+	child = fork();
+	if (child < 0)
+		return 1;
+	if (!child) {
+		if (setenv("SHIRUDO_EXPECTED_POLICY", expected, 1))
+			_exit(127);
+		execv(path, child_argv);
+		_exit(127);
+	}
+	if (waitpid(child, &status, 0) != child)
+		return 1;
+	return !WIFEXITED(status) || WEXITSTATUS(status);
 }
 
 static void print_hex(const __u8 *bytes, size_t n)
@@ -164,6 +260,12 @@ int main(int argc, char **argv)
 		printf("%lu\n", getauxval(AT_SECURE));
 		return 0;
 	}
+	if (argc == 4 && !strcmp(argv[1], "set-policy"))
+		return set_policy(argv[2], argv[3]);
+	if (argc >= 2 && !strcmp(argv[1], "check-policy"))
+		return check_policy_env();
+	if (argc >= 2 && !strcmp(argv[1], "fork-exec-policy"))
+		return fork_exec_policy_env();
 	if (argc < 3)
 		return 2;
 	if (!strcmp(argv[1], "unlink"))

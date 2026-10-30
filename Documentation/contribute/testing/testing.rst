@@ -80,7 +80,8 @@ Test numbers and families
 
 A shell test is named ``t<F><K><NN>-<what>.sh``:
 
-- ``F`` is the family, which fixes the directory.
+- ``F`` is the numbered family. A family may have multiple named
+  directories when tests need separate VM suites.
 - ``K`` is ``0`` for an operator test, which runs on the build host
   without root, a kernel or a TPM of its own, and ``1`` for a target
   test, which runs as root in the family's VM against an initialized
@@ -120,9 +121,10 @@ A shell test is named ``t<F><K><NN>-<what>.sh``:
      - Runtime and config images, settings, keys, activation,
        revocation and interruption
    * - 6
-     - ``functional/tamperproof/``
+     - ``functional/tamperproof/``, ``functional/labels/``
      - Attacks on the admission and BPF command policy, bpffs, the
-       seal, task authority, the keyrings and the TPM path
+       seal, task authority, task policy labels, the keyrings and the TPM
+       path
    * - 7
      - ``functional/bpm/``
      - Package commands, publishing and the upatch tree

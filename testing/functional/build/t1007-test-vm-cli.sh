@@ -931,7 +931,7 @@ test_expect_success 'the runners split the tests by number' '
 	! grep -q "/t[0-9]1[0-9][0-9]-" "$WORK/operator-tests" &&
 	families=$(make -s -C .. -f testing/Makefile help |
 		sed -n "s/.*families: //p") &&
-	[ "$families" = "build signing upatch tpm image tamperproof bpm otel" ] &&
+	[ "$families" = "build signing upatch tpm image labels tamperproof bpm otel" ] &&
 	for d in functional/*/; do
 		f=${d#functional/}
 		case " $families " in *" ${f%/} "*) ;; *) return 1 ;; esac
