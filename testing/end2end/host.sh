@@ -60,7 +60,9 @@ trap down EXIT
 say "a CA, and a server certificate for the registry and the collector"
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
 	-keyout "$W/ca.key" -out "$W/ca.pem" -days 1 \
-	-subj /CN=shirudo-end2end-ca 2>/dev/null
+	-subj /CN=shirudo-end2end-ca \
+	-addext 'basicConstraints=critical,CA:TRUE' \
+	-addext 'keyUsage=critical,keyCertSign,cRLSign' 2>/dev/null
 openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
 	-keyout "$W/server.key" -out "$W/server.csr" \
 	-subj /CN=shirudo-end2end 2>/dev/null
