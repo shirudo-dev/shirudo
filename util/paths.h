@@ -76,6 +76,7 @@
 #define BPRM_CHECK_LINK_PIN	BPFFS_DIR "/bpf2_bprm_check_security_link"
 #define SEAL_FILE_OPEN_PIN	BPFFS_DIR "/seal_file_open_link"
 #define SEAL_BPRM_CHECK_PIN	BPFFS_DIR "/seal_bprm_check_security_link"
+#define SEAL_BPRM_CREDS_PIN	BPFFS_DIR "/seal_bprm_creds_link"
 #define SEAL_BPRM_COMMITTED_PIN BPFFS_DIR "/seal_bprm_committed_creds_link"
 #define SEAL_TASK_ALLOC_PIN	BPFFS_DIR "/seal_task_alloc_link"
 #define SEAL_PTRACE_PIN		BPFFS_DIR "/seal_ptrace_access_check_link"
@@ -98,6 +99,7 @@
 #define BPFFS_UPATCHES_DIR	BPFFS_DIR "/upatches"
 #define IDENTITY_PIN		BPFFS_DIR "/identity"
 #define TAMPER_PIN		BPFFS_DIR "/tamper"
+#define POLICY_PIN		BPFFS_DIR "/policy_map"
 
 #define RUNTIME_DIR		RUN_DIR "/runtime"
 #define CONFIG_IMAGE_DIR		RUN_DIR "/config"

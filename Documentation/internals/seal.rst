@@ -70,6 +70,20 @@ that is not on the runtime image commits an untrusted candidate and so
 clears the mark. ``lsm/task_alloc`` copies a parent's mark to every
 child.
 
+Policy bits
+-----------
+
+An executable may carry ``security.bpf.shirudo.policy``, an 8-byte native
+``__u64`` bitset. During exec, ``bprm_check_security`` ORs the bitsets
+from the original file and each interpreter into a task-local candidate
+in ``policy_map``. ``bprm_committed_creds`` commits that value only after
+exec succeeds; a successful exec with no policy bits clears the previous
+value, while a failed exec leaves it unchanged. A fork or clone inherits
+the committed bits. The xattr remains on the inode. Only a task with
+runtime authority may set, update or remove it. An absent policy or a
+file system without xattrs contributes zero bits; invalid lengths and
+other read errors refuse the exec.
+
 The device record that the exec check consults comes from
 ``lsm.s/bdev_setintegrity``: it records a dm-verity device as runtime
 when its root hash equals the runtime root the UKI authenticated, which

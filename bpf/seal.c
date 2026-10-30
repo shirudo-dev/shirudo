@@ -94,6 +94,18 @@ static __always_inline bool seal_is_label(const char *name)
 	return !bpf_strncmp(buf, sizeof(XATTR), XATTR);
 }
 
+static __always_inline bool seal_is_policy(const char *name)
+{
+	char buf[sizeof(SHIRUDO_POLICY_XATTR) + 1];
+	long n;
+
+	n = bpf_probe_read_kernel_str(buf, sizeof(buf), name);
+	if (n != sizeof(SHIRUDO_POLICY_XATTR))
+		return false;
+	return !bpf_strncmp(buf, sizeof(SHIRUDO_POLICY_XATTR),
+			    SHIRUDO_POLICY_XATTR);
+}
+
 static __always_inline struct seal_scratch *
 seal_scratch_get(struct task_struct *task)
 {
@@ -128,8 +140,14 @@ void BPF_PROG(shirudo_seal_bprm_committed_creds,
 	      const struct linux_binprm *bprm)
 {
 	struct task_struct *task = bpf_get_current_task_btf();
+	struct shirudo_task_policy *policy;
 	struct task_authority *authority;
 
+	policy = bpf_task_storage_get(&policy_map, task, NULL, 0);
+	if (policy) {
+		policy->active = policy->candidate;
+		policy->candidate = 0;
+	}
 	authority = bpf_task_storage_get(&shirudo_tasks, task, NULL, 0);
 	if (!authority)
 		return;
@@ -144,11 +162,21 @@ int BPF_PROG(shirudo_seal_task_alloc, struct task_struct *child,
 	     __u64 clone_flags, int ret)
 {
 	struct task_struct *parent = bpf_get_current_task_btf();
+	struct shirudo_task_policy *parent_policy;
 	struct task_authority *parent_authority;
+	struct shirudo_task_policy *policy;
 	struct task_authority *authority;
 
 	if (ret)
 		return ret;
+	parent_policy = bpf_task_storage_get(&policy_map, parent, NULL, 0);
+	if (parent_policy && parent_policy->active) {
+		policy = bpf_task_storage_get(&policy_map, child, NULL,
+					      BPF_LOCAL_STORAGE_GET_F_CREATE);
+		if (!policy)
+			return -ENOMEM;
+		policy->active = parent_policy->active;
+	}
 	parent_authority = bpf_task_storage_get(&shirudo_tasks, parent,
 						NULL, 0);
 	if (!parent_authority || !parent_authority->trusted)
@@ -427,7 +455,7 @@ int BPF_PROG(shirudo_seal_inode_setxattr, struct mnt_idmap *idmap,
 {
 	if (ret)
 		return ret;
-	if (seal_is_label(name))
+	if (seal_is_label(name) || seal_is_policy(name))
 		return seal_caller(TAMPER_SEAL_LABEL);
 	return seal_dentry(dentry, TAMPER_SEAL_XATTR);
 }
@@ -436,7 +464,11 @@ SEC("lsm.s/inode_removexattr")
 int BPF_PROG(shirudo_seal_inode_removexattr, struct mnt_idmap *idmap,
 	     struct dentry *dentry, const char *name, int ret)
 {
-	return ret ? ret : seal_dentry(dentry, TAMPER_SEAL_XATTR);
+	if (ret)
+		return ret;
+	if (seal_is_policy(name))
+		return seal_caller(TAMPER_SEAL_LABEL);
+	return seal_dentry(dentry, TAMPER_SEAL_XATTR);
 }
 
 char _license[] SEC("license") = "Dual BSD/GPL";
@@ -454,6 +486,24 @@ static __always_inline bool shirudo_task_has_seccomp(struct task_struct *task)
 	       BPF_CORE_READ(seccomp, mode);
 }
 
+SEC("lsm.s/bprm_creds_for_exec")
+int BPF_PROG(shirudo_seal_bprm_creds_for_exec,
+	     struct linux_binprm *bprm, int ret)
+{
+	struct task_struct *task = bpf_get_current_task_btf();
+	struct shirudo_task_policy *policy;
+
+	(void)bprm;
+	if (ret)
+		return ret;
+	policy = bpf_task_storage_get(&policy_map, task, NULL,
+				      BPF_LOCAL_STORAGE_GET_F_CREATE);
+	if (!policy)
+		return -ENOMEM;
+	policy->candidate = policy->active;
+	return 0;
+}
+
 /*
  * shirudo grants authority only to a direct file on the verified runtime.
  * Overlay copies cannot qualify. Ptrace or seccomp supplied before exec must
@@ -465,13 +515,33 @@ int BPF_PROG(shirudo_seal_bprm_check_security,
 {
 	struct task_struct *task = bpf_get_current_task_btf();
 	struct task_authority *authority;
+	struct shirudo_task_policy *policy;
+	struct seal_scratch *scratch;
+	struct bpf_dynptr tdp;
 	struct inode *real_inode;
+	__u64 value;
+	int len;
 	bool trusted;
 
 	if (ret)
 		return ret;
 	if (!shirudo_policy())
 		return -EACCES;
+	scratch = seal_scratch_get(task);
+	if (!scratch)
+		return -ENOMEM;
+	bpf_dynptr_from_mem(scratch->target, sizeof(value), 0, &tdp);
+	len = bpf_get_file_xattr(bprm->file, SHIRUDO_POLICY_XATTR, &tdp);
+	if (len == -ENODATA || len == -EOPNOTSUPP)
+		value = 0;
+	else if (len != sizeof(value))
+		return -EACCES;
+	if (len == sizeof(value))
+		__builtin_memcpy(&value, scratch->target, sizeof(value));
+	policy = bpf_task_storage_get(&policy_map, task, NULL, 0);
+	if (!policy)
+		return -ENOMEM;
+	policy->candidate |= value;
 	real_inode = bpf_real_data_inode(bprm->file);
 	trusted = real_inode == BPF_CORE_READ(bprm, file, f_inode) &&
 		  shirudo_file_runtime(bprm->file);

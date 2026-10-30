@@ -68,6 +68,14 @@ BUILD_BUG_ON(sizeof(struct device_authority) != 48);
 BUILD_BUG_ON(sizeof(struct task_authority) != 8);
 BUILD_BUG_ON(sizeof(struct identity) != 584);
 
+struct shirudo_task_policy {
+	__u64	active;
+	__u64	candidate;
+};
+
+_Static_assert(sizeof(struct shirudo_task_policy) == 16,
+	       "task policy ABI");
+
 /* The bpffs mount init made, which the unmount guard keeps mounted. */
 struct mount_record {
 	__u64	mount;

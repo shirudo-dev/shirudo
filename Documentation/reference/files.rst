@@ -389,6 +389,12 @@ Extended attributes
        Only a task with runtime authority may set it (``SealLabel``).
        A file created in a labeled directory receives the label at
        creation.
+   * - ``security.bpf.shirudo.policy``
+     - Executable inodes carrying task policy bits.
+     - Exactly 8 bytes, the target-native representation of a ``__u64``
+       bitset. Exec ORs the original file and interpreter values into
+       task storage. Only a task with runtime authority may set, update
+       or remove it (``SealLabel``).
    * - ``security.bpf.shirudo.payload``
      - Each ``upatches/<bpffs-name>/`` directory in the private bpffs.
      - 32 bytes, the ``payload_sha256`` of the loaded upatch. Set after

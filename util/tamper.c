@@ -71,7 +71,7 @@ static const struct {
 	[TAMPER_SEAL_XATTR] = { "SealXattr",
 		"xattr change on a sealed file" },
 	[TAMPER_SEAL_LABEL] = { "SealLabel",
-		"seal label set by another executable" },
+		"seal or policy label changed by another executable" },
 	[TAMPER_SEAL_PTRACE] = { "SealPtrace",
 		"ptrace of a shirudo task" },
 	[TAMPER_SEAL_PERF] = { "SealPerf",

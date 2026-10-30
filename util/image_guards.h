@@ -8,12 +8,11 @@
 
 #include <stdint.h>
 
-#define SEAL_HOOK_COUNT 20
+#define SEAL_HOOK_COUNT 21
 #define IMAGE_SEAL_HOOK_COUNT 2
 #define MOUNT_HOOK_COUNT 5
 #define OBSERVER_HOOK_COUNT 9
 #define IMAGE_OBSERVER_HOOK_COUNT 4
-
 struct image_guard {
 	const char *prog;
 	const char *pin;
@@ -37,6 +36,7 @@ enum guard_map_index {
 	GUARD_DEVICES,
 	GUARD_ROOTS,
 	GUARD_TAMPER,
+	GUARD_POLICY,
 	GUARD_MAP_COUNT,
 };
 

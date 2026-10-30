@@ -42,7 +42,7 @@ device records of :src:`bpf/lib/`.
 ``init`` loads both without a signature, from the binary the
 authenticated initrd carries.
 
-The objects share five maps, which ``init`` hands from ``bpf2`` to
+The objects share six maps, which ``init`` hands from ``bpf2`` to
 ``seal`` with ``bpf_map__reuse_fd()`` and pins in the private bpffs:
 
 .. list-table::
@@ -62,6 +62,9 @@ The objects share five maps, which ``init`` hands from ``bpf2`` to
    * - ``shirudo_tasks``
      - ``task_authority``
      - Task storage with each task's mark and exec candidate.
+   * - ``policy_map``
+     - ``policy_map``
+     - Task storage with committed policy bits and the exec candidate.
    * - ``shirudo_devices``
      - ``devices``
      - The dm-verity devices recorded as runtime or config, up to 128.
@@ -75,7 +78,7 @@ The objects share five maps, which ``init`` hands from ``bpf2`` to
 
 ``init`` freezes every one of them against userspace writes except
 ``shirudo_roots``, which an authorized task writes before each config
-mapping. ``bpf2`` keeps a sixth map, ``shirudo_mnt_rec``, with the bpffs
+mapping. ``bpf2`` keeps a seventh map, ``shirudo_mnt_rec``, with the bpffs
 mount it records, and ``seal`` keeps its scratch buffer and the inode
 storage of directory marks.
 
@@ -414,8 +417,18 @@ when the record it needs is missing.
      - None
      - None
      - No task storage leaves the task without authority.
+   * - ``lsm.s/bprm_creds_for_exec``, ``lsm.s/bprm_check_security``,
+       ``lsm.s/bprm_committed_creds`` (``seal``)
+     - Reset, accumulate and commit the policy bitset from the original
+       executable and each interpreter. An absent policy or a file system
+       without xattrs contributes zero bits; a malformed or unreadable
+       policy xattr refuses exec.
+     - ``EACCES``
+     - Uncounted
+     - Failed exec leaves committed policy unchanged.
    * - ``lsm/task_alloc`` (``seal``)
-     - Copies a marked parent's mark to the child.
+     - Copies a marked parent's mark and any committed policy bits to the
+       child.
      - ``ENOMEM``
      - None
      - Closed: no storage refuses the fork of a marked parent.
@@ -461,13 +474,16 @@ when the record it needs is missing.
    * - ``lsm.s/inode_unlink``, ``lsm.s/inode_setattr``,
        ``lsm.s/inode_removexattr`` (``seal``)
      - The operation on a labeled inode to a task without authority.
-       Setattr covers truncate, chmod, chown and timestamps.
+       Setattr covers truncate, chmod, chown and timestamps. Removing the
+       policy xattr is refused on any inode without authority.
      - ``EACCES``
      - ``SealUnlink``, ``SealSetattr``, ``SealXattr``
      - See the label verdict below.
    * - ``lsm.s/inode_setxattr`` (``seal``)
-     - Setting ``security.bpf.shirudo`` on any inode, and any other name
-       on a labeled inode, to a task without authority.
+     - Setting ``security.bpf.shirudo`` or
+       ``security.bpf.shirudo.policy`` on any inode, and any other name
+       on a labeled inode, to a task without authority. Policy values
+       must be exactly 8 bytes.
      - ``EACCES``
      - ``SealLabel``, ``SealXattr``
      - See the label verdict below.

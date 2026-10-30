@@ -884,6 +884,7 @@ out:
 		unlink(IDENTITY_PIN);
 		unlink(TAMPER_PIN);
 		unlink(BPFFS_DIR "/task_authority");
+		unlink(BPFFS_DIR "/policy_map");
 		unlink(BPFFS_DIR "/devices");
 		unlink(BPFFS_DIR "/config_roots");
 	}

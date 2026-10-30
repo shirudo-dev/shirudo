@@ -300,6 +300,10 @@ Assets
      - ``shirudo_tasks`` task storage, pinned as ``task_authority``
      - Frozen against ``bpf()`` writes; only the seal's programs set a
        mark (T3).
+   * - Task policy bits
+     - ``policy_map`` task storage, pinned as ``policy_map``
+     - Frozen against userspace writes; exec hooks OR protected inode
+       values and commit only after a successful exec.
    * - Device records and expected roots
      - ``shirudo_devices`` (frozen) and ``shirudo_roots`` (not frozen,
        written by authorized tasks for their own config mapping)
@@ -641,7 +645,8 @@ refused, since it is a tree bound over the path rather than the one
 unlink, either end of a rename, a setattr (truncate, chmod, chown,
 utimes) and an xattr change need runtime authority (``SealWrite``,
 ``SealUnlink``, ``SealRename``, ``SealSetattr``, ``SealXattr``). Only an
-authorized task sets the exact label, on any inode (``SealLabel``).
+authorized task sets the exact seal label or changes the policy label on
+any inode (``SealLabel``).
 
 The label is a public constant, the same on every build. It marks a
 target and never grants authority: a file system root mounts can carry
@@ -651,6 +656,16 @@ with an error other than ``ENODATA``, ``EOPNOTSUPP``, ``EACCES`` or
 seal's scratch memory. The two permission errors count as unlabeled
 because the kernel checks read permission for the caller before it
 returns the label (U12).
+
+Executables may carry ``security.bpf.shirudo.policy``, an 8-byte
+target-native ``__u64`` bitset. During exec, the seal ORs the value from
+the original file and each interpreter into ``policy_map``. ``ENODATA``
+or ``EOPNOTSUPP`` means no policy; malformed or unreadable values refuse
+exec.
+Successful exec commits the accumulated bits, an unlabeled exec clears
+them, failed exec preserves the previous value, and children inherit the
+committed value. The xattr remains on the inode, and only a task with
+runtime authority may set, update or remove it (``SealLabel``).
 
 The seal keeps a mark in inode storage on every labeled directory it
 has seen since the inode came into memory. A new inode under a marked

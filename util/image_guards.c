@@ -27,6 +27,7 @@
 
 const struct image_guard
 shirudo_seal_guards[SEAL_HOOK_COUNT] = {
+	{ "shirudo_seal_bprm_creds_for_exec", SEAL_BPRM_CREDS_PIN },
 	{ "shirudo_seal_bprm_check_security",
 	  SEAL_BPRM_CHECK_PIN },
 	{ "shirudo_seal_bprm_committed_creds",
@@ -142,6 +143,11 @@ const struct guard_map shirudo_guard_maps[GUARD_MAP_COUNT] = {
 		"shirudo_tasks", BPFFS_DIR "/task_authority",
 		BPF_MAP_TYPE_TASK_STORAGE, sizeof(__u32),
 		sizeof(struct task_authority), 0, BPF_F_NO_PREALLOC,
+	},
+	[GUARD_POLICY] = {
+		"policy_map", POLICY_PIN,
+		BPF_MAP_TYPE_TASK_STORAGE, sizeof(__u32),
+		sizeof(struct shirudo_task_policy), 0, BPF_F_NO_PREALLOC,
 	},
 	[GUARD_DEVICES] = {
 		"shirudo_devices", BPFFS_DIR "/devices",

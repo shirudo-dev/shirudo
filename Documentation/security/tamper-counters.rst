@@ -146,9 +146,10 @@ counter.
      - ``lsm.s/inode_setxattr``, ``lsm.s/inode_removexattr``
      - ``EACCES``
    * - ``SealLabel``
-     - seal label set by another executable
-     - ``lsm.s/inode_setxattr``: the exact name ``security.bpf.shirudo``
-       on any inode
+     - seal or policy label changed by another executable
+     - ``lsm.s/inode_setxattr`` or ``lsm.s/inode_removexattr``: the exact
+       names ``security.bpf.shirudo`` or
+       ``security.bpf.shirudo.policy`` on any inode
      - ``EACCES``
    * - ``SealPtrace``
      - ptrace of a shirudo task
