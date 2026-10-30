@@ -159,7 +159,8 @@ jobs:
             set -eu
             cd /host
             apt-get update
-            apt-get install -y /host/upstream/shirudo-deb/shirudo-operator_*.deb
+            DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Use-Pty=0 \
+              install -y /host/upstream/shirudo-deb/shirudo-operator_*.deb
 
             keys_dir=/host/.ci/kernel-obs-keys
             version=\$(cat /host/build/kernel-obs-version)
@@ -208,7 +209,8 @@ jobs:
             set -eu
             cd /host
             apt-get update
-            apt-get install -y /host/upstream/shirudo-deb/shirudo-operator_*.deb
+            DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Use-Pty=0 \
+              install -y /host/upstream/shirudo-deb/shirudo-operator_*.deb
 
             install -d -m 0755 /etc/shirudo
             printf '%s\n' 'tls.classical_hosts = ghcr.io' \
