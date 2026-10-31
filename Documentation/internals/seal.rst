@@ -85,6 +85,13 @@ authority may set, update or remove it. An absent policy or a file system
 without xattrs contributes zero bits; invalid lengths and other read
 errors refuse the exec.
 
+``socket_post_create`` snapshots a task's committed bits into
+``socket_policy_map`` when it creates a socket. A socket with no policy
+uses no storage and reads as zero. If nonzero policy storage cannot be
+allocated, socket creation fails. The map uses ``BPF_F_CLONE`` so an
+accepted socket inherits the listener's snapshot, even when the task
+calling ``accept()`` has since accumulated other bits.
+
 The device record that the exec check consults comes from
 ``lsm.s/bdev_setintegrity``: it records a dm-verity device as runtime
 when its root hash equals the runtime root the UKI authenticated, which

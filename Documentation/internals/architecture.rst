@@ -80,8 +80,9 @@ with ``.incbin`` in :src:`util/loader.c`:
     device-mapper and perf ioctl guards and the dm-verity device records.
 
 ``seal``
-    Task marks (``bprm_check_security``, ``bprm_committed_creds``,
-    ``task_alloc``), process protection (``ptrace_access_check``,
+    Task and socket policy marks (``bprm_check_security``,
+    ``bprm_committed_creds``, ``task_alloc``, ``socket_post_create``),
+    process protection (``ptrace_access_check``,
     ``perf_event_alloc``, ``mmap_file``, ``file_mprotect``) and the label
     checks on writable state.
 

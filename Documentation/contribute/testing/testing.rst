@@ -123,8 +123,8 @@ A shell test is named ``t<F><K><NN>-<what>.sh``:
    * - 6
      - ``functional/tamperproof/``, ``functional/labels/``
      - Attacks on the admission and BPF command policy, bpffs, the
-       seal, task authority, task policy labels, the keyrings and the TPM
-       path
+       seal, task authority, task and socket policy labels, the keyrings
+       and the TPM path
    * - 7
      - ``functional/bpm/``
      - Package commands, publishing and the upatch tree

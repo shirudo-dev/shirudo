@@ -304,6 +304,10 @@ Assets
      - ``policy_map`` task storage, pinned as ``policy_map``
      - Frozen against userspace writes; exec hooks OR protected inode
        values and commit only after a successful exec.
+   * - Socket policy bits
+     - ``socket_policy_map`` socket storage, pinned as ``socket_policy_map``
+     - Frozen against userspace writes; socket creation snapshots task
+       bits and accepted sockets inherit the listener's value.
    * - Device records and expected roots
      - ``shirudo_devices`` (frozen) and ``shirudo_roots`` (not frozen,
        written by authorized tasks for their own config mapping)

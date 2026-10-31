@@ -2,12 +2,15 @@
 /* Copyright (c) 2026 Authors of shirudo */
 
 #include <sys/auxv.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 
 #include "../../include/shirudo/misc.h"
 
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/bpf.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -83,6 +86,145 @@ static int read_policy(const char *pin, __u64 *active)
 	if (!rc)
 		*active = policy.active;
 	return rc;
+}
+
+static int read_socket_policy(int socket_fd, __u64 *active)
+{
+	union bpf_attr attr = {};
+	__u64 value = 0;
+	int fd, rc;
+
+	attr.pathname = (uintptr_t)"/run/shirudo/bpffs/socket_policy_map";
+	attr.file_flags = BPF_F_RDONLY;
+	fd = syscall(SYS_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
+	if (fd < 0)
+		return -errno;
+	memset(&attr, 0, sizeof(attr));
+	attr.map_fd = fd;
+	attr.key = (uintptr_t)&socket_fd;
+	attr.value = (uintptr_t)&value;
+	rc = syscall(SYS_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr));
+	if (rc && errno != ENOENT)
+		rc = -errno;
+	else
+		rc = 0;
+	close(fd);
+	if (!rc)
+		*active = value;
+	return rc;
+}
+
+static int check_socket_policy(int socket_fd, __u64 expected)
+{
+	__u64 actual = 0;
+
+	return read_socket_policy(socket_fd, &actual) || actual != expected;
+}
+
+static int parse_policy(const char *text, __u64 *value);
+
+static int accept_child(void)
+{
+	__u64 active = 0;
+	__u64 task_bits, socket_bits;
+	const char *listener_text = getenv("SHIRUDO_TEST_LISTENER");
+	const char *task_text = getenv("SHIRUDO_TEST_TASK_BITS");
+	const char *socket_text = getenv("SHIRUDO_TEST_SOCKET_BITS");
+	char *end;
+	long listener;
+	int accepted;
+
+	if (!listener_text || !task_text || !socket_text ||
+	    parse_policy(task_text, &task_bits) ||
+	    parse_policy(socket_text, &socket_bits))
+		return 1;
+	listener = strtol(listener_text, &end, 10);
+	if (*end || listener < 0 ||
+	    read_policy("/run/shirudo/bpffs/policy_map", &active) ||
+	    active != task_bits)
+		return 1;
+	accepted = accept((int)listener, NULL, NULL);
+	if (accepted < 0)
+		return 1;
+	return check_socket_policy(accepted, socket_bits);
+}
+
+static int socket_inheritance(const char *script, __u64 extra)
+{
+	struct sockaddr_in addr = {};
+	static const char contents[] =
+		"#!/run/shirudo/runtime/usr/bin/shirudo-policy-probe accept-child\n";
+	char acceptor[PATH_MAX], number[32];
+	__u64 active = 0;
+	int listener, client, status, rc, length;
+	pid_t child;
+
+	if (read_policy("/run/shirudo/bpffs/policy_map", &active) || !active)
+		return 1;
+	listener = socket(AF_INET, SOCK_STREAM, 0);
+	if (listener < 0 || check_socket_policy(listener, active))
+		return 1;
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	if (bind(listener, (struct sockaddr *)&addr, sizeof(addr)) ||
+	    listen(listener, 1))
+		return 1;
+	rc = getsockname(listener, (struct sockaddr *)&addr,
+			 (socklen_t[]){ sizeof(addr) });
+	if (rc)
+		return 1;
+	length = snprintf(acceptor, sizeof(acceptor), "%s.acceptor", script);
+	if (length < 0 || (size_t)length >= sizeof(acceptor))
+		return 1;
+	{
+		int fd = open(acceptor, O_WRONLY | O_CREAT | O_TRUNC, 0700);
+
+		if (fd < 0)
+			return 1;
+		if (write(fd, contents, sizeof(contents) - 1) !=
+		    (ssize_t)(sizeof(contents) - 1)) {
+			close(fd);
+			return 1;
+		}
+		close(fd);
+	}
+	{
+		__u64 value = extra;
+
+		if (setxattr(acceptor, "security.bpf.shirudo.policy", &value,
+			     sizeof(value), 0))
+			return 1;
+	}
+	length = snprintf(number, sizeof(number), "%d", listener);
+	if (length < 0 || (size_t)length >= sizeof(number) ||
+	    setenv("SHIRUDO_TEST_LISTENER", number, 1))
+		return 1;
+	length = snprintf(number, sizeof(number), "0x%llx", active | extra);
+	if (length < 0 || (size_t)length >= sizeof(number) ||
+	    setenv("SHIRUDO_TEST_TASK_BITS", number, 1))
+		return 1;
+	length = snprintf(number, sizeof(number), "0x%llx", active);
+	if (length < 0 || (size_t)length >= sizeof(number) ||
+	    setenv("SHIRUDO_TEST_SOCKET_BITS", number, 1))
+		return 1;
+	child = fork();
+	if (child < 0)
+		return 1;
+	if (!child) {
+		char *const args[] = { acceptor, NULL };
+
+		execv(acceptor, args);
+		_exit(127);
+	}
+	client = socket(AF_INET, SOCK_STREAM, 0);
+	if (client < 0 || connect(client, (struct sockaddr *)&addr, sizeof(addr)))
+		return 1;
+	close(client);
+	if (waitpid(child, &status, 0) != child)
+		return 1;
+	close(listener);
+	unlink(acceptor);
+	return !WIFEXITED(status) || WEXITSTATUS(status);
 }
 
 static int parse_policy(const char *text, __u64 *value)
@@ -266,6 +408,14 @@ int main(int argc, char **argv)
 		return check_policy_env();
 	if (argc >= 2 && !strcmp(argv[1], "fork-exec-policy"))
 		return fork_exec_policy_env();
+	if (argc >= 3 && !strcmp(argv[1], "socket-inherit")) {
+		__u64 extra;
+
+		extra = 2;
+		return socket_inheritance(argv[2], extra);
+	}
+	if (argc >= 2 && !strcmp(argv[1], "accept-child"))
+		return accept_child();
 	if (argc < 3)
 		return 2;
 	if (!strcmp(argv[1], "unlink"))

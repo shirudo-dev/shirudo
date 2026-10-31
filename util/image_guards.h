@@ -8,7 +8,7 @@
 
 #include <stdint.h>
 
-#define SEAL_HOOK_COUNT 21
+#define SEAL_HOOK_COUNT 22
 #define IMAGE_SEAL_HOOK_COUNT 2
 #define MOUNT_HOOK_COUNT 5
 #define OBSERVER_HOOK_COUNT 9
@@ -37,6 +37,7 @@ enum guard_map_index {
 	GUARD_ROOTS,
 	GUARD_TAMPER,
 	GUARD_POLICY,
+	GUARD_SOCKET_POLICY,
 	GUARD_MAP_COUNT,
 };
 

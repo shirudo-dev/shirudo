@@ -42,7 +42,7 @@ device records of :src:`bpf/lib/`.
 ``init`` loads both without a signature, from the binary the
 authenticated initrd carries.
 
-The objects share six maps, which ``init`` hands from ``bpf2`` to
+The objects share seven maps, which ``init`` hands from ``bpf2`` to
 ``seal`` with ``bpf_map__reuse_fd()`` and pins in the private bpffs:
 
 .. list-table::
@@ -65,6 +65,10 @@ The objects share six maps, which ``init`` hands from ``bpf2`` to
    * - ``policy_map``
      - ``policy_map``
      - Task storage with committed policy bits and the exec candidate.
+   * - ``socket_policy_map``
+     - ``socket_policy_map``
+     - Socket storage for committed policy bits, cloned from listeners
+       to accepted sockets.
    * - ``shirudo_devices``
      - ``devices``
      - The dm-verity devices recorded as runtime or config, up to 128.
@@ -78,7 +82,7 @@ The objects share six maps, which ``init`` hands from ``bpf2`` to
 
 ``init`` freezes every one of them against userspace writes except
 ``shirudo_roots``, which an authorized task writes before each config
-mapping. ``bpf2`` keeps a seventh map, ``shirudo_mnt_rec``, with the bpffs
+mapping. ``bpf2`` also keeps ``shirudo_mnt_rec`` for the bpffs
 mount it records, and ``seal`` keeps its scratch buffer and the inode
 storage of directory marks.
 
@@ -426,6 +430,12 @@ when the record it needs is missing.
      - ``EACCES``
      - Uncounted
      - Failed exec leaves committed policy unchanged.
+   * - ``lsm/socket_post_create`` (``seal``)
+     - Copies nonzero committed task policy bits into socket storage.
+       ``BPF_F_CLONE`` carries listener storage to accepted sockets.
+     - ``ENOMEM``
+     - None
+     - No storage is needed when the task has no policy bits.
    * - ``lsm/task_alloc`` (``seal``)
      - Copies a marked parent's mark and any committed policy bits to the
        child.
