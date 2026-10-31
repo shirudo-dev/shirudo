@@ -57,6 +57,8 @@
 #include "util/seal.h"
 #include "util/timefmt.h"
 #include "util/upatch.h"
+
+static void apply_policy_labels(const char *artifact);
 #include "util/upatch_decode.h"
 #include "util/upatch_maps.h"
 #include "util/upatch_maps_otel.h"
@@ -2075,7 +2077,11 @@ out:
 
 int upatch_apply(const char *path)
 {
-	return __upatch_apply(path, false, NULL);
+	int rc = __upatch_apply(path, false, NULL);
+
+	if (!rc)
+		apply_policy_labels(path);
+	return rc;
 }
 
 /*
@@ -2652,6 +2658,57 @@ static void unload_unmeasured(const char *name)
 		       name);
 }
 
+static void apply_policy_labels(const char *artifact)
+{
+	struct upatch upatch = {};
+	const struct shirudo_upatch_policy_label_header *header;
+	const struct shirudo_upatch_policy_label_entry *entries;
+	const void *labels;
+	__u32 len, count;
+	int rc;
+
+	rc = upatch_open(artifact, &upatch);
+	if (rc)
+		return;
+	labels = upatch_signed_policy_labels(&upatch, &len);
+	if (!labels)
+		goto out;
+	header = labels;
+	count = le32toh(header->count);
+	entries = (const void *)((const __u8 *)labels + sizeof(*header));
+	for (__u32 i = 0; i < count; i++) {
+		const struct shirudo_upatch_policy_label_entry *entry = &entries[i];
+		__u64 bits = le64toh(entry->bit), current = 0;
+		ssize_t n;
+		int fd;
+
+		fd = open(entry->path, O_RDONLY | O_CLOEXEC);
+		if (fd < 0) {
+			pr_warn("upatch: cannot label %s for policy %s: %s",
+				entry->path, entry->policy, strerror(errno));
+			continue;
+		}
+		n = fgetxattr(fd, SHIRUDO_POLICY_XATTR, &current,
+			      sizeof(current));
+		if (n < 0 && (errno == ENODATA || errno == EOPNOTSUPP)) {
+			current = 0;
+		} else if (n != (ssize_t)sizeof(current)) {
+			pr_warn("upatch: cannot read policy label on %s: %s",
+				entry->path, n < 0 ? strerror(errno) : "invalid length");
+			close(fd);
+			continue;
+		}
+		current |= bits;
+		if (fsetxattr(fd, SHIRUDO_POLICY_XATTR, &current,
+			      sizeof(current), 0) != 0)
+			pr_warn("upatch: cannot set policy label on %s: %s",
+				entry->path, strerror(errno));
+		close(fd);
+	}
+out:
+	upatch_close(&upatch);
+}
+
 static int cmd_upatch_load(int argc, const char **argv)
 {
 	const char *file, *expect_chain, *expect_version_id, *report;
@@ -2724,6 +2781,7 @@ static int cmd_upatch_load(int argc, const char **argv)
 
 	if (__upatch_apply(file, false, &rep) != 0)
 		goto done;
+	apply_policy_labels(file);
 	if (!have_id) {		/* loaded but couldn't read identity */
 		ret = 0;
 		rep.ok = true;
