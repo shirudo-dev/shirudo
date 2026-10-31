@@ -54,6 +54,10 @@ struct upatch {
 	const __u8			*signed_attach;
 	__u32				signed_attach_len;
 	const __u8			*signed_unload_payload;	/* 32 bytes */
+	const void			*signed_policy_labels;
+	__u32				signed_policy_labels_len;
+	const void			*signed_policy_unlabels;
+	__u32				signed_policy_unlabels_len;
 };
 
 struct upatch_decoder_view {
@@ -106,6 +110,12 @@ const char *upatch_signed_name(const struct upatch *u);
 const void *upatch_signed_attach(const struct upatch *u,
 				 __u32 *len);
 const __u8 *upatch_signed_unload_payload(const struct upatch *u);
+
+const void *upatch_signed_policy_labels(const struct upatch *u,
+					__u32 *len);
+
+const void *upatch_signed_policy_unlabels(const struct upatch *u,
+					  __u32 *len);
 
 /*
  * Validate an externally-provided upatch name: non-empty, doesn't

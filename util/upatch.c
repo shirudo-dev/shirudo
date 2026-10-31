@@ -120,6 +120,35 @@ static bool has_nul(const char *s, size_t n)
 	return memchr(s, '\0', n);
 }
 
+static bool parse_policy_labels(const __u8 *p, __u32 len)
+{
+	struct shirudo_upatch_policy_label_header h;
+	__u32 count;
+
+	if (len < sizeof(h))
+		return false;
+	memcpy(&h, p, sizeof(h));
+	count = le32toh(h.count);
+	if (le32toh(h.magic) != SHIRUDO_UPATCH_POLICY_LABELS_MAGIC ||
+	    le32toh(h.version) != SHIRUDO_UPATCH_POLICY_LABELS_VERSION ||
+	    le32toh(h.reserved) || !count ||
+	    (__u64)sizeof(h) + (__u64)count *
+	    sizeof(struct shirudo_upatch_policy_label_entry) != len)
+		return false;
+	for (__u32 i = 0; i < count; i++) {
+		struct shirudo_upatch_policy_label_entry e;
+		__u64 bit;
+
+		memcpy(&e, p + sizeof(h) + i * sizeof(e), sizeof(e));
+		bit = le64toh(e.bit);
+		if (!bit || (bit & (bit - 1)) ||
+		    !has_nul(e.policy, sizeof(e.policy)) || !e.policy[0] ||
+		    !has_nul(e.path, sizeof(e.path)) || e.path[0] != '/')
+			return false;
+	}
+	return true;
+}
+
 /* The DECODERS section: entries and sources within the blob. */
 static bool parse_decoders(struct upatch *u, const __u8 *bp,
 			   __u32 decoder_len)
@@ -184,6 +213,10 @@ static void forget_signed_sections(struct upatch *u)
 	u->signed_attach = NULL;
 	u->signed_attach_len = 0;
 	u->signed_unload_payload = NULL;
+	u->signed_policy_labels = NULL;
+	u->signed_policy_labels_len = 0;
+	u->signed_policy_unlabels = NULL;
+	u->signed_policy_unlabels_len = 0;
 }
 
 /*
@@ -251,6 +284,20 @@ static void parse_signed_sections(struct upatch *u)
 			bit = 8;
 			if (!parse_decoders(u, data + off, len))
 				goto reject;
+			break;
+		case SHIRUDO_UPATCH_SECTION_POLICY_LABELS:
+			bit = 16;
+			if (!parse_policy_labels(data + off, len))
+				goto reject;
+			u->signed_policy_labels = data + off;
+			u->signed_policy_labels_len = len;
+			break;
+		case SHIRUDO_UPATCH_SECTION_POLICY_UNLABELS:
+			bit = 32;
+			if (!parse_policy_labels(data + off, len))
+				goto reject;
+			u->signed_policy_unlabels = data + off;
+			u->signed_policy_unlabels_len = len;
 			break;
 		default:
 			goto reject;
@@ -361,6 +408,20 @@ const void *upatch_signed_attach(const struct upatch *u, __u32 *len)
 const __u8 *upatch_signed_unload_payload(const struct upatch *u)
 {
 	return u->map ? u->signed_unload_payload : NULL;
+}
+
+const void *upatch_signed_policy_labels(const struct upatch *u,
+					__u32 *len)
+{
+	*len = u->map ? u->signed_policy_labels_len : 0;
+	return u->map ? u->signed_policy_labels : NULL;
+}
+
+const void *upatch_signed_policy_unlabels(const struct upatch *u,
+					  __u32 *len)
+{
+	*len = u->map ? u->signed_policy_unlabels_len : 0;
+	return u->map ? u->signed_policy_unlabels : NULL;
 }
 
 const void *upatch_loader(const struct upatch *u)
