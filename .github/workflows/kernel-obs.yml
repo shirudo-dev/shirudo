@@ -221,10 +221,10 @@ jobs:
             install -d -m 0755 /etc/shirudo
             printf '%s\n' 'tls.classical_hosts = ghcr.io' \
               > /etc/shirudo/shirudo.conf
-            /usr/bin/shirudo config >/dev/null
+            /usr/bin/shirudo config
 
             version=\$(cat /host/build/kernel-obs-version)
-            package="/host/package/kernel-obs-\$version.bee"
+            package="/host/kernel-obs-\$version.bee"
             test -s "\$package"
             {
               IFS= read -r BPM_OCI_USERNAME
