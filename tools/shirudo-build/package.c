@@ -1523,6 +1523,7 @@ static void unregister_target_attach_types(int handler_ids[2])
 static int finalize_object(struct bpf_object *obj, const char *out_path,
 			   const char *upatch_name, __u32 flags,
 			   const __u8 *unload_payload, const char *src_path,
+			   const void *policy_labels, __u32 policy_labels_len,
 			   const char *pkey_path, const char *cert_path)
 {
 	LIBBPF_OPTS(gen_loader_opts, opts);
@@ -1622,6 +1623,11 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 			sections[nr_sections++] = (struct signed_section){
 				UPATCH_SECTION_DECODERS, decoder_blob,
 				decoder_blob_len,
+			};
+		if (policy_labels_len)
+			sections[nr_sections++] = (struct signed_section){
+				SHIRUDO_UPATCH_SECTION_POLICY_LABELS,
+				policy_labels, policy_labels_len,
 			};
 	}
 	err = compose_signed_data(opts.data, (__u32)opts.data_sz, sections,
@@ -1745,9 +1751,14 @@ static int check_upatch_name(const char *name)
 
 int build_package_load(const char *bpf_o, const char *src_path,
 		       const char *out_path, const char *upatch_name,
-		       const char *pkey_path, const char *cert_path)
+			       const struct shirudo_upatch_policy_label_entry *policies,
+			       __u32 nr_policies,
+			       const char *pkey_path, const char *cert_path)
 {
 	struct bpf_object *obj;
+	struct shirudo_upatch_policy_label_header *label_blob = NULL;
+	struct shirudo_upatch_policy_label_entry *label_entries;
+	__u32 label_len = 0;
 	int handler_ids[2] = {-1, -1};
 	int err;
 
@@ -1768,8 +1779,27 @@ int build_package_load(const char *bpf_o, const char *src_path,
 		unregister_target_attach_types(handler_ids);
 		return err;
 	}
+	if (nr_policies) {
+		label_len = sizeof(*label_blob) + nr_policies * sizeof(*label_entries);
+		label_blob = xcalloc(1, label_len);
+		if (!label_blob) {
+			bpf_object__close(obj);
+			unregister_target_attach_types(handler_ids);
+			return -ENOMEM;
+		}
+		label_blob->magic = htole32(SHIRUDO_UPATCH_POLICY_LABELS_MAGIC);
+		label_blob->version = htole32(SHIRUDO_UPATCH_POLICY_LABELS_VERSION);
+		label_blob->count = htole32(nr_policies);
+		label_entries = (void *)(label_blob + 1);
+		for (__u32 i = 0; i < nr_policies; i++) {
+			label_entries[i] = policies[i];
+			label_entries[i].bit = htole64(policies[i].bit);
+		}
+	}
 	err = finalize_object(obj, out_path, upatch_name, 0, NULL, src_path,
-			      pkey_path, cert_path);
+			      label_blob, label_len, pkey_path, cert_path);
+	if (label_blob)
+		xfree(label_blob, label_len);
 	unregister_target_attach_types(handler_ids);
 	return err;
 }
@@ -1843,5 +1873,5 @@ int build_package_unload(const char *upatch_name,
 	 */
 	return finalize_object(obj, out_upatch, upatch_name,
 			       DIRECTIVE_UNLOAD, payload_sha256,
-			       NULL, pkey_path, cert_path);
+			       NULL, NULL, 0, pkey_path, cert_path);
 }

@@ -295,9 +295,14 @@ Section tags
      - variable
      - Signed decoders, see `DCDB section`_. Present in a load artifact
        when its programs declare decoders.
+   * - ``SHPL``
+     - ``0x4c504853``
+     - variable
+     - Signed policy labels, each naming a policy ID, one-hot bit and
+       absolute file path.
 
 The writer emits ``NAME``, then ``UNLD`` for an unload directive, or
-``UPGM`` and an optional ``DCDB`` for a load artifact.
+``UPGM`` and optional ``DCDB`` and ``SHPL`` sections for a load artifact.
 
 UPGM section
 ~~~~~~~~~~~~
@@ -653,7 +658,7 @@ unload later refuses for the section it lacks, and
    and the trailer.
 #. Each entry has ``reserved`` 0 and a section that ends at or before
    ``dir_off``.
-#. Each tag is ``NAME``, ``UPGM``, ``UNLD`` or ``DCDB``, and appears at most
+#. Each tag is ``NAME``, ``UPGM``, ``UNLD``, ``DCDB`` or ``SHPL``, and appears at most
    once.
 #. ``NAME`` is 256 bytes and contains a NUL. ``UPGM`` is not empty.
    ``UNLD`` is 32 bytes.

@@ -21,6 +21,14 @@
 #define BPM_BUILD_MAX_ENTRIES 128
 #define BPM_BUILD_MAX_RODATA 16
 #define BPM_BUILD_MAX_COMMAND_ARGS 16
+#define BPM_BUILD_MAX_POLICIES 64
+
+struct bpm_build_policy {
+	char id[SHIRUDO_UPATCH_POLICY_NAME_MAX];
+	char paths[16][TREE_STRING_MAX];
+	int n_paths;
+	__u64 bit;
+};
 
 struct bpm_build_rodata {
 	char symbol[128];
@@ -67,6 +75,8 @@ struct bpm_build_upatch {
 	struct bpm_build_tree tree;
 	struct bpm_build_rodata *rodata;
 	size_t n_rodata;
+	struct bpm_build_policy *policies;
+	size_t n_policies;
 };
 
 struct bpm_build_spec {

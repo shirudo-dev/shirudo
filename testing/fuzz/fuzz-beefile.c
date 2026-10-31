@@ -45,6 +45,8 @@ const char *build_locate_vmlinux(const char *override)
 
 int build_package_load(const char *bpf_o, const char *src_path,
 		       const char *out_upatch, const char *upatch_name,
+		       const struct shirudo_upatch_policy_label_entry *policies,
+		       __u32 nr_policies,
 		       const char *pkey_path, const char *cert_path)
 {
 	return -ENOSYS;

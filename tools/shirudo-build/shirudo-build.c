@@ -426,7 +426,7 @@ int main(int argc, char **argv)
 		name = derive_name(input, name_buf, sizeof(name_buf));
 
 	ret = build_package_load(bpf_o, src_path, output, name,
-				 pkey, cert);
+				 NULL, 0, pkey, cert);
 
 	if (temp_bpf_o) {
 		unlink(temp_bpf_o);

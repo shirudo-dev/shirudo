@@ -363,6 +363,7 @@ static int build_parse_spec(struct bpm_build_spec *spec, char *body)
 	struct bpm_build_upatch *upatch = NULL, *tree_owner = NULL;
 	struct bpm_build_rodata *rodata = NULL;
 	struct tree_selector *sel = NULL;
+	struct bpm_build_policy *policy = NULL;
 	struct bpm_build_file *file = NULL;
 	bool tree_section = false;
 	char *save = NULL, *line;
@@ -394,6 +395,7 @@ static int build_parse_spec(struct bpm_build_spec *spec, char *body)
 			file = NULL;
 			upatch = NULL;
 			rodata = NULL;
+			policy = NULL;
 			tree_section = !array &&
 				(!strcmp(section, "upatches.tree") ||
 				 !strcmp(section, "upatches.tree.selector") ||
@@ -420,6 +422,18 @@ static int build_parse_spec(struct bpm_build_spec *spec, char *body)
 						return -ENOMEM;
 				}
 				rodata = &tree_owner->rodata[tree_owner->n_rodata++];
+			} else if (array && !strcmp(section, "upatches.policy")) {
+				if (!tree_owner ||
+				    tree_owner->n_policies >= BPM_BUILD_MAX_POLICIES)
+					return -E2BIG;
+				if (!tree_owner->policies) {
+					tree_owner->policies =
+						xcalloc(BPM_BUILD_MAX_POLICIES,
+							sizeof(*tree_owner->policies));
+					if (!tree_owner->policies)
+						return -ENOMEM;
+				}
+				policy = &tree_owner->policies[tree_owner->n_policies++];
 			} else if (array) {
 				return -EINVAL;
 			} else if (tree_section) {
@@ -498,6 +512,33 @@ static int build_parse_spec(struct bpm_build_spec *spec, char *body)
 			}
 			if (build_parse_string(value, dst, cap))
 				return -EINVAL;
+		} else if (policy) {
+			if (!strcmp(key, "id")) {
+				if (build_parse_string(value, policy->id,
+						       sizeof(policy->id)))
+					return -EINVAL;
+			} else if (!strcmp(key, "bit")) {
+				const char *number = value;
+				size_t len = strlen(value);
+
+				if (len > 2 && value[0] == '0' &&
+				    (value[1] == 'x' || value[1] == 'X')) {
+					number += 2;
+					len -= 2;
+				}
+				if (!len || parse_x64(number, len, UINT64_MAX, &policy->bit) ||
+				    !policy->bit ||
+				    (policy->bit & (policy->bit - 1)))
+					return -EINVAL;
+			} else if (!strcmp(key, "paths")) {
+				if (policy->n_paths ||
+				    build_parse_string_array(value, policy->paths,
+							     ARRAY_SIZE(policy->paths),
+							     &policy->n_paths))
+					return -EINVAL;
+			} else {
+				return -EINVAL;
+			}
 		} else if (rodata) {
 			if (!strcmp(key, "symbol")) {
 				if (build_parse_string(value, rodata->symbol,
@@ -651,11 +692,17 @@ void bpm_build_spec_free(struct bpm_build_spec *spec)
 	if (!spec)
 		return;
 	for (size_t i = 0; i < spec->n_upatches; i++) {
-		xfree(spec->upatches[i].tree.selector,
-		      sizeof(*spec->upatches[i].tree.selector));
-		xfree(spec->upatches[i].rodata,
-		      BPM_BUILD_MAX_RODATA *
-		      sizeof(*spec->upatches[i].rodata));
+		if (spec->upatches[i].tree.selector)
+			xfree(spec->upatches[i].tree.selector,
+			      sizeof(*spec->upatches[i].tree.selector));
+		if (spec->upatches[i].rodata)
+			xfree(spec->upatches[i].rodata,
+			      BPM_BUILD_MAX_RODATA *
+			      sizeof(*spec->upatches[i].rodata));
+		if (spec->upatches[i].policies)
+			xfree(spec->upatches[i].policies,
+			      BPM_BUILD_MAX_POLICIES *
+			      sizeof(*spec->upatches[i].policies));
 	}
 	xfree(spec->build_file, spec->build_file_len + 1);
 	xfree(spec, sizeof(*spec));
@@ -996,6 +1043,28 @@ static int __build_validate(struct bpm_build_spec *spec,
 					return -EINVAL;
 			}
 		}
+		for (size_t j = 0; j < u->n_policies; j++) {
+			struct bpm_build_policy *p = &u->policies[j];
+
+			if (!p->id[0] || !p->bit || !p->n_paths ||
+			    (p->bit & (p->bit - 1)))
+				return -EINVAL;
+			for (int path = 0; path < p->n_paths; path++)
+				if (p->paths[path][0] != '/')
+					return -EINVAL;
+			for (size_t x = 0; x <= i; x++) {
+				struct bpm_build_upatch *other = &spec->upatches[x];
+				size_t limit = x == i ? j : other->n_policies;
+
+				for (size_t y = 0; y < limit; y++) {
+					struct bpm_build_policy *q = &other->policies[y];
+
+					if ((!strcmp(p->id, q->id) && p->bit != q->bit) ||
+					    (strcmp(p->id, q->id) && p->bit == q->bit))
+						return -EEXIST;
+				}
+			}
+		}
 	}
 	return 0;
 }
@@ -1182,6 +1251,8 @@ static int build_upatches(struct bpm_build_spec *spec, const char *pkey,
 		__u8 payload[CRYPTO_SHA256_LEN];
 		struct upatch parsed = {};
 		int ret;
+		struct shirudo_upatch_policy_label_entry *labels = NULL;
+		__u32 nr_labels = 0;
 
 		if (build_resolve_source(spec, u->source, source, sizeof(source),
 					 &(struct stat){}))
@@ -1219,8 +1290,30 @@ static int build_upatches(struct bpm_build_spec *spec, const char *pkey,
 			return -EINVAL;
 		}
 		build_upatch_name(source, name, sizeof(name));
-		ret = build_package_load(bpf_o, src_path, load, name, pkey,
-					 cert);
+		for (size_t j = 0; j < u->n_policies; j++)
+			nr_labels += u->policies[j].n_paths;
+		if (nr_labels) {
+			labels = xcalloc(nr_labels, sizeof(*labels));
+			if (!labels)
+				return -ENOMEM;
+			nr_labels = 0;
+			for (size_t j = 0; j < u->n_policies; j++) {
+				struct bpm_build_policy *p = &u->policies[j];
+
+				for (int k = 0; k < p->n_paths; k++) {
+					struct shirudo_upatch_policy_label_entry *e =
+						&labels[nr_labels++];
+
+					e->bit = p->bit;
+					strscpy(e->policy, p->id, sizeof(e->policy));
+					strscpy(e->path, p->paths[k], sizeof(e->path));
+				}
+			}
+		}
+		ret = build_package_load(bpf_o, src_path, load, name,
+					 labels, nr_labels, pkey, cert);
+		if (labels)
+			xfree(labels, (size_t)nr_labels * sizeof(*labels));
 		if (bpf_o == object)
 			unlink(object);
 		if (ret)

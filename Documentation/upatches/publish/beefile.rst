@@ -29,9 +29,10 @@ A Beefile is a small subset of TOML, read line by line.
   line. A ``"..."`` string takes the escapes ``\n``, ``\r``, ``\t``,
   ``\\`` and ``\"``; a ``'...'`` string takes none.
 - ``#`` starts a comment outside a string.
-- There are no numbers, booleans, inline tables or values that span
-  lines.
-- ``[[upatches.rodata]]`` and the ``[upatches.tree]`` tables belong to the
+- Numeric values are accepted for policy bit masks; booleans, inline
+  tables and values that span lines are not supported.
+- ``[[upatches.rodata]]``, ``[[upatches.policy]]`` and the
+  ``[upatches.tree]`` tables belong to the
   ``[[upatches]]`` entry above them. Write an entry's own keys before its
   first sub-table: a key after ``[upatches.tree]`` belongs to that table.
 
@@ -201,6 +202,25 @@ An input is named by its file name up to the first dot: ``watch.list``
 is ``watch``. ``--rodata-input <name>=<path>`` replaces the input of every
 entry with that name for one build. An override for a name that no entry
 has fails. Entries that share a name must name the same input.
+
+``[[upatches.policy]]``
+~~~~~~~~~~~~~~~~~~~~~~~
+
+A policy table declares a named bit and the absolute paths whose
+``security.bpf.shirudo.policy`` xattrs this upatch labels. The builder
+embeds the entries in the signed upatch metadata.
+
+.. code-block:: toml
+
+   [[upatches.policy]]
+   id = "apache"
+   bit = 0x1
+   paths = ["/usr/local/apache", "/usr/bin/apache"]
+
+``id`` maps to one one-hot 64-bit mask. Repeating the same ID and mask in
+other upatches extends that policy; an ID cannot change masks, and two
+different IDs cannot use the same mask in one package. Paths may name
+non-executable files.
 
 The generator and the updater run on the operator host with the
 operator's rights. The target receives only the signed result. Without
