@@ -48,14 +48,33 @@ export SHIRUDO_TEST_CLI_RESULTS="$SHIRUDO_TEST_RESULTS/cli"
 export SHIRUDO_TEST_REVOKE_RESULTS="$SHIRUDO_TEST_RESULTS/revocation"
 fail=0
 found=0
+# Keep post-test log handling in this shell; an end-to-end policy test may
+# have attached a hook that denies every new unlabeled executable.
+print_test_log()
+{
+	while IFS= read -r line || [ -n "$line" ]; do
+		printf '%s\n' "$line"
+	done <"$1"
+}
+
+test_log_skipped()
+{
+	first_line=
+	IFS= read -r first_line <"$1" || :
+	case "$first_line" in
+	'1..0 # SKIP'*) return 0 ;;
+	*) return 1 ;;
+	esac
+}
+
 for t in "$dir"/t[0-9]1[0-9][0-9]-*.sh; do
 	[ -e "$t" ] || continue
 	found=1
 	log="$SHIRUDO_TEST_RESULTS/$(basename "$t").log"
 	rc=0
 	sh "$t" >"$log" 2>&1 || rc=$?
-	cat "$log"
-	if grep -q '^1\.\.0 # SKIP' "$log"; then
+	print_test_log "$log"
+	if test_log_skipped "$log"; then
 		printf 'required target test was skipped: %s\n' "$t" >&2
 		rc=1
 	fi

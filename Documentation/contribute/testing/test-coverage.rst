@@ -459,6 +459,12 @@ signed config image.
      - DNS over loopback
    * - ``t9105-delivery``
      - Registry, tree sync, load, export and attestation end to end
+   * - ``t9106-policy-exec-graph``
+     - A signed SHPL section labels five executables; its BPF policy
+       allows unlabeled tasks to exec unlabeled files and 0x1, allows
+       0x1 to exec 0x2, and denies 0x1 and socket policy B from execing
+       unlabeled files; socket-storage bits allow 127.0.0.1 for policy A
+       and deny it for B; final evidence includes the loaded policy upatch
 
 Unit suites and fuzz targets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

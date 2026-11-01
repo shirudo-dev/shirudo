@@ -135,6 +135,7 @@ TEST_VM_BUNDLE_SOURCES := $(sort $(wildcard \
 	$(ROOT)/testing/fixtures/*.conf $(ROOT)/testing/fixtures/*.sh \
 	$(ROOT)/testing/fixtures/*.h \
 	$(ROOT)/testing/fixtures/policy-labels/* \
+	$(ROOT)/testing/fixtures/policy-exec-graph/* \
 	$(ROOT)/testing/fixtures/decoders/* \
 	$(ROOT)/upatches/kernel-obs/*.c $(ROOT)/upatches/kernel-obs/*.h $(ROOT)/upatches/kernel-obs/*.list \
 		$(ROOT)/upatches/kernel-obs/*.py $(ROOT)/upatches/kernel-obs/Beefile \

@@ -1,0 +1,32 @@
+[package]
+name = "policy-exec-graph"
+description = "exec policy graph end-to-end test"
+license = "GPL-2.0 OR BSD-2-Clause"
+
+[[upatches]]
+source = "policy-exec-graph.bpf.c"
+
+[[upatches.policy]]
+id = "entry"
+bit = 0x1
+paths = ["/tmp/shirudo-policy-exec-graph/exec-1"]
+
+[[upatches.policy]]
+id = "allowed-child"
+bit = 0x2
+paths = ["/tmp/shirudo-policy-exec-graph/exec-2"]
+
+[[upatches.policy]]
+id = "denied-child"
+bit = 0x4
+paths = ["/tmp/shirudo-policy-exec-graph/exec-4"]
+
+[[upatches.policy]]
+id = "socket-allow"
+bit = 0x8
+paths = ["/tmp/shirudo-policy-exec-graph/socket-a"]
+
+[[upatches.policy]]
+id = "socket-deny"
+bit = 0x10
+paths = ["/tmp/shirudo-policy-exec-graph/socket-b"]

@@ -29,6 +29,7 @@ export BPM_OCI_CA_FILE="$W/ca.pem"
 VM_NAME=${VM_NAME:-end2end-$$}
 export VM_NAME
 RESULT=$REPO/build/test-vm/vms/$VM_NAME-end2end/result/end2end
+POLICY_FIXTURE=$TEST_VM_HOST_BUNDLE/fixtures/shirudo-test-policy-exec-graph.upatch
 
 say() { printf 'end2end: %s\n' "$*"; }
 die() { printf 'end2end: %s\n' "$*" >&2; exit 1; }
@@ -51,6 +52,7 @@ wait_https() {
 
 command -v docker >/dev/null 2>&1 || die "docker is required"
 [ -s "$KEYS/signing_key.pem" ] || die "no operator key beside the bundle: $KEYS"
+[ -s "$POLICY_FIXTURE" ] || die "no policy exec graph fixture: $POLICY_FIXTURE"
 rm -rf "$W"
 mkdir -p "$W/out" "$W/pkg"
 chmod 0777 "$W/out"
@@ -105,6 +107,9 @@ tar -xzf "$BEE" -C "$W/pkg"
 "$S" upatch info --json "$W/pkg/kernel-obs-1.0.0/upatches/kernel-obs.upatch" |
 	python3 -c 'import json, sys; print(json.load(sys.stdin)["payload_sha256"])' \
 	>"$W/payload"
+"$S" upatch info --json "$POLICY_FIXTURE" |
+	python3 -c 'import json, sys; print(json.load(sys.stdin)["payload_sha256"])' \
+	>"$W/policy-payload"
 
 say "the target, in $VM_NAME-end2end"
 "$@"
@@ -122,11 +127,12 @@ ak=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["ak"]["nam
 grep -qx 'verdict: ok' "$W/verify.out" || die "the evidence does not verify"
 # The records replay to the register the TPM certified, so the last load
 # and tree operation they name are the target's.
-python3 - "$RESULT/evidence.json" "$(cat "$W/payload")" "$W/ca.pem" \
-	"$REGISTRY" <<'PY' || die "the target did not load what was published"
+python3 - "$RESULT/evidence.json" "$(cat "$W/payload")" \
+	"$(cat "$W/policy-payload")" "$W/ca.pem" "$REGISTRY" <<'PY' || \
+	die "the target did not load what was published"
 import json, ssl, sys, urllib.request
 
-evidence, payload, ca, registry = sys.argv[1:5]
+evidence, payload, policy_payload, ca, registry = sys.argv[1:6]
 ctx = ssl.create_default_context(cafile=ca)
 
 
@@ -151,7 +157,9 @@ for layer in manifest["layers"]:
 assert published, "no publication in the tree"
 records = json.load(open(evidence))["eventlog"]
 loads = [r["upatch"] for r in records if r["type"] == "upatch_load"]
-assert loads[-1] == {"name": "kernel-obs", "payload_sha256": payload}, loads[-1]
+assert {"name": "kernel-obs", "payload_sha256": payload} in loads, loads
+assert loads[-1] == {"name": "policy-exec-graph",
+                     "payload_sha256": policy_payload}, loads[-1]
 ops = [r["tree"] for r in records if r["type"] == "tree_op"]
 assert ops[-1] == {key: published[key] for key in
                    ("seq", "op", "id", "operation_digest")}, (ops[-1], published)
