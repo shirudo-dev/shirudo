@@ -19,6 +19,7 @@
 
 #include <openssl/evp.h>
 
+#include <linux/bpf.h>
 #include <bpf/libbpf.h>
 
 #include <shirudo/misc.h>
@@ -1587,6 +1588,17 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 	}
 
 	opts.gen_hash = true;
+	if (policy_labels_len) {
+		const struct shirudo_upatch_policy_label_header *labels =
+			policy_labels;
+		__u32 map_idx = le32toh(labels->policy_map_idx);
+
+		if (map_idx >= nr_maps || map_idx >= SHIRUDO_UPATCH_MAPS_MAX) {
+			err = -EINVAL;
+			goto out;
+		}
+		opts.reuse_map_mask = 1ULL << map_idx;
+	}
 	err = bpf_object__gen_loader(obj, &opts);
 	if (err) {
 		pr_err("bpf_object__gen_loader: %d", err);
@@ -1758,7 +1770,9 @@ int build_package_load(const char *bpf_o, const char *src_path,
 	struct bpf_object *obj;
 	struct shirudo_upatch_policy_label_header *label_blob = NULL;
 	struct shirudo_upatch_policy_label_entry *label_entries;
-	__u32 label_len = 0;
+	struct bpf_map *map, *policy_map;
+	__u32 label_len = 0, policy_map_idx = 0;
+	__u32 map_idx = 0;
 	int handler_ids[2] = {-1, -1};
 	int err;
 
@@ -1780,16 +1794,36 @@ int build_package_load(const char *bpf_o, const char *src_path,
 		return err;
 	}
 	if (nr_policies) {
+		policy_map = bpf_object__find_map_by_name(obj, "policy_map");
+		if (!policy_map ||
+		    bpf_map__type(policy_map) != BPF_MAP_TYPE_TASK_STORAGE ||
+		    bpf_map__key_size(policy_map) != sizeof(__s32) ||
+		    bpf_map__value_size(policy_map) != 2 * sizeof(__u64) ||
+		    bpf_map__map_flags(policy_map) != BPF_F_NO_PREALLOC) {
+			pr_err("policy labels require compatible policy_map task storage");
+			err = -EINVAL;
+			goto out;
+		}
+		bpf_object__for_each_map(map, obj) {
+			if (map == policy_map)
+				break;
+			map_idx++;
+		}
+		if (map_idx >= SHIRUDO_UPATCH_MAPS_MAX || map != policy_map) {
+			err = -E2BIG;
+			goto out;
+		}
+		policy_map_idx = map_idx;
 		label_len = sizeof(*label_blob) + nr_policies * sizeof(*label_entries);
 		label_blob = xcalloc(1, label_len);
 		if (!label_blob) {
-			bpf_object__close(obj);
-			unregister_target_attach_types(handler_ids);
-			return -ENOMEM;
+			err = -ENOMEM;
+			goto out;
 		}
 		label_blob->magic = htole32(SHIRUDO_UPATCH_POLICY_LABELS_MAGIC);
 		label_blob->version = htole32(SHIRUDO_UPATCH_POLICY_LABELS_VERSION);
 		label_blob->count = htole32(nr_policies);
+		label_blob->policy_map_idx = htole32(policy_map_idx);
 		label_entries = (void *)(label_blob + 1);
 		for (__u32 i = 0; i < nr_policies; i++) {
 			label_entries[i] = policies[i];
@@ -1798,6 +1832,10 @@ int build_package_load(const char *bpf_o, const char *src_path,
 	}
 	err = finalize_object(obj, out_path, upatch_name, 0, NULL, src_path,
 			      label_blob, label_len, pkey_path, cert_path);
+	obj = NULL;
+out:
+	if (obj)
+		bpf_object__close(obj);
 	if (label_blob)
 		xfree(label_blob, label_len);
 	unregister_target_attach_types(handler_ids);

@@ -28,6 +28,7 @@
 #include <shirudo/enforcement.h>
 
 #include "identity.h"
+#include "shirudo_policy_map.h"
 #include "tamper.h"
 
 #define TASK_TRUSTED	1
@@ -47,18 +48,6 @@ struct {
 	__type(key, int);
 	__type(value, struct task_authority);
 } shirudo_tasks SEC(".maps");
-
-struct shirudo_task_policy {
-	__u64	active;
-	__u64	candidate;
-};
-
-struct {
-	__uint(type, BPF_MAP_TYPE_TASK_STORAGE);
-	__uint(map_flags, BPF_F_NO_PREALLOC);
-	__type(key, int);
-	__type(value, struct shirudo_task_policy);
-} policy_map SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_SK_STORAGE);

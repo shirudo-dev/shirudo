@@ -179,7 +179,8 @@ signed config image.
      - ``status --json`` with eighty loaded upatches lists all of them
    * - ``t3109-policy-labels``
      - A loaded upatch labels executable and ordinary files, ORing
-       multiple policy bits with a preexisting xattr
+       multiple policy bits with a preexisting xattr; its signed policy
+       section binds its verdict program to the shared task policy map
 
 ``tpm`` (4)
 ~~~~~~~~~~~

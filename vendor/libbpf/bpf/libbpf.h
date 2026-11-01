@@ -1990,9 +1990,10 @@ struct gen_loader_opts {
 	__u32 data_sz;
 	__u32 insns_sz;
 	bool gen_hash;
+	__u64 reuse_map_mask;
 };
 
-#define gen_loader_opts__last_field gen_hash
+#define gen_loader_opts__last_field reuse_map_mask
 LIBBPF_API int bpf_object__gen_loader(struct bpf_object *obj,
 				      struct gen_loader_opts *opts);
 

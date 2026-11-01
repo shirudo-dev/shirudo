@@ -120,18 +120,25 @@ static bool has_nul(const char *s, size_t n)
 	return memchr(s, '\0', n);
 }
 
-static bool parse_policy_labels(const __u8 *p, __u32 len)
+static bool parse_policy_labels(const __u8 *p, __u32 len, __u32 nr_maps,
+				bool bind_policy_map, __u32 *map_idx)
 {
 	struct shirudo_upatch_policy_label_header h;
-	__u32 count;
+	__u32 count, version, idx;
 
 	if (len < sizeof(h))
 		return false;
 	memcpy(&h, p, sizeof(h));
 	count = le32toh(h.count);
+	version = le32toh(h.version);
+	idx = le32toh(h.policy_map_idx);
 	if (le32toh(h.magic) != SHIRUDO_UPATCH_POLICY_LABELS_MAGIC ||
-	    le32toh(h.version) != SHIRUDO_UPATCH_POLICY_LABELS_VERSION ||
-	    le32toh(h.reserved) || !count ||
+	    version != (bind_policy_map ?
+			SHIRUDO_UPATCH_POLICY_LABELS_VERSION :
+			SHIRUDO_UPATCH_POLICY_UNLABELS_VERSION) ||
+	    (bind_policy_map && (idx >= nr_maps ||
+				 idx >= SHIRUDO_UPATCH_MAPS_MAX)) ||
+	    (!bind_policy_map && idx) || !count ||
 	    (__u64)sizeof(h) + (__u64)count *
 	    sizeof(struct shirudo_upatch_policy_label_entry) != len)
 		return false;
@@ -146,6 +153,8 @@ static bool parse_policy_labels(const __u8 *p, __u32 len)
 		    !has_nul(e.path, sizeof(e.path)) || e.path[0] != '/')
 			return false;
 	}
+	if (bind_policy_map)
+		*map_idx = idx;
 	return true;
 }
 
@@ -215,6 +224,7 @@ static void forget_signed_sections(struct upatch *u)
 	u->signed_unload_payload = NULL;
 	u->signed_policy_labels = NULL;
 	u->signed_policy_labels_len = 0;
+	u->signed_policy_map_idx = 0;
 	u->signed_policy_unlabels = NULL;
 	u->signed_policy_unlabels_len = 0;
 }
@@ -287,14 +297,17 @@ static void parse_signed_sections(struct upatch *u)
 			break;
 		case SHIRUDO_UPATCH_SECTION_POLICY_LABELS:
 			bit = 16;
-			if (!parse_policy_labels(data + off, len))
+			if (!parse_policy_labels(data + off, len, u->hdr.nr_maps,
+						 true,
+						 &u->signed_policy_map_idx))
 				goto reject;
 			u->signed_policy_labels = data + off;
 			u->signed_policy_labels_len = len;
 			break;
 		case SHIRUDO_UPATCH_SECTION_POLICY_UNLABELS:
 			bit = 32;
-			if (!parse_policy_labels(data + off, len))
+			if (!parse_policy_labels(data + off, len, u->hdr.nr_maps,
+						 false, NULL))
 				goto reject;
 			u->signed_policy_unlabels = data + off;
 			u->signed_policy_unlabels_len = len;

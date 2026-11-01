@@ -56,6 +56,7 @@ struct upatch {
 	const __u8			*signed_unload_payload;	/* 32 bytes */
 	const void			*signed_policy_labels;
 	__u32				signed_policy_labels_len;
+	__u32				signed_policy_map_idx;
 	const void			*signed_policy_unlabels;
 	__u32				signed_policy_unlabels_len;
 };

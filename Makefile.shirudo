@@ -304,6 +304,7 @@ BPF_LIBBPF_HEADERS := $(addprefix $(LIBBPF_DIR)/,\
                                   $(addsuffix .h,$(BPF_VENDOR_HEADERS)))
 BPF_LIB_HEADERS    := bpf/lib/misc.h \
                       bpf/lib/serializer.h \
+                      bpf/lib/shirudo_policy_map.h \
                       bpf/lib/decoder.h
 
 # bpf/*.bpf.c sources compiled with clang -target bpf and embedded via

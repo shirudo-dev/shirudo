@@ -116,7 +116,7 @@ void bpf_gen__init(struct bpf_gen *gen, int log_level, int nr_progs, int nr_maps
 		   int max_func_ptr_maps)
 {
 	size_t stack_sz = sizeof(struct loader_stack), nr_progs_sz;
-	int i;
+	int i, cleanup_maps, nr_cleanup_maps;
 
 	gen->fd_array = add_data(gen, NULL, MAX_FD_ARRAY_SZ * sizeof(int));
 	gen->log_level = log_level;
@@ -126,6 +126,12 @@ void bpf_gen__init(struct bpf_gen *gen, int log_level, int nr_progs, int nr_maps
 		pr_warn("Total maps exceeds %d\n", MAX_USED_MAPS);
 		gen->error = -E2BIG;
 		return;
+	}
+	cleanup_maps = nr_maps + max_func_ptr_maps;
+	nr_cleanup_maps = cleanup_maps;
+	for (i = 0; i < nr_maps; i++) {
+		if (gen->opts->reuse_map_mask & (1ULL << i))
+			nr_cleanup_maps--;
 	}
 	/* their fds are closed like the fds of the maps of the object when loading fails */
 	nr_maps += max_func_ptr_maps;
@@ -150,7 +156,7 @@ void bpf_gen__init(struct bpf_gen *gen, int log_level, int nr_progs, int nr_maps
 			      /* 6 insns for emit_sys_close_blob,
 			       * 6 insns for debug_regs in emit_sys_close_blob
 			       */
-			      nr_maps * (6 + (gen->log_level ? 6 : 0))));
+			      nr_cleanup_maps * (6 + (gen->log_level ? 6 : 0))));
 
 	/* remember the label where all error branches will jump to */
 	gen->cleanup_label = gen->insn_cur - gen->insn_start;
@@ -160,8 +166,12 @@ void bpf_gen__init(struct bpf_gen *gen, int log_level, int nr_progs, int nr_maps
 		emit(gen, BPF_JMP_IMM(BPF_JSLE, BPF_REG_1, 0, 1));
 		emit(gen, BPF_EMIT_CALL(BPF_FUNC_sys_close));
 	}
-	for (i = 0; i < nr_maps; i++)
+	for (i = 0; i < nr_maps; i++) {
+		if (i < gen->nr_obj_maps &&
+		    (gen->opts->reuse_map_mask & (1ULL << i)))
+			continue;
 		emit_sys_close_blob(gen, blob_fd_array_off(gen, i));
+	}
 	/* R7 contains the error code from sys_bpf. Copy it into R0 and exit. */
 	emit(gen, BPF_MOV64_REG(BPF_REG_0, BPF_REG_7));
 	emit(gen, BPF_EXIT_INSN());
@@ -511,6 +521,25 @@ void bpf_gen__map_create(struct bpf_gen *gen,
 	union bpf_attr attr;
 
 	memset(&attr, 0, attr_size);
+	if (map_idx >= 0 && map_idx < MAX_USED_MAPS &&
+	    (gen->opts->reuse_map_mask & (1ULL << map_idx))) {
+		int ctx_off, fd_idx;
+
+		fd_idx = add_map_fd(gen);
+		ctx_off = sizeof(struct bpf_loader_ctx) +
+			  sizeof(struct bpf_map_desc) * map_idx +
+			  offsetof(struct bpf_map_desc, map_fd);
+		emit(gen, BPF_LDX_MEM(BPF_W, BPF_REG_7, BPF_REG_6, ctx_off));
+		emit(gen, BPF_JMP_IMM(BPF_JSGT, BPF_REG_7, 0, 2));
+		emit(gen, BPF_MOV64_IMM(BPF_REG_7, -EBADF));
+		emit_check_err(gen);
+		emit2(gen, BPF_LD_IMM64_RAW_FULL(BPF_REG_1,
+						 BPF_PSEUDO_MAP_IDX_VALUE,
+						 0, 0, 0,
+						 blob_fd_array_off(gen, fd_idx)));
+		emit(gen, BPF_STX_MEM(BPF_W, BPF_REG_1, BPF_REG_7, 0));
+		return;
+	}
 	attr.map_type = tgt_endian(map_type);
 	attr.key_size = tgt_endian(key_size);
 	attr.value_size = tgt_endian(value_size);

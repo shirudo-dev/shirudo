@@ -208,7 +208,11 @@ has fails. Entries that share a name must name the same input.
 
 A policy table declares a named bit and the absolute paths whose
 ``security.bpf.shirudo.policy`` xattrs this upatch labels. The builder
-embeds the entries in the signed upatch metadata.
+embeds the entries in the signed ``SHPL`` section. Its presence opts the
+upatch into Shirudo's shared task ``policy_map``: the generated loader
+reuses the pinned map rather than creating a private map. The BPF source
+must declare the same map ABI, normally by including
+``shirudo_policy_map.h`` after ``vmlinux.h`` and the libbpf headers.
 
 .. code-block:: toml
 
@@ -221,6 +225,13 @@ embeds the entries in the signed upatch metadata.
 other upatches extends that policy; an ID cannot change masks, and two
 different IDs cannot use the same mask in one package. Paths may name
 non-executable files.
+
+For an upatch with at least one policy table, include
+``shirudo_policy_map.h`` in its BPF source so it declares the shared map
+with the required ABI. The header is installed beside the Shirudo BPF
+headers. The signed ``SHPL`` section is what opts the upatch into this
+binding; declaring the map without policy tables leaves it as an ordinary
+upatch-owned map.
 
 The generator and the updater run on the operator host with the
 operator's rights. The target receives only the signed result. Without

@@ -183,7 +183,8 @@ static int expect_policy_labels(const struct upatch *u)
 	memcpy(&header, raw, sizeof(header));
 	if (le32toh(header.magic) != SHIRUDO_UPATCH_POLICY_LABELS_MAGIC ||
 	    le32toh(header.version) != SHIRUDO_UPATCH_POLICY_LABELS_VERSION ||
-	    le32toh(header.count) != count || header.reserved)
+	    le32toh(header.count) != count ||
+	    le32toh(header.policy_map_idx) != 0)
 		return fail("policy label header mismatch");
 	cursor = raw + sizeof(header);
 	for (size_t i = 0; i < count; i++) {

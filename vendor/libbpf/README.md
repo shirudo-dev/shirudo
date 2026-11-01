@@ -30,7 +30,10 @@ of `bpf-deps` fails on the missing symbol; extend the shim.
 
 `bpf/gen_loader.c` carries one local change on top of the recorded
 commit: `MAX_USED_PROGS` is 64 instead of 32, as required by the
-kernel-obs package.
+kernel-obs package. In addition `gen_loader.c` also supports reusing a
+signer-selected map FD supplied through the loader context. `bpf-deps`
+overwrites these files, so re-apply those changes after a refresh until
+they are upstream.
 
 `.github/scripts/check-spdx.sh` holds every vendored `.c` and `.h` to
 the licences in this table, so a refresh that brings in a file under

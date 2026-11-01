@@ -299,7 +299,8 @@ Section tags
      - ``0x4c504853``
      - variable
      - Signed policy labels, each naming a policy ID, one-hot bit and
-       absolute file path.
+       absolute file path. Its presence opts into the shared task
+       ``policy_map`` binding.
 
 The writer emits ``NAME``, then ``UNLD`` for an unload directive, or
 ``UPGM`` and optional ``DCDB`` and ``SHPL`` sections for a load artifact.
@@ -581,6 +582,47 @@ reads each source file, at most 16 MiB. A decoder whose ``language``,
 values above fails the build. :doc:`/upatches/write/decoders` covers the decoder
 API.
 
+SHPL section
+~~~~~~~~~~~~
+
+``SHPL`` starts with a 16-byte version 1 header, followed by ``count``
+fixed-size entries. ``policy_map_idx`` is the zero-based index of the
+``policy_map`` in the loader's map descriptor array. The builder accepts
+this section only when the BPF object declares a compatible task-storage
+map named ``policy_map``. At load time, Shirudo supplies the pinned shared
+task-storage map at that descriptor; the loader does not create or pin a
+private copy. Upatches that do not carry ``SHPL`` use their normal maps.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 8 6 24 62
+
+   * - Offset
+     - Size
+     - Field
+     - Value
+   * - +0
+     - 4
+     - ``magic``
+     - ``0x4c504853``, the bytes ``SHPL``.
+   * - +4
+     - 4
+     - ``version``
+     - ``1``.
+   * - +8
+     - 4
+     - ``count``
+     - Number of policy/path entries; non-zero.
+   * - +12
+     - 4
+     - ``policy_map_idx``
+     - Map descriptor index, less than ``nr_maps`` and 64.
+
+Each entry is 4168 bytes: a little-endian one-hot ``u64`` policy bit,
+64 bytes of NUL-terminated policy ID, then 4096 bytes of NUL-terminated
+absolute path. The loader applies each entry by ORing the policy bit into
+the inode's existing policy xattr.
+
 Header fields outside the signature
 -----------------------------------
 
@@ -721,6 +763,9 @@ Versioning
      - 1
      - Load refused.
    * - ``DCDB``
+     - 1
+     - Treats the directory as absent.
+   * - ``SHPL``
      - 1
      - Treats the directory as absent.
    * - Decoder manifest in ``.rodata``

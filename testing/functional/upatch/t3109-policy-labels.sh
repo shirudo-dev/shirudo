@@ -31,14 +31,15 @@ trap restore EXIT HUP INT TERM
 [ -x "$PROBE" ] || test_skip_all "runtime policy probe is missing"
 rm -rf "$WORK"
 mkdir -p "$WORK"
-printf '#!/bin/sh\nexit 0\n' >"$WORK/executable"
+printf '#!/bin/sh\n/bin/true\n' >"$WORK/executable"
 printf 'ordinary file\n' >"$WORK/ordinary"
 chmod 0755 "$WORK/executable"
 "$PROBE" set-policy "$WORK/ordinary" 0x8 ||
 	test_skip_all "scratch filesystem cannot store policy xattrs"
 
-test_expect_success 'upatch labels executable and ordinary files without clearing existing bits' '
+test_expect_success 'policy section labels files and binds the shared task map' '
 	"$SHIRUDO_BIN" upatch load "$LOAD" --no-precheck >/dev/null 2>&1 &&
+	! "$WORK/executable" >/dev/null 2>&1 &&
 	python3 - "$WORK/executable" "$WORK/ordinary" <<'"'"'PY'"'"'
 import os
 import sys

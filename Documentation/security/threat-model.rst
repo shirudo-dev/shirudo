@@ -672,6 +672,14 @@ value. Failed exec preserves the previous value, and children inherit
 the committed value. The xattr remains on the inode, and only a task
 with runtime authority may set, update or remove it (``SealLabel``).
 
+A signed upatch with an ``SHPL`` path-to-policy section opts into the
+same task-storage map. The builder requires a compatible ``policy_map``
+declaration, and the target supplies its pinned map FD to the generated
+loader. This lets the upatch's signed BPF programs read or update the
+shared task policy values; the signer therefore controls any policy
+effects those programs implement. Upatches without ``SHPL`` receive no
+binding to this map.
+
 The seal keeps a mark in inode storage on every labeled directory it
 has seen since the inode came into memory. A new inode under a marked
 directory receives the label inside the transaction that creates it
