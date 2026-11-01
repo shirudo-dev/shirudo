@@ -32,14 +32,21 @@ trap restore EXIT HUP INT TERM
 rm -rf "$WORK"
 mkdir -p "$WORK"
 printf '#!/bin/sh\n/bin/true\n' >"$WORK/executable"
+printf '#!/bin/sh\npython3 -c '\''import socket; s=socket.socket();\ntry: s.connect(("127.0.0.1", 9))\nexcept PermissionError: raise SystemExit(0)\nexcept OSError: raise SystemExit(1)\nraise SystemExit(2)'\''\n' \
+	>"$WORK/socket-executable"
 printf 'ordinary file\n' >"$WORK/ordinary"
-chmod 0755 "$WORK/executable"
+chmod 0755 "$WORK/executable" "$WORK/socket-executable"
 "$PROBE" set-policy "$WORK/ordinary" 0x8 ||
 	test_skip_all "scratch filesystem cannot store policy xattrs"
 
-test_expect_success 'policy section labels files and binds the shared task map' '
-	"$SHIRUDO_BIN" upatch load "$LOAD" --no-precheck >/dev/null 2>&1 &&
-	! "$WORK/executable" >/dev/null 2>&1 &&
+test_expect_success 'policy section binds task and socket maps and labels files' '
+	"$SHIRUDO_BIN" upatch load "$LOAD" --no-precheck &&
+	{ ! "$WORK/executable" >/dev/null 2>&1 || {
+		echo "policy executable was allowed" >&2; false;
+	}; } &&
+	{ "$WORK/socket-executable" >/dev/null 2>&1 || {
+		echo "socket policy executable failed" >&2; false;
+	}; } &&
 	python3 - "$WORK/executable" "$WORK/ordinary" <<'"'"'PY'"'"'
 import os
 import sys

@@ -300,7 +300,7 @@ Section tags
      - variable
      - Signed policy labels, each naming a policy ID, one-hot bit and
        absolute file path. Its presence opts into the shared task
-       ``policy_map`` binding.
+       ``policy_map`` and socket ``socket_policy_map`` bindings.
 
 The writer emits ``NAME``, then ``UNLD`` for an unload directive, or
 ``UPGM`` and optional ``DCDB`` and ``SHPL`` sections for a load artifact.
@@ -585,13 +585,14 @@ API.
 SHPL section
 ~~~~~~~~~~~~
 
-``SHPL`` starts with a 16-byte version 1 header, followed by ``count``
-fixed-size entries. ``policy_map_idx`` is the zero-based index of the
-``policy_map`` in the loader's map descriptor array. The builder accepts
-this section only when the BPF object declares a compatible task-storage
-map named ``policy_map``. At load time, Shirudo supplies the pinned shared
-task-storage map at that descriptor; the loader does not create or pin a
-private copy. Upatches that do not carry ``SHPL`` use their normal maps.
+``SHPL`` starts with a 20-byte version 1 header, followed by ``count``
+fixed-size entries. ``policy_map_idx`` and ``socket_policy_map_idx`` are
+the zero-based indices of the shared maps in the loader's map descriptor
+array. The builder accepts this section only when the BPF object declares
+compatible maps named ``policy_map`` and ``socket_policy_map``. At load
+time, Shirudo supplies the pinned task and socket storage maps at those
+descriptors; the loader does not create or pin private copies. Upatches
+without ``SHPL`` use their normal maps.
 
 .. list-table::
    :header-rows: 1
@@ -617,6 +618,10 @@ private copy. Upatches that do not carry ``SHPL`` use their normal maps.
      - 4
      - ``policy_map_idx``
      - Map descriptor index, less than ``nr_maps`` and 64.
+   * - +16
+     - 4
+     - ``socket_policy_map_idx``
+     - Distinct map descriptor index, less than ``nr_maps`` and 64.
 
 Each entry is 4168 bytes: a little-endian one-hot ``u64`` policy bit,
 64 bytes of NUL-terminated policy ID, then 4096 bytes of NUL-terminated

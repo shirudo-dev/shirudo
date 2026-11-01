@@ -163,14 +163,15 @@ static int expect_uprobe_multi(const struct upatch *u,
 static int expect_policy_labels(const struct upatch *u)
 {
 	static const char *const policies[] = {
-		"executable", "ordinary-a", "ordinary-b",
+		"executable", "ordinary-a", "ordinary-b", "socket-check",
 	};
 	static const char *const paths[] = {
 		"/tmp/shirudo-policy-label-test/executable",
 		"/tmp/shirudo-policy-label-test/ordinary",
 		"/tmp/shirudo-policy-label-test/ordinary",
+		"/tmp/shirudo-policy-label-test/socket-executable",
 	};
-	static const __u64 bits[] = { 1, 2, 4 };
+	static const __u64 bits[] = { 1, 2, 4, 16 };
 	struct shirudo_upatch_policy_label_entry entry;
 	struct shirudo_upatch_policy_label_header header;
 	const __u8 *raw, *cursor;
@@ -184,7 +185,8 @@ static int expect_policy_labels(const struct upatch *u)
 	if (le32toh(header.magic) != SHIRUDO_UPATCH_POLICY_LABELS_MAGIC ||
 	    le32toh(header.version) != SHIRUDO_UPATCH_POLICY_LABELS_VERSION ||
 	    le32toh(header.count) != count ||
-	    le32toh(header.policy_map_idx) != 0)
+	    le32toh(header.policy_map_idx) != 0 ||
+	    le32toh(header.socket_policy_map_idx) != 1)
 		return fail("policy label header mismatch");
 	cursor = raw + sizeof(header);
 	for (size_t i = 0; i < count; i++) {

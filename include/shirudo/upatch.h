@@ -103,6 +103,7 @@ struct shirudo_upatch_policy_label_header {
 	__u32	version;
 	__u32	count;
 	__u32	policy_map_idx;
+	__u32	socket_policy_map_idx;
 };
 
 struct shirudo_upatch_policy_label_entry {

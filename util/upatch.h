@@ -57,6 +57,7 @@ struct upatch {
 	const void			*signed_policy_labels;
 	__u32				signed_policy_labels_len;
 	__u32				signed_policy_map_idx;
+	__u32				signed_socket_policy_map_idx;
 	const void			*signed_policy_unlabels;
 	__u32				signed_policy_unlabels_len;
 };

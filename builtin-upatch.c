@@ -1518,6 +1518,7 @@ out:
  */
 static int pin_upatch_maps(const struct loader_ctx *cx,
 			   __u32 nr_maps, __u32 shared_policy_map_idx,
+			   __u32 shared_socket_policy_map_idx,
 			   const char *name)
 {
 	char dir[PATH_MAX], maps_dir[PATH_MAX + 8];
@@ -1551,7 +1552,8 @@ static int pin_upatch_maps(const struct loader_ctx *cx,
 		struct stat st;
 		int err;
 
-		if (i == shared_policy_map_idx || md->map_fd <= 0)
+		if (i == shared_policy_map_idx ||
+		    i == shared_socket_policy_map_idx || md->map_fd <= 0)
 			continue;
 		err = bpf_map_get_info_by_fd(md->map_fd, &info, &info_len);
 		if (err) {
@@ -1580,6 +1582,42 @@ static int pin_upatch_maps(const struct loader_ctx *cx,
 			i, info.name, (__u32)info.type, pin);
 	}
 	return 0;
+}
+
+static int open_shared_policy_map(const char *pin, __u32 type,
+				  __u32 value_size, __u32 map_flags)
+{
+	struct bpf_map_info info = {};
+	__u32 info_len = sizeof(info);
+	int fd, rc;
+
+	fd = bpf_obj_get(pin);
+	if (fd < 0)
+		return -errno;
+	rc = bpf_map_get_info_by_fd(fd, &info, &info_len);
+	if (rc) {
+		rc = -errno;
+		goto err;
+	}
+	if (info.type != type || info.key_size != sizeof(__s32) ||
+	    info.value_size != value_size || info.map_flags != map_flags) {
+		rc = -EINVAL;
+		goto err;
+	}
+	if (fd == 0) {
+		int copy_fd = fcntl(fd, F_DUPFD_CLOEXEC, 3);
+
+		if (copy_fd < 0) {
+			rc = -errno;
+			goto err;
+		}
+		close(fd);
+		fd = copy_fd;
+	}
+	return fd;
+err:
+	close(fd);
+	return rc;
 }
 
 /*
@@ -1686,9 +1724,11 @@ static int __upatch_apply(const char *path, bool verify_only,
 	char upatch_name[UPATCH_NAME_MAX + 1];
 	char *vlog;			/* shared PROG_LOAD / TEST_RUN log_buf */
 	size_t insn_cnt, ctx_sz = 0, prog_desc_off;
-	int prog_fd = -1, map_fd = -1, policy_map_fd = -1, ret;
+	int prog_fd = -1, map_fd = -1, policy_map_fd = -1;
+	int socket_policy_map_fd = -1, ret;
 	struct loader_ctx *cx = NULL;
 	__u32 retval = 0, shared_policy_map_idx = SHIRUDO_UPATCH_MAPS_MAX;
+	__u32 shared_socket_policy_map_idx = SHIRUDO_UPATCH_MAPS_MAX;
 
 	vlog = xmalloc(VERIFIER_LOG_MAX);
 	if (!vlog) {
@@ -1990,60 +2030,46 @@ static int __upatch_apply(const char *path, bool verify_only,
 	cx->log_size = VERIFIER_LOG_MAX;
 	cx->log_buf = ptr_to_u64(vlog);
 	if (u.signed_policy_labels) {
-		struct bpf_map_info info = {};
 		struct map_desc *md;
-		__u32 info_len = sizeof(info);
-		int map_err;
 
 		shared_policy_map_idx = u.signed_policy_map_idx;
-		policy_map_fd = bpf_obj_get(POLICY_PIN);
+		shared_socket_policy_map_idx =
+			u.signed_socket_policy_map_idx;
+		policy_map_fd =
+			open_shared_policy_map(POLICY_PIN,
+					       BPF_MAP_TYPE_TASK_STORAGE,
+					       2 * sizeof(__u64),
+					       BPF_F_NO_PREALLOC);
 		if (policy_map_fd < 0) {
-			int err = errno;
-
-			pr_err("upatch load: open policy_map: %s", strerror(err));
-			rep_fail(rep, "payload_load", "unknown", err,
+			pr_err("upatch load: open policy_map: %s",
+			       strerror(-policy_map_fd));
+			rep_fail(rep, "payload_load", "unknown", -policy_map_fd,
 				 "policy_map binding failed");
 			ret = 1;
 			goto out;
 		}
-		map_err = bpf_map_get_info_by_fd(policy_map_fd, &info, &info_len);
-		if (map_err)
-			map_err = errno;
-		else if (info.type != BPF_MAP_TYPE_TASK_STORAGE ||
-			 info.key_size != sizeof(__s32) ||
-			 info.value_size != 2 * sizeof(__u64) ||
-			 info.map_flags != BPF_F_NO_PREALLOC)
-			map_err = EINVAL;
-		if (map_err) {
-			pr_err("upatch load: policy_map ABI mismatch");
-			rep_fail(rep, "payload_load", "unknown", map_err,
-				 "policy_map binding failed");
+		socket_policy_map_fd =
+			open_shared_policy_map(SOCKET_POLICY_PIN,
+					       BPF_MAP_TYPE_SK_STORAGE, sizeof(__u64),
+					       BPF_F_NO_PREALLOC | BPF_F_CLONE);
+		if (socket_policy_map_fd < 0) {
+			int err = -socket_policy_map_fd;
+
+			pr_err("upatch load: open socket_policy_map: %s",
+			       strerror(err));
+			rep_fail(rep, "payload_load", "unknown", err,
+				 "socket_policy_map binding failed");
 			close(policy_map_fd);
 			policy_map_fd = -1;
 			ret = 1;
 			goto out;
 		}
-		if (policy_map_fd == 0) {
-			int fd = fcntl(policy_map_fd, F_DUPFD_CLOEXEC, 3);
-
-			if (fd < 0) {
-				int err = errno;
-
-				close(policy_map_fd);
-				policy_map_fd = -1;
-				pr_err("upatch load: duplicate policy_map fd: %s",
-				       strerror(err));
-				rep_fail(rep, "payload_load", "unknown", err,
-					 "policy_map binding failed");
-				ret = 1;
-				goto out;
-			}
-			close(policy_map_fd);
-			policy_map_fd = fd;
-		}
 		md = (struct map_desc *)((__u8 *)cx + sizeof(*cx)) +
 			shared_policy_map_idx;
 		md->map_fd = policy_map_fd;
+		md = (struct map_desc *)((__u8 *)cx + sizeof(*cx)) +
+			shared_socket_policy_map_idx;
+		md->map_fd = socket_policy_map_fd;
 	}
 
 	ret = prog_test_run(prog_fd, cx, (__u32)ctx_sz, &retval);
@@ -2063,6 +2089,10 @@ static int __upatch_apply(const char *path, bool verify_only,
 		if (policy_map_fd >= 0) {
 			close(policy_map_fd);
 			policy_map_fd = -1;
+		}
+		if (socket_policy_map_fd >= 0) {
+			close(socket_policy_map_fd);
+			socket_policy_map_fd = -1;
 		}
 		/*
 		 * The loader closed what it made before it failed; the
@@ -2113,7 +2143,7 @@ static int __upatch_apply(const char *path, bool verify_only,
 	}
 
 	pin_upatch_maps(cx, u.hdr.nr_maps, shared_policy_map_idx,
-			upatch_name);
+			shared_socket_policy_map_idx, upatch_name);
 
 	/* After attach and pin, so the value records a loaded upatch. */
 	set_pin_payload(upatch_name, u.hdr.payload_sha256);

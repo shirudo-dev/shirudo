@@ -1592,12 +1592,18 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 		const struct shirudo_upatch_policy_label_header *labels =
 			policy_labels;
 		__u32 map_idx = le32toh(labels->policy_map_idx);
+		__u32 socket_map_idx =
+			le32toh(labels->socket_policy_map_idx);
 
-		if (map_idx >= nr_maps || map_idx >= SHIRUDO_UPATCH_MAPS_MAX) {
+		if (map_idx >= nr_maps || map_idx >= SHIRUDO_UPATCH_MAPS_MAX ||
+		    socket_map_idx >= nr_maps ||
+		    socket_map_idx >= SHIRUDO_UPATCH_MAPS_MAX ||
+		    map_idx == socket_map_idx) {
 			err = -EINVAL;
 			goto out;
 		}
-		opts.reuse_map_mask = 1ULL << map_idx;
+		opts.reuse_map_mask = (1ULL << map_idx) |
+				      (1ULL << socket_map_idx);
 	}
 	err = bpf_object__gen_loader(obj, &opts);
 	if (err) {
@@ -1770,8 +1776,8 @@ int build_package_load(const char *bpf_o, const char *src_path,
 	struct bpf_object *obj;
 	struct shirudo_upatch_policy_label_header *label_blob = NULL;
 	struct shirudo_upatch_policy_label_entry *label_entries;
-	struct bpf_map *map, *policy_map;
-	__u32 label_len = 0, policy_map_idx = 0;
+	struct bpf_map *map, *policy_map, *socket_policy_map;
+	__u32 label_len = 0, policy_map_idx = 0, socket_policy_map_idx = 0;
 	__u32 map_idx = 0;
 	int handler_ids[2] = {-1, -1};
 	int err;
@@ -1795,12 +1801,24 @@ int build_package_load(const char *bpf_o, const char *src_path,
 	}
 	if (nr_policies) {
 		policy_map = bpf_object__find_map_by_name(obj, "policy_map");
+		socket_policy_map =
+			bpf_object__find_map_by_name(obj, "socket_policy_map");
 		if (!policy_map ||
 		    bpf_map__type(policy_map) != BPF_MAP_TYPE_TASK_STORAGE ||
 		    bpf_map__key_size(policy_map) != sizeof(__s32) ||
 		    bpf_map__value_size(policy_map) != 2 * sizeof(__u64) ||
 		    bpf_map__map_flags(policy_map) != BPF_F_NO_PREALLOC) {
 			pr_err("policy labels require compatible policy_map task storage");
+			err = -EINVAL;
+			goto out;
+		}
+		if (!socket_policy_map ||
+		    bpf_map__type(socket_policy_map) != BPF_MAP_TYPE_SK_STORAGE ||
+		    bpf_map__key_size(socket_policy_map) != sizeof(__s32) ||
+		    bpf_map__value_size(socket_policy_map) != sizeof(__u64) ||
+		    bpf_map__map_flags(socket_policy_map) !=
+				(BPF_F_NO_PREALLOC | BPF_F_CLONE)) {
+			pr_err("policy labels require compatible socket_policy_map storage");
 			err = -EINVAL;
 			goto out;
 		}
@@ -1814,6 +1832,18 @@ int build_package_load(const char *bpf_o, const char *src_path,
 			goto out;
 		}
 		policy_map_idx = map_idx;
+		map_idx = 0;
+		bpf_object__for_each_map(map, obj) {
+			if (map == socket_policy_map)
+				break;
+			map_idx++;
+		}
+		if (map_idx >= SHIRUDO_UPATCH_MAPS_MAX ||
+		    map != socket_policy_map || map_idx == policy_map_idx) {
+			err = -E2BIG;
+			goto out;
+		}
+		socket_policy_map_idx = map_idx;
 		label_len = sizeof(*label_blob) + nr_policies * sizeof(*label_entries);
 		label_blob = xcalloc(1, label_len);
 		if (!label_blob) {
@@ -1824,6 +1854,8 @@ int build_package_load(const char *bpf_o, const char *src_path,
 		label_blob->version = htole32(SHIRUDO_UPATCH_POLICY_LABELS_VERSION);
 		label_blob->count = htole32(nr_policies);
 		label_blob->policy_map_idx = htole32(policy_map_idx);
+		label_blob->socket_policy_map_idx =
+			htole32(socket_policy_map_idx);
 		label_entries = (void *)(label_blob + 1);
 		for (__u32 i = 0; i < nr_policies; i++) {
 			label_entries[i] = policies[i];

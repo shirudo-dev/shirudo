@@ -14,4 +14,11 @@ struct {
 	__type(value, struct shirudo_task_policy);
 } policy_map SEC(".maps");
 
+struct {
+	__uint(type, BPF_MAP_TYPE_SK_STORAGE);
+	__uint(map_flags, BPF_F_NO_PREALLOC | BPF_F_CLONE);
+	__type(key, int);
+	__type(value, __u64);
+} socket_policy_map SEC(".maps");
+
 #endif

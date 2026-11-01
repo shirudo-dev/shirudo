@@ -180,7 +180,8 @@ signed config image.
    * - ``t3109-policy-labels``
      - A loaded upatch labels executable and ordinary files, ORing
        multiple policy bits with a preexisting xattr; its signed policy
-       section binds its verdict program to the shared task policy map
+       section binds verdict programs to shared task and socket policy
+       maps
 
 ``tpm`` (4)
 ~~~~~~~~~~~

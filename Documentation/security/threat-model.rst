@@ -673,12 +673,13 @@ the committed value. The xattr remains on the inode, and only a task
 with runtime authority may set, update or remove it (``SealLabel``).
 
 A signed upatch with an ``SHPL`` path-to-policy section opts into the
-same task-storage map. The builder requires a compatible ``policy_map``
-declaration, and the target supplies its pinned map FD to the generated
-loader. This lets the upatch's signed BPF programs read or update the
-shared task policy values; the signer therefore controls any policy
-effects those programs implement. Upatches without ``SHPL`` receive no
-binding to this map.
+shared task and socket policy maps. The builder requires compatible map
+declarations, and the target supplies both pinned map FDs to the
+generated loader. The upatch's signed BPF programs can inspect task and
+socket policy values at any supported LSM hook. Authors are expected to
+read these values; the verifier does not prevent signed programs from
+changing them. Upatches without ``SHPL`` receive no binding to these
+maps.
 
 The seal keeps a mark in inode storage on every labeled directory it
 has seen since the inode came into memory. A new inode under a marked
