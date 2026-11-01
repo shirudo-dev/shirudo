@@ -160,6 +160,43 @@ static int expect_uprobe_multi(const struct upatch *u,
 	return cursor == end ? 0 : fail("trailing uprobe metadata");
 }
 
+static int expect_policy_labels(const struct upatch *u)
+{
+	static const char *const policies[] = {
+		"executable", "ordinary-a", "ordinary-b",
+	};
+	static const char *const paths[] = {
+		"/tmp/shirudo-policy-label-test/executable",
+		"/tmp/shirudo-policy-label-test/ordinary",
+		"/tmp/shirudo-policy-label-test/ordinary",
+	};
+	static const __u64 bits[] = { 1, 2, 4 };
+	struct shirudo_upatch_policy_label_entry entry;
+	struct shirudo_upatch_policy_label_header header;
+	const __u8 *raw, *cursor;
+	__u32 len;
+	size_t count = ARRAY_SIZE(bits);
+
+	raw = upatch_signed_policy_labels(u, &len);
+	if (!raw || len != sizeof(header) + count * sizeof(entry))
+		return fail("policy label section length mismatch");
+	memcpy(&header, raw, sizeof(header));
+	if (le32toh(header.magic) != SHIRUDO_UPATCH_POLICY_LABELS_MAGIC ||
+	    le32toh(header.version) != SHIRUDO_UPATCH_POLICY_LABELS_VERSION ||
+	    le32toh(header.count) != count || header.reserved)
+		return fail("policy label header mismatch");
+	cursor = raw + sizeof(header);
+	for (size_t i = 0; i < count; i++) {
+		memcpy(&entry, cursor, sizeof(entry));
+		cursor += sizeof(entry);
+		if (le64toh(entry.bit) != bits[i] ||
+		    strcmp(entry.policy, policies[i]) ||
+		    strcmp(entry.path, paths[i]))
+			return fail("policy label entry mismatch");
+	}
+	return cursor == raw + len ? 0 : fail("trailing policy label data");
+}
+
 int main(int argc, char **argv)
 {
 	struct upatch u;
@@ -204,6 +241,8 @@ int main(int argc, char **argv)
 		else
 			ret = expect_uprobe_multi(&u, argv[3], argv[4],
 						  (__u32)count);
+	} else if (strcmp(mode, "policy-labels") == 0 && argc == 3) {
+		ret = expect_policy_labels(&u);
 	} else {
 		ret = fail("unknown metadata check mode");
 	}

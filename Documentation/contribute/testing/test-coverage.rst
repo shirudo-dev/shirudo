@@ -177,6 +177,9 @@ signed config image.
      - A live ``uprobe.multi`` load, refusal after a build ID change
    * - ``t3108-status-many``
      - ``status --json`` with eighty loaded upatches lists all of them
+   * - ``t3109-policy-labels``
+     - A loaded upatch labels executable and ordinary files, ORing
+       multiple policy bits with a preexisting xattr
 
 ``tpm`` (4)
 ~~~~~~~~~~~
@@ -358,6 +361,11 @@ signed config image.
      - Repeated peeks and concurrent drains
    * - ``t6140-status-keyrings``
      - Status reports both keyrings with each certificate's frozen key
+   * - ``t6141-policy-inheritance``
+     - Task policy accumulates across parent exec, child exec and
+       interpreter handlers
+   * - ``t6142-policy-socket-inheritance``
+     - Task policy is inherited by a listener and its accepted socket
 
 ``bpm`` (7)
 ~~~~~~~~~~~
@@ -383,6 +391,9 @@ signed config image.
    * - ``t7005-bpm-publish``
      - ``bpm build``, ``bpm push`` with a signed index, ``bpm tree
        append``
+   * - ``t7006-policy-labels``
+     - Beefile policy declarations are serialized into the signed
+       upatch section
    * - ``t7101-bpm-tree``
      - Tree sync with a selector
    * - ``t7102-bpm-tree-sequential``
@@ -575,13 +586,17 @@ Coverage by area
      - ``t4004``, ``t5001`` to ``t5008``, ``t5101`` to ``t5105``,
        ``t6112``, ``t6127``, ``t6130``, ``t6132``. Fuzz: ``config``
    * - Packages and repositories
-     - ``t7001``, ``t7002``, ``t7003``, ``t7004``, ``t7005``. Fuzz:
+     - ``t7001``, ``t7002``, ``t7003``, ``t7004``, ``t7005``,
+       ``t7006``. Fuzz:
        ``beefile``, ``bpm-index``, ``bpm-package``, ``bpm-tar``,
        ``oci-http``, ``oci-manifest``, ``oci-ref``, ``registry-auth``
    * - upatch tree
      - ``t3011``, ``t5004``, ``t7005``, ``t7101``, ``t7102``,
        ``t7103``, ``t9105``. Fuzz: ``tree``, ``tree-state``,
        ``kconfig``. Unit: ``kernel_build_id``, ``kernel_release``
+   * - Policy labels
+     - Upatch labels and Beefile serialization: ``t3109``, ``t7006``.
+       Task and socket inheritance: ``t6141``, ``t6142``
    * - Telemetry
      - ``t6139``, ``t8001`` to ``t8006``, ``t8101`` to ``t8105``,
        ``t9101`` to ``t9105``. Fuzz: ``otel``, ``serializer``

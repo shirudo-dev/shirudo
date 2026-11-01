@@ -590,6 +590,32 @@ EOF
 	)
 }
 
+build_policy_labels_fixture()
+{
+	local source_dir="$FIXTURE_WORK/policy-labels"
+	local package="$FIXTURE_WORK/policy-labels-1.0.0.bee"
+
+	mkdir -p "$source_dir"
+	cp "$REPO_ROOT/testing/fixtures/policy-labels/Beefile" \
+		"$REPO_ROOT/testing/fixtures/policy-labels/policy-labels.bpf.c" \
+		"$source_dir/"
+	ln -s "$REPO_ROOT/vendor" "$source_dir/vendor"
+	ln -s "$REPO_ROOT/bpf" "$source_dir/bpf"
+	(
+		cd "$FIXTURE_WORK"
+		SHIRUDO_BUILD="$REPO_ROOT/tools/shirudo-build/shirudo-build" \
+			"$REPO_ROOT/shirudo" bpm build "$source_dir" \
+			--version 1.0.0 --keys-dir "$FIXTURE_WORK/trusted" \
+			--vmlinux "$REPO_ROOT/vendor/linux/vmlinux.h"
+	)
+	tar -xOf "$package" \
+		policy-labels-1.0.0/upatches/policy-labels.upatch \
+		>"$TMP_DIR/fixtures/shirudo-test-policy-labels.upatch"
+	tar -xOf "$package" \
+		policy-labels-1.0.0/upatches/policy-labels.unload.upatch \
+		>"$TMP_DIR/fixtures/shirudo-test-policy-labels.unload.upatch"
+}
+
 log "building target-test fixtures on the operator host"
 mkdir -p "$TMP_DIR/fixtures/decoders" "$FIXTURE_WORK/trusted" \
 	"$FIXTURE_WORK/foreign" "$FIXTURE_WORK/own" "$FIXTURE_WORK/third"
@@ -619,6 +645,7 @@ build_fixture scope-cgroup.bpf.c shirudo-test-scope-cgroup "$FIXTURE_WORK/truste
 build_fixture scope-kprobe.bpf.c shirudo-test-scope-kprobe "$FIXTURE_WORK/trusted"
 build_fixture basic.bpf.c shirudo-test-foreign "$FIXTURE_WORK/foreign"
 build_fixture basic.bpf.c shirudo-test-own-keyring "$FIXTURE_WORK/own"
+build_policy_labels_fixture
 build_obs_fixture "$FIXTURE_WORK/trusted"
 
 basic_payload="$($REPO_ROOT/shirudo upatch info \

@@ -1,0 +1,22 @@
+[package]
+name = "policy-labels"
+description = "policy label tests"
+license = "GPL-2.0 OR BSD-2-Clause"
+
+[[upatches]]
+source = "policy-labels.bpf.c"
+
+[[upatches.policy]]
+id = "executable"
+bit = 0x1
+paths = ["/tmp/shirudo-policy-label-test/executable"]
+
+[[upatches.policy]]
+id = "ordinary-a"
+bit = 0x2
+paths = ["/tmp/shirudo-policy-label-test/ordinary"]
+
+[[upatches.policy]]
+id = "ordinary-b"
+bit = 0x4
+paths = ["/tmp/shirudo-policy-label-test/ordinary"]

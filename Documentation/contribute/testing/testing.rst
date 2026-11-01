@@ -111,7 +111,7 @@ A shell test is named ``t<F><K><NN>-<what>.sh``:
    * - 3
      - ``functional/upatch/``
      - The ``.upatch`` container, attach metadata, decoders,
-       serializers, load, unload and ``upatch get``
+       serializers, signed policy labels, load, unload and ``upatch get``
    * - 4
      - ``functional/tpm/``
      - TPM structures, the measurement register, the eventlog,
@@ -123,11 +123,12 @@ A shell test is named ``t<F><K><NN>-<what>.sh``:
    * - 6
      - ``functional/tamperproof/``, ``functional/labels/``
      - Attacks on the admission and BPF command policy, bpffs, the
-       seal, task authority, task and socket policy labels, the keyrings
-       and the TPM path
+       seal, task authority, task and socket policy inheritance, the
+       keyrings and the TPM path
    * - 7
      - ``functional/bpm/``
-     - Package commands, publishing and the upatch tree
+     - Package commands, Beefile policy labels, publishing and the
+       upatch tree
    * - 8
      - ``functional/otel/``
      - Map export, the status keepalive, OTLP transport and TLS policy
