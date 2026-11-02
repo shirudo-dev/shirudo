@@ -250,6 +250,18 @@ static int set_policy(const char *path, const char *text)
 			sizeof(value), 0) ? 1 : 0;
 }
 
+static int remove_policy(const char *path)
+{
+	__u64 value;
+	ssize_t n;
+
+	if (removexattr(path, "security.bpf.shirudo.policy"))
+		return 1;
+	n = getxattr(path, "security.bpf.shirudo.policy", &value,
+		     sizeof(value));
+	return n < 0 && errno == ENODATA ? 0 : 1;
+}
+
 static int check_policy(const char *text)
 {
 	__u64 expected, active = 0;
@@ -404,6 +416,8 @@ int main(int argc, char **argv)
 	}
 	if (argc == 4 && !strcmp(argv[1], "set-policy"))
 		return set_policy(argv[2], argv[3]);
+	if (argc == 3 && !strcmp(argv[1], "remove-policy"))
+		return remove_policy(argv[2]);
 	if (argc >= 2 && !strcmp(argv[1], "check-policy"))
 		return check_policy_env();
 	if (argc >= 2 && !strcmp(argv[1], "fork-exec-policy"))

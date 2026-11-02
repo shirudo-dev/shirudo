@@ -638,6 +638,9 @@ build_policy_exec_graph_fixture()
 	tar -xOf "$package" \
 		policy-exec-graph-1.0.0/upatches/policy-exec-graph.upatch \
 		>"$TMP_DIR/fixtures/shirudo-test-policy-exec-graph.upatch"
+	tar -xOf "$package" \
+		policy-exec-graph-1.0.0/upatches/policy-exec-graph.unload.upatch \
+		>"$TMP_DIR/fixtures/shirudo-test-policy-exec-graph.unload.upatch"
 }
 
 log "building target-test fixtures on the operator host"
