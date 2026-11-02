@@ -383,6 +383,18 @@ Each program entry is 160 bytes:
    * - 2
      - test-run
      - The one ``SEC("syscall")`` program named ``shirudo_test__<id>``.
+   * - 3
+     - loader link
+     - A program the signed loader attaches. The target validates and pins
+       the returned link without attaching the program again. Only kinds
+       0 and 5 are valid for this role.
+
+A loader with role 3 programs returns one link descriptor per program
+slot after the program descriptors. Each descriptor is a native-endian
+32-bit file descriptor, zero for a slot without a loader-created link.
+The signed role requires a positive descriptor in its slot. Readers that
+do not support role 3 reject the metadata. Existing role 0 artifacts
+retain their userspace attachment path.
 
 .. list-table::
    :header-rows: 1

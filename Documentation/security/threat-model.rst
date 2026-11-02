@@ -551,7 +551,10 @@ command it does not classify, including commands a newer kernel adds
 ``BPF_RAW_TRACEPOINT_OPEN`` and ``BPF_OBJ_PIN`` to tasks with runtime
 authority (``ProgAttach``, ``ObjPin``). Root therefore cannot attach a
 vetted program at a site of its choosing, or pin an object into the
-private bpffs.
+private bpffs. The signed loader creates supported LSM and tracing
+links in kernel context; the target checks the returned program identity
+and attachment type before pinning them. Other attachment kinds still
+use the authorized userspace path.
 
 A link descriptor keeps the link attached after shirudo removes the pin
 for an unload, a revocation or the undo of a refused load, and no LSM

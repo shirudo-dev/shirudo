@@ -522,6 +522,11 @@ int prog_specs_parse(const void *metadata, __u32 metadata_len,
 		switch (role) {
 		case UPATCH_PROG_ROLE_ATTACH:
 			break;
+		case UPATCH_PROG_ROLE_LOADER_LINK:
+			if (le32_to_cpu(prog.kind) != UPATCH_ATTACH_RAW_TRACEPOINT &&
+			    le32_to_cpu(prog.kind) != UPATCH_ATTACH_FMOD_RET)
+				goto out;
+			break;
 		case UPATCH_PROG_ROLE_SERIALIZER:
 			if (prog.kind || prog.offset || prog.target[0])
 				goto out;

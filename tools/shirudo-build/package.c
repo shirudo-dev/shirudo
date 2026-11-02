@@ -1202,6 +1202,7 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 		__u64 offset = 0;
 		__u32 kind, j;
 
+		bpf_program__set_autoattach(p, false);
 		if (ser_map) {
 			size_t ser_len = strlen(ser_map);
 
@@ -1314,8 +1315,14 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 			err = -EOPNOTSUPP;
 			goto err_free;
 		}
-		md->progs[i].role =
-			cpu_to_le32(UPATCH_PROG_ROLE_ATTACH);
+		if (kind == UPATCH_ATTACH_RAW_TRACEPOINT ||
+		    kind == UPATCH_ATTACH_FMOD_RET) {
+			md->progs[i].role =
+				cpu_to_le32(UPATCH_PROG_ROLE_LOADER_LINK);
+			bpf_program__set_autoattach(p, true);
+		} else {
+			md->progs[i].role = cpu_to_le32(UPATCH_PROG_ROLE_ATTACH);
+		}
 		md->progs[i].kind = cpu_to_le32(kind);
 		if (kind == UPATCH_ATTACH_UPROBE_MULTI) {
 			struct build_uprobe_target *ut =
@@ -1586,6 +1593,7 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 	}
 
 	opts.gen_hash = true;
+	opts.gen_attach = !(flags & DIRECTIVE_UNLOAD);
 	err = bpf_object__gen_loader(obj, &opts);
 	if (err) {
 		pr_err("bpf_object__gen_loader: %d", err);

@@ -675,6 +675,10 @@ struct prog_desc {
 	int		prog_fd;
 };
 
+struct link_desc {
+	int		link_fd;
+};
+
 static int loader_map_create(const char *name, __u32 value_size,
 			     const void *excl_prog_hash,
 			     __u32 excl_prog_hash_sz)
@@ -1266,6 +1270,34 @@ static int link_matches_spec(int link_fd,
 	}
 }
 
+static int loader_link_matches_prog(int link_fd, int prog_fd)
+{
+	struct bpf_link_info link = {};
+	struct bpf_prog_info prog = {};
+	__u32 len = sizeof(link);
+
+	if (bpf_link_get_info_by_fd(link_fd, &link, &len))
+		return -errno;
+	len = sizeof(prog);
+	if (bpf_prog_get_info_by_fd(prog_fd, &prog, &len))
+		return -errno;
+	if (link.prog_id != prog.id || link.type != BPF_LINK_TYPE_TRACING)
+		return -EXDEV;
+	if (prog.type == BPF_PROG_TYPE_LSM)
+		return link.tracing.attach_type == BPF_LSM_MAC ? 0 : -EXDEV;
+	if (prog.type != BPF_PROG_TYPE_TRACING)
+		return -EXDEV;
+	switch (link.tracing.attach_type) {
+	case BPF_TRACE_FENTRY:
+	case BPF_TRACE_FEXIT:
+	case BPF_MODIFY_RETURN:
+	case BPF_TRACE_RAW_TP:
+		return 0;
+	default:
+		return -EXDEV;
+	}
+}
+
 static int obj_pin(int fd, const char *path)
 {
 	union bpf_attr attr = {};
@@ -1293,7 +1325,8 @@ static void count_attach_progs(const struct prog_spec *specs,
 	__u32 i, n = 0;
 
 	for (i = 0; i < nr_progs; i++) {
-		if (specs[i].role == UPATCH_PROG_ROLE_ATTACH)
+		if (specs[i].role == UPATCH_PROG_ROLE_ATTACH ||
+		    specs[i].role == UPATCH_PROG_ROLE_LOADER_LINK)
 			n++;
 	}
 	*out = n;
@@ -1322,11 +1355,13 @@ static int prog_pin_path(char *pin, size_t sz, const char *dir,
  * A failure unpins what this call pinned: the upatch is then neither
  * archived nor measured, so none of its programs may stay attached.
  */
-static int attach_and_pin_progs(const struct loader_ctx *cx,
+static int attach_and_pin_progs(struct loader_ctx *cx,
 				size_t prog_desc_off, __u32 nr_progs,
 				const char *name,
 				const struct prog_spec *specs)
 {
+	struct link_desc *links = (void *)((char *)cx + prog_desc_off +
+					  (size_t)nr_progs * sizeof(struct prog_desc));
 	char dir[PATH_MAX], serializers_dir[PATH_MAX + 16];
 	char bpffs_name[UPATCH_BPFFS_NAME_MAX + 1];
 	__u32 i, attach_count = 0, attach_seen = 0;
@@ -1369,8 +1404,8 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 		const struct prog_desc *pd =
 			(const void *)((const char *)cx + prog_desc_off +
 				       (size_t)i * sizeof(*pd));
-		int inner_fd = pd->prog_fd;
 		const struct prog_spec *spec = &specs[i];
+		int inner_fd = pd->prog_fd;
 		int link_fd;
 
 		if (inner_fd <= 0) {
@@ -1434,7 +1469,14 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 		}
 		attach_seen++;
 
-		link_fd = prog_attach_for_spec(inner_fd, spec);
+		if (spec->role == UPATCH_PROG_ROLE_LOADER_LINK) {
+			link_fd = links[i].link_fd;
+			links[i].link_fd = 0;
+			if (link_fd <= 0)
+				link_fd = -ENOLINK;
+		} else {
+			link_fd = prog_attach_for_spec(inner_fd, spec);
+		}
 		if (link_fd < 0) {
 			if (spec->kind == UPATCH_ATTACH_UPROBE_MULTI)
 				pr_err("attach prog %u (%s %s:%s): %s", i,
@@ -1453,7 +1495,10 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 			goto out;
 		}
 		/* Unpinned, a closed link detaches. */
-		ret = link_matches_spec(link_fd, spec);
+		ret = spec->role == UPATCH_PROG_ROLE_LOADER_LINK ?
+		      loader_link_matches_prog(link_fd, inner_fd) : 0;
+		if (!ret)
+			ret = link_matches_spec(link_fd, spec);
 		if (ret) {
 			pr_err("attach prog %u (%s %s): the link is not at "
 			       "the site the metadata names: %s", i,
@@ -1496,7 +1541,8 @@ out:
 					   serializers_dir, &specs[i],
 					   attach_count, attach_seen))
 				unlink(pin);
-			if (specs[i].role == UPATCH_PROG_ROLE_ATTACH)
+			if (specs[i].role == UPATCH_PROG_ROLE_ATTACH ||
+			    specs[i].role == UPATCH_PROG_ROLE_LOADER_LINK)
 				attach_seen++;
 		}
 		if (made_serializers)
@@ -1657,7 +1703,13 @@ static void close_loader_fds(const struct loader_ctx *cx,
 {
 	const struct map_desc *md = (const void *)(cx + 1);
 	const struct prog_desc *pd = (const void *)(md + nr_maps);
+	const struct link_desc *ld = (const void *)(pd + nr_progs);
 	__u32 i;
+
+	for (i = 0; i < nr_progs; i++) {
+		if (ld[i].link_fd > 0)
+			close(ld[i].link_fd);
+	}
 
 	for (i = 0; i < nr_maps; i++) {
 		if (md[i].map_fd > 0)
@@ -1941,10 +1993,8 @@ static int __upatch_apply(const char *path, bool verify_only,
 	}
 
 	/*
-	 * The loader creates the programs and maps from kernel context but
-	 * cannot attach or pin: gen_loader emits no link-create and
-	 * bpf_sys_bpf() cannot BPF_OBJ_PIN. Its descriptors trail the context,
-	 * sized from the header's counts.
+	 * Descriptor arrays follow libbpf's loader context. Reserve link
+	 * slots even for older loaders, which leave the zeroed tail alone.
 	 */
 	prog_desc_off = size_add(sizeof(struct loader_ctx),
 				 size_mul(u.hdr.nr_maps,
@@ -1955,7 +2005,8 @@ static int __upatch_apply(const char *path, bool verify_only,
 	 */
 	ctx_sz = size_add(size_add(prog_desc_off,
 				   size_mul(u.hdr.nr_progs,
-					    sizeof(struct prog_desc))),
+					    sizeof(struct prog_desc) +
+					    sizeof(struct link_desc))),
 			  1024);
 	/* TEST_RUN takes no larger a context for a syscall program. */
 	if (ctx_sz > UINT16_MAX) {

@@ -149,8 +149,8 @@ struct upatch_decoder_blob {
 };
 
 /*
- * The attach metadata of a LOAD upatch, its ATTACH section: how the
- * target attaches each program after the signed loader has created it.
+ * The attach metadata of a LOAD upatch, its ATTACH section: which
+ * programs the loader attaches and how the target attaches the rest.
  * Programs without a special attach kind use RAW_TRACEPOINT, preserving
  * the original attach_btf_id behavior. The program bytes are hash-locked
  * by the signed loader; the site a kprobe, uprobe, cgroup or netfilter
@@ -181,6 +181,7 @@ enum upatch_prog_role {
 	UPATCH_PROG_ROLE_ATTACH = 0,
 	UPATCH_PROG_ROLE_SERIALIZER = 1,
 	UPATCH_PROG_ROLE_TEST_RUN = 2,
+	UPATCH_PROG_ROLE_LOADER_LINK = 3,
 };
 
 struct upatch_prog_entry {

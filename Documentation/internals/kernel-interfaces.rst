@@ -164,11 +164,17 @@ where the caller is the loader.
        of ``sz``, ``flags``, ``log_level`` 1, ``log_size`` 16 MiB and
        ``log_buf``, followed by one map descriptor (``map_fd``,
        ``max_entries``, ``initial_value``) per map and one program
-       descriptor (``prog_fd``) per program, and 1024 bytes of padding.
-       The loader fills the descriptors.
+       descriptor (``prog_fd``) and a link descriptor (``link_fd``) per
+       program, and 1024 bytes of padding. Existing loaders leave the
+       zeroed link descriptors untouched. The loader fills the descriptors.
    * - loader: ``BPF_MAP_CREATE``, ``BPF_MAP_UPDATE_ELEM``,
        ``BPF_MAP_FREEZE``, ``BPF_PROG_LOAD`` through ``bpf_sys_bpf()``
      - As gen_loader recorded them.
+   * - loader: ``BPF_LINK_CREATE`` through ``bpf_sys_bpf()``
+     - For the signed loader-link role: ``prog_fd`` the loaded program,
+       ``target_fd`` 0, ``flags`` 0, and ``attach_type`` ``BPF_LSM_MAC``,
+       ``BPF_TRACE_FENTRY``, ``BPF_TRACE_FEXIT``, ``BPF_MODIFY_RETURN``
+       or ``BPF_TRACE_RAW_TP``. The program carries the BTF target.
    * - ``BPF_RAW_TRACEPOINT_OPEN``
      - Attach kind 0 for a program that is not ``BPF_PROG_TYPE_LSM``:
        ``raw_tracepoint.name`` 0, ``prog_fd``.

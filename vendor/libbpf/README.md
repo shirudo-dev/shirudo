@@ -28,9 +28,12 @@ shirudo provides its own definitions of exactly that surface. When an
 update makes libbpf need a new helper, the `libbpf.a` rebuild at the end
 of `bpf-deps` fails on the missing symbol; extend the shim.
 
-`bpf/gen_loader.c` carries one local change on top of the recorded
-commit: `MAX_USED_PROGS` is 64 instead of 32, as required by the
-kernel-obs package.
+The copied sources carry generated-loader attachment support for LSM,
+fentry, fexit, fmod_ret and BTF tracepoint programs, including returned
+link descriptors and cleanup after attachment failure.
+`MAX_USED_PROGS` in `bpf/bpf_gen_internal.h` is 64 instead of 32, as
+required by the kernel-obs package. A refresh overwrites these local
+changes; reapply them before building shirudo.
 
 `.github/scripts/check-spdx.sh` holds every vendored `.c` and `.h` to
 the licences in this table, so a refresh that brings in a file under

@@ -52,8 +52,65 @@ static void prog_specs_refuse_another_header_count(void)
 	EXPECT_FALSE(specs);
 }
 
+static void prog_specs_take_loader_links(void)
+{
+	struct upatch_prog_entry prog = {};
+	struct prog_spec *specs = NULL;
+	__u8 buf[ONE_PROG_LEN];
+	__u32 kind;
+
+	for (kind = UPATCH_ATTACH_RAW_TRACEPOINT;
+	     kind <= UPATCH_ATTACH_UPROBE_MULTI; kind++) {
+		one_raw_tracepoint(buf, 3);
+		prog.role = cpu_to_le32(UPATCH_PROG_ROLE_LOADER_LINK);
+		prog.kind = cpu_to_le32(kind);
+		memcpy(buf + sizeof(struct upatch_prog_metadata), &prog,
+		       sizeof(prog));
+		if (kind != UPATCH_ATTACH_RAW_TRACEPOINT &&
+		    kind != UPATCH_ATTACH_FMOD_RET) {
+			EXPECT_EQ(prog_specs_parse(buf, sizeof(buf), 3, 1,
+						   &specs), -EINVAL);
+			EXPECT_FALSE(specs);
+			continue;
+		}
+		ASSERT_EQ(prog_specs_parse(buf, sizeof(buf), 3, 1, &specs), 0);
+		ASSERT_TRUE(specs);
+		EXPECT_UEQ(specs[0].role, UPATCH_PROG_ROLE_LOADER_LINK);
+		EXPECT_UEQ(specs[0].kind, kind);
+		EXPECT_EQ(specs[0].target_fd, -1);
+		prog_specs_free(specs, 1);
+		specs = NULL;
+	}
+}
+
+static void prog_specs_refuse_loader_link_targets(void)
+{
+	struct upatch_prog_entry prog = {};
+	struct prog_spec *specs = NULL;
+	__u8 buf[ONE_PROG_LEN];
+
+	one_raw_tracepoint(buf, 3);
+	prog.role = cpu_to_le32(UPATCH_PROG_ROLE_LOADER_LINK);
+	prog.target[0] = 'x';
+	memcpy(buf + sizeof(struct upatch_prog_metadata), &prog, sizeof(prog));
+	EXPECT_EQ(prog_specs_parse(buf, sizeof(buf), 3, 1, &specs), -EINVAL);
+	EXPECT_FALSE(specs);
+	prog.target[0] = '\0';
+	prog.offset = cpu_to_le64(1);
+	memcpy(buf + sizeof(struct upatch_prog_metadata), &prog, sizeof(prog));
+	EXPECT_EQ(prog_specs_parse(buf, sizeof(buf), 3, 1, &specs), -EINVAL);
+	EXPECT_FALSE(specs);
+	prog.offset = 0;
+	prog.map[0] = 'x';
+	memcpy(buf + sizeof(struct upatch_prog_metadata), &prog, sizeof(prog));
+	EXPECT_EQ(prog_specs_parse(buf, sizeof(buf), 3, 1, &specs), -EINVAL);
+	EXPECT_FALSE(specs);
+}
+
 static const struct unit_case cases[] = {
 	UNIT_CASE(prog_specs_take_the_signed_counts),
+	UNIT_CASE(prog_specs_take_loader_links),
+	UNIT_CASE(prog_specs_refuse_loader_link_targets),
 	UNIT_CASE(prog_specs_refuse_another_header_count),
 	{}
 };

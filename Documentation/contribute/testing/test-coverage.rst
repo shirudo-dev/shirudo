@@ -148,6 +148,9 @@ signed config image.
      - Attach kinds the builder refuses
    * - ``t3011-string-bounds``
      - Names and the tree repository are refused rather than cut
+   * - ``t3012-loader-attach``
+     - Signed loader-link roles and mixed objects with serializers and
+       userspace attachments
    * - ``t3101-target-fixtures``
      - Prebuilt fixtures load and unload, foreign and own-keyring
        fixtures are refused, a map fixture exports
@@ -165,6 +168,9 @@ signed config image.
      - A live ``uprobe.multi`` load, refusal after a build ID change
    * - ``t3108-status-many``
      - ``status --json`` with eighty loaded upatches lists all of them
+   * - ``t3109-loader-attach``
+     - Load and signed unload of an object with a loader-created tracing
+       link, a serializer and a userspace-created kprobe link
 
 ``tpm`` (4)
 ~~~~~~~~~~~

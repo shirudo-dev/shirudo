@@ -605,6 +605,7 @@ mkdir -p "$TMP_DIR/fixtures/decoders" "$FIXTURE_WORK/trusted" \
 	"$REPO_ROOT/testing/fixtures/uprobe-target.c"
 
 build_fixture basic.bpf.c shirudo-test-basic "$FIXTURE_WORK/trusted"
+build_fixture loader-mixed.bpf.c shirudo-test-loader-mixed "$FIXTURE_WORK/trusted"
 build_fixture basic.bpf.c shirudo-test-lifecycle "$FIXTURE_WORK/trusted"
 build_fixture basic.bpf.c shirudo-test-tree-match "$FIXTURE_WORK/trusted"
 build_fixture basic.bpf.c shirudo-test-tree-skip "$FIXTURE_WORK/trusted"
@@ -623,6 +624,9 @@ build_obs_fixture "$FIXTURE_WORK/trusted"
 
 basic_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/shirudo-test-basic.upatch" --json |
+	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+mixed_payload="$($REPO_ROOT/shirudo upatch info \
+	"$TMP_DIR/fixtures/shirudo-test-loader-mixed.upatch" --json |
 	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
 marker_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/shirudo-test-marker.upatch" --json |
@@ -700,6 +704,11 @@ for i in $(seq -w 1 80); do
 		--key "$FIXTURE_WORK/trusted/signing_key.pem" \
 		--cert "$FIXTURE_WORK/trusted/cert.der" >/dev/null
 done
+"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
+	shirudo-test-loader-mixed --payload-sha256 "$mixed_payload" \
+	-o "$TMP_DIR/fixtures/shirudo-test-loader-mixed.unload.upatch" \
+	--key "$FIXTURE_WORK/trusted/signing_key.pem" \
+	--cert "$FIXTURE_WORK/trusted/cert.der"
 "$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
 	shirudo-test-marker --payload-sha256 "$marker_payload" \
 	-o "$TMP_DIR/fixtures/shirudo-test-marker.unload.upatch" \

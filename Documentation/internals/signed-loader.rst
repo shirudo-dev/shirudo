@@ -41,7 +41,8 @@ What the operator signs
 The operator does not ship the upatch program itself. ``shirudo build``
 compiles the source, and libbpf's gen_loader turns the object into a
 loader: a ``BPF_PROG_TYPE_SYSCALL`` program whose instructions make the
-``bpf()`` calls that create the upatch's maps and load its programs. The
+``bpf()`` calls that create the upatch's maps, load its programs and
+attach its LSM, fentry, fexit, fmod_ret and BTF tracepoint programs. The
 loader's data blob carries everything those calls need, the payload
 programs' instructions included. The builder appends signed sections to
 the data (the upatch name, the attach metadata, the unload target and the
@@ -122,8 +123,15 @@ loader inside the kernel, which ``lsm/bpf`` sees with ``kernel`` true.
        ``BPF_PROG_LOAD`` through ``bpf_sys_bpf()``
      - ``lsm/bpf`` and ``lsm/bpf_prog_load`` see ``kernel`` true and
        allow. The verifier checks each payload program as usual.
+   * - loader
+     - ``BPF_LINK_CREATE`` through ``bpf_sys_bpf()`` for programs with
+       the signed loader-link role
+     - ``lsm/bpf`` sees ``kernel`` true and allows. The link is returned
+       in the program's context slot. If a later attachment fails, the
+       loader closes the links it already created.
    * - userspace
-     - ``BPF_LINK_CREATE`` or ``BPF_RAW_TRACEPOINT_OPEN``, per program
+     - ``BPF_LINK_CREATE`` or ``BPF_RAW_TRACEPOINT_OPEN`` for programs
+       with the signed attach role
      - ``lsm/bpf``, runtime authority (``ProgAttach``). shirudo then
        compares the link the kernel reports with the signed metadata and
        refuses ``attach_scope_mismatch`` when they differ.
@@ -141,16 +149,33 @@ loader inside the kernel, which ``lsm/bpf`` sees with ``kernel`` true.
 pre-flight row (they pass ``--no-precheck``); the keyring comparison runs
 again inside the load, so those paths keep it.
 
+The builder enables generated attachment for LSM, fentry, fexit,
+fmod_ret and BTF tracepoint programs. Serializers and test-run programs
+are loaded without attachment. Kprobe, uprobe, cgroup and netfilter
+programs retain userspace attachment, including in an object that also
+carries loader-created links.
+
 The loader returns the descriptors of what it created in its context
-buffer, and the command attaches and pins them. Links are created in
-userspace because gen_loader emits no link creation and
-``bpf_sys_bpf()`` has no ``BPF_OBJ_PIN``. Each link is pinned at
+buffer. Programs with the signed loader-link role must return a link
+created by the loader. The target checks that the link references the
+returned program and has a supported tracing or LSM attachment type,
+then checks the signed attach kind and pins the link. A missing link
+fails the load. Programs with the attach role use userspace attachment.
+The target closes returned links on every exit and removes pins made by
+an attach-and-pin operation that fails. Pinning remains in userspace
+because ``bpf_sys_bpf()`` has no ``BPF_OBJ_PIN``. Each link is pinned at
 ``/run/shirudo/bpffs/upatches/<name>/link``, or ``link_<n>`` for several,
 serializers under ``serializers/`` and maps under ``maps/`` beside it. A
 dot in the name is written as ``~d`` there. The directory carries the
 ``security.bpf.shirudo.payload`` extended attribute with the payload
 digest, which only a task with runtime authority can set.
 :doc:`kernel-interfaces` lists the attributes each call sets.
+
+Attachment is not atomic. A hook can run before the loader returns,
+before its link is pinned and before the load is measured. Closing a
+link after a failure detaches it but does not undo effects of hooks that
+ran. The bootstrap LSM objects retain the staged attachment order in
+:doc:`enforcement`.
 
 Telling the loader apart from root
 ----------------------------------

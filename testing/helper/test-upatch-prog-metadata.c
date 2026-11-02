@@ -26,7 +26,7 @@ static int expect_attach(const struct upatch *u, __u32 kind,
 	struct upatch_prog_metadata md;
 	struct upatch_prog_entry prog;
 	const __u8 *raw;
-	__u32 len;
+	__u32 role, len;
 
 	if (u->hdr.nr_progs != 1)
 		return fail("unexpected metadata prog count");
@@ -42,8 +42,11 @@ static int expect_attach(const struct upatch *u, __u32 kind,
 		return fail("unexpected metadata magic/version");
 	if (le32_to_cpu(md.nr_progs) != 1)
 		return fail("unexpected metadata prog count");
-	if (le32_to_cpu(prog.role) != UPATCH_PROG_ROLE_ATTACH)
-		return fail("program is not an attach program");
+	role = kind == UPATCH_ATTACH_RAW_TRACEPOINT ||
+	       kind == UPATCH_ATTACH_FMOD_RET ?
+	       UPATCH_PROG_ROLE_LOADER_LINK : UPATCH_PROG_ROLE_ATTACH;
+	if (le32_to_cpu(prog.role) != role)
+		return fail("program attach role mismatch");
 	if (le32_to_cpu(prog.kind) != kind)
 		return fail("attach kind mismatch");
 	if (le64_to_cpu(prog.offset) != offset)
@@ -59,6 +62,38 @@ static int expect_attach(const struct upatch *u, __u32 kind,
 	if (prog.map[0])
 		return fail("unexpected attach map");
 	return 0;
+}
+
+static int expect_mixed(const struct upatch *u)
+{
+	__u32 len, links = 0, serializers = 0, userspace = 0, i;
+	struct prog_spec *specs = NULL;
+	const void *raw;
+	int ret;
+
+	raw = upatch_signed_attach(u, &len);
+	ret = prog_specs_parse(raw, len, u->hdr.nr_maps, u->hdr.nr_progs,
+			       &specs);
+	if (ret)
+		return fail("cannot parse mixed metadata");
+	for (i = 0; i < u->hdr.nr_progs; i++) {
+		switch (specs[i].role) {
+		case UPATCH_PROG_ROLE_LOADER_LINK:
+			links++;
+			break;
+		case UPATCH_PROG_ROLE_SERIALIZER:
+			serializers++;
+			break;
+		case UPATCH_PROG_ROLE_ATTACH:
+			userspace++;
+			break;
+		default:
+			break;
+		}
+	}
+	prog_specs_free(specs, u->hdr.nr_progs);
+	return links == 1 && serializers == 1 && userspace == 1 ?
+	       0 : fail("mixed program roles mismatch");
 }
 
 static int expect_serializer(const struct upatch *u)
@@ -177,6 +212,10 @@ int main(int argc, char **argv)
 
 	if (strcmp(mode, "serializer") == 0) {
 		ret = expect_serializer(&u);
+	} else if (strcmp(mode, "loader-link") == 0) {
+		ret = expect_attach(&u, UPATCH_ATTACH_RAW_TRACEPOINT, NULL, 0);
+	} else if (strcmp(mode, "loader-mixed") == 0) {
+		ret = expect_mixed(&u);
 	} else if (strcmp(mode, "cgroup-ingress") == 0) {
 		ret = expect_attach(&u,
 				    UPATCH_ATTACH_CGROUP_SKB_INGRESS,

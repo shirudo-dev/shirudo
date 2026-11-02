@@ -10,9 +10,10 @@ Attach kinds
 
 The section name of a program decides where it attaches. ``shirudo build``
 reads it, refuses the sections below the table, and records the attach
-kind and target in the signed attach metadata. After the signed loader
-has created the programs, ``shirudo upatch load`` attaches each one, checks
-the link against the metadata and pins it.
+kind, target and program role in the signed attach metadata. The signed
+loader attaches supported tracing and LSM programs. ``shirudo upatch
+load`` attaches the remaining programs, validates the links and pins them.
+Existing artifacts with the userspace attach role retain that path.
 
 .. list-table::
    :header-rows: 1
@@ -24,24 +25,24 @@ the link against the metadata and pins it.
      - Target kernel needs
    * - ``fentry/<function>``, ``fentry.s/<function>``
      - tracing
-     - ``BPF_RAW_TRACEPOINT_OPEN``
+     - Loader: ``BPF_LINK_CREATE``, ``BPF_TRACE_FENTRY``
      - the base requirements
    * - ``fexit/<function>``, ``fexit.s/<function>``
      - tracing
-     - ``BPF_RAW_TRACEPOINT_OPEN``
+     - Loader: ``BPF_LINK_CREATE``, ``BPF_TRACE_FEXIT``
      - the base requirements
    * - ``fmod_ret/<function>``, ``fmod_ret.s/<function>``
      - tracing
-     - ``BPF_LINK_CREATE``, ``BPF_MODIFY_RETURN``
+     - Loader: ``BPF_LINK_CREATE``, ``BPF_MODIFY_RETURN``
      - ``CONFIG_FUNCTION_ERROR_INJECTION`` for functions marked for error
        injection
    * - ``lsm/<hook>``, ``lsm.s/<hook>``
      - LSM
-     - ``BPF_LINK_CREATE``, ``BPF_LSM_MAC``
+     - Loader: ``BPF_LINK_CREATE``, ``BPF_LSM_MAC``
      - the base requirements
    * - ``tp_btf/<tracepoint>``
      - tracing
-     - ``BPF_RAW_TRACEPOINT_OPEN``
+     - Loader: ``BPF_LINK_CREATE``, ``BPF_TRACE_RAW_TP``
      - the base requirements
    * - ``kprobe/<symbol>``, ``kprobe/<symbol>+<offset>``
      - kprobe
@@ -93,9 +94,9 @@ the program with ``BPF_PROG()`` and the function's parameters. The
 verifier checks the prototype against the kernel's BTF.
 
 The signed loader looks the function up in the target's BTF and loads the
-program with that BTF id as its attach target. shirudo then calls
-``BPF_RAW_TRACEPOINT_OPEN`` with no name, so the kernel attaches at the
-BTF id the program carries. A function that is not in the target's BTF,
+program with that BTF id as its attach target. It then creates a link
+with ``BPF_LINK_CREATE`` and ``BPF_TRACE_FENTRY`` or ``BPF_TRACE_FEXIT``,
+using the BTF target the program carries. A function that is not in the target's BTF,
 often because the compiler inlined it, fails inside the loader, as
 ``verifier_rejected`` in phase ``payload_load``, and never reaches the
 attach step.
@@ -111,7 +112,7 @@ fmod_ret
 function body, and the caller receives that value. This is the kind for a
 shield that refuses a call before the vulnerable code runs.
 
-shirudo attaches with ``BPF_LINK_CREATE`` and attach type
+The signed loader attaches with ``BPF_LINK_CREATE`` and attach type
 ``BPF_MODIFY_RETURN``, without a fallback. The kernel admits ``fmod_ret``
 only on ``security_*`` hooks, on system call entry points and on
 functions marked for error injection or return modification. The
@@ -130,7 +131,8 @@ that returns ``int`` refuses the operation. ``lsm.s/<hook>`` declares a
 sleepable program, which the kernel admits only on hooks it lists as
 sleepable.
 
-shirudo attaches with ``BPF_LINK_CREATE`` and ``BPF_LSM_MAC``. Every
+The signed loader attaches with ``BPF_LINK_CREATE`` and ``BPF_LSM_MAC``.
+Every
 target that runs shirudo has the BPF LSM active, because shirudo's own
 enforcement programs are LSM programs.
 
@@ -142,8 +144,8 @@ tp_btf
 arguments with their BTF types. Tracepoints are stable observation points
 that the kernel maintains on purpose.
 
-The loader resolves the tracepoint by BTF, and shirudo attaches with
-``BPF_RAW_TRACEPOINT_OPEN`` as for ``fentry``.
+The signed loader resolves the tracepoint by BTF and attaches with
+``BPF_LINK_CREATE`` and ``BPF_TRACE_RAW_TP``.
 
 kprobe and kretprobe
 --------------------
