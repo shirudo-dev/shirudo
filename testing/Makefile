@@ -42,6 +42,8 @@ endif
 TEST_VM_INITRD ?= 1
 TEST_VM_WORK_DIR ?= build/test-vm
 override TEST_VM_WORK_DIR := $(call root-path,$(TEST_VM_WORK_DIR))
+TEST_VM_HOST_PRIVATE_DIR ?= /tmp/shirudo-test-vm-private-$(shell id -u)
+override TEST_VM_HOST_PRIVATE_DIR := $(call root-path,$(TEST_VM_HOST_PRIVATE_DIR))
 TEST_VM_BUNDLE_DIR ?= $(TEST_VM_WORK_DIR)/host-bundle-$(VM_KERNEL_TAG)$(KERNEL_COMMIT_SUFFIX)-$(TEST_VM_MODE)
 TEST_VM_RUNTIME_CACHE_DIR ?= $(TEST_VM_WORK_DIR)/cache/runtime
 override TEST_VM_RUNTIME_CACHE_DIR := $(call root-path,$(TEST_VM_RUNTIME_CACHE_DIR))
@@ -164,6 +166,7 @@ $(TEST_VM_BUNDLE_STAMP): $(TEST_VM_BUNDLE_INPUTS)
 	$(Q)TEST_VM_MODE="$(TEST_VM_MODE)" TEST_VM_INITRD="$(TEST_VM_INITRD)" \
 		TEST_VM_HOST_BUNDLE="$(abspath $(TEST_VM_BUNDLE_DIR))" \
 		TEST_VM_WORK_DIR="$(abspath $(TEST_VM_WORK_DIR))" \
+		TEST_VM_HOST_PRIVATE_DIR="$(abspath $(TEST_VM_HOST_PRIVATE_DIR))" \
 		TEST_VM_RUNTIME_CACHE_DIR="$(abspath $(TEST_VM_RUNTIME_CACHE_DIR))" \
 		TEST_VM_UBUNTU_CODENAME="$(TEST_VM_UBUNTU_CODENAME)" \
 		TEST_VM_ROOTFS_URL="$(TEST_VM_ROOTFS_URL)" \
@@ -301,6 +304,7 @@ end2end: build-operator
 	$(Q)$(ROOT)/testing/run-tests.sh end2end
 	+$(Q)$(if $(filter 0,$(VM)),:,$(MAKE) test-vm-bundle && \
 		TEST_VM_HOST_BUNDLE="$(abspath $(TEST_VM_BUNDLE_DIR))" \
+		TEST_VM_HOST_PRIVATE_DIR="$(abspath $(TEST_VM_HOST_PRIVATE_DIR))" \
 		$(ROOT)/testing/end2end/host.sh $(MAKE) -C $(ROOT)/testing vm-test-end2end)
 
 vm-test-tpm: vm-test-register
@@ -368,4 +372,6 @@ clean:
 		mkdir -p "$$(dirname "$$bundle_dir")"; \
 		exec 9>"$$bundle_dir.lock"; \
 		flock 9; \
-		rm -rf "$$bundle_dir" "$$bundle_dir.operator" $(ROOT)/build/test-vm/end2end
+		rm -rf "$$bundle_dir" "$$bundle_dir.operator" \
+			"$(abspath $(TEST_VM_HOST_PRIVATE_DIR))/operator-keys" \
+			$(ROOT)/build/test-vm/end2end

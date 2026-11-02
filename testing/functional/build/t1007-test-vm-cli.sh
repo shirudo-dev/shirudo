@@ -183,6 +183,7 @@ test_expect_success 'the host package manager is detected from os-release' '
 test_expect_success 'the bundle and runtime scripts print hints for the host package manager' '
 	mkdir "$WORK/bundle-bin" &&
 	ln -s /usr/bin/dirname "$WORK/bundle-bin/dirname" &&
+	ln -s /usr/bin/id "$WORK/bundle-bin/id" &&
 	ln -s /usr/bin/uname "$WORK/bundle-bin/uname" &&
 	for command_name in flock curl sha256sum awk qemu-img
 	do
@@ -207,6 +208,7 @@ test_expect_success 'the bundle and runtime scripts print hints for the host pac
 test_expect_success 'the bundle wants a DHCP client for the appliance on a Debian host' '
 	mkdir "$WORK/dhcp-bin" &&
 	ln -s /usr/bin/dirname "$WORK/dhcp-bin/dirname" &&
+	ln -s /usr/bin/id "$WORK/dhcp-bin/id" &&
 	ln -s /usr/bin/uname "$WORK/dhcp-bin/uname" &&
 	for command_name in flock curl sha256sum awk qemu-img virt-customize \
 		openssl gzip depmod

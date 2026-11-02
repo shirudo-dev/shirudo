@@ -15,8 +15,10 @@ set -eu
 cd "$(dirname "$0")/../.."
 REPO=$PWD
 : "${TEST_VM_HOST_BUNDLE:?the test VM bundle is required}"
-KEYS=$TEST_VM_HOST_BUNDLE.operator/keys
+HOST_PRIVATE_DIR="${TEST_VM_HOST_PRIVATE_DIR:-/tmp/shirudo-test-vm-private-$(id -u)}"
+KEYS=$HOST_PRIVATE_DIR/operator-keys/keys
 W=$REPO/build/test-vm/end2end
+TLS_DIR=$HOST_PRIVATE_DIR/end2end-tls
 REGISTRY=127.0.0.1:15443
 COLLECTOR=127.0.0.1:14318
 # registry 3.1.2 and opentelemetry-collector-contrib 0.164.0, both built
@@ -38,6 +40,7 @@ down() {
 	docker logs shirudo-end2end-collector >"$W/collector.log" 2>&1 || true
 	docker rm -f shirudo-end2end-registry shirudo-end2end-collector \
 		>/dev/null 2>&1 || true
+	rm -rf -- "$TLS_DIR"
 }
 
 # Up to ten seconds for a TLS service to answer an HTTP request.
@@ -51,36 +54,46 @@ wait_https() {
 }
 
 command -v docker >/dev/null 2>&1 || die "docker is required"
-[ -s "$KEYS/signing_key.pem" ] || die "no operator key beside the bundle: $KEYS"
+private_dir="$(realpath -m "$HOST_PRIVATE_DIR")"
+repo_dir="$(realpath -m "$REPO")"
+[ "$private_dir" != "$repo_dir" ] &&
+	[ "${private_dir#"$repo_dir"/}" = "$private_dir" ] ||
+	die "TEST_VM_HOST_PRIVATE_DIR must be outside the repository"
+install -d -m 0700 "$HOST_PRIVATE_DIR"
+chmod 0700 "$HOST_PRIVATE_DIR"
+[ -s "$KEYS/signing_key.pem" ] || die "no host-only operator key: $KEYS"
 [ -s "$POLICY_FIXTURE" ] || die "no policy exec graph fixture: $POLICY_FIXTURE"
 rm -rf "$W"
 mkdir -p "$W/out" "$W/pkg"
 chmod 0777 "$W/out"
 down
+install -d -m 0755 "$TLS_DIR"
 trap down EXIT
 
 say "a CA, and a server certificate for the registry and the collector"
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
-	-keyout "$W/ca.key" -out "$W/ca.pem" -days 1 \
+	-keyout "$TLS_DIR/ca.key" -out "$W/ca.pem" -days 1 \
 	-subj /CN=shirudo-end2end-ca \
 	-addext 'basicConstraints=critical,CA:TRUE' \
 	-addext 'keyUsage=critical,keyCertSign,cRLSign' 2>/dev/null
 openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
-	-keyout "$W/server.key" -out "$W/server.csr" \
+	-keyout "$TLS_DIR/server.key" -out "$TLS_DIR/server.csr" \
 	-subj /CN=shirudo-end2end 2>/dev/null
-printf 'subjectAltName=IP:127.0.0.1,IP:10.0.2.2\n' >"$W/server.ext"
-openssl x509 -req -in "$W/server.csr" -CA "$W/ca.pem" -CAkey "$W/ca.key" \
-	-CAcreateserial -out "$W/server.pem" -days 1 \
-	-extfile "$W/server.ext" 2>/dev/null
-chmod 0644 "$W/server.key"
+printf 'subjectAltName=IP:127.0.0.1,IP:10.0.2.2\n' >"$TLS_DIR/server.ext"
+openssl x509 -req -in "$TLS_DIR/server.csr" -CA "$W/ca.pem" \
+	-CAkey "$TLS_DIR/ca.key" -CAcreateserial -out "$TLS_DIR/server.pem" \
+	-days 1 -extfile "$TLS_DIR/server.ext" 2>/dev/null
+rm -f -- "$TLS_DIR/ca.key" "$TLS_DIR/server.csr" \
+	"$TLS_DIR/server.ext" "$TLS_DIR/ca.srl"
+chmod 0644 "$TLS_DIR/server.key"
 openssl rand -hex 16 >"$W/nonce"
 
 say "the registry and the collector"
 docker run -d --name shirudo-end2end-registry -p "$REGISTRY:5000" \
-	-v "$W:/certs:ro" -e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/server.pem \
+	-v "$TLS_DIR:/certs:ro" -e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/server.pem \
 	-e REGISTRY_HTTP_TLS_KEY=/certs/server.key "$REGISTRY_IMAGE" >/dev/null
 docker run -d --name shirudo-end2end-collector -p "$COLLECTOR:4318" \
-	-v "$W:/certs:ro" -v "$W/out:/out" \
+	-v "$TLS_DIR:/certs:ro" -v "$W/out:/out" \
 	-v "$REPO/testing/end2end/otelcol.yaml:/etc/otelcol-contrib/config.yaml:ro" \
 	"$COLLECTOR_IMAGE" >/dev/null
 wait_https "https://$REGISTRY/v2/" || die "the registry did not come up"

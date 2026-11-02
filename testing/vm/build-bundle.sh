@@ -12,6 +12,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "${REPO_ROOT}/testing/vm/arch.sh"
 BUNDLE_DIR="${TEST_VM_HOST_BUNDLE:-${REPO_ROOT}/build/test-vm/host-bundle}"
 WORK_DIR="${TEST_VM_WORK_DIR:-${REPO_ROOT}/build/test-vm}"
+HOST_PRIVATE_DIR="${TEST_VM_HOST_PRIVATE_DIR:-/tmp/shirudo-test-vm-private-$(id -u)}"
 RUNTIME_CACHE_DIR="${TEST_VM_RUNTIME_CACHE_DIR:-${WORK_DIR}/cache/runtime}"
 LIBGUESTFS_KERNEL_CACHE="${WORK_DIR}/cache/libguestfs/ubuntu"
 UBUNTU_CODENAME="${TEST_VM_UBUNTU_CODENAME:-resolute}"
@@ -25,6 +26,7 @@ LOCK_FILE="${BUNDLE_DIR}.lock"
 STAMP_FILE="${TEST_VM_BUNDLE_STAMP:-${BUNDLE_DIR}/.stamp}"
 STAMP_INPUTS="${TEST_VM_BUNDLE_INPUTS:-}"
 PACKAGE_CERT="${TEST_VM_PACKAGE_CERT:-}"
+OPERATOR_KEYS_DIR="${HOST_PRIVATE_DIR}/operator-keys"
 RUNTIME_PREP_VERSION=4
 TEST_VM_MODE=${TEST_VM_MODE:-verity}
 RUNTIME_DISK_SIZE="${TEST_VM_RUNTIME_DISK_SIZE:-8G}"
@@ -38,6 +40,19 @@ die()
 {
 	log "error: $*"
 	exit 1
+}
+
+validate_host_private_dir()
+{
+	local repo_root host_private_dir
+
+	repo_root="$(realpath -m "$REPO_ROOT")"
+	host_private_dir="$(realpath -m "$HOST_PRIVATE_DIR")"
+	[[ "$host_private_dir" != "$repo_root" &&
+	   "$host_private_dir" != "$repo_root"/* ]] ||
+		die "TEST_VM_HOST_PRIVATE_DIR must be outside the repository"
+	install -d -m 0700 "$HOST_PRIVATE_DIR"
+	chmod 0700 "$HOST_PRIVATE_DIR"
 }
 
 validate_package_cert()
@@ -272,6 +287,7 @@ bundle_is_current()
 	[[ -f "$STAMP_FILE" && -n "$STAMP_INPUTS" ]] || return 1
 	[[ -x "$BUNDLE_DIR/root/usr/local/bin/shirudo" ]] || return 1
 	[[ -s "$BUNDLE_DIR/runtime-image-key" ]] || return 1
+	[[ -s "$OPERATOR_KEYS_DIR/keys/signing_key.pem" ]] || return 1
 	[[ "$(<"$BUNDLE_DIR/runtime-image-key")" == "$RUNTIME_KEY" ]] || return 1
 	[[ -s "$RUNTIME_IMAGE" ]] || return 1
 	for input in $STAMP_INPUTS; do
@@ -290,6 +306,7 @@ validate_package_cert
 mkdir -p "$(dirname "$BUNDLE_DIR")"
 exec 9>"$LOCK_FILE"
 flock 9
+validate_host_private_dir
 
 resolve_rootfs
 prepare_runtime_image
@@ -304,7 +321,7 @@ make -C "$REPO_ROOT" all shirudo-build
 make -C "$REPO_ROOT/testing" test-helpers
 
 TMP_DIR="$(mktemp -d "${BUNDLE_DIR}.tmp.XXXXXX")"
-FIXTURE_WORK="$(mktemp -d "${BUNDLE_DIR}.fixtures.XXXXXX")"
+FIXTURE_WORK="$(mktemp -d "${HOST_PRIVATE_DIR}/fixtures.XXXXXX")"
 cleanup()
 {
 	rm -rf -- "$TMP_DIR" "$FIXTURE_WORK"
@@ -852,10 +869,11 @@ printf 'shirudo-test-vm-bundle-stamp-v1\n' >"$TMP_DIR/.stamp"
 printf '%s\n' "$RUNTIME_KEY" >"$TMP_DIR/runtime-image-key"
 
 # The end-to-end test publishes a package the target trusts, with the key
-# that signs the fixtures. It stays beside the bundle, out of the guest.
-rm -rf -- "$BUNDLE_DIR.operator"
-mkdir -m 0700 "$BUNDLE_DIR.operator"
-cp -a "$FIXTURE_WORK/trusted" "$BUNDLE_DIR.operator/keys"
+# that signs the fixtures. Keep its private half outside the guest share.
+rm -rf -- "$OPERATOR_KEYS_DIR"
+install -d -m 0700 "$OPERATOR_KEYS_DIR"
+cp -a "$FIXTURE_WORK/trusted" "$OPERATOR_KEYS_DIR/keys"
+chmod 0600 "$OPERATOR_KEYS_DIR/keys/signing_key.pem"
 
 rm -rf -- "$BUNDLE_DIR"
 mv -- "$TMP_DIR" "$BUNDLE_DIR"

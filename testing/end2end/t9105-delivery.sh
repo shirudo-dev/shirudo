@@ -43,6 +43,10 @@ unit_ok() {
 }
 
 test_expect_success 'the target trusts the CA of the registry and the collector' '
+	[ -s "$E2E/ca.pem" ] &&
+	[ ! -e "$E2E/ca.key" ] &&
+	[ ! -e "$E2E/server.key" ] &&
+	[ ! -e "$E2E/signing_key.pem" ] &&
 	install -m 0644 "$E2E/ca.pem" /etc/shirudo/end2end-ca.pem &&
 	install -d /etc/shirudo/bpm &&
 	printf "BPM_OCI_CA_FILE=/etc/shirudo/end2end-ca.pem\n" \
