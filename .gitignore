@@ -45,6 +45,7 @@
 # Compiled test helpers (sources are tracked)
 /testing/helper/*
 /testing/end2end/exec-paths
+/testing/end2end/policy-exec
 !/testing/helper/*.c
 !/testing/helper/*.h
 !/testing/helper/otel-mock.py
