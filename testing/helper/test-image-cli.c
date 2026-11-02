@@ -4,19 +4,29 @@
 #include "../../builtin-bpm.c"
 #include "util/config.h"
 
-int __wrap_bpm_tree_fetch_publication(struct bpm_oci_client *client,
-				      const char *repository,
-				      const char *reference,
+int __wrap_bpm_tree_fetch_publication(struct bpm_oci_client *client
+				      __attribute__((__unused__)),
+				      const char *repository
+				      __attribute__((__unused__)),
+				      const char *reference
+				      __attribute__((__unused__)),
 				      const char *certificate,
-				      struct tree_publication *pub,
-				      char *digest, size_t capacity);
+				      struct tree_publication *pub
+				      __attribute__((__unused__)),
+				      char *digest __attribute__((__unused__)),
+				      size_t capacity __attribute__((__unused__)));
 
-int __wrap_bpm_tree_fetch_publication(struct bpm_oci_client *client,
-				      const char *repository,
-				      const char *reference,
+int __wrap_bpm_tree_fetch_publication(struct bpm_oci_client *client
+				      __attribute__((__unused__)),
+				      const char *repository
+				      __attribute__((__unused__)),
+				      const char *reference
+				      __attribute__((__unused__)),
 				      const char *certificate,
-				      struct tree_publication *pub,
-				      char *digest, size_t capacity)
+				      struct tree_publication *pub
+				      __attribute__((__unused__)),
+				      char *digest __attribute__((__unused__)),
+				      size_t capacity __attribute__((__unused__)))
 {
 	puts(certificate);
 	return 0;

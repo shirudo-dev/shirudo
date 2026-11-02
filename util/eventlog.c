@@ -238,7 +238,8 @@ struct adopt_ctx {
 	bool		found;
 };
 
-static int adopt_seen(const char *line, size_t len, bool is_init, void *ctx)
+static int adopt_seen(const char *line, size_t len,
+		      bool is_init __attribute__((__unused__)), void *ctx)
 {
 	struct adopt_ctx *a = ctx;
 

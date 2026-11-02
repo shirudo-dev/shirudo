@@ -619,7 +619,8 @@ int BPF_PROG(obs_socket_create, struct socket *sock, int family, int type,
 }
 
 SEC("lsm/sock_graft")
-int BPF_PROG(obs_sock_graft, struct sock *sk, struct socket *parent)
+int BPF_PROG(obs_sock_graft, struct sock *sk,
+	     struct socket *parent __attribute__((__unused__)))
 {
 	struct obs_sock_meta *meta;
 	struct net_key key = {};
@@ -793,7 +794,8 @@ int BPF_PROG(obs_socket_bind, struct socket *sock, struct sockaddr *address,
 }
 
 SEC("lsm/socket_accept")
-int BPF_PROG(obs_socket_accept, struct socket *sock, struct socket *newsock)
+int BPF_PROG(obs_socket_accept, struct socket *sock,
+	     struct socket *newsock __attribute__((__unused__)))
 {
 	__u64 now = obs_now();
 	struct sock *sk;
@@ -810,8 +812,9 @@ int BPF_PROG(obs_socket_accept, struct socket *sock, struct socket *newsock)
 }
 
 SEC("lsm/socket_recvmsg")
-int BPF_PROG(obs_socket_recvmsg, struct socket *sock, struct msghdr *msg,
-	     int size, int flags)
+int BPF_PROG(obs_socket_recvmsg, struct socket *sock,
+	     struct msghdr *msg __attribute__((__unused__)), int size,
+	     int flags __attribute__((__unused__)))
 {
 	__u64 now = obs_now();
 	struct sock *sk;
@@ -846,7 +849,8 @@ int BPF_PROG(obs_socket_setsockopt, struct socket *sock, int level,
 }
 
 SEC("lsm/socket_shutdown")
-int BPF_PROG(obs_socket_shutdown, struct socket *sock, int how)
+int BPF_PROG(obs_socket_shutdown, struct socket *sock,
+	     int how __attribute__((__unused__)))
 {
 	__u64 now = obs_now();
 	struct sock *sk;
@@ -864,7 +868,7 @@ int BPF_PROG(obs_socket_shutdown, struct socket *sock, int how)
 
 SEC("lsm/socket_socketpair")
 int BPF_PROG(obs_socket_socketpair, struct socket *socka,
-	     struct socket *sockb)
+	     struct socket *sockb __attribute__((__unused__)))
 {
 	__u64 now = obs_now();
 	struct sock *sk;

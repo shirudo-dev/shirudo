@@ -25,7 +25,7 @@ volatile const struct unload_params shirudo_unload_params = {
 char _license[] SEC("license") = "Dual BSD/GPL";
 
 SEC("syscall")
-int shirudo_unload(void *ctx)
+int shirudo_unload(void *ctx __attribute__((__unused__)))
 {
 	/*
 	 * TODO: look up /run/shirudo/bpffs/upatches/<name>/link

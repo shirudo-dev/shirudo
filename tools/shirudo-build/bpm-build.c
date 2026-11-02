@@ -692,17 +692,14 @@ void bpm_build_spec_free(struct bpm_build_spec *spec)
 	if (!spec)
 		return;
 	for (size_t i = 0; i < spec->n_upatches; i++) {
-		if (spec->upatches[i].tree.selector)
-			xfree(spec->upatches[i].tree.selector,
-			      sizeof(*spec->upatches[i].tree.selector));
-		if (spec->upatches[i].rodata)
-			xfree(spec->upatches[i].rodata,
-			      BPM_BUILD_MAX_RODATA *
-			      sizeof(*spec->upatches[i].rodata));
-		if (spec->upatches[i].policies)
-			xfree(spec->upatches[i].policies,
-			      BPM_BUILD_MAX_POLICIES *
-			      sizeof(*spec->upatches[i].policies));
+		xfree(spec->upatches[i].tree.selector,
+		      sizeof(*spec->upatches[i].tree.selector));
+		xfree(spec->upatches[i].rodata,
+		      BPM_BUILD_MAX_RODATA *
+		      sizeof(*spec->upatches[i].rodata));
+		xfree(spec->upatches[i].policies,
+		      BPM_BUILD_MAX_POLICIES *
+		      sizeof(*spec->upatches[i].policies));
 	}
 	xfree(spec->build_file, spec->build_file_len + 1);
 	xfree(spec, sizeof(*spec));
@@ -1312,8 +1309,7 @@ static int build_upatches(struct bpm_build_spec *spec, const char *pkey,
 		}
 		ret = build_package_load(bpf_o, src_path, load, name,
 					 labels, nr_labels, pkey, cert);
-		if (labels)
-			xfree(labels, (size_t)nr_labels * sizeof(*labels));
+		xfree(labels, (size_t)nr_labels * sizeof(*labels));
 		if (bpf_o == object)
 			unlink(object);
 		if (ret)

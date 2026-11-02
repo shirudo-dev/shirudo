@@ -239,8 +239,10 @@ int BPF_PROG(obs_ptrace, struct task_struct *child, unsigned int mode)
 }
 
 SEC("lsm.s/sb_mount")
-int BPF_PROG(obs_mount, const char *dev_name, const struct path *path,
-	     const char *type, unsigned long flags, void *data)
+int BPF_PROG(obs_mount,
+	     const char *dev_name __attribute__((__unused__)),
+	     const struct path *path, const char *type, unsigned long flags,
+	     void *data __attribute__((__unused__)))
 {
 	struct priv_entry __arena *e;
 	struct obs_ident ident;
@@ -269,7 +271,8 @@ int BPF_PROG(obs_mount, const char *dev_name, const struct path *path,
 
 SEC("lsm.s/kernel_read_file")
 int BPF_PROG(obs_kernel_read_file, struct file *filp,
-	     enum kernel_read_file_id id, bool contents)
+	     enum kernel_read_file_id id,
+	     bool contents __attribute__((__unused__)))
 {
 	struct priv_entry __arena *e;
 	struct obs_ident ident;
@@ -292,7 +295,8 @@ int BPF_PROG(obs_kernel_read_file, struct file *filp,
 }
 
 SEC("lsm/kernel_load_data")
-int BPF_PROG(obs_kernel_load_data, enum kernel_load_data_id id, bool contents)
+int BPF_PROG(obs_kernel_load_data, enum kernel_load_data_id id,
+	     bool contents __attribute__((__unused__)))
 {
 	struct obs_ident ident;
 	__u64 now = obs_now();
@@ -325,7 +329,8 @@ int BPF_PROG(obs_module_request, char *kmod_name)
 }
 
 SEC("lsm/mmap_file")
-int BPF_PROG(obs_mmap_file, struct file *filp, unsigned long reqprot,
+int BPF_PROG(obs_mmap_file, struct file *filp,
+	     unsigned long reqprot __attribute__((__unused__)),
 	     unsigned long prot, unsigned long flags)
 {
 	struct priv_entry __arena *e;
@@ -350,7 +355,8 @@ int BPF_PROG(obs_mmap_file, struct file *filp, unsigned long reqprot,
 
 SEC("lsm/file_mprotect")
 int BPF_PROG(obs_file_mprotect, struct vm_area_struct *vma,
-	     unsigned long reqprot, unsigned long prot)
+	     unsigned long reqprot __attribute__((__unused__)),
+	     unsigned long prot)
 {
 	struct priv_entry __arena *e;
 	struct obs_ident ident = {};
@@ -424,8 +430,9 @@ static __always_inline bool obs_bpf_cmd_readonly(int cmd)
 }
 
 SEC("lsm/bpf")
-int BPF_PROG(obs_bpf, int cmd, union bpf_attr *attr, unsigned int size,
-	     bool kernel)
+int BPF_PROG(obs_bpf, int cmd,
+	     union bpf_attr *attr __attribute__((__unused__)),
+	     unsigned int size __attribute__((__unused__)), bool kernel)
 {
 	struct obs_ident ident;
 	__u64 now = obs_now();

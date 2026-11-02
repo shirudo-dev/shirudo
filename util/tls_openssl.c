@@ -95,7 +95,8 @@ out:
 	return allowed;
 }
 
-static void tls_info_callback(const SSL *ssl, int where, int ret)
+static void tls_info_callback(const SSL *ssl, int where, int ret
+			      __attribute__((__unused__)))
 {
 	const char *group, *host;
 	int group_id;

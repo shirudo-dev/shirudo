@@ -476,7 +476,8 @@ struct anchor_keys {
 };
 
 static void collect_asymmetric(key_serial_t serial, const char *type,
-			       const char *description, void *ud)
+			       const char *description __attribute__((__unused__)),
+			       void *ud)
 {
 	struct anchor_keys *k = ud;
 

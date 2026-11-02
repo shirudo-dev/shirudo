@@ -685,7 +685,7 @@ static char *format_value(const void *value, __u32 value_size,
 
 char *upatch_map_format_percpu_sum(const struct map_view *v,
 				   const void *values_per_cpu,
-				   const char *btf_type)
+				   const char *btf_type __attribute__((__unused__)))
 {
 	if (v->value_size == 1 || v->value_size == 2 ||
 	    v->value_size == 4 || v->value_size == 8) {

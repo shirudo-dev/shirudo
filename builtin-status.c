@@ -329,7 +329,8 @@ static void print_system_human(const struct sysinfo *si)
 		printf("  %-16s %s\n", "Boot ID:", si->boot_id);
 }
 
-static void print_kernel_config_entry(void *ctx, const char *key,
+static void print_kernel_config_entry(void *ctx __attribute__((__unused__)),
+				      const char *key,
 				      const char *value)
 {
 	printf("    %s=%s\n", key, value);

@@ -1148,7 +1148,8 @@ static void sort_old_pairs(char (*unloads)[PATH_MAX], char (*loads)[PATH_MAX],
 #define INSTALL_PATHS_MAX	128
 
 static int package_install(const struct bpm_source *s, const struct bpm_index_entry *entry,
-			   const char *old_path, const char *old_version)
+			   const char *old_path,
+			   const char *old_version __attribute__((__unused__)))
 {
 	struct bpm_oci_client c __cleanup(bpm_oci_client_clear) = {};
 	struct bpm_descriptor layers[8];
@@ -2282,8 +2283,9 @@ static void bpm_tree_usage(void)
 		"`shirudo bpm tree append --help` where the operator package is installed.\n");
 }
 
-static int remove_tree_entry(const char *path, const struct stat *st,
-			     int type, struct FTW *ftw)
+static int remove_tree_entry(const char *path,
+			     const struct stat *st __attribute__((__unused__)),
+			     int type, struct FTW *ftw __attribute__((__unused__)))
 {
 	if (type == FTW_DP || type == FTW_D)
 		return rmdir(path) ? -1 : 0;

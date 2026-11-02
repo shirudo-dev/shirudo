@@ -1866,10 +1866,8 @@ int build_package_load(const char *bpf_o, const char *src_path,
 			      label_blob, label_len, pkey_path, cert_path);
 	obj = NULL;
 out:
-	if (obj)
-		bpf_object__close(obj);
-	if (label_blob)
-		xfree(label_blob, label_len);
+	bpf_object__close(obj);
+	xfree(label_blob, label_len);
 	unregister_target_attach_types(handler_ids);
 	return err;
 }

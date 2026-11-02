@@ -105,7 +105,7 @@ int track_dns_response(struct __sk_buff *skb)
 
 /* Runs once right after attachment and sizes every table in the arena. */
 SEC("syscall")
-int shirudo_test__kernel_obs(void *ctx)
+int shirudo_test__kernel_obs(void *ctx __attribute__((__unused__)))
 {
 	__u64 now = obs_now();
 	int ret;

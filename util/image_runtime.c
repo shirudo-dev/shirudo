@@ -390,7 +390,7 @@ int image_runtime_mount(void)
 	return mount_runtime(false);
 }
 
-static int seal_fd(void *ctx, int fd)
+static int seal_fd(void *ctx __attribute__((__unused__)), int fd)
 {
 	return fsetxattr(fd, XATTR_NAME, SEAL_LABEL,
 			 strlen(SEAL_LABEL), 0) ?
@@ -626,13 +626,15 @@ static int prepare_update(void *ctx,
 }
 
 static int activate_update(void *ctx,
-			   const struct config_update_target *target)
+			   const struct config_update_target *target
+			   __attribute__((__unused__)))
 {
 	return activate_config(ctx, false);
 }
 
 static int activate_boot(void *ctx,
-			 const struct config_update_target *target)
+			 const struct config_update_target *target
+			 __attribute__((__unused__)))
 {
 	return activate_config(ctx, true);
 }
