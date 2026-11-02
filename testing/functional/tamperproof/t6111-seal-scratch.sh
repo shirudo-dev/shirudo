@@ -17,7 +17,9 @@ for c in python3 mkfs.ext4 debugfs; do
 done
 
 STATE=/var/lib/shirudo/eventlog
+POLICY=/run/shirudo/runtime/usr/bin/shirudo-policy-probe
 [ -e "$STATE" ] || test_skip_all "no labelled state at $STATE"
+[ -x "$POLICY" ] || test_skip_all "runtime policy probe is missing"
 WORK=$(mktemp -d) || test_skip_all "cannot make a scratch directory"
 MNT=$WORK/mnt
 trap 'umount "$MNT" 2>/dev/null; rm -rf "$WORK" 2>/dev/null || :' EXIT
@@ -84,6 +86,50 @@ for name, op in ops:
 sys.exit(bad)
 PYEOF
 
+cat >"$WORK/policy.py" <<'PYEOF'
+import errno
+import os
+import struct
+import sys
+
+path, operation = sys.argv[1:]
+name = "security.bpf.shirudo.policy"
+
+
+def value():
+    return os.getxattr(path, name)
+
+
+def denied(call):
+    try:
+        call()
+    except OSError as exc:
+        if exc.errno != errno.EACCES:
+            raise
+    else:
+        raise AssertionError("untrusted root changed the policy xattr")
+
+
+if operation == "add":
+    denied(lambda: os.setxattr(path, name, struct.pack("=Q", 1)))
+    try:
+        value()
+    except OSError as exc:
+        if exc.errno != errno.ENODATA:
+            raise
+    else:
+        raise AssertionError("policy xattr appeared after denied setxattr")
+elif operation == "change-remove":
+    assert value() == struct.pack("=Q", 1)
+    denied(lambda: os.setxattr(path, name, struct.pack("=Q", 2)))
+    denied(lambda: os.removexattr(path, name))
+    assert value() == struct.pack("=Q", 1)
+elif operation == "verify":
+    assert value() == struct.pack("=Q", 3)
+else:
+    raise AssertionError(operation)
+PYEOF
+
 test_expect_success 'control: an unlabelled copy of a shell cannot open a labelled file for write' '
 	cp "$SH" "$WORK/ctl" &&
 	"$WORK/ctl" -c ":" &&
@@ -95,6 +141,14 @@ test_expect_success 'root cannot put the seal label on a file' '
 import os, sys
 os.setxattr(sys.argv[1], \"security.bpf.shirudo\", open(sys.argv[2], \"rb\").read())
 " "$MNT/plain" "$WORK/label" 2>/dev/null
+'
+
+test_expect_success 'only a runtime-authorized task can add, change or remove a policy label' '
+	python3 "$WORK/policy.py" "$MNT/plain" add &&
+	"$POLICY" set-policy "$MNT/plain" 0x1 &&
+	python3 "$WORK/policy.py" "$MNT/plain" change-remove &&
+	"$POLICY" set-policy "$MNT/plain" 0x3 &&
+	python3 "$WORK/policy.py" "$MNT/plain" verify
 '
 
 test_expect_success 'a binary its file system labels cannot open a labelled file for write' '

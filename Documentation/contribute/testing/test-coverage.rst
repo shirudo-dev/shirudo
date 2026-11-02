@@ -302,7 +302,7 @@ signed config image.
    * - ``t6110-pr-set-mm-identity``
      - ``PR_SET_MM`` executable changes
    * - ``t6111-seal-scratch``
-     - The seal against root on labeled files
+     - The seal against root, including policy xattr add, update and removal
    * - ``t6112-key-permission``
      - The ``.bpf`` and ``.dm-verity`` keyrings cannot be changed
    * - ``t6113-verity-authority``
@@ -604,7 +604,8 @@ Coverage by area
        ``kconfig``. Unit: ``kernel_build_id``, ``kernel_release``
    * - Policy labels
      - Upatch labels and Beefile serialization: ``t3109``, ``t7006``.
-       Task and socket inheritance: ``t6141``, ``t6142``
+       Unauthorized policy-xattr changes: ``t6111``. Task and socket
+       inheritance: ``t6141``, ``t6142``
    * - Telemetry
      - ``t6139``, ``t8001`` to ``t8006``, ``t8101`` to ``t8105``,
        ``t9101`` to ``t9105``. Fuzz: ``otel``, ``serializer``
