@@ -31,7 +31,9 @@ die()
 
 cleanup()
 {
-	[ -n "$tmp" ] && rm -rf "$tmp"
+	if [ -n "$tmp" ]; then
+		rm -rf "$tmp"
+	fi
 }
 trap cleanup EXIT HUP INT TERM
 
