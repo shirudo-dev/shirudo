@@ -34,6 +34,12 @@
 #define BPF_FROM_LE	BPF_TO_LE
 #define BPF_FROM_BE	BPF_TO_BE
 
+/* BPF_MUL off values for high-half multiplication; BPF_ALU64 only. */
+enum bpf_mul_variant {
+	BPF_UHMUL = 1,
+	BPF_SHMUL = 2,
+};
+
 /* jmp encodings */
 #define BPF_JNE		0x50	/* jump != */
 #define BPF_JLT		0xa0	/* LT is unsigned, '<' */
@@ -56,6 +62,19 @@
 
 enum bpf_cond_pseudo_jmp {
 	BPF_MAY_GOTO = 0,
+	/*
+	 * Follows a call of a bpf subprog. Taken when the subprog left with
+	 * BPF_EXIT that has src_reg == BPF_UNWIND_EXIT.
+	 */
+	BPF_UNWIND_GOTO = 1,
+};
+
+enum bpf_pseudo_exit {
+	/*
+	 * When bpf_exit->src_reg == BPF_UNWIND_EXIT, it's the same as bpf_exit,
+	 * except that BPF_UNWIND_GOTO after the call is taken.
+	 */
+	BPF_UNWIND_EXIT = 1,
 };
 
 /* Register numbers */
@@ -1343,12 +1362,6 @@ enum bpf_perf_event_type {
 
 /* The verifier internal test flag. Behavior is undefined */
 #define BPF_F_TEST_REG_INVARIANTS	(1U << 7)
-
-/*
- * Load and store through a number is an access to the arena of the program
- * at the low 32 bits of the number. It's for programs written in Rust.
- */
-#define BPF_F_ARENA_SCALAR	(1U << 8)
 
 /* link_create.kprobe_multi.flags used in LINK_CREATE command for
  * BPF_TRACE_KPROBE_MULTI attach type to create return probe.

@@ -1,5 +1,5 @@
 # Written by tools/bpf-deps/bpf-deps.sh; do not edit.
-source=/home/darkstar/net
-commit=f5bffe9f098fbf1b60e0242c7b96e06d1e4256d5
-describe=v6.11-rc6-188859-gf5bffe9f098f
-updated=2026-10-20T13:38:19Z
+source=/tmp/shirudo-libbpf-resync
+commit=cd5bc55288d4fd999595c8f2af6a5408cbe92a52
+describe=v7.3-18472-gcd5bc55288d4
+updated=2026-11-02T17:30:38Z

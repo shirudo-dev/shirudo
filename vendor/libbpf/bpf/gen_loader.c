@@ -16,7 +16,7 @@
 #include "skel_internal.h"
 
 #define MAX_USED_MAPS	64
-#define MAX_USED_PROGS	64
+#define MAX_USED_PROGS	32
 #define MAX_KFUNC_DESCS 256
 #define MAX_FD_ARRAY_SZ (MAX_USED_MAPS + MAX_KFUNC_DESCS)
 
@@ -118,11 +118,6 @@ void bpf_gen__init(struct bpf_gen *gen, int log_level, int nr_progs, int nr_maps
 	size_t stack_sz = sizeof(struct loader_stack), nr_progs_sz;
 	int i;
 
-	if (nr_progs < 0 || nr_progs > MAX_USED_PROGS) {
-		pr_warn("Total programs exceeds %d\n", MAX_USED_PROGS);
-		gen->error = -E2BIG;
-		return;
-	}
 	gen->fd_array = add_data(gen, NULL, MAX_FD_ARRAY_SZ * sizeof(int));
 	gen->log_level = log_level;
 	gen->nr_obj_maps = nr_maps;
@@ -144,6 +139,8 @@ void bpf_gen__init(struct bpf_gen *gen, int log_level, int nr_progs, int nr_maps
 	emit(gen, BPF_MOV64_IMM(BPF_REG_3, 0));
 	emit(gen, BPF_EMIT_CALL(BPF_FUNC_probe_read_kernel));
 
+	/* nr_progs includes subprogs and progs that are not loaded */
+	nr_progs = min(nr_progs, MAX_USED_PROGS);
 	/* amount of stack actually used, only used to calculate iterations, not stack offset */
 	nr_progs_sz = offsetof(struct loader_stack, prog_fd[nr_progs]);
 	/* jump over cleanup code */
@@ -393,7 +390,7 @@ int bpf_gen__finish(struct bpf_gen *gen, int nr_progs, int nr_maps)
 {
 	int i;
 
-	if (nr_progs != gen->nr_progs || nr_maps != gen->nr_maps) {
+	if (nr_progs < gen->nr_progs || nr_maps != gen->nr_maps) {
 		pr_warn("nr_progs %d/%u nr_maps %d/%u mismatch\n",
 			nr_progs, gen->nr_progs, nr_maps, gen->nr_maps);
 		gen->error = -EFAULT;
@@ -1033,11 +1030,6 @@ void bpf_gen__prog_load(struct bpf_gen *gen,
 	int attr_size = offsetofend(union bpf_attr, core_relo_rec_size);
 	union bpf_attr attr;
 
-	if (gen->nr_progs >= MAX_USED_PROGS) {
-		gen->error = -E2BIG;
-		return;
-	}
-
 	memset(&attr, 0, attr_size);
 	/* add license string to blob of bytes */
 	license_off = add_data(gen, license, strlen(license) + 1);
@@ -1144,6 +1136,11 @@ void bpf_gen__prog_load(struct bpf_gen *gen,
 		gen->attach_kind = 0;
 	}
 	emit_check_err(gen);
+	if (gen->nr_progs == MAX_USED_PROGS) {
+		pr_warn("Total programs exceeds %d\n", MAX_USED_PROGS);
+		gen->error = -E2BIG;
+		return;
+	}
 	/* remember prog_fd in the stack, if successful */
 	emit(gen, BPF_STX_MEM(BPF_W, BPF_REG_10, BPF_REG_7,
 			      stack_off(prog_fd[gen->nr_progs])));
