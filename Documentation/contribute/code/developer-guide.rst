@@ -286,6 +286,10 @@ a change needs a newer libbpf or UAPI:
 ``<kernel-tree>`` is a kernel checkout. Without ``KERNEL_SRC``,
 :src:`tools/bpf-deps/bpf-deps.sh` makes a shallow clone of bpf-next.
 
+The source revision is recorded in ``vendor/libbpf/COMMIT``. After
+refreshing, reapply the sole local change: set ``MAX_USED_PROGS`` in
+``vendor/libbpf/bpf/gen_loader.c`` to 64 for the kernel-obs package.
+
 Other make targets
 ------------------
 
