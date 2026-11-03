@@ -13,6 +13,8 @@ import socket
 import struct
 import sys
 
+from snapshots import read_documents
+
 PAGE_SIZE = os.sysconf("SC_PAGE_SIZE")
 PROT_READ = 1
 PROT_WRITE = 2
@@ -370,13 +372,8 @@ def generate(expected_path):
 
 
 def records_from(path):
-    with open(path, encoding="utf-8") as stream:
-        documents = [json.loads(line) for line in stream]
+    documents = read_documents(path)
     document = next(doc for doc in documents if doc.get("map") == "priv")
-    assert document["schema"] == 1, document
-    assert document["upatch"] == "kernel-obs", document
-    assert document["interval"]["overflow"] == 0, document
-    assert document["interval"]["lost"] == 0, document
     return document["records"]
 
 
@@ -441,8 +438,7 @@ def anomaly_event(expected_path):
 
 
 def check_exec_unknown(path):
-    with open(path, encoding="utf-8") as source:
-        documents = [json.loads(line) for line in source]
+    documents = read_documents(path)
     document = next(doc for doc in documents if doc.get("map") == "exec")
     records = document["records"]
     unknown = [record for record in records

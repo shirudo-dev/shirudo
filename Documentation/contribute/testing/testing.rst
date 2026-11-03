@@ -575,6 +575,12 @@ hold the same data. The comparison uses event times relative to each
 map's interval start and ignores the metric export time, which the two
 decoder calls sample independently.
 
+The kernel observability scenarios share fixture setup, load reports and
+unload operations through ``testing/end2end/kernel-obs-lib.sh``. Their
+Python assertions use ``snapshots.py`` to read and validate map snapshots;
+``kernel_obs_checks.py`` holds the scenario checks called by the shell
+tests.
+
 .. code-block:: console
 
    # make -C testing end2end

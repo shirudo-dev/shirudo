@@ -194,20 +194,5 @@ python3 "$REPO/testing/end2end/check-otlp.py" \
 	"$REPO/build/test-vm/vms/$VM_NAME-end2end/result/end2end/otel" \
 	"$W/out/otlp.json" "http://$CLICKHOUSE/" || \
 	die "the collector or ClickHouse snapshots differ from the map exports"
-python3 - "$W/out/otlp.json" <<'PY' || die "the collector did not get the export"
-import json, sys
 
-upatches, text = set(), ""
-with open(sys.argv[1]) as f:
-    for line in f:
-        text += line
-        for rl in json.loads(line).get("resourceLogs", []):
-            for sl in rl.get("scopeLogs", []):
-                for record in sl.get("logRecords", []):
-                    for kv in record.get("attributes", []):
-                        if kv["key"] == "shirudo.upatch.name":
-                            upatches.add(kv["value"].get("stringValue"))
-assert "kernel-obs" in upatches, upatches
-assert "end2end/exec-paths" in text, "no exec record of the test's program"
-PY
 say "ok"
