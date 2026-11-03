@@ -179,6 +179,9 @@ assert ops[-1] == {key: published[key] for key in
 PY
 
 say "the collector holds what kernel-obs observed"
+python3 "$REPO/testing/end2end/check-otlp.py" \
+	"$REPO/build/test-vm/vms/$VM_NAME-end2end/result/end2end/otel" \
+	"$W/out/otlp.json" || die "the collector snapshots differ from the map exports"
 python3 - "$W/out/otlp.json" <<'PY' || die "the collector did not get the export"
 import json, sys
 

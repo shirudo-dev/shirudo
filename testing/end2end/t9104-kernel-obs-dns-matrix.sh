@@ -13,6 +13,8 @@ LOAD="$FIXTURES/$NAME.upatch"
 UNLOAD="$FIXTURES/$NAME.unload.upatch"
 PIN="/run/shirudo/bpffs/upatches/$NAME/link_0"
 WORK=$(mktemp -d)
+. ./end2end/otel-export.sh
+otel_setup
 
 cleanup()
 {
@@ -56,10 +58,10 @@ test_expect_success 'DNS observations use real loopback UDP traffic' '
 	"$SHIRUDO_BIN" upatch load "$LOAD" --no-precheck >/dev/null 2>&1 &&
 	python3 end2end/kernel_obs_events.py dns-long &&
 	python3 end2end/kernel_obs_events.py dns-many &&
-	"$SHIRUDO_BIN" upatch map "$NAME" dns --json="$WORK/dns.ndjson" >/dev/null &&
-	python3 "$WORK/check.py" "$WORK/dns.ndjson" &&
-	"$SHIRUDO_BIN" upatch map "$NAME" dns --json="$WORK/dns-empty.ndjson" >/dev/null &&
-	python3 "$WORK/check-empty.py" "$WORK/dns-empty.ndjson"
+	otel_export dns "$OTEL_OUT/t9104-dns.ndjson" &&
+	python3 "$WORK/check.py" "$OTEL_OUT/t9104-dns.ndjson" &&
+	otel_export dns "$OTEL_OUT/t9104-dns-empty.ndjson" &&
+	python3 "$WORK/check-empty.py" "$OTEL_OUT/t9104-dns-empty.ndjson"
 '
 
 test_done

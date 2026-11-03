@@ -14,6 +14,8 @@ UNLOAD="$FIXTURES/$NAME.unload.upatch"
 PIN="/run/shirudo/bpffs/upatches/$NAME/link_0"
 TABLES="exec net socket listen watch dns priv file"
 WORK=$(mktemp -d)
+. ./end2end/otel-export.sh
+otel_setup
 
 cleanup()
 {
@@ -32,8 +34,7 @@ export_maps()
 {
 	output="$1"
 	for map in $TABLES watch_stat; do
-		"$SHIRUDO_BIN" upatch map "$NAME" "$map" \
-			--json="$output" >/dev/null
+		otel_export "$map" "$output"
 	done
 }
 
@@ -246,26 +247,26 @@ test_expect_success 'exec, net, listen, DNS, privilege and file events produce r
 	python3 end2end/kernel_obs_events.py all &&
 	python3 end2end/kernel_obs_events.py dns-long &&
 	python3 end2end/kernel_obs_events.py dns-many &&
-	export_maps "$WORK/events.ndjson" &&
-	python3 "$WORK/check.py" "$WORK/events.ndjson" &&
-	python3 "$WORK/check_events.py" "$WORK/events.ndjson"
+	export_maps "$OTEL_OUT/t9101-events.ndjson" &&
+	python3 "$WORK/check.py" "$OTEL_OUT/t9101-events.ndjson" &&
+	python3 "$WORK/check_events.py" "$OTEL_OUT/t9101-events.ndjson"
 '
 
 test_expect_success 'watched destinations are recorded with the metric' '
 	python3 end2end/kernel_obs_events.py watch &&
-	export_maps "$WORK/watch.ndjson" &&
-	python3 "$WORK/check_watch.py" "$WORK/watch.ndjson"
+	export_maps "$OTEL_OUT/t9101-watch.ndjson" &&
+	python3 "$WORK/check_watch.py" "$OTEL_OUT/t9101-watch.ndjson"
 '
 
 test_expect_success 'an export drains the tables' '
-	export_maps "$WORK/drained.ndjson" &&
-	python3 "$WORK/check_drained.py" "$WORK/drained.ndjson"
+	export_maps "$OTEL_OUT/t9101-drained.ndjson" &&
+	python3 "$WORK/check_drained.py" "$OTEL_OUT/t9101-drained.ndjson"
 '
 
 test_expect_success 'only the touched tables carry records' '
 	python3 end2end/kernel_obs_events.py exec &&
-	export_maps "$WORK/exec-only.ndjson" &&
-	python3 "$WORK/check_exec_only.py" "$WORK/exec-only.ndjson"
+	export_maps "$OTEL_OUT/t9101-exec-only.ndjson" &&
+	python3 "$WORK/check_exec_only.py" "$OTEL_OUT/t9101-exec-only.ndjson"
 '
 
 test_done

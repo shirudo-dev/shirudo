@@ -529,7 +529,11 @@ appends it to a signed upatch tree with ``bpm tree append``. The target
 activates a signed config that points at the tree and the collector,
 and its units pull, verify, load and export. The host then verifies the
 target's TPM evidence with ``attest verify`` and checks that the
-collector holds the package's records.
+collector holds the package's records. The earlier ``kernel-obs`` tests
+export each map snapshot as local JSON and OTLP from one read; the host
+compares the snapshots with the collector's JSON output. The comparison
+uses event times relative to each map's interval start and ignores the
+metric export time, which the two decoder calls sample independently.
 
 .. code-block:: console
 

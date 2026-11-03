@@ -18,6 +18,8 @@ BPF_FILTER_UNLOAD="$FIXTURES/shirudo-test-map-export.unload.upatch"
 PIN="/run/shirudo/bpffs/upatches/$NAME/link_0"
 MODPROBE_FILE=/proc/sys/kernel/modprobe
 WORK=$(mktemp -d)
+. ./end2end/otel-export.sh
+otel_setup
 MODPROBE_BACKUP="$WORK/kernel.modprobe"
 EVENT_PID=
 
@@ -94,7 +96,7 @@ load_observability()
 
 export_priv()
 {
-	"$SHIRUDO_BIN" upatch map "$NAME" priv --json="$1" >/dev/null
+	otel_export priv "$1"
 }
 
 test_expect_success 'kernel-obs upatch loads with the priv serializer' '
@@ -104,18 +106,18 @@ test_expect_success 'kernel-obs upatch loads with the priv serializer' '
 
 test_expect_success 'non-executable mappings do not produce exec protection records' '
 	run_event negative &&
-	export_priv "$WORK/negative.ndjson" &&
+	export_priv "$OTEL_OUT/t9103-negative.ndjson" &&
 	python3 end2end/priv_events.py check-negative \
-		"$WORK/negative.ndjson" "$WORK/expected.json" &&
-	export_priv "$WORK/negative-drained.ndjson"
+		"$OTEL_OUT/t9103-negative.ndjson" "$WORK/expected.json" &&
+	export_priv "$OTEL_OUT/t9103-negative-drained.ndjson"
 '
 
 test_expect_success 'mprotect does not duplicate an existing executable mapping' '
 	run_event existing-exec &&
-	export_priv "$WORK/existing-exec.ndjson" &&
+	export_priv "$OTEL_OUT/t9103-existing-exec.ndjson" &&
 	python3 end2end/priv_events.py check-existing-exec \
-		"$WORK/existing-exec.ndjson" "$WORK/expected.json" &&
-	export_priv "$WORK/existing-exec-drained.ndjson"
+		"$OTEL_OUT/t9103-existing-exec.ndjson" "$WORK/expected.json" &&
+	export_priv "$OTEL_OUT/t9103-existing-exec-drained.ndjson"
 '
 
 test_expect_success 'privilege events produce attributed priv records' '
@@ -125,13 +127,12 @@ test_expect_success 'privilege events produce attributed priv records' '
 		--report=- >"$WORK/bpf-filter-load.log" 2>&1 &&
 	"$SHIRUDO_BIN" upatch unload "$BPF_FILTER_UNLOAD" --no-precheck \
 		>/dev/null &&
-	export_priv "$WORK/priv.ndjson" &&
-	"$SHIRUDO_BIN" upatch map "$NAME" exec \
-		--json="$WORK/exec.ndjson" >/dev/null &&
+	export_priv "$OTEL_OUT/t9103-priv.ndjson" &&
+	otel_export exec "$OTEL_OUT/t9103-exec.ndjson" &&
 	python3 end2end/priv_events.py \
-		check-exec-unknown "$WORK/exec.ndjson" &&
+		check-exec-unknown "$OTEL_OUT/t9103-exec.ndjson" &&
 	python3 end2end/priv_events.py check \
-		"$WORK/expected.json" "$WORK/priv.ndjson"
+		"$WORK/expected.json" "$OTEL_OUT/t9103-priv.ndjson"
 '
 
 test_expect_success 'credential anomalies are recorded once per task' '
@@ -141,9 +142,10 @@ test_expect_success 'credential anomalies are recorded once per task' '
 	load_observability "$ANOMALY_LOAD" &&
 	python3 end2end/priv_events.py anomaly \
 		"$WORK/anomaly-expected.json" &&
-	export_priv "$WORK/anomaly.ndjson" &&
+	export_priv "$OTEL_OUT/t9103-anomaly.ndjson" &&
 	python3 end2end/priv_events.py \
-		check-anomaly "$WORK/anomaly-expected.json" "$WORK/anomaly.ndjson"
+		check-anomaly "$WORK/anomaly-expected.json" \
+		"$OTEL_OUT/t9103-anomaly.ndjson"
 '
 
 test_done

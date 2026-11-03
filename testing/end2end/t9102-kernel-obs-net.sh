@@ -13,6 +13,8 @@ LOAD="$FIXTURES/$NAME.upatch"
 UNLOAD="$FIXTURES/$NAME.unload.upatch"
 PIN="/run/shirudo/bpffs/upatches/$NAME/link_0"
 WORK=$(mktemp -d)
+. ./end2end/otel-export.sh
+otel_setup
 
 cleanup()
 {
@@ -31,8 +33,7 @@ trap cleanup EXIT
 export_net_maps()
 {
 	for map in net socket; do
-		"$SHIRUDO_BIN" upatch map "$NAME" "$map" \
-			--json="$WORK/events.ndjson" >/dev/null
+		otel_export "$map" "$OTEL_OUT/t9102-events.ndjson"
 	done
 }
 
@@ -108,7 +109,8 @@ test_expect_success 'TCP, UDP and additional socket families are recorded' '
 	python3 end2end/kernel_obs_events.py sockets \
 		>"$WORK/expected.json" &&
 	export_net_maps &&
-	python3 "$WORK/check.py" "$WORK/expected.json" "$WORK/events.ndjson"
+	python3 "$WORK/check.py" "$WORK/expected.json" \
+		"$OTEL_OUT/t9102-events.ndjson"
 '
 
 test_done
