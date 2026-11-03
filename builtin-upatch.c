@@ -1045,6 +1045,8 @@ static const char *attach_kind_name(__u32 kind)
 		return "netfilter/ipv6-pre-routing";
 	case UPATCH_ATTACH_UPROBE_MULTI:
 		return "uprobe.multi";
+	case UPATCH_ATTACH_BPF_PROG:
+		return "bpf_prog";
 	default:
 		return "unknown";
 	}
@@ -1158,6 +1160,9 @@ static int prog_attach_for_spec(int prog_fd,
 		return prog_attach_netfilter_ipv6_pre_routing(prog_fd);
 	case UPATCH_ATTACH_UPROBE_MULTI:
 		return prog_attach_uprobe_multi(prog_fd, spec);
+	case UPATCH_ATTACH_BPF_PROG:
+		/* The target was fixed by the signed loader at load time */
+		return prog_attach_raw_tp(prog_fd);
 	case UPATCH_ATTACH_KPROBE:
 	case UPATCH_ATTACH_KRETPROBE:
 		perf_fd = perf_event_open_kprobe(spec->target, spec->offset,
@@ -1259,6 +1264,12 @@ static int link_matches_spec(int link_fd,
 		    info.tracing.attach_type != BPF_MODIFY_RETURN)
 			return -EXDEV;
 		return 0;
+	case UPATCH_ATTACH_BPF_PROG:
+		if (info.type != BPF_LINK_TYPE_TRACING ||
+		    !spec->bpf_prog_id ||
+		    info.tracing.target_obj_id != spec->bpf_prog_id)
+			return -EXDEV;
+		return 0;
 	default:
 		if (info.type != BPF_LINK_TYPE_RAW_TRACEPOINT &&
 		    info.type != BPF_LINK_TYPE_TRACING)
@@ -1329,10 +1340,13 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 				const struct prog_spec *specs)
 {
 	char dir[PATH_MAX], serializers_dir[PATH_MAX + 16];
+	bool made_dir = false, made_serializers = false;
 	char bpffs_name[UPATCH_BPFFS_NAME_MAX + 1];
 	__u32 i, attach_count = 0, attach_seen = 0;
-	bool made_dir = false, made_serializers = false;
+	char progs_dir[PATH_MAX + 8];
 	char pin[PATH_MAX + 32];
+	bool made_progs = false;
+	bool *made_prog = NULL;
 	bool *made = NULL;
 	int test_fd = -1;
 	int ret;
@@ -1356,9 +1370,16 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 	if (strsprintf(serializers_dir, sizeof(serializers_dir),
 		       "%s/serializers", dir) < 0)
 		return -ENAMETOOLONG;
+	if (strsprintf(progs_dir, sizeof(progs_dir), "%s/progs", dir) < 0)
+		return -ENAMETOOLONG;
 	made = xcalloc(nr_progs, sizeof(*made));
 	if (!made)
 		return -ENOMEM;
+	made_prog = xcalloc(nr_progs, sizeof(*made_prog));
+	if (!made_prog) {
+		xfree(made, nr_progs * sizeof(*made));
+		return -ENOMEM;
+	}
 	ret = mkdir_if_absent(dir, 0700, &made_dir);
 	if (ret) {
 		pr_err("mkdir %s: %s", dir, strerror(-ret));
@@ -1472,6 +1493,23 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 		made[i] = true;
 		pr_info("attached + pinned prog %u (%s) -> %s",
 			i, attach_kind_name(spec->kind), pin);
+
+		/* Programs of other upatches attach to this one through its pin */
+		ret = mkdir_if_absent(progs_dir, 0700, &made_progs);
+		if (ret) {
+			pr_err("mkdir %s: %s", progs_dir, strerror(-ret));
+			goto out;
+		}
+		if (strsprintf(pin, sizeof(pin), "%s/prog_%u", progs_dir, i) < 0) {
+			ret = -ENAMETOOLONG;
+			goto out;
+		}
+		ret = obj_pin(inner_fd, pin);
+		if (ret) {
+			pr_err("pin %s: %s", pin, strerror(-ret));
+			goto out;
+		}
+		made_prog[i] = true;
 	}
 	if (test_fd >= 0) {
 		__u64 init_ctx[2] = {};
@@ -1499,12 +1537,18 @@ out:
 				unlink(pin);
 			if (specs[i].role == UPATCH_PROG_ROLE_ATTACH)
 				attach_seen++;
+			if (made_prog[i] &&
+			    strsprintf(pin, sizeof(pin), "%s/prog_%u", progs_dir, i) >= 0)
+				unlink(pin);
 		}
+		if (made_progs)
+			rmdir(progs_dir);
 		if (made_serializers)
 			rmdir(serializers_dir);
 		if (made_dir)
 			rmdir(dir);
 	}
+	xfree(made_prog, nr_progs * sizeof(*made_prog));
 	xfree(made, nr_progs * sizeof(*made));
 	return ret;
 }
@@ -1655,6 +1699,53 @@ static int get_pin_payload(const char *name, __u8 out[32])
 		return -errno;
 	if (n != 32)
 		return -EINVAL;
+	return 0;
+}
+
+/*
+ * The loader of a program attaching to a program of another upatch carries
+ * a BTF ID found in that upatch's BTF, so only the build with the signed
+ * payload may be the target. Only shirudo records the payload on a pin, and
+ * the target's id is compared to the link's after the load, so a target
+ * unloaded or replaced meanwhile is not attached to either.
+ */
+static int prepare_bpf_prog_targets(struct prog_spec *specs,
+				    __u32 nr_progs)
+{
+	char bpffs_name[UPATCH_BPFFS_NAME_MAX + 1];
+	__u8 live[UPATCH_PAYLOAD_HASH_LEN];
+	char pin[PATH_MAX];
+	__u32 i;
+	int ret;
+
+	for (i = 0; i < nr_progs; i++) {
+		struct prog_spec *spec = &specs[i];
+		struct bpf_prog_info info = {};
+		__u32 info_len = sizeof(info);
+		int fd;
+
+		if (spec->kind != UPATCH_ATTACH_BPF_PROG)
+			continue;
+		ret = get_pin_payload(spec->bpf_upatch, live);
+		if (ret)
+			return ret == -ENODATA ? -ENOENT : ret;
+		if (memneq_explicit(live, spec->bpf_payload, sizeof(live)))
+			return -EBADMSG;
+		if (upatch_bpffs_name(bpffs_name, sizeof(bpffs_name),
+				      spec->bpf_upatch) ||
+		    strsprintf(pin, sizeof(pin), "%s/%s/progs/prog_%u",
+			       BPFFS_UPATCHES_DIR, bpffs_name,
+			       spec->bpf_prog_idx) < 0)
+			return -ENAMETOOLONG;
+		fd = bpf_obj_get(pin);
+		if (fd < 0)
+			return fd;
+		ret = bpf_prog_get_info_by_fd(fd, &info, &info_len);
+		close(fd);
+		if (ret)
+			return ret;
+		spec->bpf_prog_id = info.id;
+	}
 	return 0;
 }
 
@@ -1940,6 +2031,26 @@ static int __upatch_apply(const char *path, bool verify_only,
 			       cat, strerror(e));
 			rep_fail(rep, "target_verify", cat, e,
 				 "uprobe target verification failed");
+			ret = 1;
+			goto out;
+		}
+		ret = prepare_bpf_prog_targets(prog_specs, u.hdr.nr_progs);
+		if (ret) {
+			int e = -ret;
+			const char *cat;
+
+			if (e == ENOENT || e == ENOTDIR)
+				cat = "attach_target_missing";
+			else if (e == EBADMSG)
+				cat = "payload_mismatch";
+			else if (e == EACCES || e == EPERM)
+				cat = "lsm_denied";
+			else
+				cat = "unknown";
+			pr_err("BPF program target verification failed (%s): %s",
+			       cat, strerror(e));
+			rep_fail(rep, "target_verify", cat, e,
+				 "BPF program target verification failed");
 			ret = 1;
 			goto out;
 		}
@@ -2717,6 +2828,7 @@ static int remove_pin_dir(const char *name)
 	char dir[PATH_MAX], maps_dir[PATH_MAX + 8];
 	char serializers_dir[PATH_MAX + 16];
 	char bpffs_name[UPATCH_BPFFS_NAME_MAX + 1];
+	char progs_dir[PATH_MAX + 8];
 	struct stat st;
 	int ret;
 
@@ -2730,6 +2842,8 @@ static int remove_pin_dir(const char *name)
 	if (strsprintf(serializers_dir, sizeof(serializers_dir),
 		       "%s/serializers", dir) < 0)
 		return -ENAMETOOLONG;
+	if (strsprintf(progs_dir, sizeof(progs_dir), "%s/progs", dir) < 0)
+		return -ENAMETOOLONG;
 	if (stat(dir, &st) != 0)
 		return -errno;
 	if (stat(maps_dir, &st) == 0) {
@@ -2739,6 +2853,11 @@ static int remove_pin_dir(const char *name)
 	}
 	if (stat(serializers_dir, &st) == 0) {
 		ret = wipe_dir_flat(serializers_dir);
+		if (ret)
+			return ret;
+	}
+	if (stat(progs_dir, &st) == 0) {
+		ret = wipe_dir_flat(progs_dir);
 		if (ret)
 			return ret;
 	}

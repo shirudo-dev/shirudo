@@ -394,6 +394,61 @@ build_fixture()
 	)
 }
 
+# The fentry program of shirudo-test-bpf-fentry attaches to the program of
+# shirudo-test-bpf-target, against whose object it is built, and loads only
+# on top of exactly that build: the variant is another build of the same
+# name.
+build_bpf_prog_fixtures()
+{
+	local keys_dir="$1"
+	local work="$FIXTURE_WORK/bpf-prog"
+	local upatch name payload
+
+	mkdir -p "$work"
+	(
+		cd "$REPO_ROOT"
+		"$REPO_ROOT/tools/shirudo-build/shirudo-build" \
+			"$REPO_ROOT/testing/fixtures/basic.bpf.c" \
+			-o "$work/shirudo-test-bpf-target.upatch" \
+			--name shirudo-test-bpf-target --emit-artifacts \
+			--vmlinux "$REPO_ROOT/vendor/linux/vmlinux.h" \
+			--extra-cflags "-I$REPO_ROOT/vendor/libbpf" \
+			--key "$keys_dir/signing_key.pem" \
+			--cert "$keys_dir/cert.der" >/dev/null
+		"$REPO_ROOT/tools/shirudo-build/shirudo-build" \
+			"$REPO_ROOT/testing/fixtures/bpf-prog-fentry.bpf.c" \
+			-o "$TMP_DIR/fixtures/shirudo-test-bpf-fentry.upatch" \
+			--name shirudo-test-bpf-fentry \
+			--attach-upatch "$work/shirudo-test-bpf-target.upatch" \
+			--attach-object "$work/shirudo-test-bpf-target.o" \
+			--vmlinux "$REPO_ROOT/vendor/linux/vmlinux.h" \
+			--extra-cflags "-I$REPO_ROOT/vendor/libbpf" \
+			--key "$keys_dir/signing_key.pem" \
+			--cert "$keys_dir/cert.der"
+		"$REPO_ROOT/tools/shirudo-build/shirudo-build" \
+			"$REPO_ROOT/testing/fixtures/basic-variant.bpf.c" \
+			-o "$TMP_DIR/fixtures/shirudo-test-bpf-target-variant.upatch" \
+			--name shirudo-test-bpf-target \
+			--vmlinux "$REPO_ROOT/vendor/linux/vmlinux.h" \
+			--extra-cflags "-I$REPO_ROOT/vendor/libbpf" \
+			--key "$keys_dir/signing_key.pem" \
+			--cert "$keys_dir/cert.der"
+	)
+	cp "$work/shirudo-test-bpf-target.upatch" "$TMP_DIR/fixtures/"
+	for upatch in shirudo-test-bpf-target shirudo-test-bpf-target-variant \
+		      shirudo-test-bpf-fentry; do
+		name=${upatch%-variant}
+		payload="$($REPO_ROOT/shirudo upatch info \
+			"$TMP_DIR/fixtures/$upatch.upatch" --json |
+			python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+		"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
+			"$name" --payload-sha256 "$payload" \
+			-o "$TMP_DIR/fixtures/$upatch.unload.upatch" \
+			--key "$keys_dir/signing_key.pem" \
+			--cert "$keys_dir/cert.der"
+	done
+}
+
 build_tree_test_registry()
 {
 	local registry_dir="$TMP_DIR/fixtures/tree-oci"
@@ -696,6 +751,7 @@ build_fixture basic.bpf.c shirudo-test-own-keyring "$FIXTURE_WORK/own"
 build_policy_labels_fixture
 build_policy_exec_graph_fixture
 build_obs_fixture "$FIXTURE_WORK/trusted"
+build_bpf_prog_fixtures "$FIXTURE_WORK/trusted"
 
 basic_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/shirudo-test-basic.upatch" --json |

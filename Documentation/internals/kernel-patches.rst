@@ -30,11 +30,23 @@ Summary
      - KP Singh
      - No
      - All
+   * - ``0003-bpf-Remove-the-unused-bpf_obj_get_user-stub.patch``
+     - Anton Protopopov
+     - No
+     - All
+   * - ``0004-bpf-Accept-a-kernel-pathname-in-BPF_OBJ_GET.patch``
+     - Anton Protopopov
+     - No
+     - All
+   * - ``0005-bpf-Allow-BPF_OBJ_GET-in-bpf_sys_bpf.patch``
+     - Anton Protopopov
+     - No
+     - All
 
 "In bpf-next" was checked against the bpf-next tree at commit
 ``4169c9c90532``: ``include/linux/ftrace.h`` there still marks jmp mode
 with bit 0, and ``include/linux/lsm_hook_defs.h`` has no ``tpm_command``
-hook.
+hook. ``0003`` to ``0005`` are not posted yet.
 
 How the test kernel applies them
 --------------------------------
@@ -131,6 +143,37 @@ Without it
     object fails to load and ``init`` fails at "loading enforcement". The
     boot is not stopped, and the target runs without enforcement, as
     :doc:`boot-flow` describes.
+
+BPF_OBJ_GET from signed loaders
+-------------------------------
+
+Subjects
+    bpf: Remove the unused bpf_obj_get_user() stub; bpf: Accept a kernel
+    pathname in BPF_OBJ_GET; bpf: Allow BPF_OBJ_GET in bpf_sys_bpf()
+
+Files
+    ``include/linux/bpf.h``, ``kernel/bpf/inode.c``,
+    ``kernel/bpf/syscall.c``.
+
+What it changes
+    ``BPF_OBJ_GET`` reads the pathname through a ``bpfptr_t``, so that a
+    ``BPF_PROG_TYPE_SYSCALL`` program can pass one in kernel memory; such
+    a path is copied into a ``PATH_MAX`` buffer and looked up with
+    ``kern_path()``, with the root, the current directory and the
+    credentials of the current task, and without ``BPF_F_PATH_FD``. The
+    ``bpf_sys_bpf()`` helper then accepts ``BPF_OBJ_GET``. The first
+    patch only removes a stub without callers, so that the others apply
+    as they are.
+
+Why shirudo needs it
+    A program that attaches to a program of another upatch is loaded
+    with the target's descriptor as ``attach_prog_fd``. The signed loader
+    opens the target by its pin, a path in the loader's data that the
+    signature covers. :doc:`/upatches/write/attach-kinds` describes the kind.
+
+Without it
+    The loader's ``BPF_OBJ_GET`` fails, and the upatch fails in phase
+    ``payload_load``. Every other upatch is unaffected.
 
 Related
 -------

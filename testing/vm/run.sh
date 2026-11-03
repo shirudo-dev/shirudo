@@ -43,6 +43,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "${REPO_ROOT}/testing/vm/arch.sh"
 # TEST_VM_QEMU names another emulator, such as RHEL's /usr/libexec/qemu-kvm.
 QEMU_BIN="${TEST_VM_QEMU:-$TEST_VM_ARCH_QEMU}"
+# TEST_VM_ACCEL=tcg emulates the guest where KVM can't run it, e.g. in a VM
+# whose nested KVM loses timer interrupts; it is many times slower.
+VM_ACCEL="${TEST_VM_ACCEL:-kvm}"
 VM_ROOT_INPUT="${TEST_VM_WORK_DIR:-${REPO_ROOT}/build/test-vm}"
 if [[ "$VM_ROOT_INPUT" == /* ]]; then
 	VM_ROOT="$VM_ROOT_INPUT"
@@ -1288,7 +1291,23 @@ KERNEL="$(resolve_kernel)"
 
 [[ "$TEST_VM_ARCH_SUPPORTED" == 1 ]] ||
 	die "test-vm supports x86_64 and aarch64 hosts only, not $TEST_VM_ARCH"
-[[ -r /dev/kvm && -w /dev/kvm ]] || die "/dev/kvm is required and must be accessible"
+case "$VM_ACCEL" in
+kvm)
+	[[ -r /dev/kvm && -w /dev/kvm ]] ||
+		die "/dev/kvm is required and must be accessible"
+	ACCEL_ARGS=(-enable-kvm)
+	CPU_MODEL=host
+	GIC_VERSION=host
+	;;
+tcg)
+	ACCEL_ARGS=(-accel tcg,thread=multi)
+	CPU_MODEL=max
+	GIC_VERSION=3
+	;;
+*)
+	die "TEST_VM_ACCEL must be 'kvm' or 'tcg'"
+	;;
+esac
 
 RUNTIME_KEY="$(<"$TEST_VM_HOST_BUNDLE/runtime-image-key")"
 ROOTFS="$RUNTIME_CACHE_DIR/$RUNTIME_KEY.qcow2"
@@ -1521,7 +1540,7 @@ KERNEL_NET_DEVICE="virtio-net-pci,netdev=net0"
 # devices, declared so that the root disk is vda.
 case "$TEST_VM_ARCH" in
 x86_64)
-	MACHINE_ARGS=(-cpu host -machine q35)
+	MACHINE_ARGS=(-cpu "$CPU_MODEL" -machine q35)
 	DISK_ARGS=(
 		-drive "file=${OVERLAY},if=virtio,format=qcow2"
 		-drive "file=${SEED},if=virtio,format=raw,readonly=on"
@@ -1529,7 +1548,7 @@ x86_64)
 	TPM_DEVICE="tpm-tis,tpmdev=tpm0"
 	;;
 aarch64)
-	MACHINE_ARGS=(-cpu host -machine "virt,gic-version=host")
+	MACHINE_ARGS=(-cpu "$CPU_MODEL" -machine "virt,gic-version=${GIC_VERSION}")
 	DISK_ARGS=(
 		-drive "file=${OVERLAY},if=none,id=rootdisk,format=qcow2"
 		-device "virtio-blk-pci,drive=rootdisk"
@@ -1541,7 +1560,7 @@ aarch64)
 esac
 
 QEMU_ARGS=(
-	-enable-kvm \
+	"${ACCEL_ARGS[@]}" \
 	"${MACHINE_ARGS[@]}" \
 	-smp "$CPUS" \
 	-m "$MEMORY" \

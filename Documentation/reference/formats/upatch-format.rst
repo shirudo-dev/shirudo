@@ -367,7 +367,8 @@ Each program entry is 160 bytes:
      - ``target``
      - NUL-terminated. The kernel symbol for ``kprobe`` and
        ``kretprobe``, the function glob for ``uprobe.multi`` (no ``,`` or
-       ``|``). Empty for every other kind and role.
+       ``|``), the function of the target program for kind 8. Empty for
+       every other kind and role.
    * - +144
      - 16
      - ``map``
@@ -423,12 +424,17 @@ Each program entry is 160 bytes:
    * - 7
      - uprobe.multi entry probe
      - ``uprobe.multi/<absolute-path>:<function-glob>``
+   * - 8
+     - program of another upatch
+     - ``fentry/``, ``fentry.s/``, ``fexit/``, ``fexit.s/``,
+       ``freplace/`` built with ``--attach-upatch``
 
 :doc:`/upatches/write/attach-kinds` describes how the target attaches each kind.
 
-When any entry has kind 7, one ``UPUT`` block follows the program entries
-and ends the section. Without a kind 7 entry the section ends after the
-program entries.
+When any entry has kind 7, one ``UPUT`` block follows the program
+entries. When any entry has kind 8, one ``UPBT`` block follows, after the
+``UPUT`` block if there is one. The last block ends the section. Without
+a kind 7 or 8 entry the section ends after the program entries.
 
 .. list-table::
    :header-rows: 1
@@ -488,6 +494,63 @@ variable parts:
      - offsets
      - ``nr_offsets`` little-endian ``u64`` ELF file offsets, strictly
        increasing.
+
+The ``UPBT`` block names, for each kind 8 entry, the upatch whose program
+it attaches to:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 8 6 20 66
+
+   * - Offset
+     - Size
+     - Field
+     - Value
+   * - +0
+     - 4
+     - ``magic``
+     - ``0x54425055``, the bytes ``UPBT``.
+   * - +4
+     - 4
+     - ``version``
+     - ``1``.
+   * - +8
+     - 4
+     - ``nr_targets``
+     - Number of target records, equal to the number of kind 8 entries.
+   * - +12
+     - 4
+     - ``reserved``
+     - 0.
+
+Each target record is 296 bytes:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 8 6 20 66
+
+   * - Offset
+     - Size
+     - Field
+     - Value
+   * - +0
+     - 4
+     - ``prog_idx``
+     - Index of a kind 8 program entry. Each such entry has exactly one
+       record.
+   * - +4
+     - 4
+     - ``target_prog_idx``
+     - Index of the target program in the target upatch's object, the
+       ``<n>`` of its ``progs/prog_<n>`` pin.
+   * - +8
+     - 32
+     - ``payload_sha256``
+     - The ``payload_sha256`` of the target upatch.
+   * - +40
+     - 256
+     - ``upatch``
+     - NUL-terminated name of the target upatch, valid as an upatch name.
 
 DCDB section
 ~~~~~~~~~~~~
@@ -732,10 +795,14 @@ of checks 1 to 6 is reported as ``parser_rejected``, see
 #. ``payload_sha256`` equals SHA-256 of ``loader_insns || data``.
 #. A ``UPGM`` section is present and parses: version 1 (any other version
    is ``EOPNOTSUPP``), ``nr_maps`` and ``nr_progs`` equal to the header's,
-   every entry valid for its role and kind, and a ``UPUT`` block that is
-   present exactly when a kind 7 entry exists and ends the section.
+   every entry valid for its role and kind, a ``UPUT`` block that is
+   present exactly when a kind 7 entry exists, and a ``UPBT`` block that
+   is present exactly when a kind 8 entry exists, the last of them ending
+   the section.
 #. Each ``uprobe.multi`` target file is a regular file whose GNU build ID
    equals the recorded one.
+#. Each upatch a kind 8 entry names is loaded and carries the recorded
+   payload.
 #. The kernel verifies the signature in ``BPF_PROG_LOAD``.
 
 An unload directive passes the reader, then these checks:
@@ -770,6 +837,9 @@ Versioning
    * - ``UPUT``
      - 1
      - Load refused.
+   * - ``UPBT``
+     - 1
+     - Load refused.
    * - ``DCDB``
      - 1
      - Treats the directory as absent.
@@ -784,7 +854,7 @@ A section tag the reader does not know makes it treat the directory as
 absent. A new section therefore needs readers that know its tag before
 writers emit it. Reserved fields are 0 in every file a writer emits. The
 reader checks ``reserved1``, the directory entries' ``reserved`` and the
-``UPUT`` ``reserved`` field. It does not check ``flags``
+``UPUT`` and ``UPBT`` ``reserved`` fields. It does not check ``flags``
 bits 1 to 31 or the ``DCDB`` ``reserved`` field.
 
 Limits

@@ -195,6 +195,12 @@ one.
        ``shirudo-test-scope-kprobe``
      - ``cgroup_skb``, ``netfilter`` and ``kprobe`` attachments and the
        attach-scope check
+   * - ``shirudo-test-bpf-target``, ``shirudo-test-bpf-fentry``
+     - an ``fentry`` program on the program of another upatch, which
+       loads only on top of that build of it
+   * - ``shirudo-test-bpf-target-variant``
+     - another build of ``shirudo-test-bpf-target``, which
+       ``shirudo-test-bpf-fentry`` refuses
    * - ``kernel-obs``
      - the upatch of the ``kernel-obs`` package
 

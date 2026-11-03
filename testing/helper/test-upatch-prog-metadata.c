@@ -200,6 +200,66 @@ static int expect_policy_labels(const struct upatch *u)
 	return cursor == raw + len ? 0 : fail("trailing policy label data");
 }
 
+/*
+ * The program attaches to program target_idx of the target upatch, named
+ * and hashed as in its .upatch, and the parser takes the metadata.
+ */
+static int expect_bpf_prog(const struct upatch *u,
+			   const char *target_path, const char *func,
+			   __u32 target_idx)
+{
+	struct upatch_bpf_targets targets;
+	struct upatch_bpf_target record;
+	struct upatch_prog_metadata md;
+	struct upatch_prog_entry prog;
+	struct prog_spec *specs = NULL;
+	struct upatch target;
+	const char *target_name;
+	const __u8 *raw;
+	__u32 len;
+	int ret;
+
+	if (u->hdr.nr_progs != 1)
+		return fail("unexpected metadata prog count");
+	raw = upatch_signed_attach(u, &len);
+	if (!raw || len != sizeof(md) + sizeof(prog) + sizeof(targets) + sizeof(record))
+		return fail("unexpected metadata length");
+	memcpy(&md, raw, sizeof(md));
+	memcpy(&prog, raw + sizeof(md), sizeof(prog));
+	memcpy(&targets, raw + sizeof(md) + sizeof(prog), sizeof(targets));
+	memcpy(&record, raw + sizeof(md) + sizeof(prog) + sizeof(targets), sizeof(record));
+	if (le32_to_cpu(prog.role) != UPATCH_PROG_ROLE_ATTACH ||
+	    le32_to_cpu(prog.kind) != UPATCH_ATTACH_BPF_PROG || prog.offset ||
+	    !memchr(prog.target, '\0', sizeof(prog.target)) || strcmp(prog.target, func))
+		return fail("bpf_prog program entry mismatch");
+	if (le32_to_cpu(targets.magic) != UPATCH_BPF_TARGET_MAGIC ||
+	    le32_to_cpu(targets.version) != UPATCH_BPF_TARGET_VERSION ||
+	    le32_to_cpu(targets.nr_targets) != 1 || targets.reserved)
+		return fail("bpf_prog target header mismatch");
+
+	ret = upatch_open(target_path, &target);
+	if (ret)
+		return fail("open target upatch failed");
+	target_name = upatch_signed_name(&target);
+	ret = !target_name || le32_to_cpu(record.prog_idx) != 0 ||
+	     le32_to_cpu(record.target_prog_idx) != target_idx ||
+	     !memchr(record.upatch, '\0', sizeof(record.upatch)) ||
+	     strcmp(record.upatch, target_name) ||
+	     memcmp(record.payload_sha256, target.hdr.payload_sha256,
+		    sizeof(record.payload_sha256));
+	upatch_close(&target);
+	if (ret)
+		return fail("bpf_prog target record mismatch");
+
+	if (prog_specs_parse(raw, len, u->hdr.nr_maps, 1, &specs))
+		return fail("parser rejected bpf_prog metadata");
+	ret = specs[0].kind != UPATCH_ATTACH_BPF_PROG ||
+	     strcmp(specs[0].bpf_upatch, record.upatch) ||
+	     specs[0].bpf_prog_idx != target_idx;
+	prog_specs_free(specs, 1);
+	return ret ? fail("parsed bpf_prog spec mismatch") : 0;
+}
+
 int main(int argc, char **argv)
 {
 	struct upatch u;
@@ -235,6 +295,14 @@ int main(int argc, char **argv)
 		ret = expect_attach(&u,
 				    UPATCH_ATTACH_NETFILTER_IPV6_PRE_ROUTING,
 				    NULL, 0);
+	} else if (strcmp(mode, "bpf-prog") == 0 && argc == 6) {
+		char *end = NULL;
+		__u64 idx = strtoul(argv[5], &end, 10);
+
+		if (!end || *end || idx > UINT32_MAX)
+			ret = fail("invalid expected target program index");
+		else
+			ret = expect_bpf_prog(&u, argv[3], argv[4], (__u32)idx);
 	} else if (strcmp(mode, "uprobe-multi") == 0 && argc == 6) {
 		char *end = NULL;
 		__u64 count = strtoul(argv[5], &end, 10);

@@ -138,6 +138,10 @@ struct prog_spec {
 	__u32 nr_uprobe_offsets;
 	int target_fd;
 	struct stat target_stat;
+	char bpf_upatch[UPATCH_NAME_MAX];
+	__u8 bpf_payload[UPATCH_PAYLOAD_HASH_LEN];
+	__u32 bpf_prog_idx;
+	__u32 bpf_prog_id;	/* of the target, found before the load */
 };
 
 /*

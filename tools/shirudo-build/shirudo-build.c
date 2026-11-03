@@ -43,6 +43,7 @@ static void usage(FILE *fp)
 		"                [--key <signing_key.pem>] [--cert <cert.der>]\n"
 		"                [--vmlinux <vmlinux.h>] [--extra-cflags '<flags>']\n"
 		"                [--emit-artifacts]\n"
+		"                [--attach-upatch <target.upatch> --attach-object <target.bpf.o>]\n"
 		"\n"
 		"  shirudo-build --unload <upatch-name> [-o <output.upatch>]\n"
 		"                [--payload-sha256 <64-hex>]\n"
@@ -70,6 +71,10 @@ static void usage(FILE *fp)
 		"--payload-sha256: 64 hex chars; if omitted, read from the local\n"
 		"                  archive /var/lib/shirudo/upatches/<name>.upatch,\n"
 		"                  else all-zero (target skips the payload check).\n"
+		"--attach-upatch, --attach-object: attach fentry, fexit and freplace\n"
+		"                  programs to the programs of the target upatch,\n"
+		"                  built from the target object; the result loads\n"
+		"                  only on top of exactly this build of the target.\n"
 		"--emit-artifacts: for a .bpf.c input, also keep the compiled\n"
 		"                  .bpf.o next to the .upatch (instead of a temp\n"
 		"                  file that is removed). Reports every emitted\n"
@@ -184,6 +189,8 @@ int main(int argc, char **argv)
 	const char *cert = CERT_PATH;
 	const char *keys_dir_arg = NULL;
 	const char *keys_dir;
+	struct build_attach_upatch attach = {};
+	const char *attach_upatch = NULL;
 	const char *vmlinux_override = NULL;
 	const char *extra_cflags = NULL;
 	__u8 payload_sha256[32] = {};
@@ -248,6 +255,10 @@ int main(int argc, char **argv)
 			payload_sha256_hex = argv[++i];
 		} else if (strcmp(a, "--emit-artifacts") == 0) {
 			emit_artifacts = 1;
+		} else if (strcmp(a, "--attach-upatch") == 0 && i + 1 < argc) {
+			attach_upatch = argv[++i];
+		} else if (strcmp(a, "--attach-object") == 0 && i + 1 < argc) {
+			attach.obj_path = argv[++i];
 		} else if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) {
 			usage(stdout);
 			return 0;
@@ -425,8 +436,37 @@ int main(int argc, char **argv)
 	if (!name)
 		name = derive_name(input, name_buf, sizeof(name_buf));
 
-	ret = build_package_load(bpf_o, src_path, output, name,
-				 NULL, 0, pkey, cert);
+	if (!attach_upatch != !attach.obj_path) {
+		pr_err("--attach-upatch and --attach-object go together");
+		ret = -EINVAL;
+	} else if (attach_upatch) {
+		const char *target_name;
+		struct upatch target;
+
+		ret = upatch_open(attach_upatch, &target);
+		if (ret) {
+			pr_err("open %s: %s", attach_upatch, strerror(-ret));
+		} else {
+			target_name = upatch_signed_name(&target);
+			if (!target_name || upatch_is_unload(&target) ||
+			    strscpy(attach.name, target_name,
+				    sizeof(attach.name)) < 0) {
+				pr_err("%s is not a signed load upatch",
+				       attach_upatch);
+				ret = -EINVAL;
+			}
+			memcpy(attach.payload_sha256, target.hdr.payload_sha256,
+			       sizeof(attach.payload_sha256));
+			upatch_close(&target);
+		}
+		if (!ret)
+			ret = build_package_load_attach(bpf_o, src_path, output,
+							name, NULL, 0, &attach,
+							pkey, cert);
+	} else {
+		ret = build_package_load(bpf_o, src_path, output, name,
+					 NULL, 0, pkey, cert);
+	}
 
 	if (temp_bpf_o) {
 		unlink(temp_bpf_o);

@@ -189,6 +189,8 @@ struct upatch_decoder_blob {
 #define UPATCH_UPROBE_PATH_MAX	4096u
 #define UPATCH_BUILD_ID_MAX	64u
 #define UPATCH_UPROBE_OFFSETS_MAX	(1u << 20)
+#define UPATCH_BPF_TARGET_MAGIC	0x54425055u	/* "UPBT" le */
+#define UPATCH_BPF_TARGET_VERSION	1u
 
 enum upatch_attach_kind {
 	UPATCH_ATTACH_RAW_TRACEPOINT = 0,
@@ -199,6 +201,8 @@ enum upatch_attach_kind {
 	UPATCH_ATTACH_FMOD_RET = 5,
 	UPATCH_ATTACH_NETFILTER_IPV6_PRE_ROUTING = 6,
 	UPATCH_ATTACH_UPROBE_MULTI = 7,
+	/* fentry, fexit or freplace on a program of another upatch */
+	UPATCH_ATTACH_BPF_PROG = 8,
 };
 
 enum upatch_prog_role {
@@ -246,6 +250,28 @@ struct upatch_uprobe_target {
 	__le32		path_len;
 	__le32		build_id_len;
 	__le32		nr_offsets;
+};
+
+/*
+ * UPGM v1 optionally appends one UPBT block, after the UPUT block if any.
+ * It is required when any program has BPF_PROG attach kind and absent
+ * otherwise. The target is program target_prog_idx of the upatch with the
+ * name and the payload_sha256 below: the signed loader opens that program's
+ * pin and uses the BTF ID of the function in the entry's target, found in
+ * that upatch's BTF at build time, so it fits no other build.
+ */
+struct upatch_bpf_targets {
+	__le32		magic;		/* UPATCH_BPF_TARGET_MAGIC */
+	__le32		version;	/* UPATCH_BPF_TARGET_VERSION */
+	__le32		nr_targets;
+	__le32		reserved;
+};
+
+struct upatch_bpf_target {
+	__le32		prog_idx;
+	__le32		target_prog_idx;
+	__u8		payload_sha256[UPATCH_PAYLOAD_HASH_LEN];
+	char		upatch[UPATCH_NAME_MAX];
 };
 
 

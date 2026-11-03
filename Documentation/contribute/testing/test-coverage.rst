@@ -160,6 +160,9 @@ signed config image.
      - Attach kinds the builder refuses
    * - ``t3011-string-bounds``
      - Names and the tree repository are refused rather than cut
+   * - ``t3012-bpf-prog-target-metadata``
+     - The target upatch, its payload and program in the metadata of a
+       program attaching to it, and the builder's refusals
    * - ``t3101-target-fixtures``
      - Prebuilt fixtures load and unload, foreign and own-keyring
        fixtures are refused, a map fixture exports
@@ -184,6 +187,9 @@ signed config image.
        maps
    * - ``t3110-double-load``
      - A second load of a loaded upatch is refused as ``already_loaded``
+   * - ``t3111-bpf-prog-target``
+     - An ``fentry`` program on another upatch's program loads and runs
+       only on top of that build of it
 
 ``tpm`` (4)
 ~~~~~~~~~~~
@@ -566,9 +572,10 @@ Coverage by area
        ``t6116``, ``t6122``, ``t6128``. Unit: ``kernel_abi``
    * - Attach kinds
      - Offline metadata: ``t3006``, ``t3007``, ``t3008``, ``t3009``,
-       ``t3010``. Loaded on a target: fentry (fixtures), ``lsm``
-       (``t9101``), ``cgroup_skb`` and netfilter (``t6116``),
-       ``uprobe.multi`` (``t3107``)
+       ``t3010``, ``t3012``. Loaded on a target: fentry (fixtures),
+       ``lsm`` (``t9101``), ``cgroup_skb`` and netfilter (``t6116``),
+       ``uprobe.multi`` (``t3107``), fentry on another upatch's program
+       (``t3111``)
    * - bpffs pins and mounts
      - ``t4101``, ``t6105``, ``t6106``, ``t6108``, ``t6120``,
        ``t6121``

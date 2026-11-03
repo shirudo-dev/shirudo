@@ -169,9 +169,13 @@ where the caller is the loader.
    * - loader: ``BPF_MAP_CREATE``, ``BPF_MAP_UPDATE_ELEM``,
        ``BPF_MAP_FREEZE``, ``BPF_PROG_LOAD`` through ``bpf_sys_bpf()``
      - As gen_loader recorded them.
+   * - loader: ``BPF_OBJ_GET`` through ``bpf_sys_bpf()``
+     - For an attach kind 8 program, ``pathname`` the pin of the target
+       program in the loader's data, before its ``BPF_PROG_LOAD`` with
+       the descriptor as ``attach_prog_fd``. Needs a carried patch.
    * - ``BPF_RAW_TRACEPOINT_OPEN``
-     - Attach kind 0 for a program that is not ``BPF_PROG_TYPE_LSM``:
-       ``raw_tracepoint.name`` 0, ``prog_fd``.
+     - Attach kind 0 for a program that is not ``BPF_PROG_TYPE_LSM``,
+       and kind 8: ``raw_tracepoint.name`` 0, ``prog_fd``.
    * - ``BPF_LINK_CREATE``
      - Attach kind 0 for ``BPF_PROG_TYPE_LSM``: ``target_fd`` 0,
        ``attach_type`` ``BPF_LSM_MAC``. Kind 5, ``fmod_ret``:
@@ -192,9 +196,12 @@ where the caller is the loader.
        Netfilter: ``pf``, ``hooknum``, ``priority`` as set, and the
        caller's network namespace cookie (``SO_NETNS_COOKIE``) 7. Kprobe:
        perf event type, function name and offset as signed. Uprobe:
-       offset count. ``fmod_ret``: ``BPF_MODIFY_RETURN``.
+       offset count. ``fmod_ret``: ``BPF_MODIFY_RETURN``. Kind 8: a
+       tracing link whose ``target_obj_id`` is the id of the target
+       program.
    * - ``BPF_OBJ_PIN``
-     - Links at ``upatches/<name>/link`` or ``link_<n>``, serializer
+     - Links at ``upatches/<name>/link`` or ``link_<n>``, attached
+       programs at ``progs/prog_<n>``, serializer
        programs at ``serializers/<map>``, the test-run program at
        ``test``, maps at ``maps/<map>``, under ``/run/shirudo/bpffs``.
 

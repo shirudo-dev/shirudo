@@ -554,7 +554,7 @@ int prog_specs_parse(const void *metadata, __u32 metadata_len,
 	struct prog_spec *specs = NULL;
 	const __u8 *cursor, *end;
 	size_t base_len;
-	__u32 magic, version, count, i, nr_uprobes = 0;
+	__u32 magic, version, count, i, nr_uprobes = 0, nr_bpf = 0;
 	int ret = -EINVAL;
 
 	*out = NULL;
@@ -643,6 +643,11 @@ int prog_specs_parse(const void *metadata, __u32 metadata_len,
 				goto out;
 			nr_uprobes++;
 			break;
+		case UPATCH_ATTACH_BPF_PROG:
+			if (prog.offset)
+				goto out;
+			nr_bpf++;
+			break;
 		default:
 			goto out;
 		}
@@ -660,7 +665,7 @@ int prog_specs_parse(const void *metadata, __u32 metadata_len,
 			goto out;
 	}
 
-	if (!nr_uprobes) {
+	if (!nr_uprobes && !nr_bpf) {
 		if (metadata_len != base_len)
 			goto out;
 		*out = specs;
@@ -669,13 +674,12 @@ int prog_specs_parse(const void *metadata, __u32 metadata_len,
 
 	cursor = (const __u8 *)metadata + base_len;
 	end = (const __u8 *)metadata + metadata_len;
-	if ((size_t)(end - cursor) <
-	    sizeof(struct upatch_uprobe_targets))
-		goto out;
-	{
+	if (nr_uprobes) {
 		struct upatch_uprobe_targets targets;
 		__u32 nr_targets;
 
+		if ((size_t)(end - cursor) < sizeof(targets))
+			goto out;
 		memcpy(&targets, cursor, sizeof(targets));
 		cursor += sizeof(targets);
 		nr_targets = le32_to_cpu(targets.nr_targets);
@@ -743,11 +747,53 @@ int prog_specs_parse(const void *metadata, __u32 metadata_len,
 			}
 		}
 	}
+	if (nr_bpf) {
+		struct upatch_bpf_targets targets;
+
+		if ((size_t)(end - cursor) < sizeof(targets))
+			goto out;
+		memcpy(&targets, cursor, sizeof(targets));
+		cursor += sizeof(targets);
+		if (le32_to_cpu(targets.magic) != UPATCH_BPF_TARGET_MAGIC ||
+		    le32_to_cpu(targets.version) !=
+		    UPATCH_BPF_TARGET_VERSION ||
+		    le32_to_cpu(targets.reserved) != 0 ||
+		    le32_to_cpu(targets.nr_targets) != nr_bpf)
+			goto out;
+
+		for (i = 0; i < nr_bpf; i++) {
+			struct upatch_bpf_target record;
+			struct prog_spec *spec;
+			__u32 prog_idx;
+
+			if ((size_t)(end - cursor) < sizeof(record))
+				goto out;
+			memcpy(&record, cursor, sizeof(record));
+			cursor += sizeof(record);
+			prog_idx = le32_to_cpu(record.prog_idx);
+			if (prog_idx >= nr_progs)
+				goto out;
+			spec = &specs[prog_idx];
+			if (spec->kind != UPATCH_ATTACH_BPF_PROG ||
+			    spec->bpf_upatch[0] ||
+			    !memchr(record.upatch, '\0', sizeof(record.upatch)) ||
+			    !upatch_name_valid(record.upatch))
+				goto out;
+			memcpy(spec->bpf_upatch, record.upatch,
+			       sizeof(spec->bpf_upatch));
+			memcpy(spec->bpf_payload, record.payload_sha256,
+			       sizeof(spec->bpf_payload));
+			spec->bpf_prog_idx = le32_to_cpu(record.target_prog_idx);
+		}
+	}
 	if (cursor != end)
 		goto out;
 	for (i = 0; i < nr_progs; i++) {
 		if (specs[i].kind == UPATCH_ATTACH_UPROBE_MULTI &&
 		    !specs[i].uprobe_path)
+			goto out;
+		if (specs[i].kind == UPATCH_ATTACH_BPF_PROG &&
+		    !specs[i].bpf_upatch[0])
 			goto out;
 	}
 	*out = specs;

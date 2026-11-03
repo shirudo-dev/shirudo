@@ -1,0 +1,36 @@
+From b8a695e4d789a7bd6048ad1ab1eecaa3d2dd6f33 Mon Sep 17 00:00:00 2001
+From: Anton Protopopov <a.s.protopopov@gmail.com>
+Date: Fri, 30 Oct 2026 10:20:22 +0100
+Subject: [PATCH] bpf: Remove the unused bpf_obj_get_user() stub
+
+The !CONFIG_BPF_SYSCALL stub of the bpf_obj_get_user() function has
+no callers. The only caller is the bpf_obj_get() function in the
+kernel/bpf/syscall.c file, which is built only with CONFIG_BPF_SYSCALL.
+Since commit cb8edce28073 ("bpf: Support O_PATH FDs in BPF_OBJ_PIN and
+BPF_OBJ_GET commands") the stub even didn't match the real prototype.
+So, remove it.
+
+Signed-off-by: Anton Protopopov <a.s.protopopov@gmail.com>
+---
+ include/linux/bpf.h | 5 -----
+ 1 file changed, 5 deletions(-)
+
+diff --git a/include/linux/bpf.h b/include/linux/bpf.h
+index 580f89c450b5..daa9d7221571 100644
+--- a/include/linux/bpf.h
++++ b/include/linux/bpf.h
+@@ -3545,11 +3545,6 @@ static inline void bpf_link_put(struct bpf_link *link)
+ {
+ }
+ 
+-static inline int bpf_obj_get_user(const char __user *pathname, int flags)
+-{
+-	return -EOPNOTSUPP;
+-}
+-
+ static inline bool bpf_token_capable(const struct bpf_token *token, int cap)
+ {
+ 	return capable(cap) || (cap != CAP_SYS_ADMIN && capable(CAP_SYS_ADMIN));
+-- 
+2.54.0 (Apple Git-157)
+

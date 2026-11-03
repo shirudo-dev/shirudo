@@ -26,6 +26,8 @@ Usage
                  [--key <signing-key>] [--cert <certificate>]
                  [--vmlinux <vmlinux-h>] [--extra-cflags <flags>]
                  [--emit-artifacts]
+                 [--attach-upatch <target-upatch>
+                  --attach-object <target-object>]
    shirudo build --unload <name> [-o <output>] [--payload-sha256 <digest>]
                  [--keys-dir <dir> | --keys-dir=<dir>]
                  [--key <signing-key>] [--cert <certificate>]
@@ -172,6 +174,19 @@ Options
      - off
      - Keep the compiled object as ``<output without .upatch>.o`` and
        print the emitted paths on standard output.
+   * - ``--attach-upatch``
+     - ``<target-upatch>``
+     - none
+     - Attach the ``fentry``, ``fexit`` and ``freplace`` programs whose
+       function is in the target's BTF to the programs of this upatch.
+       The result loads only on top of exactly this build of the target.
+       Only with ``--attach-object``. See
+       :doc:`/upatches/write/attach-kinds`.
+   * - ``--attach-object``
+     - ``<target-object>``
+     - none
+     - The object the target upatch was built from, as
+       ``--emit-artifacts`` keeps it. Only with ``--attach-upatch``.
    * - ``--unload``
      - ``<name>``
      - none
@@ -198,7 +213,9 @@ Exit status
      - The artifact or directive was written.
    * - 1
      - The key or certificate is unusable, ``vmlinux.h`` or clang is
-       missing, compilation failed, or packaging and signing failed.
+       missing, compilation failed, ``--attach-upatch`` came without
+       ``--attach-object`` or the reverse, no program attaches to a
+       program of the target upatch, or packaging and signing failed.
    * - 2
      - An unknown option, a second input, an input that is not
        ``.bpf.c``, ``.bpf.o`` or ``.o``, no input, an input together with

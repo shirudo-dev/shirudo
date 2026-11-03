@@ -374,7 +374,9 @@ test_expect_success 'the kernel package format follows the host package manager'
 '
 
 test_expect_success 'test-vm boots arm64 on the virt machine with PCI disks' '
-	grep -q "virt,gic-version=host" "$RUNNER" &&
+	grep -q "virt,gic-version=\${GIC_VERSION}" "$RUNNER" &&
+	grep -q "GIC_VERSION=host" "$RUNNER" &&
+	grep -q "ACCEL_ARGS=(-accel tcg,thread=multi)" "$RUNNER" &&
 	grep -q "virtio-blk-pci,drive=rootdisk" "$RUNNER" &&
 	grep -q "tpm-tis-device,tpmdev=tpm0" "$RUNNER" &&
 	! grep -q "ttyS0" "$RUNNER"

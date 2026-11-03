@@ -41,7 +41,8 @@ measures in ``tpm_extend`` and removes the pins in ``pin``.
        data, and the signed attach metadata.
    * - ``target_verify``
      - Opening each ``uprobe.multi`` target binary and comparing its GNU
-       build ID with the one the artifact records.
+       build ID with the one the artifact records, and comparing the
+       payload of each upatch whose program a program attaches to.
    * - ``signed_loader_load``
      - Creating, filling and freezing ``__loader.map`` and the
        ``BPF_PROG_LOAD`` of the signed loader, where the kernel verifies
@@ -129,7 +130,8 @@ Categories
    * - ``attach_target_missing``
      - ``target_verify``, ``link_create``
      - ``ENOENT``, ``ENOTDIR``
-     - The uprobe binary, the kprobe symbol or its module is absent.
+     - The uprobe binary, the kprobe symbol or its module is absent, or
+       the upatch whose program a program attaches to is not loaded.
        ``upatch load`` exits 2. ``bpm tree sync`` records the operation as
        ``skipped: module not loaded`` and continues.
      - Load the module or install the binary, then load again.
@@ -183,11 +185,13 @@ Categories
        records. Nothing was touched.
      - Unload it with its signed directive first.
    * - ``payload_mismatch``
-     - ``pin``
-     - ``EPERM``, errno of the read
+     - ``pin``, ``target_verify``
+     - ``EPERM``, ``EBADMSG``, errno of the read
      - The upatch loaded under the name carries another payload than the
        directive expects, or the recorded payload cannot be read.
-       Nothing was detached.
+       Nothing was detached. In ``target_verify``, the upatch whose
+       program a program attaches to is another build than the one the
+       artifact was built against; nothing was loaded.
      - Compare the ``Payload`` of ``shirudo upatch get <name>`` with the
        directive and build a directive for the loaded payload.
    * - ``detach_failed``

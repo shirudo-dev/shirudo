@@ -1,0 +1,145 @@
+From e00ccd7509d36081684eaa817a6e900388d793aa Mon Sep 17 00:00:00 2001
+From: Anton Protopopov <a.s.protopopov@gmail.com>
+Date: Thu, 29 Oct 2026 17:36:38 +0100
+Subject: [PATCH] bpf: Accept a kernel pathname in BPF_OBJ_GET
+
+When a BPF_PROG_TYPE_SYSCALL program calls the bpf_sys_bpf() helper,
+the bpf_attr is in kernel memory, and so are the buffers it points to.
+Most commands handle this already. For example, the BPF_PROG_LOAD reads
+the instructions and the license via a bpfptr_t built from the
+uattr.is_kernel. The BPF_OBJ_GET, however, always treats the pathname as
+a user pointer, so it can't be used from a syscall program, even if the
+bpf_sys_bpf() allowed it.
+
+Pass the is_kernel down to the bpf_obj_get_user() and look up a kernel
+pathname with the kern_path(). This prepares for allowing loaders to
+open pinned objects, e.g., to find a program to which a program they
+load should attach.
+
+A kernel pathname is resolved the same way as a user one: in the context
+of the current task, with its root, current directory and credentials,
+and with the same permission and LSM checks. The only difference is that
+kernel callers can't use the BPF_F_PATH_FD, as the kern_path() doesn't
+take a directory fd. A loader has no reason to pass one anyway, and this
+can be extended later if needed.
+
+Signed-off-by: Anton Protopopov <a.s.protopopov@gmail.com>
+---
+ include/linux/bpf.h  |  2 +-
+ kernel/bpf/inode.c   | 41 ++++++++++++++++++++++++++++++++++++++---
+ kernel/bpf/syscall.c |  6 +++---
+ 3 files changed, 42 insertions(+), 7 deletions(-)
+
+diff --git a/include/linux/bpf.h b/include/linux/bpf.h
+index daa9d7221571..4fd94ddc3bec 100644
+--- a/include/linux/bpf.h
++++ b/include/linux/bpf.h
+@@ -3107,7 +3107,7 @@ bool bpf_token_allow_prog_type(const struct bpf_token *token,
+ 			       enum bpf_attach_type attach_type);
+ 
+ int bpf_obj_pin_user(u32 ufd, int path_fd, const char __user *pathname);
+-int bpf_obj_get_user(int path_fd, const char __user *pathname, int flags);
++int bpf_obj_get_user(int path_fd, bpfptr_t pathname, int flags);
+ struct inode *bpf_get_inode(struct super_block *sb, const struct inode *dir,
+ 			    umode_t mode);
+ 
+diff --git a/kernel/bpf/inode.c b/kernel/bpf/inode.c
+index c6f328e4752e..74e05fd71658 100644
+--- a/kernel/bpf/inode.c
++++ b/kernel/bpf/inode.c
+@@ -547,7 +547,42 @@ int bpf_obj_pin_user(u32 ufd, int path_fd, const char __user *pathname)
+ 	return ret;
+ }
+ 
+-static void *bpf_obj_do_get(int path_fd, const char __user *pathname,
++static int bpf_obj_lookup(int path_fd, bpfptr_t pathname, struct path *path)
++{
++	char *name;
++	long len;
++	int ret;
++
++	if (!bpfptr_is_kernel(pathname))
++		return user_path_at(path_fd, pathname.user, LOOKUP_FOLLOW, path);
++
++	/* Kernel callers, i.e., loader programs, only pass paths without path_fd */
++	if (path_fd != AT_FDCWD)
++		return -EINVAL;
++
++	name = __getname();
++	if (!name)
++		return -ENOMEM;
++
++	len = strncpy_from_kernel_nofault(name, pathname.kernel, PATH_MAX);
++	/*
++	 * If len == PATH_MAX, we can't tell a path of PATH_MAX - 1 characters
++	 * from a truncated one. Treat both the same to keep the code simple
++	 */
++	if (len == PATH_MAX)
++		ret = -ENAMETOOLONG;
++	else if (len < 0)
++		ret = len;
++	else if (!name[0])
++		ret = -ENOENT;	/* as getname() for a user path */
++	else
++		ret = kern_path(name, LOOKUP_FOLLOW, path);
++
++	__putname(name);
++	return ret;
++}
++
++static void *bpf_obj_do_get(int path_fd, bpfptr_t pathname,
+ 			    enum bpf_type *type, int flags)
+ {
+ 	struct inode *inode;
+@@ -555,7 +590,7 @@ static void *bpf_obj_do_get(int path_fd, const char __user *pathname,
+ 	void *raw;
+ 	int ret;
+ 
+-	ret = user_path_at(path_fd, pathname, LOOKUP_FOLLOW, &path);
++	ret = bpf_obj_lookup(path_fd, pathname, &path);
+ 	if (ret)
+ 		return ERR_PTR(ret);
+ 
+@@ -579,7 +614,7 @@ static void *bpf_obj_do_get(int path_fd, const char __user *pathname,
+ 	return ERR_PTR(ret);
+ }
+ 
+-int bpf_obj_get_user(int path_fd, const char __user *pathname, int flags)
++int bpf_obj_get_user(int path_fd, bpfptr_t pathname, int flags)
+ {
+ 	enum bpf_type type = BPF_TYPE_UNSPEC;
+ 	int f_flags;
+diff --git a/kernel/bpf/syscall.c b/kernel/bpf/syscall.c
+index 90bc7230afa8..3872bd5ee696 100644
+--- a/kernel/bpf/syscall.c
++++ b/kernel/bpf/syscall.c
+@@ -3244,7 +3244,7 @@ static int bpf_obj_pin(const union bpf_attr *attr)
+ 				u64_to_user_ptr(attr->pathname));
+ }
+ 
+-static int bpf_obj_get(const union bpf_attr *attr)
++static int bpf_obj_get(const union bpf_attr *attr, bool is_kernel)
+ {
+ 	int path_fd;
+ 
+@@ -3257,7 +3257,7 @@ static int bpf_obj_get(const union bpf_attr *attr)
+ 		return -EINVAL;
+ 
+ 	path_fd = attr->file_flags & BPF_F_PATH_FD ? attr->path_fd : AT_FDCWD;
+-	return bpf_obj_get_user(path_fd, u64_to_user_ptr(attr->pathname),
++	return bpf_obj_get_user(path_fd, make_bpfptr(attr->pathname, is_kernel),
+ 				attr->file_flags);
+ }
+ 
+@@ -6467,7 +6467,7 @@ static int __sys_bpf(enum bpf_cmd cmd, bpfptr_t uattr, unsigned int size,
+ 		err = bpf_obj_pin(&attr);
+ 		break;
+ 	case BPF_OBJ_GET:
+-		err = bpf_obj_get(&attr);
++		err = bpf_obj_get(&attr, uattr.is_kernel);
+ 		break;
+ 	case BPF_PROG_ATTACH:
+ 		err = bpf_prog_attach(&attr);
+-- 
+2.54.0 (Apple Git-157)
+

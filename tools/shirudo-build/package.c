@@ -20,6 +20,7 @@
 #include <openssl/evp.h>
 
 #include <linux/bpf.h>
+#include <bpf/btf.h>
 #include <bpf/libbpf.h>
 
 #include <shirudo/misc.h>
@@ -1141,8 +1142,121 @@ static int validate_serializer_output_map(struct bpf_object *obj)
 	return -EINVAL;
 }
 
+/* The function a program which may attach to a BPF program attaches to */
+static const char *bpf_prog_target_func(const char *sec)
+{
+	static const char * const prefixes[] = {
+		"fentry/", "fentry.s/", "fexit/", "fexit.s/", "freplace/",
+	};
+	size_t i, n;
+
+	if (!sec)
+		return NULL;
+	if (sec[0] == '?')
+		sec++;
+	for (i = 0; i < ARRAY_SIZE(prefixes); i++) {
+		n = strlen(prefixes[i]);
+		if (!strncmp(sec, prefixes[i], n) && sec[n])
+			return sec + n;
+	}
+	return NULL;
+}
+
+/*
+ * Attach every program of obj which traces or replaces a function of the
+ * upatch to that upatch's program, opened by the loader through its pin.
+ * The BTF ID of the function is found in the BTF of the object the upatch
+ * was built from, which is the BTF its loader loads. A function that
+ * isn't there is a kernel one. The target program is the one named as the
+ * function, or the only program of the upatch.
+ */
+static int set_bpf_prog_targets(struct bpf_object *obj,
+				const struct build_attach_upatch *attach,
+				__s32 *tgt_idx)
+{
+	char bpffs_name[UPATCH_BPFFS_NAME_MAX + 1];
+	__u32 i = 0, nr_tgt_progs = 0, nr_set = 0;
+	struct bpf_program *p, *t;
+	struct bpf_object *tgt;
+	const struct btf *btf;
+	char path[PATH_MAX];
+	int err;
+
+	tgt = bpf_object__open_file(attach->obj_path, NULL);
+	err = libbpf_get_error(tgt);
+	if (err) {
+		pr_err("open %s: %d", attach->obj_path, err);
+		return err;
+	}
+	btf = bpf_object__btf(tgt);
+	if (!btf) {
+		pr_err("%s carries no BTF", attach->obj_path);
+		err = -EINVAL;
+		goto out;
+	}
+	if (upatch_bpffs_name(bpffs_name, sizeof(bpffs_name), attach->name)) {
+		err = -ENAMETOOLONG;
+		goto out;
+	}
+	bpf_object__for_each_program(t, tgt)
+		nr_tgt_progs++;
+
+	bpf_object__for_each_program(p, obj) {
+		const char *func = bpf_prog_target_func(bpf_program__section_name(p));
+		__s32 id, idx = -1, j = 0;
+
+		tgt_idx[i] = -1;
+		if (!func) {
+			i++;
+			continue;
+		}
+		id = btf__find_by_name_kind(btf, func, BTF_KIND_FUNC);
+		if (id <= 0 ||
+		    btf_vlen(btf__type_by_id(btf, id)) == BTF_FUNC_EXTERN) {
+			i++;
+			continue;
+		}
+		bpf_object__for_each_program(t, tgt) {
+			if (!strcmp(bpf_program__name(t), func))
+				idx = j;
+			j++;
+		}
+		if (idx < 0 && nr_tgt_progs == 1)
+			idx = 0;
+		if (idx < 0) {
+			pr_err("program '%s': no program of upatch %s is named '%s'",
+			       bpf_program__name(p), attach->name, func);
+			err = -ENOENT;
+			goto out;
+		}
+		if (strsprintf(path, sizeof(path), "%s/%s/progs/prog_%d",
+			       BPFFS_UPATCHES_DIR, bpffs_name, idx) < 0) {
+			err = -ENAMETOOLONG;
+			goto out;
+		}
+		err = bpf_program__set_attach_target_path(p, path, btf, func);
+		if (err) {
+			pr_err("program '%s': cannot attach to '%s' of upatch %s: %d",
+			       bpf_program__name(p), func, attach->name, err);
+			goto out;
+		}
+		tgt_idx[i++] = idx;
+		nr_set++;
+	}
+	if (!nr_set) {
+		pr_err("no program attaches to a program of upatch %s",
+		       attach->name);
+		err = -ENOENT;
+	}
+out:
+	bpf_object__close(tgt);
+	return err;
+}
+
 static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
-			       __u32 nr_progs, void **out, __u32 *out_len)
+			       __u32 nr_progs,
+			       const struct build_attach_upatch *attach,
+			       const __s32 *tgt_idx, void **out, __u32 *out_len)
 {
 	struct build_uprobe_target {
 		__u32 prog_idx;
@@ -1155,7 +1269,7 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 	char (*seen_maps)[UPATCH_PROG_MAP_MAX] = NULL;
 	struct bpf_program *p;
 	size_t len, base_len, md_alloc_len;
-	__u32 i = 0, n_seen = 0, nr_uprobe_targets = 0;
+	__u32 i = 0, n_seen = 0, nr_uprobe_targets = 0, nr_bpf_targets = 0;
 	bool has_serializer = false, has_test_run = false;
 	int err;
 
@@ -1268,6 +1382,21 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 			has_test_run = true;
 			md->progs[i].role =
 				cpu_to_le32(UPATCH_PROG_ROLE_TEST_RUN);
+			i++;
+			continue;
+		}
+		if (tgt_idx && tgt_idx[i] >= 0) {
+			md->progs[i].role =
+				cpu_to_le32(UPATCH_PROG_ROLE_ATTACH);
+			md->progs[i].kind =
+				cpu_to_le32(UPATCH_ATTACH_BPF_PROG);
+			if (strscpy(md->progs[i].target, bpf_prog_target_func(sec),
+				    sizeof(md->progs[i].target)) < 0) {
+				pr_err("target function too long in section '%s'", sec);
+				err = -E2BIG;
+				goto err_free;
+			}
+			nr_bpf_targets++;
 			i++;
 			continue;
 		}
@@ -1435,6 +1564,50 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 		}
 	}
 
+	if (nr_bpf_targets) {
+		struct upatch_bpf_targets targets = {};
+		size_t bpf_off = len;
+		__u8 *cursor;
+		void *grown;
+		__u32 j;
+
+		if (check_add_overflow(len, sizeof(targets), &len) ||
+		    check_add_overflow(len,
+				       size_mul(nr_bpf_targets,
+						sizeof(struct upatch_bpf_target)),
+				       &len) ||
+		    len > UINT32_MAX) {
+			err = -EOVERFLOW;
+			goto err_free;
+		}
+		grown = xreallocarray(md, md_alloc_len, len, 1);
+		if (!grown) {
+			err = -ENOMEM;
+			goto err_free;
+		}
+		md = grown;
+		md_alloc_len = len;
+		targets.magic = cpu_to_le32(UPATCH_BPF_TARGET_MAGIC);
+		targets.version = cpu_to_le32(UPATCH_BPF_TARGET_VERSION);
+		targets.nr_targets = cpu_to_le32(nr_bpf_targets);
+		cursor = (__u8 *)md + bpf_off;
+		memcpy(cursor, &targets, sizeof(targets));
+		cursor += sizeof(targets);
+		for (j = 0; j < nr_progs; j++) {
+			struct upatch_bpf_target record = {};
+
+			if (tgt_idx[j] < 0)
+				continue;
+			record.prog_idx = cpu_to_le32(j);
+			record.target_prog_idx = cpu_to_le32((__u32)tgt_idx[j]);
+			memcpy(record.payload_sha256, attach->payload_sha256,
+			       sizeof(record.payload_sha256));
+			memcpy(record.upatch, attach->name, sizeof(record.upatch));
+			memcpy(cursor, &record, sizeof(record));
+			cursor += sizeof(record);
+		}
+	}
+
 	*out = md;
 	*out_len = (__u32)len;
 	xfree(seen_maps, (size_t)nr_progs * sizeof(*seen_maps));
@@ -1525,6 +1698,7 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 			   const char *upatch_name, __u32 flags,
 			   const __u8 *unload_payload, const char *src_path,
 			   const void *policy_labels, __u32 policy_labels_len,
+			   const struct build_attach_upatch *attach,
 			   const char *pkey_path, const char *cert_path)
 {
 	LIBBPF_OPTS(gen_loader_opts, opts);
@@ -1545,6 +1719,7 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 	__u32 nr_decoders = 0;
 	void *attach_meta = NULL;
 	struct bpf_program *p;
+	__s32 *tgt_idx = NULL;
 	void *sig_buf = NULL;
 	struct bpf_map *m;
 	int err = 0;
@@ -1570,7 +1745,19 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 		if (err)
 			goto out;
 
-		err = build_prog_metadata(obj, nr_maps, nr_progs,
+		if (attach) {
+			tgt_idx = xcalloc(nr_progs ?: 1, sizeof(*tgt_idx));
+			if (!tgt_idx) {
+				err = -ENOMEM;
+				goto out;
+			}
+			err = set_bpf_prog_targets(obj, attach, tgt_idx);
+			if (err)
+				goto out;
+		}
+
+		err = build_prog_metadata(obj, nr_maps, nr_progs, attach,
+					  tgt_idx,
 					  &attach_meta, &attach_meta_len);
 		if (err)
 			goto out;
@@ -1749,6 +1936,8 @@ out:
 	xfree(sig_buf, MAX_SIG_SIZE);
 	bpf_object__close(obj);
 	xfree(attach_meta, attach_meta_len);
+	if (tgt_idx)
+		xfree(tgt_idx, (nr_progs ?: 1) * sizeof(*tgt_idx));
 	return err;
 }
 
@@ -1772,6 +1961,18 @@ int build_package_load(const char *bpf_o, const char *src_path,
 		       const struct upatch_policy_label_entry *policies,
 		       __u32 nr_policies,
 		       const char *pkey_path, const char *cert_path)
+{
+	return build_package_load_attach(bpf_o, src_path, out_path,
+					 upatch_name, policies, nr_policies,
+					 NULL, pkey_path, cert_path);
+}
+
+int build_package_load_attach(const char *bpf_o, const char *src_path,
+			      const char *out_path, const char *upatch_name,
+			      const struct upatch_policy_label_entry *policies,
+			      __u32 nr_policies,
+			      const struct build_attach_upatch *attach,
+			      const char *pkey_path, const char *cert_path)
 {
 	__u32 label_len = 0, policy_map_idx = 0, socket_policy_map_idx = 0;
 	struct upatch_policy_label_header *label_blob = NULL;
@@ -1868,7 +2069,8 @@ int build_package_load(const char *bpf_o, const char *src_path,
 			label_entries[i] = policies[i];
 	}
 	err = finalize_object(obj, out_path, upatch_name, 0, NULL, src_path,
-			      label_blob, label_len, pkey_path, cert_path);
+			      label_blob, label_len, attach, pkey_path,
+			      cert_path);
 	obj = NULL;
 out:
 	bpf_object__close(obj);
@@ -1946,5 +2148,5 @@ int build_package_unload(const char *upatch_name,
 	 */
 	return finalize_object(obj, out_upatch, upatch_name,
 			       DIRECTIVE_UNLOAD, payload_sha256,
-			       NULL, NULL, 0, pkey_path, cert_path);
+			       NULL, NULL, 0, NULL, pkey_path, cert_path);
 }
