@@ -1,14 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
-#
-# testing/end2end/host.sh <command>... -- the operator's side of the
-# end-to-end test, around <command>, which boots the end2end VM. An OCI
-# registry and an OpenTelemetry Collector run in containers behind a
-# throwaway CA; the operator builds kernel-obs into a package, pushes it
-# and appends it to a signed upatch tree. After the VM, the TPM-signed
-# evidence the target left must verify and record the published operation
-# and payload, and the collector must hold what the package observed.
+# testing/end2end/host.sh -- run the operator side of the end-to-end VM test.
 
 set -eu
 
@@ -21,10 +14,12 @@ W=$REPO/build/test-vm/end2end
 TLS_DIR=$HOST_PRIVATE_DIR/end2end-tls
 REGISTRY=127.0.0.1:15443
 COLLECTOR=127.0.0.1:14318
+CLICKHOUSE=127.0.0.1:18123
 # registry 3.1.2 and opentelemetry-collector-contrib 0.164.0, both built
 # with a Go that offers the hybrid ML-KEM group shirudo requires.
 REGISTRY_IMAGE=docker.io/library/registry@sha256:d4032d4cc323c1731c707931ecada07a53076eac38e3b61ae57533f170f2c6c3
 COLLECTOR_IMAGE=docker.io/otel/opentelemetry-collector-contrib@sha256:340c9ca6a36617084c6661bdc4f0fe92b7cda5a805d61673ec8db375fddc522b
+CLICKHOUSE_IMAGE=docker.io/clickhouse/clickhouse-server@sha256:d426d2f612e1e189c90f9a3f8dcd85a03c6851273833817a296bb327e63aa7a7
 S=$REPO/shirudo
 export SHIRUDO_BUILD="$REPO/tools/shirudo-build/shirudo-build"
 export BPM_OCI_CA_FILE="$W/ca.pem"
@@ -38,8 +33,11 @@ die() { printf 'end2end: %s\n' "$*" >&2; exit 1; }
 
 down() {
 	docker logs shirudo-end2end-collector >"$W/collector.log" 2>&1 || true
+	docker logs shirudo-end2end-clickhouse >"$W/clickhouse.log" 2>&1 || true
 	docker rm -f shirudo-end2end-registry shirudo-end2end-collector \
+		shirudo-end2end-clickhouse \
 		>/dev/null 2>&1 || true
+	docker network rm shirudo-end2end >/dev/null 2>&1 || true
 	rm -rf -- "$TLS_DIR"
 }
 
@@ -88,11 +86,23 @@ rm -f -- "$TLS_DIR/ca.key" "$TLS_DIR/server.csr" \
 chmod 0644 "$TLS_DIR/server.key"
 openssl rand -hex 16 >"$W/nonce"
 
-say "the registry and the collector"
+say "the registry, collector and ClickHouse"
+docker network create shirudo-end2end >/dev/null
+docker run -d --name shirudo-end2end-clickhouse \
+	--network shirudo-end2end --network-alias clickhouse \
+	-p "$CLICKHOUSE:8123" -e CLICKHOUSE_SKIP_USER_SETUP=1 \
+	"$CLICKHOUSE_IMAGE" >/dev/null
+i=0
+until curl -fsS --data-binary 'SELECT 1' "http://$CLICKHOUSE/" >/dev/null 2>&1; do
+	i=$((i + 1))
+	[ "$i" -lt 150 ] || die "ClickHouse did not come up"
+	sleep 0.2
+done
 docker run -d --name shirudo-end2end-registry -p "$REGISTRY:5000" \
 	-v "$TLS_DIR:/certs:ro" -e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/server.pem \
 	-e REGISTRY_HTTP_TLS_KEY=/certs/server.key "$REGISTRY_IMAGE" >/dev/null
 docker run -d --name shirudo-end2end-collector -p "$COLLECTOR:4318" \
+	--network shirudo-end2end \
 	-v "$TLS_DIR:/certs:ro" -v "$W/out:/out" \
 	-v "$REPO/testing/end2end/otelcol.yaml:/etc/otelcol-contrib/config.yaml:ro" \
 	"$COLLECTOR_IMAGE" >/dev/null
@@ -181,7 +191,8 @@ PY
 say "the collector holds what kernel-obs observed"
 python3 "$REPO/testing/end2end/check-otlp.py" \
 	"$REPO/build/test-vm/vms/$VM_NAME-end2end/result/end2end/otel" \
-	"$W/out/otlp.json" || die "the collector snapshots differ from the map exports"
+	"$W/out/otlp.json" "http://$CLICKHOUSE/" || \
+	die "the collector or ClickHouse snapshots differ from the map exports"
 python3 - "$W/out/otlp.json" <<'PY' || die "the collector did not get the export"
 import json, sys
 

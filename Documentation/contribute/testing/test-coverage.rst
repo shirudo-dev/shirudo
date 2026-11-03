@@ -450,13 +450,13 @@ signed config image.
      - The DNS packet builders the matrix test uses
    * - ``t9101-kernel-obs``
      - ``kernel-obs`` with eight serializers, records from real events,
-       draining exports and matching OTLP collector snapshots
+       draining exports and matching OTLP and ClickHouse snapshots
    * - ``t9102-kernel-obs-net``
-     - Socket families and matching OTLP collector snapshots
+     - Socket families and matching OTLP and ClickHouse snapshots
    * - ``t9103-kernel-obs-priv``
-     - Privilege and executable-mapping records in maps and OTLP
+     - Privilege and executable-mapping records in maps, OTLP and ClickHouse
    * - ``t9104-kernel-obs-dns-matrix``
-     - DNS over loopback in maps and OTLP
+     - DNS over loopback in maps, OTLP and ClickHouse
    * - ``t9105-delivery``
      - Registry, tree sync, load, export and attestation end to end
    * - ``t9106-policy-exec-graph``

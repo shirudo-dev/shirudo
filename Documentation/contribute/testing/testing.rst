@@ -522,25 +522,29 @@ Run the end-to-end tests
 
 ``make -C testing end2end`` runs ``t9001`` on the host, then
 :src:`testing/end2end/host.sh` plays the operator around one VM. It starts
-an OCI registry and an OpenTelemetry Collector in Docker containers,
-pinned by digest and behind a throwaway CA. It builds ``kernel-obs``
-into a package with ``bpm build``, pushes it with ``bpm push`` and
-appends it to a signed upatch tree with ``bpm tree append``. The target
+an OCI registry, an OpenTelemetry Collector and ClickHouse in Docker
+containers pinned by digest. The registry and collector use a throwaway
+CA. It builds ``kernel-obs`` into a package with ``bpm build``, pushes
+it with ``bpm push`` and appends it to a signed upatch tree with
+``bpm tree append``. The target
 activates a signed config that points at the tree and the collector,
 and its units pull, verify, load and export. The host then verifies the
 target's TPM evidence with ``attest verify`` and checks that the
 collector holds the package's records. The earlier ``kernel-obs`` tests
 export each map snapshot as local JSON and OTLP from one read; the host
-compares the snapshots with the collector's JSON output. The comparison
-uses event times relative to each map's interval start and ignores the
-metric export time, which the two decoder calls sample independently.
+compares the snapshots with the collector's JSON output and queries the
+ClickHouse log and sum metric tables to check that both collector exports
+hold the same data. The comparison uses event times relative to each
+map's interval start and ignores the metric export time, which the two
+decoder calls sample independently.
 
 .. code-block:: console
 
    # make -C testing end2end
 
 The host side writes to ``build/test-vm/end2end/``. The guest reaches
-the containers through QEMU's address for the host.
+the registry and collector through QEMU's address for the host. ClickHouse
+is available to the collector on the test's Docker network.
 
 Write a test
 ------------

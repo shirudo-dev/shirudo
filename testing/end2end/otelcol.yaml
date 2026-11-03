@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Authors of shirudo
 #
 # The collector of the end-to-end test: OTLP over HTTPS in, every request
-# written to a file the host then checks.
+# written to a file and ClickHouse for the host to compare.
 receivers:
   otlp:
     protocols:
@@ -14,11 +14,15 @@ receivers:
 exporters:
   file:
     path: /out/otlp.json
+  clickhouse:
+    endpoint: tcp://clickhouse:9000
+    database: shirudo
+    create_schema: true
 service:
   pipelines:
     logs:
       receivers: [otlp]
-      exporters: [file]
+      exporters: [file, clickhouse]
     metrics:
       receivers: [otlp]
-      exporters: [file]
+      exporters: [file, clickhouse]
