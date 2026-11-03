@@ -210,6 +210,8 @@ $(VM_KERNEL_STAMP):
 endif
 endif
 
+LOCAL_STACK ?= 1
+
 vm: $(VM_KERNEL_DEP) test-vm-bundle
 	$(Q)VM_MODE=interactive VM_NAME="$(VM_NAME)" VM_TENANT="$(VM_TENANT)" \
 		TEST_VM_KERNEL="$(abspath $(VM_KERNEL_IMAGE))" \
@@ -232,7 +234,7 @@ vm: $(VM_KERNEL_DEP) test-vm-bundle
 		TEST_VM_BPM_OCI_INDEX_CERT="$(TEST_VM_BPM_OCI_INDEX_CERT)" \
 		TEST_VM_MODE="$(TEST_VM_MODE)" TEST_VM_INITRD="$(TEST_VM_INITRD)" \
 		TEST_VM_HOST_BUNDLE="$(abspath $(TEST_VM_BUNDLE_DIR))" \
-		$(ROOT)/testing/vm/run.sh
+		$(if $(filter 0,$(LOCAL_STACK)),,$(ROOT)/testing/vm/stack.sh vm) $(ROOT)/testing/vm/run.sh
 vm-console:
 	$(Q)VM_NAME="$(VM_NAME)" \
 		TEST_VM_WORK_DIR="$(TEST_VM_WORK_DIR)" $(ROOT)/testing/vm/run.sh --console
@@ -370,6 +372,7 @@ help:
 	  '  make -C testing vm KERNEL=7.4' \
 	  '  make -C testing kernel KERNEL_TAG=v7.4' \
 	  '  make -C testing bpf-next, bundle or test-helpers' \
+	  '  make -C testing stack-up, oci, telemetry or stack-down' \
 	  '  make -C testing clean'
 
 clean:
@@ -381,3 +384,11 @@ clean:
 		rm -rf "$$bundle_dir" "$$bundle_dir.operator" \
 			"$(abspath $(TEST_VM_HOST_PRIVATE_DIR))/operator-keys" \
 			$(ROOT)/build/test-vm/end2end
+
+.PHONY: oci telemetry stack-up stack-down
+stack-up: oci telemetry
+
+oci telemetry:
+	$(Q)TEST_VM_HOST_PRIVATE_DIR="$(TEST_VM_HOST_PRIVATE_DIR)" $(ROOT)/testing/vm/stack.sh $@
+stack-down:
+	$(Q)TEST_VM_HOST_PRIVATE_DIR="$(TEST_VM_HOST_PRIVATE_DIR)" $(ROOT)/testing/vm/stack.sh down

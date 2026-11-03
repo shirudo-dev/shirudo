@@ -74,7 +74,7 @@ for name in config-boot-keys config-live-new-key config-live-revoke-a config-a c
 	config-tree-stable config-tree-updated config-tree-deleted config-tree-restored \
 	config-tree-kconfig config-tree-reloaded \
 	config-otel config-jsonl config-jsonl-bad config-interrupted config-end2end \
-	config-builtin config-untrusted; do
+	config-local-stack config-builtin config-untrusted; do
 	[ "$name" != config-builtin ] || [ -n "$builtin_key" ] || continue
 	root="$output/source/$name"
 	mkdir -p "$root/etc/shirudo" "$root/keys/trusted" "$root/keys/revoked"
@@ -93,6 +93,12 @@ for name in config-boot-keys config-live-new-key config-live-revoke-a config-a c
 		;;
 	config-jsonl|config-jsonl-bad)
 		cp "$templates/${name#config-}.conf" "$root/etc/shirudo/shirudo.conf"
+		;;
+	config-local-stack)
+		mkdir -p "$root/etc/shirudo/bpm"
+		cp "$templates/local-stack.conf" "$root/etc/shirudo/shirudo.conf"
+		cp "$templates/local-stack-tree.conf" "$root/etc/shirudo/bpm/upatch-tree.conf"
+		printf 'role=local\n' >"$root/etc/shirudo/node.labels"
 		;;
 	config-end2end)
 		mkdir -p "$root/etc/shirudo/bpm"

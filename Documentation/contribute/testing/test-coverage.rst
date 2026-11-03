@@ -103,6 +103,9 @@ signed config image.
      - Script regex matching through ``-t`` and ``TEST_FILTER``, command-line
        precedence, empty and invalid patterns, ordering and failure status
 
+   * - ``t1010-local-stack``
+     - VM-first service configuration and stable public trust across starts
+
 ``signing`` (2)
 ~~~~~~~~~~~~~~~
 

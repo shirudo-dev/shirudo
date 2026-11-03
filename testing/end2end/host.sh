@@ -15,11 +15,9 @@ TLS_DIR=$HOST_PRIVATE_DIR/end2end-tls
 REGISTRY=127.0.0.1:15443
 COLLECTOR=127.0.0.1:14318
 CLICKHOUSE=127.0.0.1:18123
-# registry 3.1.2 and opentelemetry-collector-contrib 0.164.0, both built
-# with a Go that offers the hybrid ML-KEM group shirudo requires.
-REGISTRY_IMAGE=docker.io/library/registry@sha256:d4032d4cc323c1731c707931ecada07a53076eac38e3b61ae57533f170f2c6c3
-COLLECTOR_IMAGE=docker.io/otel/opentelemetry-collector-contrib@sha256:340c9ca6a36617084c6661bdc4f0fe92b7cda5a805d61673ec8db375fddc522b
-CLICKHOUSE_IMAGE=docker.io/clickhouse/clickhouse-server@sha256:d426d2f612e1e189c90f9a3f8dcd85a03c6851273833817a296bb327e63aa7a7
+. "$REPO/testing/vm/stack-lib.sh"
+STACK_NAME=shirudo-end2end
+STACK_PERSIST=0
 S=$REPO/shirudo
 export SHIRUDO_BUILD="$REPO/tools/shirudo-build/shirudo-build"
 export BPM_OCI_CA_FILE="$W/ca.pem"
@@ -32,23 +30,8 @@ say() { printf 'end2end: %s\n' "$*"; }
 die() { printf 'end2end: %s\n' "$*" >&2; exit 1; }
 
 down() {
-	docker logs shirudo-end2end-collector >"$W/collector.log" 2>&1 || true
-	docker logs shirudo-end2end-clickhouse >"$W/clickhouse.log" 2>&1 || true
-	docker rm -f shirudo-end2end-registry shirudo-end2end-collector \
-		shirudo-end2end-clickhouse \
-		>/dev/null 2>&1 || true
-	docker network rm shirudo-end2end >/dev/null 2>&1 || true
+	stack_down
 	rm -rf -- "$TLS_DIR"
-}
-
-# Up to ten seconds for a TLS service to answer an HTTP request.
-wait_https() {
-	i=0
-	until curl -fsS --cacert "$W/ca.pem" "$@" >/dev/null 2>&1; do
-		i=$((i + 1))
-		[ "$i" -lt 50 ] || return 1
-		sleep 0.2
-	done
 }
 
 command -v docker >/dev/null 2>&1 || die "docker is required"
@@ -68,47 +51,11 @@ down
 install -d -m 0755 "$TLS_DIR"
 trap down EXIT
 
-say "a CA, and a server certificate for the registry and the collector"
-openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
-	-keyout "$TLS_DIR/ca.key" -out "$W/ca.pem" -days 1 \
-	-subj /CN=shirudo-end2end-ca \
-	-addext 'basicConstraints=critical,CA:TRUE' \
-	-addext 'keyUsage=critical,keyCertSign,cRLSign' 2>/dev/null
-openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
-	-keyout "$TLS_DIR/server.key" -out "$TLS_DIR/server.csr" \
-	-subj /CN=shirudo-end2end 2>/dev/null
-printf 'subjectAltName=IP:127.0.0.1,IP:10.0.2.2\n' >"$TLS_DIR/server.ext"
-openssl x509 -req -in "$TLS_DIR/server.csr" -CA "$W/ca.pem" \
-	-CAkey "$TLS_DIR/ca.key" -CAcreateserial -out "$TLS_DIR/server.pem" \
-	-days 1 -extfile "$TLS_DIR/server.ext" 2>/dev/null
-rm -f -- "$TLS_DIR/ca.key" "$TLS_DIR/server.csr" \
-	"$TLS_DIR/server.ext" "$TLS_DIR/ca.srl"
-chmod 0644 "$TLS_DIR/server.key"
+stack_prepare
 openssl rand -hex 16 >"$W/nonce"
-
 say "the registry, collector and ClickHouse"
-docker network create shirudo-end2end >/dev/null
-docker run -d --name shirudo-end2end-clickhouse \
-	--network shirudo-end2end --network-alias clickhouse \
-	-p "$CLICKHOUSE:8123" -e CLICKHOUSE_SKIP_USER_SETUP=1 \
-	"$CLICKHOUSE_IMAGE" >/dev/null
-i=0
-until curl -fsS --data-binary 'SELECT 1' "http://$CLICKHOUSE/" >/dev/null 2>&1; do
-	i=$((i + 1))
-	[ "$i" -lt 150 ] || die "ClickHouse did not come up"
-	sleep 0.2
-done
-docker run -d --name shirudo-end2end-registry -p "$REGISTRY:5000" \
-	-v "$TLS_DIR:/certs:ro" -e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/server.pem \
-	-e REGISTRY_HTTP_TLS_KEY=/certs/server.key "$REGISTRY_IMAGE" >/dev/null
-docker run -d --name shirudo-end2end-collector -p "$COLLECTOR:4318" \
-	--network shirudo-end2end \
-	-v "$TLS_DIR:/certs:ro" -v "$W/out:/out" \
-	-v "$REPO/testing/end2end/otelcol.yaml:/etc/otelcol-contrib/config.yaml:ro" \
-	"$COLLECTOR_IMAGE" >/dev/null
-wait_https "https://$REGISTRY/v2/" || die "the registry did not come up"
-wait_https -X POST -H 'Content-Type: application/json' -d '{}' \
-	"https://$COLLECTOR/v1/logs" || die "the collector did not come up"
+stack_oci || die "the registry did not come up"
+stack_telemetry || die "the telemetry stack did not come up"
 
 say "the operator builds, pushes and publishes kernel-obs"
 cp -R upatches/kernel-obs "$W/pkg/kernel-obs"

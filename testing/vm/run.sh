@@ -1469,6 +1469,7 @@ if [[ -n "$KERNEL_ARTIFACT_DIR" ]]; then
       export TEST_VM_KERNEL_MODULES=/mnt/shirudo-kernel/lib/modules
 EOF
 fi
+printf '      export TEST_VM_LOCAL_STACK=%q\n' "${TEST_VM_LOCAL_STACK:-0}" >>"$USER_DATA"
 printf '      export VM_MODE=%q\n' "$VM_MODE" >>"$USER_DATA"
 printf '      export TEST_VM_MODE=%q\n' "$TEST_MODE" >>"$USER_DATA"
 printf '      export TEST_VM_SUITE=%q\n' "$VM_SUITE" >>"$USER_DATA"

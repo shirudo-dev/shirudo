@@ -414,6 +414,13 @@ if tpm.get("chain_matches_eventlog") is not True:
     raise SystemExit("register does not match the shirudo eventlog")
 PY
 
+if [[ "${TEST_VM_LOCAL_STACK:-0}" == 1 ]]; then
+	"$SHIRUDO_BIN" image update /var/lib/shirudo/images/config-local-stack
+	install -d /etc/shirudo/bpm
+	printf '%s\n' 'BPM_OCI_CA_FILE=/usr/local/share/ca-certificates/shirudo-oci-ca.crt' \
+		>/etc/shirudo/bpm/environment
+fi
+
 if [[ -n "${TEST_VM_BPM_TREE_INPUT:-}" ]]; then
 	log "performing initial BPM tree sync"
 	tree_sync_ok=0

@@ -87,6 +87,7 @@ help:
 	@printf '%s\n' \
 	  'shirudo make targets:' \
 	  '  Build: make, make target, make target-deps, make bpf-deps, make install' \
+	  '  Local stack: make stack-up, make oci, make telemetry, make vm, make stack-down' \
 	  '  Checks: make sparse' \
 	  '  Install roles: make install-target, make install-operator' \
 	  '  Package: make -C packaging help' \
@@ -146,3 +147,7 @@ distclean: clean
 	$(Q)rm -f config.mk
 	+$(Q)$(MAKE) -f Makefile.target-deps TARGET_DEPS_DIR="$(TARGET_DEPS_DIR)" clean
 	$(Q)$(MAKE) -f Makefile.shirudo distclean
+
+.PHONY: vm vm-console vm-ssh vm-stop vm-clean oci telemetry stack-up stack-down
+vm vm-console vm-ssh vm-stop vm-clean oci telemetry stack-up stack-down:
+	+$(Q)$(MAKE) -C testing $@

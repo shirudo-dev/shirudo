@@ -554,6 +554,50 @@ failed keeps its disks too, copies its logs to
 overlay holds an ephemeral signing key, so do not share the state
 directory.
 
+Run a local development stack
+-----------------------------
+
+From the checkout root, run the following commands in any order:
+
+.. code-block:: console
+
+   $ make oci
+   $ make telemetry
+   # make vm
+
+``make oci`` starts a persistent TLS OCI registry on
+``127.0.0.1:15444``. ``make telemetry`` starts the OTLP collector on
+``https://127.0.0.1:14319`` and ClickHouse on
+``http://127.0.0.1:18124``. Both targets are idempotent. They use the same
+container helpers as the end-to-end tests, which use separate ports and
+storage.
+
+``make stack-up`` is shorthand for ``make oci telemetry``. Start the VM
+with ``make vm``.
+
+``make vm`` prepares a stable CA even when neither service is running.
+After initialization, it activates the signed ``config-local-stack``
+image. That image points telemetry at ``https://10.0.2.2:14319`` and the
+BPM tree at ``oci://10.0.2.2:15444/shirudo/local-tree``, reference
+``stable``. The existing timers retry exports and tree sync when services
+are unavailable; starting the containers later needs no VM reboot.
+The registry starts empty. Publish a signed tree at that reference using
+the VM bundle's operator key under ``TEST_VM_HOST_PRIVATE_DIR`` to load
+upatches. Keepalives can reach the collector before any upatch is loaded.
+The VM's node labels include ``role=local``.
+
+The public CA and service data live under ``build/test-vm/stack/``;
+collector JSON is ``out/otlp.json`` there. Server private keys live outside
+the checkout in a directory under ``/tmp`` named for the checkout's hash.
+Normal and sudo invocations use the same trust material. The guest
+receives only the public CA. ``make stack-down`` removes the service
+containers and network while retaining the data and CA for the next start.
+It does not stop the VM; use ``make vm-stop`` for that.
+
+``make -C testing vm`` uses the same defaults. Set ``LOCAL_STACK=0`` to
+boot a VM without the local-stack configuration and use the explicit
+endpoint settings described above instead.
+
 Run the end-to-end tests
 ------------------------
 
