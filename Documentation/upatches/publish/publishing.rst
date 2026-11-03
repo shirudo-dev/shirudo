@@ -77,9 +77,11 @@ Push it to a repository
    repository, without a tag. The command uploads the package as an OCI
    artifact, attaches the package's certificate to it as a referrer, adds
    the version with the package's digests to the index at
-   ``shirudo/bpm-index:stable`` in the same registry, signs the index
-   with your key, and tags the package with its version. It prints the
-   pushed reference, ``oci://<registry>/<namespace>/<name>:<version>``.
+   ``<namespace>/bpm-index:stable`` in the same registry, signs the index
+   with your key, and tags the package with its version. The index
+   namespace is the package repository path without its final name. It
+   prints the pushed reference,
+   ``oci://<registry>/<namespace>/<name>:<version>``.
 
    Without ``--keys-dir``, or ``--index-cert`` and ``--index-key``, the
    command pushes the package and moves the version tag, but leaves the

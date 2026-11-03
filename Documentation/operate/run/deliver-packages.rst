@@ -21,7 +21,8 @@ Delivery is a pull in four steps, which Figure 1 shows together with
 the upatch tree:
 
 #. On the operator host, ``shirudo bpm push`` publishes the package and
-   a signed entry in the repository index ``shirudo/bpm-index:stable``.
+   a signed entry in the repository index
+   ``<namespace>/bpm-index:stable``.
 #. On the target, ``shirudo bpm repo update`` fetches that index from
    each repository, verifies its signature against the repository's
    certificate and caches it under
@@ -130,10 +131,17 @@ Add a repository
       endpoint = oci://<registry-host>
       key_file = /etc/shirudo/bpm/keys/<name>.der
 
-   ``<name>`` is the repository name that ``bpm install`` uses.
+   ``index_repository`` is optional. If omitted, shirudo uses
+   ``<name>/bpm-index``; use the package namespace as ``<name>`` to match
+   ``bpm push``. Set the field explicitly when the source name differs.
+
+   ``<name>`` is the repository name that ``bpm install`` uses. When the
+   default index location is used, it must also be the package namespace.
    ``<registry-host>`` is the registry's host name with an optional port
-   and no path. ``key_file`` names a certificate inside the config
-   image. The target refuses any other absolute path.
+   and no path. ``index_repository`` names the index repository. Its
+   namespace must match the namespace of the package repository passed to
+   ``bpm push``. ``key_file`` names a certificate inside the config image.
+   The target refuses any other absolute path.
 
 #. Copy the certificate whose key signs the repository index, the one
    you pass to ``bpm push``, to ``etc/shirudo/bpm/keys/<name>.der`` in

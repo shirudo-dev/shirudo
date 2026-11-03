@@ -127,7 +127,7 @@ manifest with shirudo's own media types:
      - The signing certificate as ``application/pkix-cert``. No
        ``shirudo bpm`` command reads it.
    * - Repository index
-     - ``shirudo/bpm-index:stable``, one per registry host
+     - ``<namespace>/bpm-index:stable``, one per repository namespace
      - ``application/vnd.shirudo.bpm.index.v1+json`` and its detached
        CMS signature,
        ``application/vnd.shirudo.bpm.index.signature.v1``.

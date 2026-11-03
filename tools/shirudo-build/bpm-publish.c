@@ -100,17 +100,32 @@ static int index_entry_compare(const void *left, const void *right)
 	return ret ? ret : strcmp(a->version, b->version);
 }
 
+static int index_repository_for_package(const char *repository, char *out, size_t out_sz)
+{
+	const char *name = strrchr(repository, '/');
+	size_t namespace_len;
+
+	if (!name || name == repository)
+		return -EINVAL;
+	namespace_len = (size_t)(name - repository);
+	if (strsprintf(out, out_sz, "%.*s/%s", (int)namespace_len, repository,
+		       BPM_INDEX_REPOSITORY_NAME) < 0)
+		return -ENAMETOOLONG;
+	return 0;
+}
+
 /* A registry without an index yields an empty one. */
-static int fetch_index(struct bpm_oci_client *c, const char *cert,
+static int fetch_index(struct bpm_oci_client *c, const char *repository,
+		       const char *cert,
 		       struct bpm_index_entry *entries, int *n)
 {
 	struct bpm_buffer manifest = {}, payload = {}, sig = {};
 	struct bpm_descriptor *layers = NULL;
-	char url[PATH_MAX];
-	int nl = 0, ret;
+	char url[PATH_MAX], hex[65];
+	int nl = 0, ret = 0;
 
 	*n = 0;
-	ret = bpm_oci_url(c, BPM_INDEX_REPOSITORY, "manifests", BPM_INDEX_TAG,
+	ret = bpm_oci_url(c, repository, "manifests", BPM_INDEX_TAG,
 			  url, sizeof(url));
 	if (ret)
 		return ret;
@@ -128,11 +143,37 @@ static int fetch_index(struct bpm_oci_client *c, const char *cert,
 				     BPM_MAX_ENTRIES, &nl, NULL, 0);
 	if (ret)
 		goto out;
-	ret = bpm_oci_get_signed(c, BPM_INDEX_REPOSITORY, layers, nl,
-				 BPM_INDEX_MEDIA, BPM_INDEX_SIG_MEDIA, &payload,
-				 &sig);
-	if (ret)
+	for (int i = 0; i < nl; i++) {
+		struct bpm_buffer *dst;
+
+		if (!strcmp(layers[i].media, BPM_INDEX_MEDIA))
+			dst = &payload;
+		else if (!strcmp(layers[i].media, BPM_INDEX_SIG_MEDIA))
+			dst = &sig;
+		else
+			continue;
+		if (dst->data) {
+			ret = -EINVAL;
+			goto out;
+		}
+		ret = bpm_oci_url(c, repository, "blobs", layers[i].digest,
+				  url, sizeof(url));
+		if (ret)
+			goto out;
+		ret = bpm_oci_get_blob(c, url, layers[i].media, dst);
+		if (ret)
+			goto out;
+		if ((layers[i].size >= 0 && (__s64)dst->len != layers[i].size) ||
+		    bpm_sha256_hex(dst->data, dst->len, hex, sizeof(hex)) ||
+		    !bpm_digest_matches(layers[i].digest, hex)) {
+			ret = -EKEYREJECTED;
+			goto out;
+		}
+	}
+	if (!payload.data || !sig.data) {
+		ret = -EINVAL;
 		goto out;
+	}
 	if (bpm_verify_cms(payload.data, payload.len, sig.data, sig.len, cert)) {
 		pr_err("bpm push: the published repository index is not signed by %s",
 		       cert);
@@ -149,12 +190,12 @@ out:
 }
 
 /*
- * Add or refresh the package's entry in the registry's signed index at
- * shirudo/bpm-index:stable, the document `bpm repo update` consumes. A
- * version already listed with different content is refused: published
- * versions are immutable.
+ * Add or refresh the package's entry in the signed index beside its
+ * repository namespace. A version already listed with different content
+ * is refused: published versions are immutable.
  */
-static int push_index(struct bpm_oci_client *c, const char *repository,
+static int push_index(struct bpm_oci_client *c, const char *index_repository,
+		      const char *repository,
 		      const struct bpm_package_info *info,
 		      const char *manifest_digest,
 		      const struct bpm_descriptor *layer,
@@ -169,12 +210,12 @@ static int push_index(struct bpm_oci_client *c, const char *repository,
 	size_t cap = 0, sig_len = 0;
 	time_t now = time(NULL);
 	__u8 *sig = NULL;
-	int n = 0, ret;
+	int n = 0, ret = 0;
 
 	entries = xcalloc(BPM_MAX_ENTRIES, sizeof(*entries));
 	if (!entries)
 		return -ENOMEM;
-	ret = fetch_index(c, cert, entries, &n);
+	ret = fetch_index(c, index_repository, cert, entries, &n);
 	if (ret)
 		goto out;
 	for (int i = 0; i < n; i++) {
@@ -184,7 +225,7 @@ static int push_index(struct bpm_oci_client *c, const char *repository,
 		if (strcmp(entries[i].manifest_digest, manifest_digest) ||
 		    strcmp(entries[i].package_digest, layer->digest)) {
 			pr_err("bpm push: the repository index already lists %s %s "
-			       "with different content", info->name, info->version);
+				  "with different content", info->name, info->version);
 			ret = -EEXIST;
 			goto out;
 		}
@@ -243,16 +284,16 @@ static int push_index(struct bpm_oci_client *c, const char *repository,
 	ret = sign_detached(body, e.len, key, cert, &sig, &sig_len);
 	if (ret)
 		goto out;
-	ret = bpm_oci_push_blob(c, BPM_INDEX_REPOSITORY, empty_config,
+	ret = bpm_oci_push_blob(c, index_repository, empty_config,
 				strlen(empty_config), BPM_EMPTY_CONFIG_MEDIA,
-				&config);
+				  &config);
 	if (ret)
 		goto out;
-	ret = bpm_oci_push_blob(c, BPM_INDEX_REPOSITORY, body, e.len,
+	ret = bpm_oci_push_blob(c, index_repository, body, e.len,
 				BPM_INDEX_MEDIA, &payload_layer);
 	if (ret)
 		goto out;
-	ret = bpm_oci_push_blob(c, BPM_INDEX_REPOSITORY, sig, sig_len,
+	ret = bpm_oci_push_blob(c, index_repository, sig, sig_len,
 				BPM_INDEX_SIG_MEDIA, &sig_layer);
 	if (ret)
 		goto out;
@@ -276,9 +317,9 @@ static int push_index(struct bpm_oci_client *c, const char *repository,
 		ret = e.err;
 		goto out;
 	}
-	ret = bpm_oci_put_manifest(c, BPM_INDEX_REPOSITORY, BPM_INDEX_TAG,
+	ret = bpm_oci_put_manifest(c, index_repository, BPM_INDEX_TAG,
 				   (const __u8 *)manifest, e.len, digest,
-				   sizeof(digest));
+				sizeof(digest));
 out:
 	xfree(manifest, BPM_MANIFEST_CAP);
 	sig_free(sig);
@@ -298,6 +339,7 @@ static int push_package(const char *package_path, const char *raw_repository,
 	__u8 *archive = NULL, *manifest = NULL;
 	const char *base;
 	char repository[BPM_MAX_ENDPOINT], package_digest[72], key_digest[72];
+	char index_repository[BPM_MAX_ENDPOINT] = {};
 	char hex[65];
 	char reference[PATH_MAX];
 	char config_body[] = "{\"mediaType\":\"" BPM_CONFIG_MEDIA "\"}";
@@ -307,6 +349,7 @@ static int push_package(const char *package_path, const char *raw_repository,
 	char *key_manifest_body = NULL;
 	struct stat st;
 	size_t archive_len, manifest_len, key_manifest_len;
+	size_t index_repo_sz = sizeof(index_repository);
 	int ret;
 
 	if (!package_path || !*package_path)
@@ -326,6 +369,11 @@ static int push_package(const char *package_path, const char *raw_repository,
 				      sizeof(repository));
 	if (ret)
 		goto out;
+	if (index_key && index_cert) {
+		ret = index_repository_for_package(repository, index_repository, index_repo_sz);
+		if (ret)
+			goto out;
+	}
 	base = strrchr(package_path, '/');
 	base = base ? base + 1 : package_path;
 	if (!*base || strlen(base) >= sizeof(package_title)) {
@@ -441,8 +489,8 @@ static int push_package(const char *package_path, const char *raw_repository,
 	if (ret)
 		goto out;
 	if (index_key && index_cert) {
-		ret = push_index(&c, repository, &info, package_digest, &layer,
-				 index_key, index_cert);
+		ret = push_index(&c, index_repository, repository, &info,
+				 package_digest, &layer, index_key, index_cert);
 		if (ret)
 			goto out;
 	}
@@ -847,7 +895,7 @@ static void bpm_push_usage(void)
 		"                         --index-key <signing_key.pem>]\n\n"
 		"The repository must start with oci:// and must not include a tag.\n"
 		"With signing material the registry's signed index at\n"
-		"shirudo/bpm-index:stable gains the package entry, signed with the\n"
+		"<namespace>/bpm-index:stable gains the package entry, signed with the\n"
 		"operator key; without it only the package is published.\n"
 		"Examples:\n"
 		"  shirudo bpm push ./package.bee oci://quay.io/namespace/package\n"

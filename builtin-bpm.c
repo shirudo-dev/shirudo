@@ -55,6 +55,7 @@
 struct bpm_source {
 	char name[BPM_MAX_NAME];
 	char endpoint[BPM_MAX_ENDPOINT];
+	char index_repository[BPM_MAX_ENDPOINT];
 	char key_file[BPM_MAX_KEY];
 };
 
@@ -337,6 +338,25 @@ static DIR *registries_opendir(void)
 	return fdopendir(fd);
 }
 
+static int source_index_repository_valid(const char *endpoint,
+					 const char *repository)
+{
+	char raw[PATH_MAX], parsed[BPM_MAX_ENDPOINT];
+	const char *name = strrchr(repository, '/');
+	struct bpm_oci_client c = {};
+	int rc;
+
+	if (!name || name == repository ||
+	    strcmp(name + 1, BPM_INDEX_REPOSITORY_NAME))
+		return -EINVAL;
+	if (strsprintf(raw, sizeof(raw), "%s/%s", endpoint, repository) < 0)
+		return -ENAMETOOLONG;
+	rc = bpm_oci_parse_push_repo(raw, &c, parsed, sizeof(parsed));
+	if (rc)
+		return rc;
+	return strcmp(parsed, repository) ? -EINVAL : 0;
+}
+
 static FILE *tree_conf_open(void)
 {
 	int fd;
@@ -376,6 +396,8 @@ static int load_source(const char *name, struct bpm_source *s)
 		ret = got < 0 ? got :
 		     bpm_parse_source_line(line,
 					   s->endpoint, sizeof(s->endpoint),
+					   s->index_repository,
+					   sizeof(s->index_repository),
 					   s->key_file, sizeof(s->key_file));
 	}
 	libc_free(line);
@@ -384,6 +406,14 @@ static int load_source(const char *name, struct bpm_source *s)
 		return ret;
 	if (!s->endpoint[0] || !s->key_file[0])
 		return -EINVAL;
+	if (!s->index_repository[0] &&
+	    strsprintf(s->index_repository, sizeof(s->index_repository),
+		       "%s/%s", s->name, BPM_INDEX_REPOSITORY_NAME) < 0)
+		return -E2BIG;
+	ret = source_index_repository_valid(s->endpoint,
+					    s->index_repository);
+	if (ret)
+		return ret;
 	/* With a config image the key file is the image's, named from its root. */
 	if (image_config_active()) {
 		if (!strncmp(s->key_file, "/etc/shirudo/bpm/keys/", 22))
@@ -418,8 +448,9 @@ static int save_source(const struct bpm_source *s)
 
 	if (ret)
 		return ret;
-	if (strsprintf(data, sizeof(data), "endpoint = %s\nkey_file = %s\n",
-		       s->endpoint, s->key_file) < 0)
+	if (strsprintf(data, sizeof(data),
+		       "endpoint = %s\nindex_repository = %s\nkey_file = %s\n",
+		       s->endpoint, s->index_repository, s->key_file) < 0)
 		return -E2BIG;
 	return seal_write_file(path, data, strlen(data), 0644);
 }
@@ -608,7 +639,7 @@ static int print_package_upatches(const char *source, bool all)
 	const char *archive = source;
 	char package_dir[101];
 	struct bpm_upatches_ctx ctx = { .all = all };
-	int ret;
+	int ret = 0;
 
 	ret = bpm_info_archive(source, temporary);
 	if (ret)
@@ -1057,7 +1088,7 @@ static int repo_update_one(const char *name)
 	int nl = 0;
 	struct bpm_buffer manifest = {}, index = {}, sig = {};
 	char url[PATH_MAX], cache[PATH_MAX], dir[PATH_MAX];
-	int ret;
+	int ret = 0;
 
 	ret = load_source(name, &s);
 	if (ret)
@@ -1065,18 +1096,59 @@ static int repo_update_one(const char *name)
 	ret = bpm_oci_parse_endpoint(s.endpoint, &c);
 	if (ret)
 		return ret;
-	ret = bpm_oci_url(&c, BPM_INDEX_REPOSITORY, "manifests", BPM_INDEX_TAG, url, sizeof(url));
+	ret = bpm_oci_url(&c, s.index_repository, "manifests", BPM_INDEX_TAG,
+			  url, sizeof(url));
 	if (ret)
 		return ret;
-	ret = bpm_oci_get_memory(&c, url, BPM_MANIFEST_MEDIA, &manifest);
+	ret = bpm_oci_get_memory(&c, url, "application/vnd.oci.image.manifest.v1+json", &manifest);
 	if (ret)
 		goto out;
 	ret = bpm_oci_parse_manifest(manifest.data, manifest.len, layers,
 				     ARRAY_SIZE(layers), &nl, NULL, 0);
 	if (ret)
 		goto out;
-	ret = bpm_oci_get_signed(&c, BPM_INDEX_REPOSITORY, layers, nl,
-				 BPM_INDEX_MEDIA, BPM_INDEX_SIG_MEDIA, &index, &sig);
+	if (nl < 2) {
+		ret = -EINVAL;
+		goto out;
+	}
+	for (int i = 0; i < nl; i++) {
+		if (!strcmp(layers[i].media, BPM_INDEX_MEDIA)) {
+			char layer_hex[65];
+
+			ret = bpm_oci_url(&c, s.index_repository, "blobs",
+					  layers[i].digest, url, sizeof(url));
+			if (ret)
+				goto out;
+			ret = bpm_oci_get_blob(&c, url, BPM_INDEX_MEDIA, &index);
+			if (!ret)
+				ret = bpm_sha256_hex(index.data, index.len, layer_hex,
+						     sizeof(layer_hex));
+			if (!ret && !bpm_digest_matches(layers[i].digest, layer_hex))
+				ret = -EKEYREJECTED;
+			break;
+		}
+	}
+	if (ret)
+		goto out;
+	for (int i = 0; i < nl; i++) {
+		if (!strcmp(layers[i].media, BPM_INDEX_SIG_MEDIA)) {
+			char sig_hex[65];
+
+			ret = bpm_oci_url(&c, s.index_repository, "blobs",
+					  layers[i].digest, url, sizeof(url));
+			if (ret)
+				goto out;
+			ret = bpm_oci_get_blob(&c, url, BPM_INDEX_SIG_MEDIA, &sig);
+			if (!ret)
+				ret = bpm_sha256_hex(sig.data, sig.len, sig_hex,
+						     sizeof(sig_hex));
+			if (!ret && !bpm_digest_matches(layers[i].digest, sig_hex))
+				ret = -EKEYREJECTED;
+			break;
+		}
+	}
+	if (!ret && !sig.data)
+		ret = -EINVAL;
 	if (ret)
 		goto out;
 	if (verify_with_source_key(&s, index.data, index.len, sig.data,
@@ -1487,7 +1559,10 @@ static int cmd_bpm_config(int argc, const char **argv)
 
 	if (!op || is_help(op)) {
 		fprintf(stderr,
-			"usage: shirudo bpm config register {add|list|remove} ...\n"
+			"usage: shirudo bpm config register add <source> "
+			"oci://<registry> --index-repository <repository> "
+			"--key-file <certificate>\n"
+			"       shirudo bpm config register {list|remove} ...\n"
 			"       shirudo bpm config update --base-package "
 			"<package.bee|oci://host/repo:tag> --version <version> "
 			"[--file <name>.bee] [options]\n");
@@ -1576,16 +1651,38 @@ static int cmd_bpm_config(int argc, const char **argv)
 			return 2;
 		}
 		for (int i = 5; i < argc; i++) {
-			if (!strncmp(argv[i], "--cert=", 7))
+			if (!strncmp(argv[i], "--cert=", 7)) {
 				key = argv[i] + 7;
-			else if (!strcmp(argv[i], "--cert") && i + 1 < argc)
+			} else if (!strcmp(argv[i], "--cert") && i + 1 < argc) {
 				key = argv[++i];
+			} else if (!strncmp(argv[i], "--index-repository=", 19)) {
+				if (strscpy(s.index_repository,
+					    argv[i] + 19,
+					    sizeof(s.index_repository)) < 0)
+					return 2;
+			} else if (!strcmp(argv[i], "--index-repository") &&
+				   i + 1 < argc) {
+				if (strscpy(s.index_repository,
+					    argv[++i],
+					    sizeof(s.index_repository)) < 0)
+					return 2;
+			} else if (!strcmp(argv[i], "--index-repository")) {
+				return 2;
+			}
 		}
+		if (!s.index_repository[0] &&
+		    strsprintf(s.index_repository, sizeof(s.index_repository),
+			       "%s/%s", s.name,
+			       BPM_INDEX_REPOSITORY_NAME) < 0)
+			return 2;
 		if (!key || cert_read_file(key, &cert) ||
 		    !bpm_name_ok(s.name) ||
-		    bpm_oci_parse_endpoint(s.endpoint, &probe)) {
+		    bpm_oci_parse_endpoint(s.endpoint, &(struct bpm_oci_client){}) ||
+		    source_index_repository_valid(s.endpoint,
+						  s.index_repository)) {
 			cert_free(&cert);
-			pr_err("bpm: register add requires a valid oci:// endpoint and --cert certificate");
+			pr_err("bpm: register add requires a valid endpoint, index "
+			       "repository and --key-file certificate");
 			return 2;
 		}
 		cert_free(&cert);

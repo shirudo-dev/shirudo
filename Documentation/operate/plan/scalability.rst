@@ -81,7 +81,7 @@ Staged rollouts
 ~~~~~~~~~~~~~~~
 
 - A repository is one registry endpoint, ``oci://<host>[:<port>]`` without
-  a path, and its index is always ``shirudo/bpm-index:stable`` on it.
+  a path, and its index is at ``<namespace>/bpm-index:stable`` on it.
   There is no mirror or fallback list. To stage a package, publish it to
   a registry that only canary targets follow before the one the fleet
   follows. Targets reach different registries, or a pull-through cache,

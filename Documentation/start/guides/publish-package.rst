@@ -122,7 +122,7 @@ Publish it
 
    The push tags the package with its version. With ``--keys-dir``, it
    also adds the package to the registry's signed index,
-   ``shirudo/bpm-index:stable``, which targets read when they install from
+   ``<namespace>/bpm-index:stable``, which targets read when they install from
    a registered repository. ``BPM_OCI_SCHEME=http`` drops TLS, which suits
    only a registry on your own host. Without it, shirudo speaks HTTPS with
    TLS 1.3 and a hybrid ML-KEM key exchange.

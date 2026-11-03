@@ -222,7 +222,8 @@ The last path component of ``<repository>`` follows the package name rule.
 Repository index
 ----------------
 
-One index per registry, at ``<registry>/shirudo/bpm-index:stable``.
+One index per registry namespace, at
+``<registry>/<namespace>/bpm-index:stable``.
 
 .. list-table::
    :header-rows: 1

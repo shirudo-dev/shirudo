@@ -39,7 +39,7 @@ struct json_emit;
 	(BPM_OCI_BASIC_ENCODED_SIZE + sizeof("Basic "))
 #define BPM_OCI_BASIC_HEADER_SIZE \
 	(BPM_OCI_AUTH_VALUE_SIZE + sizeof("Authorization: ") - 1u)
-#define BPM_INDEX_REPOSITORY "shirudo/bpm-index"
+#define BPM_INDEX_REPOSITORY_NAME "bpm-index"
 #define BPM_INDEX_TAG "stable"
 #define BPM_INDEX_MEDIA "application/vnd.shirudo.bpm.index.v1+json"
 #define BPM_INDEX_SIG_MEDIA "application/vnd.shirudo.bpm.index.signature.v1"

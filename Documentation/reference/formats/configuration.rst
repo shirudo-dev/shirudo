@@ -442,6 +442,11 @@ repository name: 1 to 127 characters from ``A-Z``, ``a-z``, ``0-9``,
    * - ``endpoint``
      - Required. ``oci://<host>[:<port>]``, no path, ``?``, ``#`` or
        ``@``.
+   * - ``index_repository``
+     - Optional. The OCI repository containing the signed index. When
+       omitted, it defaults to ``<source>/bpm-index``; set ``<source>``
+       to the package namespace to use the same namespace as the package
+       repository. The repository must end in ``/bpm-index``.
    * - ``key_file``
      - Required. DER certificate that verifies the repository's signed
        index. With a config image, ``/etc/shirudo/bpm/keys/<file>``

@@ -144,7 +144,7 @@ registry protocol.
 
 ``shirudo bpm push`` uploads a package as an OCI artifact. Given the
 signing key, it also adds the package to the registry's index at
-``shirudo/bpm-index:stable``: a JSON document that lists each package's
+``<namespace>/bpm-index:stable``: a JSON document that lists each package's
 name, version, manifest digest and package digest, with a detached CMS
 signature in a second layer. ``push`` refuses to list a version again
 with different content, so a version published through the index does not

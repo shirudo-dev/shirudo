@@ -21,8 +21,8 @@ Usage
 
 .. code-block:: none
 
-   shirudo bpm config register add <source> oci://<registry> (--cert <certificate> | --cert=<certificate>)
-   shirudo bpm config register list [--json]
+   shirudo bpm config register add <source> oci://<registry> [--index-repository <repository>] (--key-file <certificate> | --key-file=<certificate>)
+   shirudo bpm config register list
    shirudo bpm config register (remove | rm) <source>
    shirudo bpm config update --base-package <package> --version <version>
                              [--file <beefile>]
@@ -132,12 +132,10 @@ image, the image's ``etc/shirudo/bpm/registries.d/`` is used instead, and
    image mode: change repository definitions and keys in a signed config image, then run `shirudo image update`
 
 - ``add`` checks that the endpoint is ``oci://<host>[:<port>]`` without a
-  path and that ``--cert`` is a certificate, copies the certificate to
+  path, checks ``--index-repository`` and that ``--key-file`` is a
+  certificate. It copies the certificate to
   ``/etc/shirudo/bpm/keys/<source>.der`` and writes the source file.
-  Arguments after the endpoint other than ``--cert`` are ignored.
-- ``list`` prints the registered source names under the heading
-  ``Registered sources:``, or ``none``. With ``--json`` it prints one
-  object with ``schema`` and ``sources``.
+- ``list`` prints the registered source names, one per line.
 - ``remove`` and ``rm`` delete the source file and its certificate.
 
 The key file verifies the signed index of the repository
@@ -162,9 +160,8 @@ value as the next argument only.
 repo update
 -----------
 
-``repo update`` fetches the signed index ``shirudo/bpm-index:stable`` of
-every registered source, or of ``<source>`` alone, verifies it with the
-source's key file and caches it in
+``repo update`` fetches each source's configured signed index, or the index
+for ``<source>`` alone, verifies it with the source's key file and caches it in
 ``/var/lib/shirudo/bpm/repos/<source>/index.json``. A source that fails
 does not stop the others, and the exit status is then 1.
 
@@ -268,7 +265,8 @@ push
 (no tag) and prints ``oci://<registry>/<repository>:<version>``. With
 ``--keys-dir``, or ``--index-cert`` and ``--index-key`` together, it also
 adds the package to the registry's signed index
-``shirudo/bpm-index:stable``, signed with that key. Without them only the
+``<namespace>/bpm-index:stable``, signed with that key. The namespace is
+derived from the package repository path. Without signing options only the
 package is published. ``push`` does not read ``SHIRUDO_KEYS_DIR``. Its
 options take the value as the next argument or after ``=``.
 

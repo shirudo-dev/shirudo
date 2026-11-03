@@ -21,7 +21,8 @@ printf "host-key\n" >"$WORK/host.der"
 FP=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 
 source_file() {
-	printf "endpoint = oci://example.invalid\nkey_file = %s\n" "$2" >"$REG/$1.conf"
+	printf "endpoint = oci://example.invalid\nindex_repository = example/bpm-index\nkey_file = %s\n" \
+		"$2" >"$REG/$1.conf"
 }
 
 refused() {

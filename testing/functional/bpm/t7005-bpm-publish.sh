@@ -140,8 +140,8 @@ test_expect_success 'bpm push publishes the package and a signed repository inde
 		--keys-dir "$WORK/keys" >"$WORK/push.out" 2>"$WORK/push.err" &&
 	grep -qx "oci://$REGISTRY/ns/t7005:1.0.0" "$WORK/push.out" &&
 	test -s "$REG/ns/t7005/manifests/1.0.0" &&
-	test -s "$REG/shirudo/bpm-index/manifests/stable" &&
-	split_layers "$REG/shirudo/bpm-index/manifests/stable" "$REG/shirudo/bpm-index" "$WORK/index1" &&
+	test -s "$REG/ns/bpm-index/manifests/stable" &&
+	split_layers "$REG/ns/bpm-index/manifests/stable" "$REG/ns/bpm-index" "$WORK/index1" &&
 	grep -qx "application/vnd.shirudo.bpm.index.v1" "$WORK/index1.artifact_type" &&
 	cms_verify "$WORK/index1.sig" "$WORK/index1.payload"
 '
@@ -173,7 +173,7 @@ PY
 test_expect_success 'pushing the same package again keeps a single index entry' '
 	"$S" bpm push "$WORK/t7005-1.0.0.bee" "oci://$REGISTRY/ns/t7005" \
 		--keys-dir "$WORK/keys" >/dev/null 2>&1 &&
-	split_layers "$REG/shirudo/bpm-index/manifests/stable" "$REG/shirudo/bpm-index" "$WORK/index2" &&
+	split_layers "$REG/ns/bpm-index/manifests/stable" "$REG/ns/bpm-index" "$WORK/index2" &&
 	cms_verify "$WORK/index2.sig" "$WORK/index2.payload" &&
 	python3 -c "
 import json, sys
@@ -187,7 +187,7 @@ test_expect_success 'a second version is added to the index in sorted order' '
 	"$S" bpm push "$WORK/t7005-0.9.0.bee" "oci://$REGISTRY/ns/t7005" \
 		--index-cert "$WORK/keys/cert.der" --index-key "$WORK/keys/signing_key.pem" \
 		>/dev/null 2>&1 &&
-	split_layers "$REG/shirudo/bpm-index/manifests/stable" "$REG/shirudo/bpm-index" "$WORK/index3" &&
+	split_layers "$REG/ns/bpm-index/manifests/stable" "$REG/ns/bpm-index" "$WORK/index3" &&
 	cms_verify "$WORK/index3.sig" "$WORK/index3.payload" &&
 	python3 -c "
 import json, sys
@@ -200,7 +200,7 @@ test_expect_success 'push without signing material leaves the index untouched' '
 	( cd "$WORK" && "$S" bpm build pkg --version 2.0.0 --keys-dir "$WORK/keys" ) >/dev/null 2>&1 &&
 	"$S" bpm push "$WORK/t7005-2.0.0.bee" "oci://$REGISTRY/ns/t7005" >/dev/null 2>&1 &&
 	test -s "$REG/ns/t7005/manifests/2.0.0" &&
-	split_layers "$REG/shirudo/bpm-index/manifests/stable" "$REG/shirudo/bpm-index" "$WORK/index4" &&
+	split_layers "$REG/ns/bpm-index/manifests/stable" "$REG/ns/bpm-index" "$WORK/index4" &&
 	cmp -s "$WORK/index3.payload" "$WORK/index4.payload"
 '
 
@@ -305,7 +305,7 @@ PY
 test_expect_success 'the operator commands are reachable directly in shirudo-build' '
 	"$B" bpm --help | grep -q "tree append <package-file> <repository>" &&
 	"$B" bpm tree append --help 2>&1 | grep -q "\-\-op add|delete" &&
-	"$B" bpm push --help 2>&1 | grep -q "shirudo/bpm-index:stable" &&
+	"$B" bpm push --help 2>&1 | grep -q "<namespace>/bpm-index:stable" &&
 	! "$B" bpm not-a-command >/dev/null 2>&1
 '
 

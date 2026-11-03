@@ -373,7 +373,7 @@ it.
       the target's differs. See :doc:`/reference/cli/version`.
 
    signed index
-      The JSON document at ``shirudo/bpm-index:stable`` in a registry that
+      The JSON document at ``<namespace>/bpm-index:stable`` in a registry that
       lists each package's name, version, manifest digest and package
       digest, with a detached CMS signature. ``shirudo bpm push`` updates
       it and refuses to list a version again with different content, and

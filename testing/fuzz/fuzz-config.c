@@ -14,8 +14,9 @@
 
 int LLVMFuzzerTestOneInput(const __u8 *data, size_t size)
 {
-	char endpoint[BPM_MAX_ENDPOINT], reference[BPM_MAX_DIGEST];
 	char line[PATH_MAX], copy[PATH_MAX], key_file[BPM_MAX_KEY];
+	char endpoint[BPM_MAX_ENDPOINT], reference[BPM_MAX_DIGEST];
+	char index_repository[BPM_MAX_ENDPOINT] = {};
 	struct config cfg;
 	char path[64];
 	FILE *fp;
@@ -30,7 +31,9 @@ int LLVMFuzzerTestOneInput(const __u8 *data, size_t size)
 	while (fp && fgets(line, sizeof(line), fp)) {
 		memcpy(copy, line, sizeof(line));
 		bpm_parse_source_line(copy, endpoint, sizeof(endpoint),
-				      key_file, sizeof(key_file));
+				      index_repository,
+				      sizeof(index_repository), key_file,
+				      sizeof(key_file));
 		bpm_parse_tree_line(line, endpoint, sizeof(endpoint),
 				    reference, sizeof(reference));
 	}

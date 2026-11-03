@@ -98,6 +98,7 @@ OCI_CA="${TEST_VM_OCI_CA:-}"
 BPM_TREE_CONFIG="${TEST_VM_BPM_TREE_CONFIG:-}"
 PACKAGE_CERT="${TEST_VM_PACKAGE_CERT:-}"
 BPM_OCI_REPOSITORY_RAW="${TEST_VM_BPM_OCI_REPOSITORY:-}"
+BPM_OCI_INDEX_REPOSITORY="${TEST_VM_BPM_OCI_INDEX_REPOSITORY:-}"
 BPM_OCI_INDEX_CERT="${TEST_VM_BPM_OCI_INDEX_CERT:-}"
 BPM_OCI_SOURCE="default"
 BPM_OCI_ENDPOINT=""
@@ -304,6 +305,10 @@ validate_bpm_oci()
 		die "TEST_VM_BPM_OCI_REPOSITORY is too long"
 	[[ -f "$BPM_OCI_INDEX_CERT" && -r "$BPM_OCI_INDEX_CERT" && -s "$BPM_OCI_INDEX_CERT" ]] ||
 		die "TEST_VM_BPM_OCI_INDEX_CERT is not a readable, non-empty regular file: $BPM_OCI_INDEX_CERT"
+	[[ -n "$BPM_OCI_INDEX_REPOSITORY" ]] ||
+		die "TEST_VM_BPM_OCI_INDEX_REPOSITORY must be set"
+	[[ "$BPM_OCI_INDEX_REPOSITORY" =~ ^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*/bpm-index$ ]] ||
+		die "TEST_VM_BPM_OCI_INDEX_REPOSITORY must end in /bpm-index"
 }
 
 # The tool that builds the cloud-init seed: cloud-localds, or an ISO 9660
@@ -1338,6 +1343,7 @@ if [[ -n "$BPM_OCI_ENDPOINT" ]]; then
 		"$BPM_OCI_DIR/keys/${BPM_OCI_SOURCE}.pem"
 	{
 		printf '%s\n' "endpoint = $BPM_OCI_ENDPOINT" \
+			"index_repository = $BPM_OCI_INDEX_REPOSITORY" \
 			"key_file = /etc/shirudo/bpm/keys/${BPM_OCI_SOURCE}.pem"
 	} >"$BPM_OCI_DIR/registries.d/${BPM_OCI_SOURCE}.conf"
 	chmod 0644 "$BPM_OCI_DIR/registries.d/${BPM_OCI_SOURCE}.conf"

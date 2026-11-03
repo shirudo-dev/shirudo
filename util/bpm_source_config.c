@@ -14,11 +14,13 @@
 
 int bpm_parse_source_line(char *line,
 			  char *endpoint, size_t endpoint_sz,
+			  char *index_repository, size_t index_repository_sz,
 			  char *key_file, size_t key_file_sz)
 {
 	char *eq, *key, *key_end, *val;
 
-	if (!line || !endpoint || !endpoint_sz || !key_file || !key_file_sz)
+	if (!line || !endpoint || !endpoint_sz || !index_repository ||
+	    !index_repository_sz || !key_file || !key_file_sz)
 		return -EINVAL;
 
 	key = line;
@@ -38,6 +40,9 @@ int bpm_parse_source_line(char *line,
 	val[strcspn(val, "\r\n")] = '\0';
 
 	if (!strcmp(key, "endpoint") && strscpy(endpoint, val, endpoint_sz) < 0)
+		return -E2BIG;
+	if (!strcmp(key, "index_repository") &&
+	    strscpy(index_repository, val, index_repository_sz) < 0)
 		return -E2BIG;
 	if (!strcmp(key, "key_file") && strscpy(key_file, val, key_file_sz) < 0)
 		return -E2BIG;

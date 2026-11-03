@@ -189,7 +189,7 @@ from the config the target runs, and activate it.
    .. code-block:: console
 
       operator$ mkdir -p "$DEV/config-root/etc/shirudo/bpm/registries.d" "$DEV/config-root/etc/shirudo/bpm/keys"
-      operator$ printf '%s\n' 'endpoint = oci://10.0.2.2:5000' 'key_file = /etc/shirudo/bpm/keys/dev.der' > "$DEV/config-root/etc/shirudo/bpm/registries.d/dev.conf"
+      operator$ printf '%s\n' 'endpoint = oci://10.0.2.2:5000' 'index_repository = dev/bpm-index' 'key_file = /etc/shirudo/bpm/keys/dev.der' > "$DEV/config-root/etc/shirudo/bpm/registries.d/dev.conf"
       operator$ cp "$KEYS/cert.der" "$DEV/config-root/etc/shirudo/bpm/keys/dev.der"
 
 5. Build and sign the config image, and verify it:

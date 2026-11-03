@@ -10,6 +10,7 @@
 
 int bpm_parse_source_line(char *line,
 			  char *endpoint, size_t endpoint_sz,
+			  char *index_repository, size_t index_repository_sz,
 			  char *key_file, size_t key_file_sz);
 /* A line of upatch-tree.conf: endpoint and reference, either quoted. */
 int bpm_parse_tree_line(char *line,
