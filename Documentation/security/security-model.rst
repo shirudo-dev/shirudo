@@ -46,10 +46,11 @@ What shirudo provides
      - :ref:`T3 <tm-t3>`, R19
    * - Every change is measured
      - Loads, unloads, revocations and tree operations extend a TPM NV
-       register whose writes ``lsm/tpm_command`` keeps to shirudo.
-     - The TPM transport is not authenticated; the config PCR is not
-       guarded.
-     - :ref:`T5 <tm-t5>`, R4, U8, U9
+       register whose writes ``lsm/tpm_command`` keeps to shirudo;
+       salted sessions authenticate TPM acknowledgments and readbacks.
+     - Initial session-key enrollment trusts the initrd; the config
+       PCR is not guarded.
+     - :ref:`T5 <tm-t5>`, R4, U9
    * - A verifier can tell
      - ``shirudo attest`` returns a TPM quote and a certification of the
        register; ``shirudo attest verify`` checks them offline.

@@ -118,6 +118,23 @@ A new host boot chooses new input and so a new key. A TPM reset within
 the same host boot keeps the input, and so the key. A TPM clear changes
 the owner seed, and the frozen key can no longer be recreated.
 
+Authenticated TPM sessions
+--------------------------
+
+Shirudo employs trust on first use (TOFU) and trusts the TPM it finds during
+initialization in the initrd by freezing the EK's name in the identity map.
+
+Every TPM connection creates the standard ECC P-256 endorsement key
+(EK) to transport a secret salt via ECDH to calculate an HMAC session key.
+This salted HMAC session binds communication to the enrolled TPM.
+Successful responses contain HMACs that shirudo verifies.
+
+The session's audit flag allows shirudo to authenticate responses even from
+commands that require no authorization, such as PCR and clock reads.
+NV extensions use separately salted policy sessions with the existing
+command-bound writer authorization. An intermediary that suppresses an
+extension cannot invent or replay a successful response.
+
 Binding at boot
 ---------------
 
@@ -425,13 +442,11 @@ Limits
 These are properties of the design as implemented.
 :doc:`/security/threat-model` gives their consequences.
 
-The TPM transport is not authenticated.
-    shirudo opens the TPM by device path, ``/dev/tpmrm0`` unless the
-    runtime settings name another device, and uses unsalted, unbound
-    policy sessions. The attestation key name check rejects a TPM that
-    reports a different name, but the name is public, so a substitute
-    transport could replay it. Only evidence signed by a pinned
-    attestation key settles which TPM answered.
+The first TPM contact must be trusted.
+    Session-key enrollment runs in the authenticated initrd against
+    its kernel TPM device. Sessions protect later communications, not
+    a bootstrap already controlled by an attacker. The operator's
+    enrollment and attestation checks remain necessary.
 
 Rebinding depends on the record.
     ``init`` decides that the register is already bound this boot from

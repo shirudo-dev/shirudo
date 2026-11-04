@@ -18,17 +18,11 @@ command -v python3 >/dev/null 2>&1 || test_skip_all "no python3"
 W=$(mktemp -d) || test_skip_all "cannot make a scratch directory"
 PID=
 cleanup() {
-	# A writer lets the blocked open return; shirudo then rejects the
-	# input and exits. ENXIO means it is not waiting any more.
-	[ -n "$PID" ] && python3 -c '
-import os, sys
-try:
-    fd = os.open(sys.argv[1], os.O_WRONLY | os.O_NONBLOCK)
-    os.write(fd, b"x")
-    os.close(fd)
-except OSError:
-    pass' "$W/fifo" 2>/dev/null
 	if [ -n "$PID" ]; then
+		if [ -d "/proc/$PID" ] &&
+			[ "$(awk '{print $3}' "/proc/$PID/stat" 2>/dev/null)" != Z ]; then
+			fifo_release "$W/fifo" || :
+		fi
 		wait "$PID" 2>/dev/null || :
 	fi
 	rm -rf "$W"
@@ -38,7 +32,7 @@ trap cleanup EXIT
 mkfifo "$W/fifo" || test_skip_all "cannot make a fifo"
 "$SHIRUDO_BIN" bpm info "$W/fifo" >/dev/null 2>&1 &
 PID=$!
-# Blocked in open(2) of the fifo: alive and sleeping.
+# A sleeping task may still be completing TPM startup.
 i=0
 while [ "$i" -lt 50 ]; do
 	[ -d "/proc/$PID" ] || break
@@ -92,12 +86,8 @@ fi
 # The task is the main shell's child: the case's subshell cannot reap it,
 # so it watches the task become a zombie instead.
 test_expect_success 'the task is unharmed and finishes once released' '
-	[ "$(cut -d" " -f3 "/proc/$PID/stat")" = S ] &&
-	python3 -c "
-import os, sys
-fd = os.open(sys.argv[1], os.O_WRONLY | os.O_NONBLOCK)
-os.write(fd, b\"x\")
-os.close(fd)" "$W/fifo" &&
+	[ -d "/proc/$PID" ] &&
+	fifo_release "$W/fifo" &&
 	i=0 &&
 	while s=$(cut -d" " -f3 "/proc/$PID/stat" 2>/dev/null) &&
 	      [ "$s" != Z ]; do

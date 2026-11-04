@@ -17,6 +17,7 @@
 
 #include "config.h"
 #include "image_config.h"
+#include "identity.h"
 #include "log.h"
 #include "malloc.h"
 #include "nv_writer.h"
@@ -25,6 +26,58 @@
 #define EK_CERT_NV_RSA		0x01C00002u
 #define EK_CERT_NV_ECC		0x01C0000Au
 #define NV_READ_CHUNK		512u
+
+/* Reads without an authorization handle require an audit session for HMACs. */
+static int session_start(struct tpm *t, TPM2_SE type, ESYS_TR *session)
+{
+	TPMT_SYM_DEF sym = { .algorithm = TPM2_ALG_NULL };
+	TPMA_SESSION attrs = TPMA_SESSION_CONTINUESESSION;
+	TSS2_RC ret;
+
+	if (type == TPM2_SE_HMAC)
+		attrs |= TPMA_SESSION_AUDIT;
+	ret = Esys_StartAuthSession(t->esys, t->session_key.handle, ESYS_TR_NONE,
+				    ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+				    NULL, type, &sym, TPM2_ALG_SHA256, session);
+	if (ret == TSS2_RC_SUCCESS)
+		ret = Esys_TRSess_SetAttributes(t->esys, *session, attrs, 0xff);
+	if (ret != TSS2_RC_SUCCESS) {
+		pr_err("tpm: start salted session: rc=0x%08x", (__u32)ret);
+		if (*session != ESYS_TR_NONE) {
+			Esys_FlushContext(t->esys, *session);
+			*session = ESYS_TR_NONE;
+		}
+		return -EIO;
+	}
+	return 0;
+}
+
+static int session_setup(struct tpm *t, bool active)
+{
+	struct identity id = {};
+	int ret;
+
+	if (active) {
+		ret = identity_read(&id);
+		if (ret) {
+			pr_err("tpm: frozen identity unreadable: %s", strerror(-ret));
+			return ret;
+		}
+		if (id.ek_name[0] || id.ek_name[1] != TPM2_ALG_SHA256) {
+			pr_err("tpm: no frozen session key; trusted reboot required");
+			return -EACCES;
+		}
+	}
+	ret = tpm_ek_create(t, false, &t->session_key);
+	if (ret)
+		return ret;
+	if (t->session_key.name_len != TPM_NAME_LEN ||
+	    (active && memcmp(t->session_key.name, id.ek_name, TPM_NAME_LEN))) {
+		pr_err("tpm: not the TPM init bound (session key name differs)");
+		return -EACCES;
+	}
+	return session_start(t, TPM2_SE_HMAC, &t->session);
+}
 
 /*
  * Before an authenticated image is active, tests can select a software
@@ -50,20 +103,24 @@ int tpm_tcti(char *buf, size_t size)
 	return n < 0 ? (int)n : 0;
 }
 
+/* libtss2 debug logs can expose session keys, even during bootstrap. */
 static int open_tpm(struct tpm **out, bool quiet)
 {
 	char tcti[TPM_TCTI_MAX];
+	int active, err;
 	struct tpm *t;
 	TSS2_RC ret;
-	int err;
 
-	/*
-	 * Quiet libtss2's own stderr logging (it screams ERROR on the
-	 * expected "index not yet defined" probe during first-init).
-	 * shirudo logs its own diagnostics via pr_*; an operator who
-	 * sets TSS2_LOG keeps their setting (overwrite = 0).
-	 */
-	setenv("TSS2_LOG", "all+none", 0);
+	active = enforcement_active();
+	if (active < 0) {
+		pr_err("tpm: cannot determine enforcement state: %s", strerror(-active));
+		return active;
+	}
+	if (setenv("TSS2_LOG", "all+none", 1) || unsetenv("TSS2_LOGFILE")) {
+		err = -errno;
+		pr_err("tpm: cannot disable library logging: %s", strerror(-err));
+		return err;
+	}
 
 	err = tpm_tcti(tcti, sizeof(tcti));
 	if (err) {
@@ -78,6 +135,8 @@ static int open_tpm(struct tpm **out, bool quiet)
 	t = xcalloc(1, sizeof(*t));
 	if (!t)
 		return -ENOMEM;
+	t->session = ESYS_TR_NONE;
+	t->session_key.handle = ESYS_TR_NONE;
 	ret = Tss2_TctiLdr_Initialize(tcti, &t->tcti);
 	if (ret != TSS2_RC_SUCCESS) {
 		if (!quiet)
@@ -93,6 +152,11 @@ static int open_tpm(struct tpm **out, bool quiet)
 		Tss2_TctiLdr_Finalize(&t->tcti);
 		xfree(t, sizeof(*t));
 		return -EIO;
+	}
+	err = session_setup(t, active);
+	if (err) {
+		tpm_close(t);
+		return err;
 	}
 	*out = t;
 	return 0;
@@ -112,11 +176,20 @@ void tpm_close(struct tpm *t)
 {
 	if (!t)
 		return;
-	if (t->esys)
+	if (t->esys) {
+		if (t->session != ESYS_TR_NONE)
+			Esys_FlushContext(t->esys, t->session);
+		tpm_key_flush(t, &t->session_key);
 		Esys_Finalize(&t->esys);
+	}
 	if (t->tcti)
 		Tss2_TctiLdr_Finalize(&t->tcti);
 	xfree(t, sizeof(*t));
+}
+
+void tpm_ek_name(struct tpm *t, __u8 out[TPM_NAME_LEN])
+{
+	memcpy(out, t->session_key.name, TPM_NAME_LEN);
 }
 
 int tpm_nv_set_writer(struct tpm *t,
@@ -171,7 +244,7 @@ int tpm_pcr_read(struct tpm *t, __u32 pcr,
 	if (pcr >= 24)
 		return -EINVAL;
 	pcr_selection(1u << pcr, &sel);
-	ret = Esys_PCR_Read(t->esys, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+	ret = Esys_PCR_Read(t->esys, t->session, ESYS_TR_NONE, ESYS_TR_NONE,
 			    &sel, &counter, NULL, &values);
 	if (ret != TSS2_RC_SUCCESS) {
 		pr_err("tpm: PCR_Read(%u): rc=0x%08x", pcr, (__u32)ret);
@@ -197,7 +270,7 @@ int tpm_pcr_extend(struct tpm *t, __u32 pcr,
 		return -EINVAL;
 	dv.digests[0].hashAlg = TPM2_ALG_SHA256;
 	memcpy(dv.digests[0].digest.sha256, digest, 32);
-	ret = Esys_PCR_Extend(t->esys, ESYS_TR_PCR0 + pcr, ESYS_TR_PASSWORD,
+	ret = Esys_PCR_Extend(t->esys, ESYS_TR_PCR0 + pcr, t->session,
 			      ESYS_TR_NONE, ESYS_TR_NONE, &dv);
 	if (ret != TSS2_RC_SUCCESS) {
 		pr_err("tpm: PCR_Extend(%u): rc=0x%08x", pcr, (__u32)ret);
@@ -214,7 +287,7 @@ int tpm_boot_identity(struct tpm *t, __u32 *reset,
 
 	if (!t || !reset || !restart)
 		return -EINVAL;
-	ret = Esys_ReadClock(t->esys, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+	ret = Esys_ReadClock(t->esys, t->session, ESYS_TR_NONE, ESYS_TR_NONE,
 			     &info);
 	if (ret != TSS2_RC_SUCCESS) {
 		pr_err("tpm: ReadClock: rc=0x%08x", (__u32)ret);
@@ -231,7 +304,7 @@ int tpm_reset_count(struct tpm *t, __u32 *out)
 	TPMS_TIME_INFO *info = NULL;
 	TSS2_RC ret;
 
-	ret = Esys_ReadClock(t->esys, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+	ret = Esys_ReadClock(t->esys, t->session, ESYS_TR_NONE, ESYS_TR_NONE,
 			     &info);
 	if (ret != TSS2_RC_SUCCESS) {
 		pr_err("tpm: ReadClock: rc=0x%08x", (__u32)ret);
@@ -246,7 +319,7 @@ static int nv_handle(struct tpm *t, __u32 index, ESYS_TR *out)
 {
 	TSS2_RC ret;
 
-	ret = Esys_TR_FromTPMPublic(t->esys, index, ESYS_TR_NONE, ESYS_TR_NONE,
+	ret = Esys_TR_FromTPMPublic(t->esys, index, t->session, ESYS_TR_NONE,
 				    ESYS_TR_NONE, out);
 	if (rc_is(ret, TPM2_RC_HANDLE))
 		return -ENOENT;		/* quiet: undefined is normal */
@@ -273,7 +346,7 @@ int tpm_nv_info(struct tpm *t, __u32 index,
 		return 0;
 	if (err)
 		return err;
-	ret = Esys_NV_ReadPublic(t->esys, nv, ESYS_TR_NONE, ESYS_TR_NONE,
+	ret = Esys_NV_ReadPublic(t->esys, nv, t->session, ESYS_TR_NONE,
 				 ESYS_TR_NONE, &pub, &name);
 	Esys_TR_Close(t->esys, &nv);
 	if (ret != TSS2_RC_SUCCESS) {
@@ -356,7 +429,7 @@ int tpm_nv_define(struct tpm *t, __u32 index,
 	pub.nvPublic.authPolicy.size = 32;
 	memcpy(pub.nvPublic.authPolicy.buffer, policy, 32);
 	pub.nvPublic.dataSize = TPM_NV_DIGEST_LEN;
-	ret = Esys_NV_DefineSpace(t->esys, ESYS_TR_RH_OWNER, ESYS_TR_PASSWORD,
+	ret = Esys_NV_DefineSpace(t->esys, ESYS_TR_RH_OWNER, t->session,
 				  ESYS_TR_NONE, ESYS_TR_NONE, &nv_auth, &pub,
 				  &nv);
 	owner_auth_clear(t);
@@ -382,7 +455,7 @@ int tpm_nv_undefine(struct tpm *t, __u32 index,
 		return err;
 	}
 	ret = Esys_NV_UndefineSpace(t->esys, ESYS_TR_RH_OWNER, nv,
-				    ESYS_TR_PASSWORD, ESYS_TR_NONE,
+				    t->session, ESYS_TR_NONE,
 				    ESYS_TR_NONE);
 	owner_auth_clear(t);
 	if (ret != TSS2_RC_SUCCESS) {
@@ -402,7 +475,7 @@ int tpm_nv_read(struct tpm *t, __u32 index, __u8 out[32])
 	err = nv_handle(t, index, &nv);
 	if (err)
 		return err;
-	ret = Esys_NV_Read(t->esys, nv, nv, ESYS_TR_PASSWORD, ESYS_TR_NONE,
+	ret = Esys_NV_Read(t->esys, nv, nv, t->session, ESYS_TR_NONE,
 			   ESYS_TR_NONE, TPM_NV_DIGEST_LEN, 0, &data);
 	Esys_TR_Close(t->esys, &nv);
 	if (rc_is(ret, TPM2_RC_NV_UNINITIALIZED))
@@ -424,18 +497,7 @@ int tpm_nv_read(struct tpm *t, __u32 index, __u8 out[32])
 
 int tpm_policy_session_start(struct tpm *t, ESYS_TR *session)
 {
-	TPMT_SYM_DEF sym = { .algorithm = TPM2_ALG_NULL };
-	TSS2_RC ret;
-
-	ret = Esys_StartAuthSession(t->esys, ESYS_TR_NONE, ESYS_TR_NONE,
-				    ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
-				    NULL, TPM2_SE_POLICY, &sym, TPM2_ALG_SHA256,
-				    session);
-	if (ret != TSS2_RC_SUCCESS) {
-		pr_err("tpm: StartAuthSession: rc=0x%08x", (__u32)ret);
-		return -EIO;
-	}
-	return 0;
+	return session_start(t, TPM2_SE_POLICY, session);
 }
 
 static void session_flush(struct tpm *t, ESYS_TR session)
@@ -518,7 +580,7 @@ static int tpm_writer_primary(struct tpm *t,
 	if (err)
 		return err;
 	ret = Esys_CreatePrimary(t->esys, ESYS_TR_RH_OWNER,
-				 ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
+				 t->session, ESYS_TR_NONE, ESYS_TR_NONE,
 				 &sensitive, &in_pub, &outside, &creation_pcr,
 				 key, &out_pub, NULL, NULL, NULL);
 	owner_auth_clear(t);
@@ -611,7 +673,7 @@ static int tpm_writer_sign(struct tpm *t, ESYS_TR key,
 
 	memcpy(digest.buffer, hash, TPM_DIGEST_LEN);
 	scheme.details.rsassa.hashAlg = TPM2_ALG_SHA256;
-	ret = Esys_Sign(t->esys, key, ESYS_TR_PASSWORD, ESYS_TR_NONE,
+	ret = Esys_Sign(t->esys, key, t->session, ESYS_TR_NONE,
 			ESYS_TR_NONE, &digest, &scheme, &validation, &signature);
 	if (ret != TSS2_RC_SUCCESS) {
 		pr_err("tpm: Sign(NV writer): rc=0x%08x", (__u32)ret);
@@ -703,7 +765,7 @@ int tpm_policy_session_finish(struct tpm *t, ESYS_TR session,
 		pr_err("tpm: register policy assertion: rc=0x%08x", (__u32)ret);
 		return -EACCES;
 	}
-	ret = Esys_PolicyGetDigest(t->esys, session, ESYS_TR_NONE,
+	ret = Esys_PolicyGetDigest(t->esys, session, t->session,
 				   ESYS_TR_NONE, ESYS_TR_NONE, &digest);
 	if (ret != TSS2_RC_SUCCESS || !digest || digest->size != TPM_DIGEST_LEN ||
 	    memcmp(digest->buffer, expected, TPM_DIGEST_LEN)) {
@@ -937,7 +999,9 @@ static int endorsement_primary(struct tpm *t,
 
 	memset(key, 0, sizeof(*key));
 	ret = Esys_CreatePrimary(t->esys, ESYS_TR_RH_ENDORSEMENT,
-				 ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
+				 t->session == ESYS_TR_NONE ?
+					 ESYS_TR_PASSWORD : t->session,
+				 ESYS_TR_NONE, ESYS_TR_NONE,
 				 &sensitive, in_pub, &outside, &creation_pcr,
 				 &handle, &out_pub, NULL, NULL, NULL);
 	if (ret != TSS2_RC_SUCCESS) {
@@ -1068,7 +1132,7 @@ int tpm_quote(struct tpm *t, const struct tpm_key *ak,
 	memcpy(qual.buffer, nonce, nonce_len);
 	qual.size = (__u16)nonce_len;
 	pcr_selection(pcr_mask, &sel);
-	ret = Esys_Quote(t->esys, ak->handle, ESYS_TR_PASSWORD, ESYS_TR_NONE,
+	ret = Esys_Quote(t->esys, ak->handle, t->session, ESYS_TR_NONE,
 			 ESYS_TR_NONE, &qual, &scheme, &sel, &quoted, &sig);
 	if (ret != TSS2_RC_SUCCESS) {
 		pr_err("tpm: Quote: rc=0x%08x", (__u32)ret);
@@ -1100,7 +1164,7 @@ int tpm_nv_certify(struct tpm *t,
 	err = nv_handle(t, index, &nv);
 	if (err)
 		return err;
-	ret = Esys_NV_Certify(t->esys, ak->handle, nv, nv, ESYS_TR_PASSWORD,
+	ret = Esys_NV_Certify(t->esys, ak->handle, nv, nv, t->session,
 			      ESYS_TR_PASSWORD, ESYS_TR_NONE, &qual, &scheme,
 			      TPM_NV_DIGEST_LEN, 0, &info, &sig);
 	Esys_TR_Close(t->esys, &nv);
@@ -1140,7 +1204,7 @@ int tpm_activate_credential(struct tpm *t,
 		return err;
 	/* The endorsement key's policy: the hierarchy's own authorisation. */
 	ret = Esys_PolicySecret(t->esys, ESYS_TR_RH_ENDORSEMENT, session,
-				ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
+				t->session, ESYS_TR_NONE, ESYS_TR_NONE,
 				NULL, NULL, NULL, 0, NULL, NULL);
 	if (ret != TSS2_RC_SUCCESS) {
 		pr_err("tpm: PolicySecret(endorsement): rc=0x%08x",
@@ -1149,7 +1213,7 @@ int tpm_activate_credential(struct tpm *t,
 		return -EACCES;
 	}
 	ret = Esys_ActivateCredential(t->esys, ak->handle, ek->handle,
-				      ESYS_TR_PASSWORD, session, ESYS_TR_NONE,
+				      t->session, session, ESYS_TR_NONE,
 				      &id, &sec, &cert_info);
 	session_flush(t, session);
 	if (ret != TSS2_RC_SUCCESS) {
@@ -1178,7 +1242,7 @@ static int nv_read_all(struct tpm *t, __u32 index, __u8 *out,
 	err = nv_handle(t, index, &nv);
 	if (err)
 		return err;
-	ret = Esys_NV_ReadPublic(t->esys, nv, ESYS_TR_NONE, ESYS_TR_NONE,
+	ret = Esys_NV_ReadPublic(t->esys, nv, t->session, ESYS_TR_NONE,
 				 ESYS_TR_NONE, &pub, NULL);
 	if (ret != TSS2_RC_SUCCESS) {
 		Esys_TR_Close(t->esys, &nv);
@@ -1196,7 +1260,7 @@ static int nv_read_all(struct tpm *t, __u32 index, __u8 *out,
 
 		if (want > NV_READ_CHUNK)
 			want = NV_READ_CHUNK;
-		ret = Esys_NV_Read(t->esys, nv, nv, ESYS_TR_PASSWORD,
+		ret = Esys_NV_Read(t->esys, nv, nv, t->session,
 				   ESYS_TR_NONE, ESYS_TR_NONE, (UINT16)want,
 				   (UINT16)off, &data);
 		if (ret != TSS2_RC_SUCCESS) {

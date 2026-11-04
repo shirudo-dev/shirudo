@@ -212,6 +212,14 @@ signed config image.
    * - ``t4004-config-attest``
      - Config activation in the evidence and its verification. Runs in
        the register VM
+   * - ``t4005-tpm-session``
+     - Salted HMAC and policy sessions, ECC and RSA credential
+       activation, rejected key pins, forged and replayed extension
+       replies, forged NV, PCR, clock and policy-digest readbacks, and
+       refusal of TPM logging overrides during bootstrap and enforcement.
+       An unsalted negative control accepts a forged acknowledgment
+       with an empty or SHA-256 response HMAC; malformed lengths are refused.
+       Salted sessions reject it and leave the real measured value unchanged
    * - ``t4101-initrd``
      - The production configuration: ``init`` from the initrd, adoption,
        PCR 11 after the binding, pins under ``/run``
@@ -344,7 +352,9 @@ signed config image.
    * - ``t6124-overlay-copy-up``
      - An overlay over the state root
    * - ``t6125-tpm-identity``
-     - A substituted TPM device is refused by its attestation key name
+     - A substituted TPM is refused by its session key name; a proxy
+       forwarding the enrolled TPM cannot suppress an extension and
+       make a signed load succeed without measurement
    * - ``t6126-kexec``
      - ``kexec_file_load`` and, where available, ``kexec_load`` are
        refused and counted
@@ -768,7 +778,7 @@ Most of these attacks are open threats in
   expectation of the state.
 - An environment that steers an authorized shirudo process, such as
   ``BPM_OCI_SCHEME``, ``BPM_OCI_CA_FILE``, proxy variables,
-  ``SSLKEYLOGFILE`` or ``TSS2_LOGFILE``. ``t6136`` covers the dynamic
+  ``SSLKEYLOGFILE``. ``t6136`` covers the dynamic
   loader's variables only.
 - A repository index or tree publication signed with a classical
   algorithm.
@@ -776,8 +786,6 @@ Most of these attacks are open threats in
   ACLs on them, and a hard link of a labeled inode into an unsealed
   directory. ``t6118`` covers hard links into sealed directories only.
 - An eventlog larger than the size the readers accept.
-- A fake TPM transport that replays the attestation key name ``init``
-  recorded. ``t6125`` covers a device with another name.
 - Making ``init`` read another boot ID, or miss this boot's init
   record by other means than the unlabeled state directory ``t6115``
   covers, so that it binds the register again.

@@ -31,7 +31,9 @@ of `bpf-deps` fails on the missing symbol; extend the shim.
 `bpf/gen_loader.c` carries one local change on top of the recorded
 commit: `MAX_USED_PROGS` is 64 instead of 32, as required by the
 kernel-obs package. In addition `gen_loader.c` also supports reusing a
-signer-selected map FD supplied through the loader context. `bpf-deps`
+signer-selected map FD supplied through the loader context.
+`bpf/btf_dump.c` preserves complete native GNU attribute spellings without
+wrapping them twice. `bpf-deps`
 overwrites these files, so re-apply those changes after a refresh until
 they are upstream.
 

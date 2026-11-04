@@ -44,6 +44,50 @@ def serve(state, swtpm):
         "--log", "file=" + os.path.join(state, "log") + ",level=1"])
 
 
+def read_packet(fd):
+    data = b""
+    size = 10
+    while len(data) < size:
+        chunk = os.read(fd, size - len(data))
+        if not chunk:
+            raise RuntimeError("TPM connection closed mid-packet")
+        data += chunk
+        if len(data) == 10:
+            size = struct.unpack(">I", data[2:6])[0]
+            if not 10 <= size <= 65536:
+                raise RuntimeError("invalid TPM packet size")
+    return data
+
+
+def proxy(state):
+    backend = os.open("/dev/tpmrm0", os.O_RDWR)
+    master, slave = pty.openpty()
+    tty.setraw(master)
+    tty.setraw(slave)
+    with open(os.path.join(state, "slave"), "w") as f:
+        f.write(os.ttyname(slave))
+    while True:
+        command = read_packet(master)
+        code = struct.unpack(">I", command[6:10])[0]
+        if code == 0x136:
+            response = (struct.pack(">HIIIH", 0x8002, 83, 0, 0, 32) +
+                        bytes(32) + b"\x01" + struct.pack(">H", 32) + bytes(32))
+            print("proxy: suppressed NV_Extend", flush=True)
+        else:
+            if os.write(backend, command) != len(command):
+                raise RuntimeError("short TPM command write")
+            response = read_packet(backend)
+        offset = 0
+        while offset < len(response):
+            written = os.write(master, response[offset:])
+            if written <= 0:
+                raise RuntimeError("short TPM response write")
+            offset += written
+
+
 if sys.argv[1] == "probe":
     sys.exit(probe(sys.argv[2]))
+if sys.argv[1] == "proxy":
+    proxy(sys.argv[2])
+    sys.exit(0)
 serve(sys.argv[1], sys.argv[2])

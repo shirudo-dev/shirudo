@@ -659,6 +659,7 @@ TEST_HELPERS := $(VERITY_TEST_HELPERS) \
                 testing/helper/test-register \
                 testing/helper/test-register-cli \
                 testing/helper/test-nv-cphash \
+                testing/helper/test-tpm-session \
                 testing/helper/test-eventlog \
                 testing/helper/test-keys \
                 testing/helper/test-seal \
@@ -710,6 +711,8 @@ REGISTER_OBJS := util/config_attest.o util/config_update.o util/config_measure.o
 REGISTER_LIBS := $(LIBCRYPTO_LIBS) $(LIBSSL_LIBS) $(TSS2_LIBS) \
                  $(LIBBPF_A) $(LIBELF_LIBS) $(ZLIB_LIBS)
 
+TPM_CLIENT_SRCS := testing/helper/tpm-client.c testing/helper/tpm-session.h
+
 testing/helper/test-nv-writer: testing/helper/test-nv-writer.c $(REGISTER_OBJS)
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(REGISTER_LIBS)
@@ -725,9 +728,10 @@ testing/helper/test-keyring-seal: testing/helper/test-keyring-seal.c \
 		$(STATIC_LIBS) $(DYNAMIC_LIBS)
 
 testing/helper/test-tpm-preopened: testing/helper/test-tpm-preopened.c \
-                                 $(REGISTER_OBJS)
+                                 $(TPM_CLIENT_SRCS) $(REGISTER_OBJS)
 	@printf '  CC      $@\n'
-	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(REGISTER_LIBS)
+	$(Q)$(CC) $(CFLAGS) -o $@ $(filter-out %.h,$^) $(REGISTER_LIBS) \
+		-Wl,--wrap=enforcement_active
 
 testing/helper/test-keys: testing/helper/test-keys.c util/keys.o \
                           util/upatch.o $(REGISTER_OBJS)
@@ -751,9 +755,10 @@ testing/helper/test-tpm-wire: testing/helper/test-tpm-wire.c util/tpm_wire.o uti
 	$(Q)$(CC) $(CFLAGS) -o $@ $^ -lcrypto -lssl
 
 testing/helper/test-register: testing/helper/test-register.c util/attest.o util/keyring.o \
-                        util/upatch.o $(REGISTER_OBJS)
+                        util/upatch.o $(TPM_CLIENT_SRCS) $(REGISTER_OBJS)
 	@printf '  CC      $@\n'
-	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(REGISTER_LIBS)
+	$(Q)$(CC) $(CFLAGS) -o $@ $(filter-out %.h,$^) $(REGISTER_LIBS) \
+		-Wl,--wrap=enforcement_active
 
 testing/helper/test-register-cli: testing/helper/test-register-cli.c \
 		$(BUILTIN_OBJS) $(UTIL_OBJS) $(VERSION_OBJ) $(LIBBPF_A)
@@ -764,9 +769,17 @@ testing/helper/tpmsim-cmd: testing/helper/tpmsim-cmd.c
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS_BASE) -Iinclude $(TPMSIM_CFLAGS) -o $@ $< $(TPMSIM_LIBS) -lcrypto
 
-testing/helper/test-nv-cphash: testing/helper/test-nv-cphash.c util/keyring.o $(REGISTER_OBJS)
+testing/helper/test-nv-cphash: testing/helper/test-nv-cphash.c util/keyring.o \
+		$(TPM_CLIENT_SRCS) $(REGISTER_OBJS)
 	@printf '  CC      $@\n'
-	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(REGISTER_LIBS)
+	$(Q)$(CC) $(CFLAGS) -o $@ $(filter-out %.h,$^) $(REGISTER_LIBS) \
+		-Wl,--wrap=enforcement_active
+
+testing/helper/test-tpm-session: testing/helper/test-tpm-session.c \
+		$(TPM_CLIENT_SRCS) $(REGISTER_OBJS)
+	@printf '  CC      $@\n'
+	$(Q)$(CC) $(CFLAGS) -o $@ $(filter-out %.h,$^) $(REGISTER_LIBS) \
+		-Wl,--wrap=enforcement_active,--wrap=identity_read
 
 testing/helper/test-config: testing/helper/test-config.c util/config.o util/io.o util/seal.o util/log.o util/hex.o \
                             util/image_config.o util/string.o util/malloc.o

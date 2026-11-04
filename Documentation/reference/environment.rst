@@ -182,7 +182,9 @@ per-signal variable takes precedence over the generic one. See
 Libraries
 ---------
 
-shirudo sets none of these and refuses none of them.
+These variables control library behavior. Target entry refuses the log
+file destinations described above, and TPM setup always disables library
+logging, including during bootstrap.
 
 .. list-table::
    :header-rows: 1
@@ -204,12 +206,14 @@ shirudo sets none of these and refuses none of them.
        upper case is not read.
    * - ``TSS2_LOG``
      - tpm2-tss
-     - Log levels of the TPM library. shirudo sets ``all+none`` when the
-       variable is unset.
+     - Log levels of the TPM library. shirudo always forces ``all+none``,
+       including during bootstrap, because library debug logs can expose
+       session secrets.
    * - ``TSS2_LOGFILE``
      - tpm2-tss
      - Destination of those logs: ``stderr`` (default), ``stdout`` or
-       ``-``, or a file opened for appending.
+       ``-``, or a file opened for appending. Refused on a target.
+       TPM connection setup always clears it before library initialization.
    * - ``LIBBPF_LOG_LEVEL``
      - libbpf
      - ``warn``, ``info`` (default) or ``debug`` for libbpf's messages

@@ -205,7 +205,8 @@ TPM
    * - Endorsement key
      - The TCG default template, RSA-2048 with the exponent 65537 or ECC
        P-256, with AES-128 in CFB mode as its symmetric algorithm
-     - Credential activation for ``shirudo attest challenge``
+     - Credential activation for ``shirudo attest challenge``; the ECC
+       primary also salts TPM sessions, with its name frozen at init
    * - Credential
      - RSA-OAEP with SHA-256 and the label ``IDENTITY`` for an RSA
        endorsement key, or an ephemeral ECDH on P-256 with KDFe for an
@@ -234,13 +235,16 @@ TPM
 
 Sessions and authorization:
 
-- The register's policy session uses SHA-256, is unsalted and unbound,
-  and has no symmetric algorithm, so no parameter is encrypted and no
-  response is authenticated by a session (threat model U8).
-- Commands that need authorization use password sessions: the owner
-  password from ``tpm.owner_auth``, when configured, in plain, and an
-  empty password for the endorsement hierarchy. shirudo uses no HMAC
-  session.
+- SHA-256 HMAC and policy sessions are salted with the standard ECC
+  endorsement primary whose name ``init`` freezes. Successful responses,
+  including NV, PCR and clock readbacks, are authenticated. The HMAC
+  session has the audit attribute to cover commands without an
+  authorization handle.
+- The sessions are unbound and have no symmetric algorithm: parameters
+  are not encrypted. The owner authorization from ``tpm.owner_auth`` is
+  used in HMAC authorization, not transmitted as a password. Initial
+  endorsement-primary creation uses the empty endorsement authorization
+  and trusts the initrd's TPM device.
 
 Key custody
 -----------

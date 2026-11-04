@@ -459,7 +459,7 @@ ADV-C, root with mount-namespace and device control
    A refinement of ADV-B that uses private mount namespaces, bind
    mounts over shirudo's paths, overlays, substitute device nodes and
    ``/proc`` substitution to show a shirudo command a different world.
-   T3, T11 and T14 address parts of it. R22, U8 and U9 are the parts
+   T3, T11 and T14 address parts of it. R22 and U9 are the parts
    that remain.
 
 ADV-D, network and registry
@@ -962,7 +962,7 @@ tree operations run without it.
 :Proofs: ``Shirudo.Chain``, ``Shirudo.Events``, ``Shirudo.Measured``,
    ``Shirudo.UpatchLoad``, ``chain-events``, ``measured-fold-model``,
    ``eventlog-records``, ``tpm-digest``
-:Residual: R4, R12, R20, U6, U8, U9
+:Residual: R4, R12, R20, U6, U9
 
 T6 Boot window
 ~~~~~~~~~~~~~~
@@ -1126,7 +1126,7 @@ document can carry a software key's signatures (U1).
 :Proofs: ``tpm-reader``, ``tpm-attest``, ``tpm-signature``,
    ``tpm-public``, ``attest-pcr``, ``attest-fields``,
    ``attest-name-digest``, ``Shirudo.Chain``, ``Shirudo.Events``
-:Residual: R10, R11, U1, U8, U9
+:Residual: R10, R11, U1, U9
 
 .. _tm-t10:
 
@@ -1291,28 +1291,32 @@ instance, and the emulator would answer every check that compares
 public values, since the index name, the policy and the reset count are
 in the readable init record.
 
-Before it binds or extends the register, and before a config
-activation, shirudo recreates the attestation key under the endorsement
-hierarchy and compares its name with the one ``init`` froze in the
-identity map. An emulator lacks the TPM's endorsement seed and produces
-another name, and the command refuses. The comparison authenticates the
-TPM's answer to that one command, not the responses that follow: shirudo
-uses unsalted, unbound sessions, so a device that forwards some
-commands to the real TPM and answers others itself is not detected
-(U8). ``lsm/tpm_command`` refuses an unauthorized extension only for
-commands that reach the real driver.
+Every connection recreates the ECC endorsement primary and, while
+enforcement is active, compares its name with the one ``init`` froze.
+That primary salts HMAC and policy sessions. Successful TPM replies,
+including the extension acknowledgments and NV, PCR and clock readbacks,
+are authenticated. A device that forwards the key creation but suppresses
+an extension cannot produce a valid success response or fabricate the
+readback. Session failures are not retried as measurements.
+
+Initial enrollment trusts the authenticated initrd and the kernel TPM
+device it opens (A1, A6, A8). An unreadable frozen identity, a missing pin
+or a different session key fails rather than enrolling a replacement.
+The attestation key comparison remains an additional check.
+``lsm/tpm_command`` refuses unauthorized extensions that reach the real
+driver; sessions do not prevent denial of service by dropping requests.
 
 .. rst-class:: facts
 
 :Adversary: ADV-C, root with mount-namespace and device control
 :Enforced at: ``lsm/tpm_command`` for commands that reach the driver;
-   the attestation key comparison in userspace
-:Refusal: ``tampered`` from the register path
+   pinned-key and session-response checks in userspace
+:Refusal: the TPM operation fails; measuring commands refuse
 :Counters: ``TpmExtend`` for a refused extension; none for a
    substituted device
-:Tests: ``t4103``, ``t6125``
+:Tests: ``t4005``, ``t4103``, ``t6125``
 :Proofs: ``tpm-public``, ``tpm-kdf``
-:Residual: U8
+:Residual: trusted bootstrap (A1, A6, A8); denial of service
 
 Residual risks
 --------------
@@ -1524,9 +1528,10 @@ R19 Raw device and offline writes bypass the seal
 
 R20 The TPM owner password is not a secret on the target
    ``tpm.owner_auth`` lives in the runtime image's ``shirudo.conf``,
-   where root reads it, and shirudo sends it as a plain password
-   session. Root can undefine the register, which makes every measuring
-   command refuse until the next TPM reset, or use the owner hierarchy.
+   where root reads it. shirudo uses it in HMAC authorization, but this
+   does not hide it on disk. Root can undefine the register, which makes
+   every measuring command refuse until the next TPM reset, or use the
+   owner hierarchy.
    An image shared across a fleet shares the password.
 
 R21 upatches can be neutralized without detaching them
@@ -1656,22 +1661,6 @@ U7 The shipped timer units run the host binary
    :Meanwhile: Install a drop-in for each of these services that
       starts its commands from the runtime image, as the test VM does
       in :src:`testing/vm/guest.sh`.
-
-U8 The TPM transport is not authenticated
-   :Affects: The register (T5) and the device check (T14).
-   :Consequence: shirudo opens the TPM by path and uses unsalted,
-      unbound sessions, so no response is authenticated. A device in
-      root's mount namespace that forwards the attestation key's
-      creation to the real TPM and answers the rest can accept
-      extensions that never reach the TPM. Root then drops those
-      records from the evidence it relays, and the evidence verifies
-      while an upatch was loaded or removed unmeasured. The owner
-      password, when configured, goes to that device too.
-   :Status: Confirmed in code for the sessions and the device path; the
-      attack is a code-path reading, not reproduced.
-   :Meanwhile: No deployment setting closes it. Pin the bind PCRs and
-      the expected state on every verification so that other
-      substitutions fail.
 
 U9 init can rebind the register after hiding this boot's record
    :Affects: The one-binding-per-reset rule (T5).

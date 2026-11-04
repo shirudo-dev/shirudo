@@ -559,10 +559,8 @@ static int freeze_task_maps(struct bpf_object *obj)
 }
 
 /*
- * The register is only as good as the TPM that holds it, and the device
- * the TCTI opens is root's to replace: every register write recreates the
- * attestation key, whose name no other TPM produces, and compares it with
- * the one recorded here (util/chain.c).
+ * Initial TPM contact is trusted in the authenticated initrd. Later
+ * connections salt their sessions with the key whose name we freeze here.
  */
 static int record_attestation_key(struct identity *id)
 {
@@ -577,6 +575,7 @@ static int record_attestation_key(struct identity *id)
 	if (!ret) {
 		memcpy(id->ak_name, ak.name, ak.name_len);
 		id->ak_name_len = (__u32)ak.name_len;
+		tpm_ek_name(tpm, id->ek_name);
 		tpm_key_flush(tpm, &ak);
 	}
 	tpm_close(tpm);

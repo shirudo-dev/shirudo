@@ -9,8 +9,10 @@
 #include "tpm.h"
 
 struct tpm {
+	struct tpm_key		session_key;
 	TSS2_TCTI_CONTEXT	*tcti;
 	ESYS_CONTEXT		*esys;
+	ESYS_TR			session;
 	__u8			writer_seed[TPM_DIGEST_LEN];
 	__u8			writer_public[TPM_NV_RSA_BYTES];
 	bool			writer_set;

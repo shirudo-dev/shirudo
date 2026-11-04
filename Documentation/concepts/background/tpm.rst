@@ -252,17 +252,25 @@ because a typical Linux system has no PCR that are not used already.
 Authorization and sessions
 --------------------------
 
-shirudo uses password authorizations for operations such as creating
-TPM keys, defining or deleting the :term:`measurement register`, reading
-it and signing. The owner authorization comes from ``tpm.owner_auth``;
-register reads and signing use empty authorization values. A password
-authorization carries that value in plaintext in the command.
+Each TPM connection creates the standard ECC :term:`endorsement key`
+and uses it to salt SHA-256 HMAC and policy sessions. ``init`` freezes
+the EK's Name in the :term:`identity map` during trusted initrd setup.
+Later connections require that same Name. Initial EK creation uses the
+empty endorsement authorization before a session is established and
+trusts the TPM device.
 
-Extending the register requires a policy session instead. This is
-temporary state inside the TPM that shirudo updates with policy commands.
-The TPM checks that the session's policy digest matches the register's
-policy and that its restrictions hold when executing the extension.
-shirudo uses these commands:
+The HMAC session authorizes key creation, definition and deletion of
+the :term:`measurement register`, register reads and signing. The owner
+authorization from ``tpm.owner_auth`` is used in HMAC authorization,
+not sent as a plaintext password. Register reads and signing use empty
+authorization values. Even reads that require no permission use an authenticated
+session, so a proxy cannot substitute the returned values.
+
+Extending the register starts a new authenticated policy session in the TPM.
+shirudo uses policy commands in that session to satisfy the register's write
+policy.  The TPM checks that the session's policy digest matches the register's
+policy and that its restrictions hold when executing the extension.  shirudo
+uses these commands:
 
 - ``TPM2_PolicyNvWritten`` requires an unwritten index for the first
   extension, or an already written index for later extensions.
@@ -279,16 +287,19 @@ shirudo uses these commands:
   ``TPM2_NV_Extend``.
 
 Before submitting the extension, shirudo calls ``TPM2_PolicyGetDigest``
-and compares the session's digest with the policy it computed in software.
-The next section explains how these conditions protect the register.
+through the authenticated session and compares the session's digest
+with the policy it computed in software. The next section explains how
+these conditions protect the register.
 
 Credential activation uses a separate policy session for the
 :term:`endorsement key`. shirudo satisfies that policy with
 ``TPM2_PolicySecret``, using the empty endorsement-hierarchy authorization.
 
-These sessions do not encrypt command parameters or authenticate command
-responses. The TPM signatures on attestation :term:`evidence` are separate
-from session authentication. `Limits`_ describes the transport risks.
+Salted policy sessions authenticate successful extension replies. The
+sessions do not encrypt command parameters. The TPM signatures on
+attestation :term:`evidence` are separate from session authentication.
+:doc:`/internals/measurement-register` describes the session checks in
+detail, and `Limits`_ describes the transport risks.
 
 Register binding
 ----------------
@@ -490,14 +501,13 @@ Limits
 The :doc:`/security/threat-model` gives the full analysis of each of
 these.
 
-- The transport is not authenticated. shirudo opens the device by path
-  in the caller's mount namespace, and its sessions are unsalted and
-  unbound, so no TPM response carries proof of its origin. The AK Name
-  comparison detects a different TPM but not a device that replays the
-  public Name. A root process that substitutes the device can keep
-  shirudo's extensions from reaching the real register.
-- The owner authorization travels as a password to whatever device is
-  at the path, and root on the :term:`target` can read it from the
+- The first TPM contact in the authenticated initrd is trusted.
+  ``init`` pins the ECC endorsement primary used to salt later HMAC
+  and policy sessions. Successful replies and measurement readbacks are
+  authenticated, but a substituted device can still drop requests and
+  deny service. See :doc:`/internals/measurement-register`.
+- The owner authorization is protected in transit by HMAC authorization,
+  but root on the :term:`target` can read it from the
   :term:`runtime image`.
 - The ``tpm_command`` guard covers ``TPM2_NV_Extend`` of the register
   only. ``TPM2_NV_UndefineSpace`` with the owner authorization and

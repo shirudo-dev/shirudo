@@ -26,6 +26,7 @@ int tpm_tcti(char *buf, size_t size);
 int tpm_open(struct tpm **out);
 int tpm_open_quiet(struct tpm **out);
 void tpm_close(struct tpm *t);
+void tpm_ek_name(struct tpm *t, __u8 out[TPM_NAME_LEN]);
 
 int tpm_writer_create(struct tpm *t,
 		      const __u8 seed[TPM_DIGEST_LEN],

@@ -58,7 +58,8 @@ The objects share seven maps, which ``init`` hands from ``bpf2`` to
        and of ``/run/shirudo``, the runtime root hash, the ``.bpf``
        keyring serial and kind, the serials of the enrolled keys, the
        ``.dm-verity`` keyring and key serials, the NV index, the NV
-       writer's public modulus and seed, and the attestation key name.
+       writer's public modulus and seed, the attestation key name and
+       the ECC endorsement key name used to salt authenticated sessions.
    * - ``shirudo_tasks``
      - ``task_authority``
      - Task storage with each task's mark and exec candidate.

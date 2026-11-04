@@ -29,6 +29,28 @@ target_guard() {
 		test_skip_all "LSM not attached; run \`shirudo init\` first"
 }
 
+# TPM startup can sleep before the task reaches its blocking FIFO open.
+fifo_release() {
+	python3 -c '
+import errno, os, sys, time
+for _ in range(100):
+    try:
+        fd = os.open(sys.argv[1], os.O_WRONLY | os.O_NONBLOCK)
+    except OSError as error:
+        if error.errno != errno.ENXIO:
+            raise
+        time.sleep(0.1)
+        continue
+    try:
+        os.write(fd, b"x")
+    finally:
+        os.close(fd)
+    break
+else:
+    raise TimeoutError("task did not open the FIFO within ten seconds")
+' "$1"
+}
+
 # The executable $SHIRUDO_BIN runs: itself, or the one the runtime image's
 # wrapper script hands over to.
 runtime_binary() {

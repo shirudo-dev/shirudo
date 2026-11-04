@@ -4,11 +4,8 @@
 #
 # t6125 -- the TPM behind the device path is root's to replace: in a
 # mount namespace of root's own a bind mount puts a character device of
-# root's at /dev/tpmrm0, and an emulator behind it answered every check
-# the register path made, since the index name, policy and reset count
-# it compares are in the readable init record. Every TPM handle a
-# command takes must first compare the attestation key's name with the
-# one init recorded, which takes the endorsement seed no emulator has.
+# root's at /dev/tpmrm0. Refuse both another TPM and forged responses
+# from a proxy forwarding the enrolled TPM's identity.
 
 cd "$(dirname "$0")/../.."
 . ./integration-lib.sh
@@ -30,6 +27,7 @@ mkdir -p "$W"
 
 cleanup() {
 	[ -s "$W/pid" ] && kill "$(cat "$W/pid")" 2>/dev/null
+	[ -s "$W/proxy-pid" ] && kill "$(cat "$W/proxy-pid")" 2>/dev/null
 	if [ -e "$PIN" ]; then
 		"$SHIRUDO_BIN" upatch unload "$UNLOAD" --no-precheck \
 			>/dev/null 2>&1 || true
@@ -81,6 +79,39 @@ test_expect_success 'the same load succeeds against the TPM init bound' '
 	[ -e "$PIN/link" ] &&
 	"$SHIRUDO_BIN" upatch unload "$UNLOAD" --no-precheck >/dev/null 2>&1 &&
 	[ ! -e "$PIN" ]
+'
+
+mkdir "$W/proxy" || exit 1
+python3 functional/tamperproof/t6125-pty-tpm.py proxy "$W/proxy" >"$W/proxy.out" 2>&1 &
+echo $! >"$W/proxy-pid"
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+	[ -s "$W/proxy/slave" ] && break
+	sleep 0.5
+done
+
+test_expect_success 'the genuine TPM remains identifiable through the proxy' '
+	[ -s "$W/proxy/slave" ] &&
+	SLAVE=$(cat "$W/proxy/slave") &&
+	at_slave env TSS2_LOG=all+TRACE \
+		"$SHIRUDO_BIN" status --json >"$W/proxy-status.json" &&
+	python3 -c "import json; assert json.load(open(\"$W/proxy-status.json\"))[\"tpm\"][\"chain_matches_eventlog\"] is True"
+'
+
+test_expect_success 'suppressing an extension cannot produce a successful unmeasured load' '
+	SLAVE=$(cat "$W/proxy/slave") &&
+	before=$(chain) &&
+	lines=$(wc -l </var/lib/shirudo/eventlog) &&
+	{
+		rc=0
+		at_slave "$SHIRUDO_BIN" upatch load "$LOAD" --no-precheck \
+			>/dev/null 2>"$W/proxy-load.err" || rc=$?
+		[ "$rc" != 0 ] &&
+		grep -qx "proxy: suppressed NV_Extend" "$W/proxy.out" &&
+		grep -q "NV_Extend.*rc=0x0007001b" "$W/proxy-load.err" &&
+		[ ! -e "$PIN" ] &&
+		[ "$(chain)" = "$before" ] &&
+		[ "$(wc -l </var/lib/shirudo/eventlog)" = "$lines" ]
+	}
 '
 
 test_done

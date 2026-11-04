@@ -19,14 +19,10 @@ PID=
 OTHER=
 release() {
 	[ -n "$PID" ] || return 0
-	python3 -c '
-import os, sys
-try:
-    fd = os.open(sys.argv[1], os.O_WRONLY | os.O_NONBLOCK)
-    os.write(fd, b"x")
-    os.close(fd)
-except OSError:
-    pass' "$W/fifo" 2>/dev/null || true
+	if [ -d "/proc/$PID" ] &&
+		[ "$(awk '{print $3}' "/proc/$PID/stat" 2>/dev/null)" != Z ]; then
+		fifo_release "$W/fifo" || true
+	fi
 	wait "$PID" 2>/dev/null || true
 	PID=
 }
