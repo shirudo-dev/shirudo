@@ -318,9 +318,10 @@ if bundle_is_current; then
 	exit 0
 fi
 
+jobs=$(nproc)
 log "building host shirudo payload and test helpers"
-make -C "$REPO_ROOT" all shirudo-build
-make -C "$REPO_ROOT/testing" test-helpers
+make -C "$REPO_ROOT" -j"$jobs" all shirudo-build
+make -C "$REPO_ROOT/testing" -j"$jobs" test-helpers
 
 TMP_DIR="$(mktemp -d "${BUNDLE_DIR}.tmp.XXXXXX")"
 FIXTURE_WORK="$(mktemp -d "${HOST_PRIVATE_DIR}/fixtures.XXXXXX")"
@@ -330,8 +331,8 @@ cleanup()
 }
 trap cleanup EXIT
 
-make -C "$REPO_ROOT" DESTDIR="$TMP_DIR/root" install-target
-make -C "$REPO_ROOT" -j"$(nproc)" -f Makefile.shirudo \
+make -C "$REPO_ROOT" -j"$jobs" DESTDIR="$TMP_DIR/root" install-target
+make -C "$REPO_ROOT" -j"$jobs" -f Makefile.shirudo \
 	PROFILE=target CONFIG_MK=config-target.mk verity-test-helpers
 
 install -d "$TMP_DIR/test-helpers/testing/helper" \
@@ -378,6 +379,27 @@ if swtpm="$(command -v swtpm)"; then
 fi
 
 
+wait_fixture_jobs()
+{
+	local failed=0
+	local pid
+
+	for pid in "${pids[@]}"; do
+		wait "$pid" || failed=1
+	done
+	((failed == 0)) || die "building fixtures failed"
+	pids=()
+}
+
+queue_fixture()
+{
+	"$@" &
+	pids+=("$!")
+	if ((${#pids[@]} == jobs)); then
+		wait_fixture_jobs
+	fi
+}
+
 build_fixture()
 {
 	local source="$1"
@@ -394,6 +416,28 @@ build_fixture()
 			--key "$keys_dir/signing_key.pem" \
 			--cert "$keys_dir/cert.der"
 	)
+}
+
+build_many_fixture()
+{
+	local name="shirudo-test-many-$1"
+	local payload
+	cd "$REPO_ROOT"
+	"$REPO_ROOT/tools/shirudo-build/shirudo-build" \
+		"$REPO_ROOT/testing/fixtures/status-many.bpf.c" \
+		-o "$TMP_DIR/fixtures/many/$name.upatch" \
+		--name "$name" --vmlinux "$REPO_ROOT/vendor/linux/vmlinux.h" \
+		--extra-cflags "-I$REPO_ROOT/vendor/libbpf" \
+		--key "$FIXTURE_WORK/trusted/signing_key.pem" \
+		--cert "$FIXTURE_WORK/trusted/cert.der" >/dev/null
+	payload="$($REPO_ROOT/shirudo upatch info \
+		"$TMP_DIR/fixtures/many/$name.upatch" --json |
+		python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+	"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
+		"$name" --payload-sha256 "$payload" \
+		-o "$TMP_DIR/fixtures/many/$name.unload.upatch" \
+		--key "$FIXTURE_WORK/trusted/signing_key.pem" \
+		--cert "$FIXTURE_WORK/trusted/cert.der" >/dev/null
 }
 
 build_tree_test_registry()
@@ -680,24 +724,26 @@ mkdir -p "$TMP_DIR/fixtures/decoders" "$FIXTURE_WORK/trusted" \
 	-o /tmp/shirudo-test-uprobe-target \
 	"$REPO_ROOT/testing/fixtures/uprobe-target.c"
 
-build_fixture basic.bpf.c shirudo-test-basic "$FIXTURE_WORK/trusted"
-build_fixture basic.bpf.c shirudo-test-lifecycle "$FIXTURE_WORK/trusted"
-build_fixture basic.bpf.c shirudo-test-tree-match "$FIXTURE_WORK/trusted"
-build_fixture basic.bpf.c shirudo-test-tree-skip "$FIXTURE_WORK/trusted"
-build_fixture marker.bpf.c shirudo-test-marker "$FIXTURE_WORK/trusted"
-build_fixture map-export.bpf.c shirudo-test-map-export "$FIXTURE_WORK/trusted"
-build_fixture otel-backend.bpf.c shirudo-test-otel-backend "$FIXTURE_WORK/trusted"
-build_fixture serialized-metric.bpf.c shirudo-test-serialized-metric "$FIXTURE_WORK/trusted"
-build_fixture arena-tree-serializer.bpf.c shirudo-test-arena-tree "$FIXTURE_WORK/trusted"
-build_fixture uprobe-multi.bpf.c shirudo-test-uprobe-multi "$FIXTURE_WORK/trusted"
-build_fixture scope-netfilter.bpf.c shirudo-test-scope-netfilter "$FIXTURE_WORK/trusted"
-build_fixture scope-cgroup.bpf.c shirudo-test-scope-cgroup "$FIXTURE_WORK/trusted"
-build_fixture scope-kprobe.bpf.c shirudo-test-scope-kprobe "$FIXTURE_WORK/trusted"
-build_fixture basic.bpf.c shirudo-test-foreign "$FIXTURE_WORK/foreign"
-build_fixture basic.bpf.c shirudo-test-own-keyring "$FIXTURE_WORK/own"
-build_policy_labels_fixture
-build_policy_exec_graph_fixture
-build_obs_fixture "$FIXTURE_WORK/trusted"
+pids=()
+queue_fixture build_fixture basic.bpf.c shirudo-test-basic "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture basic.bpf.c shirudo-test-lifecycle "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture basic.bpf.c shirudo-test-tree-match "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture basic.bpf.c shirudo-test-tree-skip "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture marker.bpf.c shirudo-test-marker "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture map-export.bpf.c shirudo-test-map-export "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture otel-backend.bpf.c shirudo-test-otel-backend "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture serialized-metric.bpf.c shirudo-test-serialized-metric "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture arena-tree-serializer.bpf.c shirudo-test-arena-tree "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture uprobe-multi.bpf.c shirudo-test-uprobe-multi "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture scope-netfilter.bpf.c shirudo-test-scope-netfilter "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture scope-cgroup.bpf.c shirudo-test-scope-cgroup "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture scope-kprobe.bpf.c shirudo-test-scope-kprobe "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture basic.bpf.c shirudo-test-foreign "$FIXTURE_WORK/foreign"
+queue_fixture build_fixture basic.bpf.c shirudo-test-own-keyring "$FIXTURE_WORK/own"
+queue_fixture build_policy_labels_fixture
+queue_fixture build_policy_exec_graph_fixture
+queue_fixture build_obs_fixture "$FIXTURE_WORK/trusted"
+wait_fixture_jobs
 
 basic_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/shirudo-test-basic.upatch" --json |
@@ -739,104 +785,48 @@ for scope in netfilter cgroup kprobe; do
 	scope_payload="$($REPO_ROOT/shirudo upatch info \
 		"$TMP_DIR/fixtures/shirudo-test-scope-$scope.upatch" --json |
 		python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
-	"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
+	queue_fixture "$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
 		"shirudo-test-scope-$scope" --payload-sha256 "$scope_payload" \
 		-o "$TMP_DIR/fixtures/shirudo-test-scope-$scope.unload.upatch" \
 		--key "$FIXTURE_WORK/trusted/signing_key.pem" \
 		--cert "$FIXTURE_WORK/trusted/cert.der"
 done
-"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
-	shirudo-test-basic --payload-sha256 "$basic_payload" \
-	-o "$TMP_DIR/fixtures/shirudo-test-basic.unload.upatch" \
-	--key "$FIXTURE_WORK/trusted/signing_key.pem" \
-	--cert "$FIXTURE_WORK/trusted/cert.der"
-"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
-	shirudo-test-basic --payload-sha256 "$(printf 'aa%.0s' {1..32})" \
-	-o "$TMP_DIR/fixtures/shirudo-test-basic-mismatch.unload.upatch" \
-	--key "$FIXTURE_WORK/trusted/signing_key.pem" \
-	--cert "$FIXTURE_WORK/trusted/cert.der"
+wait_fixture_jobs
 # Enough loaded upatches to outgrow the fixed part of a status document.
 mkdir -p "$TMP_DIR/fixtures/many"
+pids=()
 for i in $(seq -w 1 80); do
-	name="shirudo-test-many-$i"
-	(
-		cd "$REPO_ROOT"
-		"$REPO_ROOT/tools/shirudo-build/shirudo-build" \
-			"$REPO_ROOT/testing/fixtures/status-many.bpf.c" \
-			-o "$TMP_DIR/fixtures/many/$name.upatch" \
-			--name "$name" --vmlinux "$REPO_ROOT/vendor/linux/vmlinux.h" \
-			--extra-cflags "-I$REPO_ROOT/vendor/libbpf" \
-			--key "$FIXTURE_WORK/trusted/signing_key.pem" \
-			--cert "$FIXTURE_WORK/trusted/cert.der" >/dev/null
-	)
-	payload="$($REPO_ROOT/shirudo upatch info \
-		"$TMP_DIR/fixtures/many/$name.upatch" --json |
-		python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
-	"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
-		"$name" --payload-sha256 "$payload" \
-		-o "$TMP_DIR/fixtures/many/$name.unload.upatch" \
-		--key "$FIXTURE_WORK/trusted/signing_key.pem" \
-		--cert "$FIXTURE_WORK/trusted/cert.der" >/dev/null
+	queue_fixture build_many_fixture "$i"
 done
-"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
-	shirudo-test-marker --payload-sha256 "$marker_payload" \
-	-o "$TMP_DIR/fixtures/shirudo-test-marker.unload.upatch" \
-	--key "$FIXTURE_WORK/trusted/signing_key.pem" \
-	--cert "$FIXTURE_WORK/trusted/cert.der"
-"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
-	shirudo-test-lifecycle --payload-sha256 "$lifecycle_payload" \
-	-o "$TMP_DIR/fixtures/shirudo-test-lifecycle.unload.upatch" \
-	--key "$FIXTURE_WORK/trusted/signing_key.pem" \
-	--cert "$FIXTURE_WORK/trusted/cert.der"
-"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
-	shirudo-test-tree-match --payload-sha256 "$tree_match_payload" \
-	-o "$TMP_DIR/fixtures/shirudo-test-tree-match.unload.upatch" \
-	--key "$FIXTURE_WORK/trusted/signing_key.pem" \
-	--cert "$FIXTURE_WORK/trusted/cert.der"
-"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
-	shirudo-test-tree-skip --payload-sha256 "$tree_skip_payload" \
-	-o "$TMP_DIR/fixtures/shirudo-test-tree-skip.unload.upatch" \
-	--key "$FIXTURE_WORK/trusted/signing_key.pem" \
-	--cert "$FIXTURE_WORK/trusted/cert.der"
+wait_fixture_jobs
+pids=()
+while read -r name payload output; do
+	queue_fixture "$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
+		"$name" --payload-sha256 "$payload" \
+		-o "$TMP_DIR/fixtures/$output" \
+		--key "$FIXTURE_WORK/trusted/signing_key.pem" \
+		--cert "$FIXTURE_WORK/trusted/cert.der"
+done <<EOF
+shirudo-test-basic $basic_payload shirudo-test-basic.unload.upatch
+shirudo-test-basic $(printf 'aa%.0s' {1..32}) shirudo-test-basic-mismatch.unload.upatch
+shirudo-test-marker $marker_payload shirudo-test-marker.unload.upatch
+shirudo-test-lifecycle $lifecycle_payload shirudo-test-lifecycle.unload.upatch
+shirudo-test-tree-match $tree_match_payload shirudo-test-tree-match.unload.upatch
+shirudo-test-tree-skip $tree_skip_payload shirudo-test-tree-skip.unload.upatch
+shirudo-test-map-export $map_export_payload shirudo-test-map-export.unload.upatch
+shirudo-test-otel-backend $otel_backend_payload shirudo-test-otel-backend.unload.upatch
+shirudo-test-serialized-metric $serialized_metric_payload shirudo-test-serialized-metric.unload.upatch
+shirudo-test-arena-tree $arena_tree_payload shirudo-test-arena-tree.unload.upatch
+kernel-obs $observability_payload kernel-obs.unload.upatch
+kernel-obs $observability_anomaly_payload kernel-obs-cred-anomaly.unload.upatch
+shirudo-test-uprobe-multi $uprobe_payload shirudo-test-uprobe-multi.unload.upatch
+EOF
+wait_fixture_jobs
+
 tree_match_unload_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/shirudo-test-tree-match.unload.upatch" --json |
 	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
 build_tree_test_registry
-"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
-	shirudo-test-map-export --payload-sha256 "$map_export_payload" \
-	-o "$TMP_DIR/fixtures/shirudo-test-map-export.unload.upatch" \
-	--key "$FIXTURE_WORK/trusted/signing_key.pem" \
-	--cert "$FIXTURE_WORK/trusted/cert.der"
-"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
-	shirudo-test-otel-backend --payload-sha256 "$otel_backend_payload" \
-	-o "$TMP_DIR/fixtures/shirudo-test-otel-backend.unload.upatch" \
-	--key "$FIXTURE_WORK/trusted/signing_key.pem" \
-	--cert "$FIXTURE_WORK/trusted/cert.der"
-"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
-	shirudo-test-serialized-metric --payload-sha256 "$serialized_metric_payload" \
-	-o "$TMP_DIR/fixtures/shirudo-test-serialized-metric.unload.upatch" \
-	--key "$FIXTURE_WORK/trusted/signing_key.pem" \
-	--cert "$FIXTURE_WORK/trusted/cert.der"
-"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
-	shirudo-test-arena-tree --payload-sha256 "$arena_tree_payload" \
-	-o "$TMP_DIR/fixtures/shirudo-test-arena-tree.unload.upatch" \
-	--key "$FIXTURE_WORK/trusted/signing_key.pem" \
-	--cert "$FIXTURE_WORK/trusted/cert.der"
-"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
-	kernel-obs --payload-sha256 "$observability_payload" \
-	-o "$TMP_DIR/fixtures/kernel-obs.unload.upatch" \
-	--key "$FIXTURE_WORK/trusted/signing_key.pem" \
-	--cert "$FIXTURE_WORK/trusted/cert.der"
-"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
-	kernel-obs --payload-sha256 "$observability_anomaly_payload" \
-	-o "$TMP_DIR/fixtures/kernel-obs-cred-anomaly.unload.upatch" \
-	--key "$FIXTURE_WORK/trusted/signing_key.pem" \
-	--cert "$FIXTURE_WORK/trusted/cert.der"
-"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
-	shirudo-test-uprobe-multi --payload-sha256 "$uprobe_payload" \
-	-o "$TMP_DIR/fixtures/shirudo-test-uprobe-multi.unload.upatch" \
-	--key "$FIXTURE_WORK/trusted/signing_key.pem" \
-	--cert "$FIXTURE_WORK/trusted/cert.der"
 
 mv /tmp/shirudo-test-uprobe-target \
 	"$TMP_DIR/fixtures/shirudo-test-uprobe-target"

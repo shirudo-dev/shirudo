@@ -368,6 +368,14 @@ key the bundle's fixtures are signed with. Build it alone with:
 
    $ make -C testing bundle
 
+The bundle script runs Make builds with one job per available CPU reported
+by ``nproc``. The eighty status-many fixture pairs build in parallel batches, with one
+worker per available CPU reported by ``nproc``. Each worker builds a load
+artifact and its matching unload artifact. The ordinary fixture builders, including
+the policy and observability fixtures, and the independent unload artifacts
+also build in CPU-sized batches. Payload hashes are read after their builders
+finish, and the tree test registry is generated after its unload artifact.
+
 Boot an interactive VM
 ~~~~~~~~~~~~~~~~~~~~~~
 
