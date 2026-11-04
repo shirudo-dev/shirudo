@@ -5,10 +5,10 @@
 # .github/scripts/build-debian.sh -- build on a Debian testing container of
 # any architecture, with the distribution's compiler and libraries, which
 # are new enough to need no toolchain of their own, and clang 23 from
-# unstable through install-clang.sh: the binary and the
-# shirudo-build helper, then the unit tests and the linkage check. The BPF
-# objects are bytecode whatever the host, so the BTF can come from a
-# kernel of another architecture.
+# unstable through install-clang.sh: the binary and the shirudo-build
+# helper, then the unit tests, the decoder test and the linkage check.
+# The BPF objects are bytecode whatever the host, so the BTF can come from
+# a kernel of another architecture.
 #
 #   .github/scripts/build-debian.sh <vmlinux-btf>
 #
@@ -53,5 +53,9 @@ export BPF_VMLINUX_BTF="$btf"
 make -j"$(nproc)"
 make shirudo-build
 make -C testing unit
+# LuaJIT needs its state below 2^47, which the heap meets on some
+# architectures and not others, and no unit test runs a decoder.
+make -C testing build-operator
+sh testing/run-tests.sh -t t3002 functional/upatch
 sh .github/scripts/check-operator-linkage.sh shirudo \
 	tools/shirudo-build/shirudo-build

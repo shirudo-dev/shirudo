@@ -459,12 +459,11 @@ the commit at ``HEAD`` alone without them.
        so run it only in a throwaway container or VM.
    * - ``build-debian.sh <btf>``
      - Installs Debian testing's compiler and libraries and clang 23
-       from unstable, builds the
-       binary and the helper with the BTF given, and runs the unit tests
-       and ``check-operator-linkage.sh``. The ``Build`` workflow runs it
-       in a ``debian:testing`` container on arm64 and riscv64. It
-       installs packages as root, so run it only in a throwaway
-       container.
+       from unstable, builds the binary and the helper with the BTF
+       given, and runs the unit tests, the decoder test ``t3002`` and
+       ``check-operator-linkage.sh``. The ``Build`` workflow runs it in a
+       ``debian:testing`` container on arm64 and riscv64. It installs
+       packages as root, so run it only in a throwaway container.
    * - ``check-static-target.sh <binary>``
      - That a target binary is a static PIE.
    * - ``check-operator-linkage.sh <binary>...``
