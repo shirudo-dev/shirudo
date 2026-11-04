@@ -97,6 +97,9 @@ signed config image.
      - The upatch build compiles for BPF instruction set v4, and a
        ``-mcpu`` in ``--extra-cflags`` replaces it; a dense ``switch``
        compiles to branches, not a table in ``.rodata``
+   * - ``t1010-test-filter``
+     - Script regex matching through ``-t`` and ``TEST_FILTER``, command-line
+       precedence, empty and invalid patterns, ordering and failure status
 
 ``signing`` (2)
 ~~~~~~~~~~~~~~~
