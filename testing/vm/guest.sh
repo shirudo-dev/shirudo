@@ -352,12 +352,13 @@ if [[ "${TEST_VM_SUITE:-}" == register ]]; then
 	: >/mnt/shirudo-out/failed-suites
 	(
 		cd testing
-		SHIRUDO_TEST_REGISTER_VM=1 \
-			SHIRUDO_TEST_FAILURES_FILE=/mnt/shirudo-out/failed-tests \
-			sh functional/tpm/t4003-register.sh
-		SHIRUDO_TEST_REGISTER_VM=1 \
-			SHIRUDO_TEST_FAILURES_FILE=/mnt/shirudo-out/failed-tests \
-			sh functional/tpm/t4004-config-attest.sh
+		. ./test-filter.sh
+		for t in functional/tpm/t400[34]-*.sh; do
+			test_matches "$t" || continue
+			SHIRUDO_TEST_REGISTER_VM=1 \
+				SHIRUDO_TEST_FAILURES_FILE=/mnt/shirudo-out/failed-tests \
+				sh "$t"
+		done
 	)
 	exit 0
 fi

@@ -2,13 +2,14 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 #
-# testing/run-target-tests.sh <family> -- the target tests (t?1??) of one
+# testing/run-target-tests.sh [-t <regex>] <family> -- the target tests (t?1??) of one
 # family in number order, in the test VM that family booted for itself.
 # A test that skips as a whole fails the family: every one is required.
 
 set -eu
 cd "$(dirname "$0")"
-family=${1:?usage: run-target-tests.sh <family>}
+. ./test-filter.sh
+family=${1:?usage: run-target-tests.sh [-t <regex>] <family>}
 case "$family" in
 end2end) dir=end2end ;;
 *) dir=functional/$family ;;
@@ -70,6 +71,7 @@ test_log_skipped()
 for t in "$dir"/t[0-9]1[0-9][0-9]-*.sh; do
 	[ -e "$t" ] || continue
 	found=1
+	test_matches "$t" || continue
 	log="$SHIRUDO_TEST_RESULTS/$(basename "$t").log"
 	rc=0
 	sh "$t" >"$log" 2>&1 || rc=$?

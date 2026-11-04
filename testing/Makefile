@@ -14,6 +14,7 @@ else
   Q = @
 endif
 export Q V
+export TEST_FILTER
 
 # make tests at the top exports the install paths, and dracut takes the
 # prefix it finds in the environment for the initrd a test VM boots.
@@ -357,6 +358,7 @@ help:
 	  '  make -C testing ci-checks               the scripts CI runs' \
 	  '  make -C testing functional[/<family>]   families: $(FAMILIES)' \
 	  '  make -C testing end2end' \
+	  '  TEST_FILTER=<regex> selects test filenames (empty runs everything).' \
 	  '  VM=0 leaves out the tests that boot a VM, which need root;' \
 	  '  make -j boots several at once.' \
 	  '  make -C testing fuzz [FUZZ_SECONDS=60] [FUZZ_CORPUS=<dir>]' \

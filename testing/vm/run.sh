@@ -1414,6 +1414,7 @@ fi
 printf '      export VM_MODE=%q\n' "$VM_MODE" >>"$USER_DATA"
 printf '      export TEST_VM_MODE=%q\n' "$TEST_MODE" >>"$USER_DATA"
 printf '      export TEST_VM_SUITE=%q\n' "$VM_SUITE" >>"$USER_DATA"
+printf '      export TEST_FILTER=%q\n' "${TEST_FILTER:-}" >>"$USER_DATA"
 printf '      export TEST_VM_SKIP_SEAL=%q\n' "$SKIP_SEAL" >>"$USER_DATA"
 printf '      export TEST_VM_INITRD=%q\n' "$VM_INITRD" >>"$USER_DATA"
 printf '      export TEST_VM_SSH_PUBLIC_KEY=%q\n' "$SSH_PUBLIC_KEY" >>"$USER_DATA"

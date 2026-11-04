@@ -548,6 +548,29 @@ The host side writes to ``build/test-vm/end2end/``. The guest reaches
 the registry and collector through QEMU's address for the host. ClickHouse
 is available to the collector on the test's Docker network.
 
+Select test scripts
+~~~~~~~~~~~~~~~~~~~
+
+Pass ``-t <regex>`` to either runner to select test filenames with a
+POSIX extended regular expression. The match includes the ``.sh`` suffix
+but not the directory. All TAP cases in a selected script run.
+
+.. code-block:: console
+
+   $ testing/run-tests.sh -t '^t100[67]-' functional/build
+   target# testing/run-target-tests.sh -t '^t310[12]-' upatch
+
+With make, set ``TEST_FILTER``; it is passed into test VMs as well:
+
+.. code-block:: console
+
+   $ make -C testing functional/build VM=0 TEST_FILTER='^t100[67]-'
+
+An empty filter selects everything; invalid expressions fail with status
+2. ``-t`` overrides ``TEST_FILTER``. For unit tests, the filter selects
+suite executable names. Filtering preserves order and does not add
+prerequisite scripts or skip the normal build and VM setup.
+
 Write a test
 ------------
 

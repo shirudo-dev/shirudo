@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 #
-# testing/run-tests.sh [unit[/<suite>]|ci-checks|functional[/<family>]|end2end]...
+# testing/run-tests.sh [-t <regex>] [unit[/<suite>]|ci-checks|functional[/<family>]|end2end]...
 # -- the tests of each tier named, all of them without an argument, that
 # run on the build host: the unit tests and the operator tests (t?0??) in
 # number order. The target tests run in the test VM through
@@ -12,6 +12,7 @@
 set -eu
 
 cd "$(dirname "$0")"
+. ./test-filter.sh
 
 [ $# -gt 0 ] || set -- unit ci-checks functional end2end
 units=
@@ -50,6 +51,7 @@ operator_tests()
 fail=0
 : "${SHIRUDO_TEST_SUITE_FAILURES_FILE:=}"
 for t in $(unit_tests) $(operator_tests); do
+	test_matches "$t" || continue
 	case "$t" in
 	*.sh) set -- sh "$t" ;;
 	*) set -- "$t" ;;
