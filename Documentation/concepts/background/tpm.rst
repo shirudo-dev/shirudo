@@ -174,13 +174,10 @@ shirudo's :term:`attestation key` (AK) is an ECC NIST P-256 primary key in the
 endorsement hierarchy that signs with ECDSA and SHA-256. Its attributes
 are ``fixedTPM``, ``fixedParent``, ``sensitiveDataOrigin``,
 ``userWithAuth``, ``restricted`` and ``sign``, and it has no
-authorization value and no policy. ``init`` records its Name in the
-:term:`identity map`. Before each write to the register, shirudo creates the
-AK again and compares its Name with the recorded one, which detects a
-different TPM behind the device path. ``attest verify`` checks that
-the AK's public area has these attributes, that the Name matches the
-public area and, with ``--ak-name``, that it is the key pinned at
-enrollment.
+authorization value and no policy. ``shirudo attest`` creates the AK
+when it collects evidence. ``attest verify`` checks that the AK's public
+area has these attributes, that the Name matches the public area and,
+with ``--ak-name``, that it is the key the operator pinned at enrollment.
 
 PCRs, banks and extension
 -------------------------

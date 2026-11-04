@@ -562,24 +562,17 @@ static int freeze_task_maps(struct bpf_object *obj)
  * Initial TPM contact is trusted in the authenticated initrd. Later
  * connections salt their sessions with the key whose name we freeze here.
  */
-static int record_attestation_key(struct identity *id)
+static int record_ek_name(struct identity *id)
 {
-	struct tpm_key ak = {};
 	struct tpm *tpm;
 	int ret;
 
 	ret = tpm_open(&tpm);
 	if (ret)
 		return ret;
-	ret = tpm_ak_create(tpm, &ak);
-	if (!ret) {
-		memcpy(id->ak_name, ak.name, ak.name_len);
-		id->ak_name_len = (__u32)ak.name_len;
-		tpm_ek_name(tpm, id->ek_name);
-		tpm_key_flush(tpm, &ak);
-	}
+	tpm_ek_name(tpm, id->ek_name);
 	tpm_close(tpm);
-	return ret;
+	return 0;
 }
 
 static int init_lsm(void)
@@ -707,9 +700,9 @@ static int init_lsm(void)
 		pr_err("init: create TPM RSA-3072 NV writer: %s", strerror(-err));
 		goto out;
 	}
-	err = record_attestation_key(&id);
+	err = record_ek_name(&id);
 	if (err) {
-		pr_err("init: record the attestation key name: %s (tpm_error)",
+		pr_err("init: record the endorsement key name: %s (tpm_error)",
 		       strerror(-err));
 		goto out;
 	}

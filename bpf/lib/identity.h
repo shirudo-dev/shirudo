@@ -19,8 +19,6 @@ struct sb_id {
 	__u8	runtime_root[32];
 	__u8	nv_writer_seed[32];
 	__u8	nv_writer_public[TPM_NV_RSA_BYTES];
-	__u8	ak_name[TPM_NAME_LEN];
-	__u32	ak_name_len;
 	__u8	ek_name[TPM_NAME_LEN];
 	__s32	dm_verity_ring;
 	__s32	dm_verity_key;

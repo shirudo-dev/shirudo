@@ -104,15 +104,6 @@ int chain_extend(const __u8 event[CHAIN_DIGEST_LEN],
 /* The live value; -ENODEV when no register is written this boot. */
 int chain_read(__u8 out[CHAIN_DIGEST_LEN]);
 
-struct tpm;
-
-/*
- * Whether the TPM behind an open handle is the one init recorded, by
- * the name of its attestation key: 0 when it is or enforcement is not
- * live, -EACCES for another TPM, -EPROTO without a record.
- */
-int chain_tpm_bound(struct tpm *tpm);
-
 /* For a probe: a TPM that does not answer is not logged. */
 bool chain_bound(void);
 

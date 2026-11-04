@@ -267,11 +267,12 @@ without the protection.
        the runtime image hands root shirudo's authority.
      - No.
    * - A15
-     - The TPM is a correct TPM 2.0 with RSA-3072 support and an
-       endorsement hierarchy without an authorization value.
-     - The register, the NV writer and the attestation key live in it.
-     - Partly. ``init`` fails without a TPM and when the attestation
-       key cannot be created under the endorsement hierarchy.
+     - The TPM is a correct TPM 2.0 with RSA-3072 and ECC P-256 support
+       and an endorsement hierarchy without an authorization value.
+     - The register, the NV writer, the session key and the attestation
+       key live in it.
+     - Partly. ``init`` requires ECC endorsement-key creation, salted
+       session setup and RSA-3072 NV writer creation.
 
 Assets
 ------
@@ -311,7 +312,7 @@ Assets
    * - Identity map
      - ``shirudo_bpffs_sb``, pinned as ``identity``
      - Frozen by ``init``; opened only by tasks with runtime authority
-       (T13). It holds the keyring serials, the runtime root, the AK
+       (T13). It holds the keyring serials, the runtime root, the EK
        name, the NV writer seed and public key, and the NV index.
    * - Task marks
      - ``shirudo_tasks`` task storage, pinned as ``task_authority``
@@ -346,8 +347,8 @@ Assets
      - The private key never leaves the TPM; the seed is not secret
        (T5).
    * - Attestation key
-     - An ECDSA P-256 endorsement-hierarchy primary; its name in the
-       identity map and with the operator
+     - An ECDSA P-256 endorsement-hierarchy primary; its name pinned
+       by the operator after enrollment
      - The TPM; the verifier's pin of its name (T9).
    * - Eventlog
      - ``/var/lib/shirudo/eventlog``; the initrd's record at
@@ -1302,7 +1303,6 @@ readback. Session failures are not retried as measurements.
 Initial enrollment trusts the authenticated initrd and the kernel TPM
 device it opens (A1, A6, A8). An unreadable frozen identity, a missing pin
 or a different session key fails rather than enrolling a replacement.
-The attestation key comparison remains an additional check.
 ``lsm/tpm_command`` refuses unauthorized extensions that reach the real
 driver; sessions do not prevent denial of service by dropping requests.
 

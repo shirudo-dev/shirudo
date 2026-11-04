@@ -141,9 +141,8 @@ Binding at boot
 ``init`` binds the register once per TPM boot, normally from the initrd,
 after it has restored the archived upatches (:doc:`boot-flow`):
 
-#. Recreate the attestation key and compare its name with the one frozen
-   in the identity map, so the register is bound in the TPM ``init``
-   recorded.
+#. Open a salted session using the EK whose name ``init`` froze in the
+   identity map. The session authenticates the TPM's successful replies.
 #. Read the TPM's reset count. When this boot's eventlog already holds an
    ``init`` record for that count, the register was bound: if the index
    is written under the recorded name, ``init`` reuses it and adds no
@@ -176,8 +175,8 @@ tree root and the events since boot, which the operator can compute.
 Extending later
 ~~~~~~~~~~~~~~~
 
-Every later extension recreates the attestation key and compares its
-name, requires this boot's ``init`` record, recomputes the policy from
+Every later extension uses a session authenticated with the pinned EK,
+requires this boot's ``init`` record, recomputes the policy from
 the recorded PCR values and writer key, and requires the live index to be
 written, to carry the recorded name and policy, and the TPM's reset count
 to equal the recorded one. A missing register is ``tpm_error``; a

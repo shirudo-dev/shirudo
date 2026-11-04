@@ -165,7 +165,7 @@ it.
       enforcement programs compare against: the devices of the private
       bpffs and of ``/run/shirudo``, the ``.bpf`` keyring and the enrolled key
       serials, the runtime image's root hash, the NV index and its writer
-      key, the attestation and session-establishment key names and the
+      key, the endorsement key's name for TPM sessions and the
       ``.dm-verity`` keyring.
       ``init`` freezes it before the admission gates attach, so userspace
       cannot change it afterwards. See :doc:`/internals/enforcement`.

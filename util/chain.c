@@ -21,7 +21,6 @@
 #include "chain.h"
 #include "config.h"
 #include "crypto.h"
-#include "identity.h"
 #include "initrd.h"
 #include "log.h"
 #include "malloc.h"
@@ -244,42 +243,6 @@ static int register_writer(struct tpm *tpm,
 	return ret ? ret : tpm_nv_set_writer(tpm, seed, public);
 }
 
-/*
- * A different attestation key has a different Name, but the Name is
- * public and a substitute transport can replay it. Remote evidence
- * still needs a valid signature from the pinned key.
- */
-int chain_tpm_bound(struct tpm *tpm)
-{
-	struct identity id = {};
-	struct tpm_key ak = {};
-	int ret;
-
-	ret = enforcement_active();
-	if (ret <= 0)
-		return ret;
-	ret = identity_read(&id);
-	if (ret) {
-		pr_err("tpm: frozen identity unreadable: %s", strerror(-ret));
-		return ret;
-	}
-	if (id.ak_name_len != TPM_NAME_LEN) {
-		pr_err("tpm: no attestation key name on record");
-		return -EPROTO;
-	}
-	ret = tpm_ak_create(tpm, &ak);
-	if (ret)
-		return ret;
-	if (ak.name_len != TPM_NAME_LEN ||
-	    memneq_explicit(ak.name, id.ak_name, TPM_NAME_LEN)) {
-		pr_err("tpm: not the TPM init bound (attestation key name "
-		       "differs)");
-		ret = -EACCES;
-	}
-	tpm_key_flush(tpm, &ak);
-	return ret;
-}
-
 int chain_init(const __u8 event[32],
 	       struct chain_init_info *info)
 {
@@ -295,9 +258,6 @@ int chain_init(const __u8 event[32],
 	ret = tpm_open(&tpm);
 	if (ret)
 		return -ENODEV;
-	ret = chain_tpm_bound(tpm);
-	if (ret)
-		goto out;
 	ret = tpm_reset_count(tpm, &info->reset_count);
 	if (ret)
 		goto out;
@@ -457,9 +417,6 @@ int chain_extend(const __u8 event[32], __u8 out_chain[32])
 	ret = tpm_open(&tpm);
 	if (ret)
 		return -ENODEV;
-	ret = chain_tpm_bound(tpm);
-	if (ret)
-		goto out;
 	ret = tpm_nv_info(tpm, NV_INDEX, &nv);
 	if (ret)
 		goto out;

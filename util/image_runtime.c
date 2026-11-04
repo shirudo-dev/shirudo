@@ -26,7 +26,6 @@
 #include <shirudo/string.h>
 
 #include "../builtin.h"
-#include "chain.h"
 #include "config.h"
 #include "config_image.h"
 #include "config_update.h"
@@ -669,8 +668,6 @@ static int open_update(void)
 	ret = mkdir_owned(CONFIG_UPDATE_DIR);
 	if (!ret)
 		ret = tpm_open(&image.tpm);
-	if (!ret)
-		ret = chain_tpm_bound(image.tpm);
 	if (!ret)
 		ret = config_update_open(CONFIG_UPDATE_DIR,
 					 &update_ops, &image,

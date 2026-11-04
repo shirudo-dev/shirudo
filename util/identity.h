@@ -28,8 +28,6 @@ struct identity {
 	__u8	runtime_root[32];
 	__u8	nv_writer_seed[32];
 	__u8	nv_writer_public[TPM_NV_RSA_BYTES];
-	__u8	ak_name[TPM_NAME_LEN];
-	__u32	ak_name_len;
 	__u8	ek_name[TPM_NAME_LEN];
 	__s32	dm_verity_ring;
 	__s32	dm_verity_key;
@@ -72,7 +70,7 @@ struct task_policy {
 
 BUILD_BUG_ON(sizeof(struct device_authority) != 48);
 BUILD_BUG_ON(sizeof(struct task_authority) != 8);
-BUILD_BUG_ON(sizeof(struct identity) != 620);
+BUILD_BUG_ON(sizeof(struct identity) != 580);
 BUILD_BUG_ON(sizeof(struct task_policy) != 16);
 
 /* The bpffs mount init made, which the unmount guard keeps mounted. */

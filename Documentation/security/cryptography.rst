@@ -200,8 +200,7 @@ TPM
      - ECDSA on NIST P-256 with SHA-256; a restricted signing primary
        with a fixed template under the endorsement hierarchy
      - Signs ``TPM2_Quote`` and ``TPM2_NV_Certify`` with the verifier's
-       nonce, up to 64 bytes. ``init`` records its name in the identity
-       map.
+       nonce, up to 64 bytes. The operator pins its name after enrollment.
    * - Endorsement key
      - The TCG default template, RSA-2048 with the exponent 65537 or ECC
        P-256, with AES-128 in CFB mode as its symmetric algorithm
