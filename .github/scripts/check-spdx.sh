@@ -188,6 +188,8 @@ expr_of() {
 : >"$work/exprs"
 git ls-files | while IFS= read -r f; do
 	excluded "$f" && continue
+	# A tracked symlink points into the tree, where its target is checked.
+	[ -L "$f" ] && continue
 	case "$f" in
 	vendor/*)
 		printf '%s\n' "$f" >>"$work/vendor" ;;
