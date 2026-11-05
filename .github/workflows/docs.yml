@@ -11,6 +11,11 @@ on:
 permissions:
   contents: read
 
+# A newer run for the same branch or pull request supersedes this one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   docs:
     runs-on: ubuntu-latest
