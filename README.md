@@ -5,7 +5,7 @@
 
 \
 [![CI suite](https://github.com/shirudo-dev/shirudo/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/shirudo-dev/shirudo/actions/workflows/tests.yml)
-[![Build packages](https://github.com/shirudo-dev/shirudo/actions/workflows/deb.yml/badge.svg?branch=main)](https://github.com/shirudo-dev/shirudo/actions/workflows/deb.yml)
+[![Build packages](https://github.com/shirudo-dev/shirudo/actions/workflows/packages.yml/badge.svg?branch=main)](https://github.com/shirudo-dev/shirudo/actions/workflows/packages.yml)
 [![Documentation](https://github.com/shirudo-dev/shirudo/actions/workflows/docs.yml/badge.svg?branch=main)](https://github.com/shirudo-dev/shirudo/actions/workflows/docs.yml)
 [![Sanitizers](https://github.com/shirudo-dev/shirudo/actions/workflows/sanitizers.yml/badge.svg?branch=main)](https://github.com/shirudo-dev/shirudo/actions/workflows/sanitizers.yml)
 [![License](https://img.shields.io/badge/license-BSD--2--Clause-blue.svg)](LICENSE)
@@ -34,7 +34,7 @@ http://127.0.0.1:8000
 [main](https://github.com/shirudo-dev/shirudo/commits/main/) is the
 development branch and no stable branches are maintained at this point.
 Until the first release, every push to main builds the packages in the
-[Build packages](https://github.com/shirudo-dev/shirudo/actions/workflows/deb.yml)
+[Build packages](https://github.com/shirudo-dev/shirudo/actions/workflows/packages.yml)
 workflow, where they are available as run artifacts. Once releases
 start, each release tag publishes its packages on
 [GitHub Releases](https://github.com/shirudo-dev/shirudo/releases)
