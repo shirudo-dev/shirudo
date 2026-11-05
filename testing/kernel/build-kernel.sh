@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
-# build-kernel.sh: build bootable kernel packages from the upstream/bpf-next
-# branch of this repository, the only base patches/ supports for now, with
-# the hardened configuration assembled from kernel.conf, kernel.<arch>.conf
-# and blacklist.conf.
+# build-kernel.sh: build kernel packages from upstream/bpf-next with the
+# hardened full profile or the small CI VM-test profile.
 #
 # The source is checked out as a detached git worktree under build/src,
 # patches/*.patch are applied on top, the configuration is assembled out
@@ -29,6 +27,8 @@ usage: ${0##*/} [options]
                          are installed, otherwise gcc)
   -b, --base BASE        defconfig (default) or a path to a .config to
                          start from instead of the arch defconfig
+      --profile PROFILE   full (default) hardened packages or ci (small
+                         VM-test kernel)
       --localversion S   use S verbatim as CONFIG_LOCALVERSION instead of
                          the kernel.conf value plus -YYYYMMDD (build day)
       --module-key PEM   sign modules with this key+certificate PEM
@@ -71,6 +71,7 @@ OUT="$REPO/build"
 JOBS="$(nproc)"
 TOOLCHAIN=""
 BASE="defconfig"
+PROFILE="full"
 LOCALVERSION=""
 MODULE_KEY=""
 OPENSSL_PREFIX="${OPENSSL_PREFIX:-}"
@@ -89,6 +90,7 @@ while [ $# -gt 0 ]; do
 	-j|--jobs) JOBS="$2"; shift 2 ;;
 	-t|--toolchain) TOOLCHAIN="$2"; shift 2 ;;
 	-b|--base) BASE="$2"; shift 2 ;;
+	--profile) PROFILE="$2"; shift 2 ;;
 	--localversion) LOCALVERSION="$2"; shift 2 ;;
 	--module-key) MODULE_KEY="$(readlink -f "$2")"; shift 2 ;;
 	--openssl) OPENSSL_PREFIX="$2"; shift 2 ;;
@@ -141,11 +143,25 @@ if [ -n "$MODULE_KEY" ]; then
 		die "module key must be one PEM file with the private key and its certificate: $MODULE_KEY"
 fi
 
-FRAGMENTS=("$REPO/kernel.conf" "$REPO/kernel.$ARCH.conf")
-BLACKLIST="$REPO/blacklist.conf"
-for f in "${FRAGMENTS[@]}" "$BLACKLIST"; do
+case "$PROFILE" in
+full)
+	FRAGMENTS=("$REPO/kernel.conf" "$REPO/kernel.$ARCH.conf")
+	BLACKLIST="$REPO/blacklist.conf"
+	;;
+ci)
+	[ "$ARCH" = x86-64 ] || die "--profile ci supports only --arch x86-64"
+	[ "$BASE" = defconfig ] || die "--base cannot be combined with --profile ci"
+	FRAGMENTS=("$REPO/kernel-ci.conf")
+	BLACKLIST=""
+	;;
+*) die "unsupported --profile $PROFILE (full, ci)" ;;
+esac
+for f in "${FRAGMENTS[@]}"; do
 	[ -f "$f" ] || die "missing $f"
 done
+if [ -n "$BLACKLIST" ]; then
+	[ -f "$BLACKLIST" ] || die "missing $BLACKLIST"
+fi
 # An ML-DSA module signing key (kernel.conf) is only selectable when
 # Kconfig's OPENSSL_SUPPORTS_ML_DSA probe finds an openssl CLI with
 # ML-DSA on PATH, so this must hold before the configuration is assembled,
@@ -284,14 +300,18 @@ lint_file() {
 		grep -qx "$sym" "$KNOWN" || log "lint: $(basename "$f"): CONFIG_$sym does not exist in $REF"
 	done < <(sed -nE 's/^CONFIG_([A-Za-z0-9_]+)=.*/\1/p; s/^# CONFIG_([A-Za-z0-9_]+) is not set$/\1/p' "$f" | sort -u)
 }
-for f in "${FRAGMENTS[@]}" "$BLACKLIST"; do lint_file "$f"; done
+for f in "${FRAGMENTS[@]}"; do lint_file "$f"; done
+[ -z "$BLACKLIST" ] || lint_file "$BLACKLIST"
 
 # ---------------------------------------------------------------------------
 # Configuration: base, fragments, blacklist, olddefconfig
 # ---------------------------------------------------------------------------
 kmake() { make -C "$SRC" O="$OBJ" ARCH="$KARCH" "${MAKE_TC[@]}" "$@"; }
 
-if [ "$BASE" = defconfig ]; then
+if [ "$PROFILE" = ci ]; then
+	log "base: $KARCH allnoconfig"
+	kmake -s allnoconfig
+elif [ "$BASE" = defconfig ]; then
 	log "base: $KARCH $DEFCONFIG"
 	kmake -s "$DEFCONFIG"
 else
@@ -320,12 +340,14 @@ if [ -n "$MODULE_KEY" ]; then
 	"$SRC/scripts/config" --file "$OBJ/.config" --set-str MODULE_SIG_KEY "$MODULE_KEY"
 fi
 
-log "applying blacklist.conf"
 BLACKLISTED=()
-while IFS= read -r sym; do BLACKLISTED+=("$sym"); done < <(sed -nE 's/^# CONFIG_([A-Za-z0-9_]+) is not set$/\1/p' "$BLACKLIST")
-for sym in "${BLACKLISTED[@]}"; do
-	"$SRC/scripts/config" --file "$OBJ/.config" --disable "$sym"
-done
+if [ -n "$BLACKLIST" ]; then
+	log "applying $(basename "$BLACKLIST")"
+	while IFS= read -r sym; do BLACKLISTED+=("$sym"); done < <(sed -nE 's/^# CONFIG_([A-Za-z0-9_]+) is not set$/\1/p' "$BLACKLIST")
+	for sym in "${BLACKLISTED[@]}"; do
+		"$SRC/scripts/config" --file "$OBJ/.config" --disable "$sym"
+	done
+fi
 
 log "make olddefconfig"
 kmake -s olddefconfig
@@ -484,7 +506,10 @@ rm -f "$OBJ/.vmlinux.btf-tmp"
 	echo "toolchain=$TOOLCHAIN"
 	echo "compiler=$(grep -E '^CONFIG_CC_VERSION_TEXT=' "$OBJ/.config" | cut -d= -f2-)"
 	echo "base=$BASE"
-	echo "fragments_sha256=$(cat "${FRAGMENTS[@]}" "$BLACKLIST" | sha256sum | cut -d' ' -f1)"
+	config_inputs=("${FRAGMENTS[@]}")
+	[ -z "$BLACKLIST" ] || config_inputs+=("$BLACKLIST")
+	echo "profile=$PROFILE"
+	echo "fragments_sha256=$(cat "${config_inputs[@]}" | sha256sum | cut -d' ' -f1)"
 	echo "module_key=${MODULE_KEY:-generated in $OBJ/certs/signing_key.pem}"
 	echo "libcrypto=$(pkg-config --modversion libcrypto 2>/dev/null || echo unknown)"
 	echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
