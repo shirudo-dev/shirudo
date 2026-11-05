@@ -8,11 +8,11 @@
 Concurrency hazards
 ===================
 
-An upatch's programs run on every CPU at once, and on one CPU a run can
-stop halfway while another one runs. Code that looks right for one run
-at a time loses updates, mixes up records or decides on data that
-changed under it. This page lists the hazards that recur in BPF code,
-what to write instead, and the Coccinelle rule in
+Runs of an upatch's programs overlap on different CPUs, and on one CPU
+a run can stop halfway while another one runs. Code that looks right
+for one run at a time loses updates, mixes up records or decides on
+data that changed under it. This page lists the hazards that recur in
+BPF code, what to write instead, and the Coccinelle rule in
 :src:`testing/coccinelle/` that refuses it in the tree where a rule can.
 
 When a run can stop halfway
@@ -218,23 +218,30 @@ that returns a value, as a successful compare-and-swap does. The reader
 loads the pointer with ``READ_ONCE()`` and reads through it, an address
 dependency, or with a load-acquire,
 ``__atomic_load_n(&p, __ATOMIC_ACQUIRE)``. Use the load-acquire when the
-code compares the loaded index with a constant before it uses it: the
-compiler can then replace the index with the constant and lose the
-dependency.
+path that reads through the index first tests it for equality with a
+constant, as ``if (idx == 1)`` does: the compiler can then use the
+constant in place of the index and lose the dependency. A bounds check
+such as ``idx > CAPACITY`` keeps it.
 
 The arena table template publishes its active buffer with a release
-store. ``bpf_publish`` refuses ``WRITE_ONCE()`` of a pointer.
+store. ``bpf_publish`` refuses ``WRITE_ONCE()`` of a pointer. It does not
+see an index published with ``WRITE_ONCE()``.
 
 Which accesses order what:
 
 - ``__sync_fetch_and_add()`` and its kin, ``__sync_lock_test_and_set()``,
   ``__atomic_exchange_n()`` and a successful compare-and-swap are full
-  barriers. clang emits the value-returning instruction for
-  ``__sync_fetch_and_add()`` even when the result is unused.
+  barriers. clang 20 and later emit the value-returning instruction for
+  ``__sync_fetch_and_add()`` and its kin even when the result is unused.
+  Older clang emits the atomic without fetch there, which orders nothing.
 - ``__atomic_fetch_add(p, v, __ATOMIC_RELAXED)`` with its result unused
-  orders nothing, nor does a failed compare-and-swap.
+  orders nothing, nor does a failed compare-and-swap. With its result
+  used, clang emits the value-returning instruction, which orders more
+  than the source asks for.
 - A release store orders the accesses before it, and a load-acquire the
-  accesses after it.
+  accesses after it. ``__sync_lock_release()`` is a release store. clang
+  refuses ``__atomic_load_n()`` and ``__atomic_store_n()`` with
+  ``__ATOMIC_SEQ_CST``.
 
 Switching buffers
 -----------------
@@ -263,8 +270,10 @@ What the rules cannot see
 The ``bpf_`` rules match code within one function, so a hazard spread
 over several functions passes them, and they cannot parse a file that
 defines its own token-pasting macros, such as
-:src:`upatches/kernel-obs/obs_table.h`. Write the ordering such code
-relies on as a litmus test and run it, as :doc:`blitmus` shows.
+:src:`upatches/kernel-obs/obs_table.h`. Write the ordering between CPUs
+that such code relies on as a litmus test and run it, as :doc:`blitmus`
+shows. blitmus does not cover runs that interleave on one CPU or what
+happens inside maps and helpers, so review decides those.
 
 Related
 -------

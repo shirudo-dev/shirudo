@@ -19,13 +19,14 @@ build host therefore says little about the targets that run an upatch on
 arm64 or riscv64.
 
 BPF gives a program three ways to order its accesses. The atomics that
-return a value, ``atomic_fetch_add``, ``cmpxchg`` and ``xchg``, are fully
-ordered. ``load_acquire`` and ``store_release`` order the accesses after
-or before them. And a load through an index or a pointer that an earlier
-``READ_ONCE()`` returned stays after that load, an address dependency.
-The JIT turns each into the CPU's own instructions. Whether a given
-choice of them is enough for a pattern is the question a litmus test
-answers.
+return a value are fully ordered: ``atomic_fetch_add``,
+``atomic_fetch_and``, ``atomic_fetch_or``, ``atomic_fetch_xor``, ``xchg``
+and a ``cmpxchg`` that succeeds. ``load_acquire`` and ``store_release``
+order the accesses after or before them. And a load through an index or
+a pointer that an earlier ``READ_ONCE()`` returned stays after that
+load, an address dependency. The JIT turns each into the CPU's own
+instructions. Whether a given choice of them is enough for a pattern is
+the question a litmus test answers.
 
 :doc:`hazards` lists the patterns that go wrong in BPF code, what to
 write instead and the Coccinelle rules that refuse them, and
