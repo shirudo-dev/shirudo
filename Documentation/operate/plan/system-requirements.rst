@@ -427,9 +427,10 @@ keyrings. Any Linux kernel on which the tools below run serves.
      - ML-DSA-87 signing and hybrid ML-KEM TLS. The build refuses older
        versions.
    * - ``libcurl`` 7.75 or newer, ``tss2-esys`` 4.0 or newer,
-       ``tss2-tctildr``, ``libelf``, ``zlib``, LuaJIT
+       ``tss2-tctildr``, ``libelf``, ``zlib``, LuaJIT with GC64
      - Linked by the ``shirudo`` binary, which is the same program on
-       both roles.
+       both roles. LuaJIT GC64 is required on the supported 64-bit
+       architectures.
    * - ``clang`` and LLVM 23 with the BPF target
      - ``shirudo build`` runs ``/usr/bin/clang``, and the helper of the
        Debian package ``/usr/lib/llvm-23/bin/clang``. It does not search
@@ -482,7 +483,7 @@ target-deps`` first.
    * - autoconf, automake, libtool and autoconf-archive
      - tpm2-tss's ``bootstrap`` script.
    * - Static ``libelf.a``, ``libz.a``, ``libzstd.a`` and
-       ``libluajit-5.1.a``
+       ``libluajit-5.1.a`` with GC64
      - Taken from the first of ``/usr/lib/<multiarch>``, ``/usr/lib64``
        and ``/usr/lib`` that holds ``libelf.a``.
        ``TARGET_SYSTEM_LIBDIR=`` names another directory.

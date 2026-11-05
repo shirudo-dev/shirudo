@@ -96,6 +96,14 @@ than 32 MiB in total. The limit covers everything the state allocates,
 the input table included, and a decoder that reaches it fails with a
 memory error.
 
+The allocator function uses LuaJIT's allocator for addresses its garbage
+collector can represent, including on arm64 where the libc heap can sit
+above its 47-bit limit. A separate empty state owns the allocator arena
+and releases it after the decoder state closes. Decoder allocations are
+zeroed and scrubbed before release. The memory limit also covers finalizers
+run at close. The empty owner state and allocator bookkeeping are outside
+that limit.
+
 The state opens the standard libraries and then removes these globals:
 ``io``, ``os``, ``package``, ``require``, ``debug``, ``jit``, ``ffi``,
 ``dofile``, ``loadfile``, ``load``, ``loadstring``, ``module`` and

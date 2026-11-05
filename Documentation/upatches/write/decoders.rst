@@ -191,6 +191,7 @@ The decoder runs in a restricted LuaJIT state:
   instruction. One snapshot may take 1,000,000 virtual machine
   instructions, loading the chunk included, and 32 MiB of memory, and the
   result may nest 32 levels deep.
+  The memory limit also applies to finalizers during state cleanup.
 - ``io``, ``os``, ``package``, ``require``, ``debug``, ``jit``, ``ffi``,
   ``dofile``, ``loadfile``, ``load``, ``loadstring``, ``module`` and
   ``collectgarbage`` are removed. The rest of the base library and the

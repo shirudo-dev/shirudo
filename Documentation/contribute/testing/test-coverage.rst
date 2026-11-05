@@ -490,10 +490,11 @@ signed config image.
 Unit suites and fuzz targets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The unit suites in :src:`testing/unit/` cover eight of the modules in
+The unit suites in :src:`testing/unit/` cover nine of the modules in
 :src:`util/`: ``chain``, ``hex``, ``json``, ``kernel_abi``,
-``kernel_build_id``, ``kernel_release``, ``string`` and ``upatch``, and
-``overflow`` the arithmetic of :src:`include/shirudo/overflow.h`. The
+``kernel_build_id``, ``kernel_release``, ``string``, ``upatch`` and
+``upatch_decode``, and ``overflow`` the arithmetic of
+:src:`include/shirudo/overflow.h`. The
 other modules are reached through the test helpers, the fuzz targets and
 the binaries the functional tests run.
 
