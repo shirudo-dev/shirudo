@@ -35,6 +35,15 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # The build does not depend on the compiler under test, so one cache
+      # entry serves both matrix legs.
+      - name: Restore the sanitizer OpenSSL build
+        id: sanitizer-openssl
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: build/sanitizer-openssl
+          key: sanitizer-openssl-${{ hashFiles('.github/scripts/sanitizer-openssl-deps.sh') }}
+
       # The BPF objects embedded in the binary need the BTF of a signed-BPF
       # capable bpf-next kernel, so the build runs in the same LVH VM as the
       # package build. The host-side suite itself needs no root, LSM or TPM.
@@ -77,17 +86,7 @@ jobs:
 
             git config --global --add safe.directory /host
 
-            # OpenSSL 3.5+: the distribution's build predates ML-DSA, and
-            # the suite generates its test keys with the openssl binary.
-            curl -fsSL https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz \
-              -o /tmp/openssl-3.5.9.tar.gz
-            tar -C /tmp -xf /tmp/openssl-3.5.9.tar.gz
-            cd /tmp/openssl-3.5.9
-            ./Configure --prefix=/tmp/shirudo-openssl --openssldir=/etc/ssl \
-              --libdir=lib no-docs no-tests
-            make -j4
-            make install_sw
-            cd /host
+            sh .github/scripts/sanitizer-openssl-deps.sh
 
             export PATH=/tmp/shirudo-openssl/bin:\$PATH
             export PKG_CONFIG_PATH=/tmp/shirudo-openssl/lib/pkgconfig
@@ -98,6 +97,13 @@ jobs:
             make SANITIZE=address,undefined shirudo-build
             make -C testing SANITIZE=address,undefined test-helpers
             make tests VM=0 SANITIZE=address,undefined
+
+      - name: Save the sanitizer OpenSSL build
+        if: always() && steps.sanitizer-openssl.outputs.cache-hit != 'true' && hashFiles('build/sanitizer-openssl/lib/libcrypto.so') != ''
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: build/sanitizer-openssl
+          key: ${{ steps.sanitizer-openssl.outputs.cache-primary-key }}
 
   libfuzzer:
     name: libFuzzer
