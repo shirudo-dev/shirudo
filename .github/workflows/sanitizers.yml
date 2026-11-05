@@ -39,7 +39,7 @@ jobs:
       # entry serves both matrix legs.
       - name: Restore the sanitizer OpenSSL build
         id: sanitizer-openssl
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/sanitizer-openssl
           key: sanitizer-openssl-${{ hashFiles('.github/scripts/sanitizer-openssl-deps.sh') }}
@@ -116,7 +116,7 @@ jobs:
       # Every run starts from the corpus the last nightly run kept; the
       # newest one is restored, as each is saved under a key of its own.
       - name: Restore the fuzz corpora
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/fuzz-corpus
           key: fuzz-corpus-${{ github.run_id }}-${{ github.run_attempt }}
