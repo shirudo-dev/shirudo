@@ -103,14 +103,14 @@ jobs:
       # fails, so that the next run does not build it again.
       - name: Save the bpf-next kernel
         if: always() && steps.kernel.outputs.cache-hit != 'true' && hashFiles('artifacts/bpf-next-kernel-debs/bzImage.sha256sum') != ''
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: artifacts/bpf-next-kernel-debs
           key: ${{ steps.kernel.outputs.cache-primary-key }}
 
       - name: Save the static target dependencies
         if: always() && steps.target-deps.outputs.cache-hit != 'true' && hashFiles('build/target-deps/lib/libcrypto.a') != '' && hashFiles('build/target-deps/curl/lib/libcurl.a') != ''
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/target-deps
           key: ${{ steps.target-deps.outputs.cache-primary-key }}
@@ -120,7 +120,7 @@ jobs:
       # written once the image is complete.
       - name: Save the VM images
         if: always() && steps.images.outputs.cache-hit != 'true' && hashFiles('build/test-vm/cache/runtime/.*.key') != ''
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/test-vm/cache
           key: ${{ steps.images.outputs.cache-primary-key }}

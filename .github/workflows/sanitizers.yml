@@ -100,7 +100,7 @@ jobs:
 
       - name: Save the sanitizer OpenSSL build
         if: always() && steps.sanitizer-openssl.outputs.cache-hit != 'true' && hashFiles('build/sanitizer-openssl/lib/libcrypto.so') != ''
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/sanitizer-openssl
           key: ${{ steps.sanitizer-openssl.outputs.cache-primary-key }}
@@ -150,7 +150,7 @@ jobs:
       # add a corpus to the cache the kernel and the VM images share.
       - name: Save the fuzz corpora
         if: always() && steps.fuzz.outcome != 'skipped' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/fuzz-corpus
           key: fuzz-corpus-${{ github.run_id }}-${{ github.run_attempt }}
