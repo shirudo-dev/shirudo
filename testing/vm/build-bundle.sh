@@ -320,7 +320,8 @@ fi
 
 jobs=$(nproc)
 log "building host shirudo payload and test helpers"
-make -C "$REPO_ROOT" -j"$jobs" all shirudo-build
+make -C "$REPO_ROOT" -j"$jobs" all
+make -C "$REPO_ROOT" -j"$jobs" shirudo-build
 make -C "$REPO_ROOT/testing" -j"$jobs" test-helpers
 
 TMP_DIR="$(mktemp -d "${BUNDLE_DIR}.tmp.XXXXXX")"
