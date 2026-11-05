@@ -37,6 +37,15 @@ Before you begin
   it misses with an install command for ``apt-get`` or ``dnf``.
 - For the end-to-end tests: Docker on the host.
 
+The ``CI suite`` workflow uses the x86-64 CI kernel package from
+``shirudo-dev/kernel`` for every trigger. By default, it selects the
+latest available ``kernel-packages-x86-64-ci`` artifact from ``main``.
+For a manual run, set ``kernel_run_id`` to select a specific run instead.
+The run must contain that artifact. The
+``KERNEL_REPO_READ_TOKEN`` secret needs Actions read access to the kernel
+repository. Setup extracts the image and headers packages, checks the
+kernel config and BTF, and stages the result for the test VM.
+
 Test tiers
 ----------
 

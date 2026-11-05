@@ -189,6 +189,45 @@ stage_lvh_kernel() {
 	) || return 1
 }
 
+stage_kernel_ci_artifact() {
+	artifact_dir="$1"
+	set -- "$artifact_dir"/*/linux-image-*_amd64.deb
+	[ "$#" -eq 1 ] && [ -s "$1" ] || {
+		echo "expected one x86-64 kernel image package in $artifact_dir" >&2
+		return 1
+	}
+	image_package="$1"
+	package_dir=${image_package%/*}
+	release=${image_package##*/linux-image-}
+	release=${release%%_*}
+	set -- "$package_dir"/linux-headers-"$release"_*_amd64.deb
+	[ "$#" -eq 1 ] && [ -s "$1" ] || {
+		echo "expected headers package for kernel $release in $package_dir" >&2
+		return 1
+	}
+	btf="$package_dir/vmlinux-$release.btf"
+	config="$package_dir/config-$release"
+	[ -s "$btf" ] && [ -s "$config" ] || {
+		echo "kernel CI artifact lacks BTF or config for $release" >&2
+		return 1
+	}
+	install_root="$PWD/build/kernel-ci-extract"
+	rm -rf "$install_root"
+	mkdir -p "$install_root" || return 1
+	dpkg-deb -x "$image_package" "$install_root" || return 1
+	dpkg-deb -x "$1" "$install_root" || return 1
+	image="$install_root/boot/vmlinuz-$release"
+	modules="$install_root/lib/modules/$release"
+	cp "$btf" "$install_root/boot/btf-$release" || return 1
+	cp "$config" "$install_root/boot/config-$release" || return 1
+	[ -s "$image" ] && [ -d "$modules" ] || {
+		echo "kernel packages did not contain image and modules for $release" >&2
+		return 1
+	}
+	validate_lvh_kernel "$install_root" || return 1
+	stage_lvh_kernel
+}
+
 build_test_kernel() {
 	# A restored kernel is older than the checkout of the script that
 	# built it.
@@ -207,7 +246,9 @@ setup() {
 	sudo udevadm control --reload-rules
 	sudo udevadm trigger --name-match=kvm
 
-	if [ -n "${LVH_KERNEL_ARTIFACT_DIR:-}" ] &&
+	if [ -n "${KERNEL_CI_ARTIFACT_DIR:-}" ]; then
+		stage_kernel_ci_artifact "$KERNEL_CI_ARTIFACT_DIR" || exit 1
+	elif [ -n "${LVH_KERNEL_ARTIFACT_DIR:-}" ] &&
 		validate_lvh_kernel "$LVH_KERNEL_ARTIFACT_DIR"; then
 		stage_lvh_kernel || exit 1
 	else
