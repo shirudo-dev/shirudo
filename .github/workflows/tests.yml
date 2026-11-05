@@ -17,25 +17,9 @@ concurrency:
 
 jobs:
   tests:
-    name: ${{ matrix.name }}
+    name: CI tests
     runs-on: ubuntu-latest
     timeout-minutes: 150
-
-    # One check per tier, so that a failure names its tier. They run one
-    # after the other: on a cache miss the first builds the kernel and
-    # the images and saves them for the next, and every tier runs even
-    # when one before it failed.
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        include:
-          - suite: unit
-            name: unit tests
-          - suite: functional
-            name: functional tests
-          - suite: end2end
-            name: end-to-end tests
 
     steps:
       - name: Check out repository
@@ -71,8 +55,49 @@ jobs:
       - name: Prepare the runner as the VM host
         run: .github/scripts/tests.sh setup
 
-      - name: Run the ${{ matrix.name }}
-        run: .github/scripts/tests.sh run ${{ matrix.suite }}
+      - name: Run unit tests
+        id: unit
+        run: .github/scripts/tests.sh run unit
+
+      - name: Upload unit guest logs
+        if: always() && steps.unit.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: guest-logs-unit
+          path: |
+            build/test-vm/vms/*/result
+            build/test-vm/vms/*/console.log
+          if-no-files-found: ignore
+
+      - name: Run functional tests
+        id: functional
+        if: ${{ !cancelled() }}
+        run: .github/scripts/tests.sh run functional
+
+      - name: Upload functional guest logs
+        if: always() && steps.functional.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: guest-logs-functional
+          path: |
+            build/test-vm/vms/*/result
+            build/test-vm/vms/*/console.log
+          if-no-files-found: ignore
+
+      - name: Run end-to-end tests
+        id: end2end
+        if: ${{ !cancelled() }}
+        run: .github/scripts/tests.sh run end2end
+
+      - name: Upload end-to-end guest logs
+        if: always() && steps.end2end.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: guest-logs-end2end
+          path: |
+            build/test-vm/vms/*/result
+            build/test-vm/vms/*/console.log
+          if-no-files-found: ignore
 
       # Each part is saved once it is complete, even when a later step
       # fails, so that the next run does not build it again.
@@ -99,13 +124,3 @@ jobs:
         with:
           path: build/test-vm/cache
           key: ${{ steps.images.outputs.cache-primary-key }}
-
-      - name: Upload the guest logs
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: guest-logs-${{ matrix.suite }}
-          path: |
-            build/test-vm/vms/*/result
-            build/test-vm/vms/*/console.log
-          if-no-files-found: ignore
