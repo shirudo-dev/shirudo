@@ -195,6 +195,14 @@ uses the binaries in the checkout root, so build them first:
 A target test runs only in a VM, with its family or by hand in an
 interactive VM, see :ref:`testing-by-hand`.
 
+CI builds with both GCC and Clang using ``-Werror``.
+Use ``-B`` when switching ``CC`` to avoid reusing objects:
+
+.. code-block:: console
+
+   $ make -B -C testing unit/<suite> CC=<gcc>
+   $ make -B -C testing unit/<suite> CC=<clang>
+
 Read the results
 ~~~~~~~~~~~~~~~~
 

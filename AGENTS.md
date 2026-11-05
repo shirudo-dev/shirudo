@@ -499,6 +499,8 @@ one usually still compiles and passes tests.
   objects, vendored libbpf, test helpers and fuzz targets included;
   fix the warning rather than silence it. `WERROR=0` is for a compiler
   newer than the tree, while its new warnings get fixed.
+- Validate C changes, test code included, with both GCC and Clang.
+  Use `make -B` when switching `CC` to avoid reusing objects.
 - `make tests` (or `make -C testing`) runs every test, and is what CI runs;
   `make -C testing unit`, `ci-checks`, `functional` or `end2end` runs one
   tier, `unit/<suite>` or `functional/<family>` part of one. The target
