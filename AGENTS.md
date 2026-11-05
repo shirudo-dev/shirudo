@@ -57,6 +57,7 @@ remote-management or transport layers.
 | `Documentation/upatches/` | Authoring and shipping upatches: attach kinds, maps and serializers, decoders, the Beefile, publishing, debugging a failed load. |
 | `Documentation/reference/` | Every command (`reference/cli/`), the formats and settings (`reference/formats/`, including the `.upatch` container), failure categories and exit status, files, units, environment variables, the cheat sheet. |
 | `Documentation/contribute/` | Developer guide, test tiers and the test VM (read `testing.rst` before adding or moving a test), test coverage, the kernel coding style, commits and sign-off (read `contributing.rst` before crafting a commit), and the documentation style guide `writing-docs.rst`. |
+| `.agents/skills/` | Skills for coding agents in the `SKILL.md` format of agentskills.io, linked from `.claude/skills` for tools that look there: `test-vm` boots, reuses and stops the test VM. |
 
 The kernel side of the signing design is the kernel's own
 `Documentation/bpf/signing.rst`; `bpf_prog_verify_signature()` runs
