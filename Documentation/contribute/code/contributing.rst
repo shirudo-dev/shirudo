@@ -91,7 +91,7 @@ about which lines moved. The diff shows that.
 Sign your work
 --------------
 
-Every commit carries a ``Signed-off-by:`` line, with no exception. The
+Every human-authored commit carries a ``Signed-off-by:`` line. The
 sign-off certifies the Developer's Certificate of Origin, reproduced
 here from the kernel's ``submitting-patches.rst``::
 
@@ -129,8 +129,12 @@ using a known identity. Anonymous or pseudonymous sign-offs are not
 accepted, and neither is an address nobody answers at: a GitHub noreply
 address, the address a coding agent writes with, or anything called
 ``[bot]`` is rejected as the author, in a ``Signed-off-by:`` and in a
-``Co-developed-by:``. ``git commit -s`` and ``git revert -s`` add the
-line for you.
+``Co-developed-by:``. The sole exception is Dependabot's numbered
+GitHub noreply author identity (the numeric prefix may vary) and
+``dependabot[bot] <support@github.com>`` sign-off, which Dependabot
+uses on generated commits. This is an automation exception, not a human
+certification of the DCO.
+``git commit -s`` and ``git revert -s`` add the line for you.
 
 A commit without a valid sign-off is not merged. A maintainer who
 applies a commit adds their own sign-off after the author's, so the
@@ -146,7 +150,9 @@ merge commits:
 - The commit has a ``Signed-off-by:`` from its author, spelled exactly
   like that and in the form ``Name <address>``.
 - No author, sign-off or ``Co-developed-by:`` names an identity that
-  contains ``noreply``, ``no-reply`` or ``[bot]``, in any case.
+  contains ``noreply``, ``no-reply`` or ``[bot]``, in any case, except
+  for Dependabot's numbered GitHub noreply author identity and
+  ``dependabot[bot] <support@github.com>`` sign-off combination.
 
 CI runs it on every pull request and every push to ``main``, in the
 ``DCO`` workflow.

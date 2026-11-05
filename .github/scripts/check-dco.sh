@@ -7,8 +7,8 @@
 # one-line subject, a body that says more than its tags, and the
 # Signed-off-by of its author, the Developer's Certificate of Origin, from
 # an identity a person answers at: a noreply address or a bot is no
-# identity, as author, signer or co-developer. Merge commits are not
-# signed in the kernel's process and are skipped.
+# identity, as author, signer or co-developer, except for Dependabot's
+# canonical author and sign-off identity. Merge commits are skipped.
 #
 #   .github/scripts/check-dco.sh [<rev-list arguments>]
 #
@@ -47,6 +47,15 @@ impersonal() {
 	return 1
 }
 
+dependabot_identity() {
+	printf '%s\n' "$(lower "$1")" |
+		grep -Eq '^dependabot\[bot\] <[0-9]+\+dependabot\[bot\]@users\.noreply\.github\.com>$'
+}
+
+dependabot_signoff() {
+	[ "$(lower "$1")" = 'dependabot[bot] <support@github.com>' ]
+}
+
 commits=$(git rev-list --no-merges "$@")
 
 for commit in $commits; do
@@ -58,7 +67,7 @@ for commit in $commits; do
 	signoffs=$(printf '%s\n' "$message" | grep -i '^signed-off-by:' || :)
 	codevs=$(printf '%s\n' "$message" | grep -i '^co-developed-by:' || :)
 
-	if impersonal "$author"; then
+	if impersonal "$author" && ! dependabot_identity "$author"; then
 		report "$id: the author is a noreply or bot identity, not a person: $author"
 		bad=$((bad + 1))
 		continue
@@ -97,7 +106,8 @@ for commit in $commits; do
 	while IFS= read -r line; do
 		value=$(printf '%s' "$line" |
 			sed 's/^[Ss][Ii][Gg][Nn][Ee][Dd]-[Oo][Ff][Ff]-[Bb][Yy]:[[:space:]]*//; s/[[:space:]]*$//')
-		if [ "$(lower "$value")" = "$(lower "$author")" ]; then
+		if [ "$(lower "$value")" = "$(lower "$author")" ] ||
+		   { dependabot_identity "$author" && dependabot_signoff "$value"; }; then
 			by_author=1
 		fi
 		[ -z "$problem" ] || continue
@@ -114,7 +124,8 @@ for commit in $commits; do
 		if ! printf '%s\n' "$value" |
 		   grep -Eq '^[^<>]*[^<>[:space:]][^<>]* <[^<>@[:space:]]+@[^<>@[:space:]]+>$'; then
 			problem="malformed sign-off, expected 'Name <email>', found: $line"
-		elif impersonal "$value"; then
+		elif impersonal "$value" &&
+		     { ! dependabot_identity "$author" || ! dependabot_signoff "$value"; }; then
 			problem="a noreply or bot identity cannot certify the DCO: $line"
 		fi
 	done <<EOT

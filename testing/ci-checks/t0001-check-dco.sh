@@ -141,6 +141,28 @@ test_expect_success 'a range reports every failing commit once' '
 	grep -q "9 of 12 commits fail" "$W/err"
 '
 
+test_expect_success 'Dependabot author and sign-off are accepted' '
+	commit "a: Dependabot update
+
+Why the change is made.
+
+Signed-off-by: dependabot[bot] <support@github.com>" \
+		--author="dependabot[bot] <123456789+dependabot[bot]@users.noreply.github.com>" &&
+	check &&
+	grep -q "DCO: 1 commits checked" "$W/out"
+'
+
+test_expect_success 'Dependabot cannot sign a human-authored commit' '
+	commit "a: bot sign-off
+
+Why the change is made.
+
+Signed-off-by: Random J Developer <random@developer.example.org>
+Signed-off-by: dependabot[bot] <support@github.com>" &&
+	! check &&
+	grep -q "cannot certify the DCO: Signed-off-by: dependabot\[bot\]" "$W/err"
+'
+
 test_expect_success 'merge commits are skipped' '
 	base=$(git -C "$R" rev-parse HEAD) &&
 	git -C "$R" checkout -q -b side &&
