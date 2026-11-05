@@ -486,6 +486,11 @@ signed config image.
        0x1 to exec 0x2, and denies 0x1 and socket policy B from execing
        unlabeled files; socket-storage bits allow 127.0.0.1 for policy A
        and deny it for B; final evidence includes the loaded policy upatch
+   * - ``t9107-ksock-dummy``
+     - A signed syscall program creates and connects a kernel UDP socket,
+       sends a fixed datagram to the VM host and releases it; signed
+       unload removes its pin. The host receiver checks the exact payload
+       and fails the end-to-end run if no valid datagram arrives
 
 Unit suites and fuzz targets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

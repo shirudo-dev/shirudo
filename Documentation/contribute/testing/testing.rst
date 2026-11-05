@@ -135,7 +135,7 @@ A shell test is named ``t<F><K><NN>-<what>.sh``:
    * - 9
      - ``end2end/``
      - The ``kernel-obs`` package against real kernel activity and the
-       whole delivery path
+       whole delivery path, plus ksock UDP delivery to the VM host
 
 A test you add takes the next free number of its family and kind. A
 number is never reused for another test. A file under :src:`testing/` that
@@ -547,6 +547,10 @@ ClickHouse log and sum metric tables to check that both collector exports
 hold the same data. The comparison uses event times relative to each
 map's interval start and ignores the metric export time, which the two
 decoder calls sample independently.
+
+``t9107`` loads and unloads the signed ksock fixture. A host receiver on
+``127.0.0.1:19090`` checks the exact datagram independently of load success.
+The target kernel must provide the ksock kfuncs.
 
 .. code-block:: console
 

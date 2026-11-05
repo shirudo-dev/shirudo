@@ -1,0 +1,8 @@
+[package]
+name = "ksock-dummy"
+description = "Send a dummy UDP datagram from a signed BPF program"
+license = "GPL-2.0 OR BSD-2-Clause"
+authors = ["Authors of shirudo"]
+
+[[upatches]]
+source = "ksock-dummy.bpf.c"

@@ -658,6 +658,26 @@ EOF
 	)
 }
 
+build_ksock_fixture()
+{
+	local keys_dir="$FIXTURE_WORK/trusted"
+	local payload
+
+	"$REPO_ROOT/tools/shirudo-build/shirudo-build" \
+		"$REPO_ROOT/upatches/ksock-dummy/ksock-dummy.bpf.c" \
+		-o "$TMP_DIR/fixtures/ksock-dummy.upatch" \
+		--name ksock-dummy --vmlinux "$REPO_ROOT/vendor/linux/vmlinux.h" \
+		--extra-cflags "-I$REPO_ROOT/vendor/libbpf" \
+		--key "$keys_dir/signing_key.pem" --cert "$keys_dir/cert.der"
+	payload=$("$REPO_ROOT/shirudo" upatch info \
+		"$TMP_DIR/fixtures/ksock-dummy.upatch" --json |
+		python3 -c 'import json, sys; print(json.load(sys.stdin)["payload_sha256"])')
+	"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload \
+		ksock-dummy --payload-sha256 "$payload" \
+		-o "$TMP_DIR/fixtures/ksock-dummy.unload.upatch" \
+		--key "$keys_dir/signing_key.pem" --cert "$keys_dir/cert.der"
+}
+
 build_policy_labels_fixture()
 {
 	local source_dir="$FIXTURE_WORK/policy-labels"
@@ -743,6 +763,7 @@ queue_fixture build_fixture basic.bpf.c shirudo-test-own-keyring "$FIXTURE_WORK/
 queue_fixture build_policy_labels_fixture
 queue_fixture build_policy_exec_graph_fixture
 queue_fixture build_obs_fixture "$FIXTURE_WORK/trusted"
+queue_fixture build_ksock_fixture
 wait_fixture_jobs
 
 basic_payload="$($REPO_ROOT/shirudo upatch info \

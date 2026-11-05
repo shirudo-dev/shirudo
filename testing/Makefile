@@ -144,7 +144,8 @@ TEST_VM_BUNDLE_SOURCES := $(sort $(wildcard \
 	$(ROOT)/testing/fixtures/decoders/* \
 	$(ROOT)/upatches/kernel-obs/*.c $(ROOT)/upatches/kernel-obs/*.h $(ROOT)/upatches/kernel-obs/*.list \
 		$(ROOT)/upatches/kernel-obs/*.py $(ROOT)/upatches/kernel-obs/Beefile \
-	$(ROOT)/upatches/kernel-obs/decoders/*))
+	$(ROOT)/upatches/kernel-obs/decoders/* \
+	$(ROOT)/upatches/ksock-dummy/*.c))
 # The kernel build replaces versioned package files; depend on its stable stamp.
 TEST_VM_BUNDLE_ARTIFACTS := $(VM_KERNEL_STAMP)
 TEST_VM_BUNDLE_INPUTS := $(sort \

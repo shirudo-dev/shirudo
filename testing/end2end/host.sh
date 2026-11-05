@@ -27,11 +27,17 @@ VM_NAME=${VM_NAME:-end2end-$$}
 export VM_NAME
 RESULT=$REPO/build/test-vm/vms/$VM_NAME-end2end/result/end2end
 POLICY_FIXTURE=$TEST_VM_HOST_BUNDLE/fixtures/shirudo-test-policy-exec-graph.upatch
+KSOCK_PID=
 
 say() { printf 'end2end: %s\n' "$*"; }
 die() { printf 'end2end: %s\n' "$*" >&2; exit 1; }
 
 down() {
+	if [ -n "$KSOCK_PID" ]; then
+		kill "$KSOCK_PID" 2>/dev/null || true
+		wait "$KSOCK_PID" 2>/dev/null || true
+		KSOCK_PID=
+	fi
 	docker logs shirudo-end2end-collector >"$W/collector.log" 2>&1 || true
 	docker logs shirudo-end2end-clickhouse >"$W/clickhouse.log" 2>&1 || true
 	docker rm -f shirudo-end2end-registry shirudo-end2end-collector \
@@ -134,8 +140,37 @@ tar -xzf "$BEE" -C "$W/pkg"
 	python3 -c 'import json, sys; print(json.load(sys.stdin)["payload_sha256"])' \
 	>"$W/policy-payload"
 
+say "a host UDP receiver for the signed ksock sender"
+python3 "$REPO/testing/end2end/ksock-receiver.py" \
+	"$W/ksock-ready" "$W/ksock-received" >"$W/ksock.log" 2>&1 &
+KSOCK_PID=$!
+i=0
+while [ ! -s "$W/ksock-ready" ]; do
+	i=$((i + 1))
+	if [ "$i" -ge 50 ]; then
+		cat "$W/ksock.log" >&2
+		die "the ksock UDP receiver did not bind"
+	fi
+	sleep 0.1
+done
+
 say "the target, in $VM_NAME-end2end"
 "$@"
+
+say "the host received the datagram sent by the signed ksock upatch"
+i=0
+while [ ! -s "$W/ksock-received" ]; do
+	i=$((i + 1))
+	if [ "$i" -ge 50 ]; then
+		cat "$W/ksock.log" >&2
+		die "the host received no valid ksock datagram"
+	fi
+	sleep 0.1
+done
+wait "$KSOCK_PID" || die "the ksock UDP receiver failed"
+KSOCK_PID=
+printf 'shirudo ksock dummy\n' | cmp - "$W/ksock-received" ||
+	die "the ksock payload differs"
 
 say "the evidence verifies and records what was published"
 [ -s "$RESULT/evidence.json" ] || die "the target left no evidence in $RESULT"
