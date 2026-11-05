@@ -363,8 +363,9 @@ one usually still compiles and passes tests.
   pattern as a litmus test and run it with blitmus
   (https://github.com/puranjaymohan/blitmus) on x86-64, arm64 and
   riscv64: a pass on x86-64 says little about the other two. It covers
-  `READ_ONCE()`, `WRITE_ONCE()`, acquire, release and the BPF atomics,
-  not `bpf_spin_lock()` or RCU.
+  `READ_ONCE()`, `WRITE_ONCE()`, acquire, release, full barriers and the
+  add, exchange and compare-and-exchange atomics, not the or, and and
+  xor atomics, `bpf_spin_lock()` or RCU.
   `Documentation/upatches/write/memory-consistency/blitmus.rst` shows how.
 - **Write upatch BPF code for runs that interleave, and apply each fix
   only under the preemption model and program types its hazard needs**,
