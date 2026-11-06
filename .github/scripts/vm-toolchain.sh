@@ -5,7 +5,7 @@
 # .github/scripts/vm-toolchain.sh -- prepare the LVH guest a workflow builds
 # in, or the runner itself: check that the kernel the BPF objects are
 # built for takes signed BPF, install clang 23 with install-clang.sh and the
-# build dependencies, and build an OpenSSL 3.5 toolchain, since the
+# build dependencies, and build or reuse an OpenSSL 3.5 toolchain, since the
 # distribution's predates ML-DSA. The
 # environment the build then needs is written to build/vm-toolchain.env
 # for the caller to source.
@@ -23,9 +23,24 @@ set -eu
 
 OPENSSL_VERSION=3.5.9
 OPENSSL_SHA256=603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a
-OPENSSL_PREFIX=/tmp/shirudo-openssl
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
+OPENSSL_PREFIX=$root/build/host-openssl
+OPENSSL_STAMP=$OPENSSL_PREFIX/.shirudo-openssl-built
+
+openssl_ready() {
+	[ -f "$OPENSSL_STAMP" ] &&
+		[ -x "$OPENSSL_PREFIX/bin/openssl" ] &&
+		[ -s "$OPENSSL_PREFIX/lib/libcrypto.so.3" ] &&
+		[ -s "$OPENSSL_PREFIX/lib/libssl.so.3" ] || return 1
+
+	version=$(LD_LIBRARY_PATH="$OPENSSL_PREFIX/lib" \
+		"$OPENSSL_PREFIX/bin/openssl" version -v 2>/dev/null) || return 1
+	case "$version" in
+	"OpenSSL $OPENSSL_VERSION"|"OpenSSL $OPENSSL_VERSION "*) return 0 ;;
+	esac
+	return 1
+}
 
 btf=${BPF_VMLINUX_BTF:-/sys/kernel/btf/vmlinux}
 grep -aq 'signature_size' "$btf" || {
@@ -55,17 +70,26 @@ apt-get install -y --no-install-recommends \
 # The checkout is mounted from the host under another owner.
 git config --global --add safe.directory "$root"
 
-tarball=openssl-$OPENSSL_VERSION.tar.gz
-curl -fsSL --retry 3 -o "/tmp/$tarball" \
-	"https://github.com/openssl/openssl/releases/download/openssl-$OPENSSL_VERSION/$tarball"
-printf '%s  /tmp/%s\n' "$OPENSSL_SHA256" "$tarball" | sha256sum -c --quiet
-tar -C /tmp -xf "/tmp/$tarball"
-cd "/tmp/openssl-$OPENSSL_VERSION"
-./Configure --prefix="$OPENSSL_PREFIX" --openssldir=/etc/ssl --libdir=lib \
-	no-docs no-tests
-make -j"$(nproc)"
-make install_sw
-cd "$root"
+if ! openssl_ready; then
+	rm -rf "$OPENSSL_PREFIX"
+	tarball=openssl-$OPENSSL_VERSION.tar.gz
+	curl -fsSL --retry 3 -o "/tmp/$tarball" \
+		"https://github.com/openssl/openssl/releases/download/openssl-$OPENSSL_VERSION/$tarball"
+	printf '%s  /tmp/%s\n' "$OPENSSL_SHA256" "$tarball" | sha256sum -c --quiet
+	tar -C /tmp -xf "/tmp/$tarball"
+	cd "/tmp/openssl-$OPENSSL_VERSION"
+	./Configure --prefix="$OPENSSL_PREFIX" --openssldir=/etc/ssl --libdir=lib \
+		no-docs no-tests
+	make -j"$(nproc)"
+	make install_sw
+	cd "$root"
+	LD_LIBRARY_PATH="$OPENSSL_PREFIX/lib" \
+		"$OPENSSL_PREFIX/bin/openssl" version -v | \
+		grep -F "OpenSSL $OPENSSL_VERSION" >/dev/null
+	touch "$OPENSSL_STAMP"
+else
+	echo "using cached OpenSSL $OPENSSL_VERSION from $OPENSSL_PREFIX"
+fi
 
 mkdir -p build
 cat >build/vm-toolchain.env <<EOT

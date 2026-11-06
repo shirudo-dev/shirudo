@@ -64,6 +64,13 @@ jobs:
           path: build/target-deps
           key: target-deps-${{ hashFiles('Makefile.target-deps') }}
 
+      - name: Restore the host OpenSSL toolchain
+        id: host-openssl
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/host-openssl
+          key: host-openssl-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/vm-toolchain.sh') }}
+
       - name: Restore the VM images
         id: images
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -129,6 +136,13 @@ jobs:
         with:
           path: build/target-deps
           key: ${{ steps.target-deps.outputs.cache-primary-key }}
+
+      - name: Save the host OpenSSL toolchain
+        if: always() && steps.host-openssl.outputs.cache-hit != 'true' && hashFiles('build/host-openssl/.shirudo-openssl-built') != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/host-openssl
+          key: ${{ steps.host-openssl.outputs.cache-primary-key }}
 
       # hashFiles reads every byte it matches and gives up after two
       # minutes, too short for an image; the key file beside one is
