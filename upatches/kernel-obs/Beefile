@@ -19,6 +19,9 @@ input = "watch.list"
 generator = ["python3", "gen_watch_rodata.py"]
 update = ["python3", "gen_watch_rodata.py"]
 
+[[upatches]]
+source = "userns-unshare-counter.bpf.c"
+
 [[files]]
 source = "gen_watch_rodata.py"
 target = "gen_watch_rodata.py"

@@ -1,10 +1,13 @@
 # kernel-obs
 
-The `kernel-obs` package installs the `kernel-obs` upatch: host
+The `kernel-obs` package installs the `kernel-obs` upatch and the
+`userns-unshare-counter` upatch. `kernel-obs` provides host
 observability for executed programs, network peers and volumes,
 listeners, DNS answers, watched destinations, privilege transitions
 and access to credential and persistence files. Every hook observes;
-nothing in this package enforces.
+nothing in this package enforces. `userns-unshare-counter` counts calls
+to `unshare()` that request a new user namespace; it does not block or
+change them. Its `userns_unshare_calls` per-CPU map holds the count.
 
 Each table lives in one BPF arena and holds one export interval: the
 export flips to a fresh buffer, drains the previous one and clears it,
@@ -45,6 +48,10 @@ sudo shirudo upatch list
 `shirudo bpm info "$PACKAGE"` prints this document without installing.
 
 ## Tables
+
+To inspect the unshare counter, use `shirudo upatch map
+userns-unshare-counter userns_unshare_calls`. Running `unshare -U true`
+triggers the traced path.
 
 | Map | Key | Records |
 | --- | --- | --- |
