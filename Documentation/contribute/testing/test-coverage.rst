@@ -343,7 +343,8 @@ signed config image.
    * - ``t6125-tpm-identity``
      - A substituted TPM device is refused by its attestation key name
    * - ``t6126-kexec``
-     - ``kexec_load`` and ``kexec_file_load``
+     - ``kexec_file_load`` and, where available, ``kexec_load`` are
+       refused and counted
    * - ``t6127-proc-substitution``
      - Config read through a substituted ``/proc``
    * - ``t6128-register-lock``
