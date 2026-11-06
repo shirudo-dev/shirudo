@@ -36,7 +36,7 @@ jobs:
       # the host mount because the guest disk is small.
       - name: Build under cov-build in LVH VM and upload the result
         if: env.COVERITY_SCAN_TOKEN != ''
-        uses: cilium/little-vm-helper@f86d344aca812dda5aef167867a9a0a90ca6cca5 # v0.0.31
+        uses: cilium/little-vm-helper@c8b0bfbae3bdda7bc69fb9cd370e4b74ce84986d # v0.0.33
         with:
           test-name: shirudo-coverity
           image: kind

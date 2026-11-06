@@ -30,7 +30,7 @@ jobs:
       # same LVH VM as the package build. The guest does not inherit the
       # runner's environment; GITHUB_ACTIONS is set for the annotations.
       - name: Build every commit the pull request adds in LVH VM
-        uses: cilium/little-vm-helper@f86d344aca812dda5aef167867a9a0a90ca6cca5 # v0.0.31
+        uses: cilium/little-vm-helper@c8b0bfbae3bdda7bc69fb9cd370e4b74ce84986d # v0.0.33
         with:
           test-name: shirudo-build-commits
           image: kind

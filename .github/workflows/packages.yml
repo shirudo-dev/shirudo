@@ -48,7 +48,7 @@ jobs:
           key: lvh-target-deps-kind-bpf-next-20260603.072225-${{ hashFiles('.github/scripts/lvh-target-deps.sh') }}
 
       - name: Build installer tarballs and deb package in LVH VM
-        uses: cilium/little-vm-helper@f86d344aca812dda5aef167867a9a0a90ca6cca5 # v0.0.31
+        uses: cilium/little-vm-helper@c8b0bfbae3bdda7bc69fb9cd370e4b74ce84986d # v0.0.33
         with:
           test-name: shirudo-apt
           image: kind
@@ -199,7 +199,7 @@ jobs:
           key: lvh-target-deps-kind-bpf-next-20260603.072225-${{ hashFiles('.github/scripts/lvh-target-deps.sh') }}
 
       - name: Build the target RPM and BPF header in LVH
-        uses: cilium/little-vm-helper@f86d344aca812dda5aef167867a9a0a90ca6cca5 # v0.0.31
+        uses: cilium/little-vm-helper@c8b0bfbae3bdda7bc69fb9cd370e4b74ce84986d # v0.0.33
         with:
           test-name: shirudo-rpm-target
           image: kind

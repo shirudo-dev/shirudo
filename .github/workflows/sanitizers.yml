@@ -48,7 +48,7 @@ jobs:
       # capable bpf-next kernel, so the build runs in the same LVH VM as the
       # package build. The host-side suite itself needs no root, LSM or TPM.
       - name: Build with sanitizers and run the host-side suite in LVH VM
-        uses: cilium/little-vm-helper@f86d344aca812dda5aef167867a9a0a90ca6cca5 # v0.0.31
+        uses: cilium/little-vm-helper@c8b0bfbae3bdda7bc69fb9cd370e4b74ce84986d # v0.0.33
         with:
           test-name: shirudo-sanitizers-${{ matrix.compiler }}
           image: kind
@@ -127,7 +127,7 @@ jobs:
       # minute per target, the nightly run ten.
       - name: Fuzz the parsers of input from outside the host in LVH VM
         id: fuzz
-        uses: cilium/little-vm-helper@f86d344aca812dda5aef167867a9a0a90ca6cca5 # v0.0.31
+        uses: cilium/little-vm-helper@c8b0bfbae3bdda7bc69fb9cd370e4b74ce84986d # v0.0.33
         with:
           test-name: shirudo-libfuzzer
           image: kind

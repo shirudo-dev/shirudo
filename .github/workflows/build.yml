@@ -37,7 +37,7 @@ jobs:
       # The BPF objects need the BTF of a signed-BPF capable bpf-next
       # kernel, so the build runs in the same LVH VM as the package build.
       - name: Build with ${{ matrix.cc }} and run the unit tests in LVH VM
-        uses: cilium/little-vm-helper@f86d344aca812dda5aef167867a9a0a90ca6cca5 # v0.0.31
+        uses: cilium/little-vm-helper@c8b0bfbae3bdda7bc69fb9cd370e4b74ce84986d # v0.0.33
         with:
           test-name: shirudo-build-${{ matrix.cc }}
           image: kind
@@ -68,7 +68,7 @@ jobs:
       # The BTF of the bpf-next kernel the other builds run on, for the
       # builds that cannot boot it themselves.
       - name: Copy the kernel BTF out of the LVH VM
-        uses: cilium/little-vm-helper@f86d344aca812dda5aef167867a9a0a90ca6cca5 # v0.0.31
+        uses: cilium/little-vm-helper@c8b0bfbae3bdda7bc69fb9cd370e4b74ce84986d # v0.0.33
         with:
           test-name: shirudo-btf
           image: kind
