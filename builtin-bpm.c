@@ -341,9 +341,9 @@ static DIR *registries_opendir(void)
 static int source_index_repository_valid(const char *endpoint,
 					 const char *repository)
 {
+	struct bpm_oci_client c __cleanup(bpm_oci_client_clear) = {};
 	char raw[PATH_MAX], parsed[BPM_MAX_ENDPOINT];
 	const char *name = strrchr(repository, '/');
-	struct bpm_oci_client c = {};
 	int rc;
 
 	if (!name || name == repository ||
@@ -1677,7 +1677,7 @@ static int cmd_bpm_config(int argc, const char **argv)
 			return 2;
 		if (!key || cert_read_file(key, &cert) ||
 		    !bpm_name_ok(s.name) ||
-		    bpm_oci_parse_endpoint(s.endpoint, &(struct bpm_oci_client){}) ||
+		    bpm_oci_parse_endpoint(s.endpoint, &probe) ||
 		    source_index_repository_valid(s.endpoint,
 						  s.index_repository)) {
 			cert_free(&cert);
