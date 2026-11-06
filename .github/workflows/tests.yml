@@ -23,9 +23,21 @@ concurrency:
 
 jobs:
   tests:
-    name: CI tests
-    runs-on: ubuntu-latest
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: CI tests
+            runner: ubuntu-latest
+            vm: '1'
+          - name: CI host tests (arm64)
+            runner: ubuntu-24.04-arm
+            vm: '0'
+    env:
+      VM: ${{ matrix.vm }}
 
     steps:
       - name: Check out repository
@@ -58,6 +70,7 @@ jobs:
           path: build/kernel-ci-artifact
 
       - name: Restore the static target dependencies
+        if: matrix.vm == '1'
         id: target-deps
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -72,13 +85,14 @@ jobs:
           key: host-openssl-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/vm-toolchain.sh') }}
 
       - name: Restore the VM images
+        if: matrix.vm == '1'
         id: images
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/test-vm/cache
           key: test-vm-images-${{ hashFiles('testing/vm/runtime-packages', 'testing/vm/prepare-runtime.sh', 'testing/vm/build-bundle.sh', 'testing/vm/arch.sh') }}
 
-      - name: Prepare the runner as the VM host
+      - name: Prepare the test environment
         id: setup
         env:
           KERNEL_CI_ARTIFACT_DIR: ${{ format('{0}/build/kernel-ci-artifact', github.workspace) }}
@@ -115,7 +129,7 @@ jobs:
 
       - name: Run end-to-end tests
         id: end2end
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.vm == '1' }}
         run: .github/scripts/tests.sh run end2end
 
       - name: Upload end-to-end guest logs
@@ -131,7 +145,7 @@ jobs:
       # Save each expensive build once it is complete, even when a later
       # step fails, so the next run does not rebuild it.
       - name: Save the static target dependencies
-        if: always() && steps.target-deps.outputs.cache-hit != 'true' && hashFiles('build/target-deps/lib/libcrypto.a') != '' && hashFiles('build/target-deps/curl/lib/libcurl.a') != ''
+        if: always() && matrix.vm == '1' && steps.target-deps.outputs.cache-hit != 'true' && hashFiles('build/target-deps/lib/libcrypto.a') != '' && hashFiles('build/target-deps/curl/lib/libcurl.a') != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/target-deps
@@ -148,7 +162,7 @@ jobs:
       # minutes, too short for an image; the key file beside one is
       # written once the image is complete.
       - name: Save the VM images
-        if: always() && steps.images.outputs.cache-hit != 'true' && hashFiles('build/test-vm/cache/runtime/.*.key') != ''
+        if: always() && matrix.vm == '1' && steps.images.outputs.cache-hit != 'true' && hashFiles('build/test-vm/cache/runtime/.*.key') != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/test-vm/cache

@@ -485,6 +485,9 @@ the commit at ``HEAD`` alone without them.
        one part of it: ``unit`` runs the unit and ``ci-checks`` tests,
        ``functional`` and ``end2end`` the tier of that name. The ``CI
        suite`` workflow runs the three parts as checks of their own.
+       With ``VM=0``, setup uses the kernel CI artifact's BTF and installs
+       only host test dependencies. The arm64 job uses this to run unit,
+       ``ci-checks`` and host functional tests without target VMs.
        Meant for CI runners, which are discarded afterwards.
 
 ``check-style.sh`` fetches the kernel's ``checkpatch.pl`` at a pinned

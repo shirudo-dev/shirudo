@@ -9,6 +9,8 @@
 # unit, ci-checks, functional and end2end tests, each family of target tests
 # in a VM of its own, or one part of them: unit runs the unit and
 # ci-checks tests, functional and end2end the tier of that name.
+# With VM=0, setup installs only host test dependencies using the kernel
+# CI artifact's BTF, and run leaves out target VMs.
 #
 #   .github/scripts/tests.sh setup|run [unit|functional|end2end]
 #
@@ -46,7 +48,7 @@ restore_workspace_ownership() {
 finish() {
 	status=$?
 	restore_workspace_ownership || status=$?
-	[ "$status" -eq 0 ] || diagnose
+	[ "$status" -eq 0 ] || [ "${VM:-1}" = 0 ] || diagnose
 	exit "$status"
 }
 
@@ -200,15 +202,23 @@ stage_kernel_ci_artifact() {
 	package_dir=${image_package%/*}
 	release=${image_package##*/linux-image-}
 	release=${release%%_*}
+	btf="$package_dir/vmlinux-$release.btf"
+	[ -s "$btf" ] || {
+		echo "kernel CI artifact lacks BTF for $release" >&2
+		return 1
+	}
+	mkdir -p "$kernel" || return 1
+	cp "$btf" "$kernel/vmlinux.btf" || return 1
+	[ "${VM:-1}" != 0 ] || return 0
+
 	set -- "$package_dir"/linux-headers-"$release"_*_amd64.deb
 	[ "$#" -eq 1 ] && [ -s "$1" ] || {
 		echo "expected headers package for kernel $release in $package_dir" >&2
 		return 1
 	}
-	btf="$package_dir/vmlinux-$release.btf"
 	config="$package_dir/config-$release"
-	[ -s "$btf" ] && [ -s "$config" ] || {
-		echo "kernel CI artifact lacks BTF or config for $release" >&2
+	[ -s "$config" ] || {
+		echo "kernel CI artifact lacks config for $release" >&2
 		return 1
 	}
 	install_root="$PWD/build/kernel-ci-extract"
@@ -238,13 +248,9 @@ build_test_kernel() {
 }
 
 setup() {
-	sudo rm -rf /opt/ghc /usr/local/lib/android /usr/share/dotnet
-
-	# /dev/kvm belongs to root on the runner.
-	echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
-		sudo tee /etc/udev/rules.d/99-kvm.rules >/dev/null
-	sudo udevadm control --reload-rules
-	sudo udevadm trigger --name-match=kvm
+	if [ "${VM:-1}" != 0 ]; then
+		sudo rm -rf /opt/ghc /usr/local/lib/android /usr/share/dotnet
+	fi
 
 	if [ -n "${KERNEL_CI_ARTIFACT_DIR:-}" ]; then
 		stage_kernel_ci_artifact "$KERNEL_CI_ARTIFACT_DIR" || exit 1
@@ -259,32 +265,43 @@ setup() {
 		build_test_kernel
 	fi
 
+	set -- rpm coccinelle
+	if [ "${VM:-1}" != 0 ]; then
+		set -- "$@" autoconf autoconf-archive automake cloud-image-utils \
+			dracut-core file isc-dhcp-client libguestfs-tools libltdl-dev \
+			libtool libzstd-dev qemu-system-x86 qemu-utils swtpm \
+			swtpm-tools tpm2-tools
+	fi
 	mkdir -p build
 	sudo BPF_VMLINUX_BTF="$PWD/$kernel/vmlinux.btf" \
-		.github/scripts/vm-toolchain.sh \
-		autoconf autoconf-archive automake cloud-image-utils \
-		dracut-core file isc-dhcp-client libguestfs-tools libltdl-dev \
-		libtool libzstd-dev cryptsetup-bin e2fsprogs qemu-system-x86 qemu-utils swtpm \
-		swtpm-tools tpm2-tools coccinelle
+		.github/scripts/vm-toolchain.sh "$@"
 
-	# Ubuntu's dracut 060 looks for systemd-pcrphase, which systemd 255
-	# calls systemd-pcrextend, and so leaves out the PCR phase
-	# measurement shirudo's initrd needs.
-	if [ ! -e /usr/lib/systemd/systemd-pcrphase ]; then
-		sudo ln -s systemd-pcrextend /usr/lib/systemd/systemd-pcrphase
-	fi
+	if [ "${VM:-1}" != 0 ]; then
+		# /dev/kvm belongs to root on the runner.
+		echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+			sudo tee /etc/udev/rules.d/99-kvm.rules >/dev/null
+		sudo udevadm control --reload-rules
+		sudo udevadm trigger --name-match=kvm
 
-	# libguestfs networks the appliance through passt. Ubuntu's AppArmor
-	# profile for passt refuses the socket libguestfs asks for under
-	# XDG_RUNTIME_DIR, and without that profile Ubuntu's restriction of
-	# unprivileged user namespaces keeps passt from sandboxing itself.
-	# The runner is discarded after the job, so lift both.
-	apparmor=/sys/kernel/security/apparmor
-	if sudo grep -q '^passt ' "$apparmor/profiles" 2>/dev/null; then
-		printf passt | sudo tee "$apparmor/.remove" >/dev/null
-	fi
-	if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
-		sudo sysctl -q -w kernel.apparmor_restrict_unprivileged_userns=0
+		# Ubuntu's dracut 060 looks for systemd-pcrphase, which systemd 255
+		# calls systemd-pcrextend, and so leaves out the PCR phase
+		# measurement shirudo's initrd needs.
+		if [ ! -e /usr/lib/systemd/systemd-pcrphase ]; then
+			sudo ln -s systemd-pcrextend /usr/lib/systemd/systemd-pcrphase
+		fi
+
+		# libguestfs networks the appliance through passt. Ubuntu's AppArmor
+		# profile for passt refuses the socket libguestfs asks for under
+		# XDG_RUNTIME_DIR, and without that profile Ubuntu's restriction of
+		# unprivileged user namespaces keeps passt from sandboxing itself.
+		# The runner is discarded after the job, so lift both.
+		apparmor=/sys/kernel/security/apparmor
+		if sudo grep -q '^passt ' "$apparmor/profiles" 2>/dev/null; then
+			printf passt | sudo tee "$apparmor/.remove" >/dev/null
+		fi
+		if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+			sudo sysctl -q -w kernel.apparmor_restrict_unprivileged_userns=0
+		fi
 	fi
 }
 
@@ -318,6 +335,8 @@ fi
 # shellcheck source=/dev/null
 . build/vm-toolchain.env
 
+export BPF_VMLINUX_BTF="$PWD/$kernel/vmlinux.btf"
+
 # A guest that boots runs the suite in minutes; one that hangs, in
 # emergency mode for instance, would otherwise hold the job for an hour.
 export TEST_VM_TIMEOUT=900
@@ -334,4 +353,4 @@ sudo prlimit --pid "$$" --memlock=unlimited:unlimited
 # secure_path, and the OpenSSL 3.5 build needs both: for the openssl the
 # config probes run and for every shirudo binary the tests run here.
 # shellcheck disable=SC2086
-sudo -E env PATH="$PATH" LD_LIBRARY_PATH="$LD_LIBRARY_PATH" make $goals
+sudo -E env PATH="$PATH" LD_LIBRARY_PATH="$LD_LIBRARY_PATH" make VM="${VM:-1}" $goals

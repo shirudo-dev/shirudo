@@ -861,9 +861,11 @@ Platforms
   NitroTPM.
 - Architectures. CI builds and runs the unit tests on arm64 and on
   riscv64, under QEMU user emulation, with the BPF objects built from
-  the BTF of the x86-64 bpf-next kernel. Every other tier runs on
-  x86-64 only. The test VM boots arm64 too, and ``t1007`` checks its
-  arm64 settings without booting. riscv64 has no test VM.
+  the BTF of the x86-64 bpf-next kernel. The CI suite also runs unit,
+  ``ci-checks`` and host functional tests on arm64 with ``VM=0``.
+  Target VM tests, end-to-end tests and fuzzing run on x86-64 only. The
+  test VM boots arm64 too, and ``t1007`` checks its arm64 settings without
+  booting. riscv64 has no test VM.
 - Kernels. CI boots bpf-next only. ``KERNEL=`` boots a release kernel
   by hand.
 
