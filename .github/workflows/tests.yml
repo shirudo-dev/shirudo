@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       kernel_run_id:
-        description: Optional run ID; defaults to the latest successful kernel main run
+        description: Optional override; defaults to kernel run 42037357652
         required: false
         type: string
 
@@ -43,18 +43,7 @@ jobs:
             esac
             run_id="$REQUESTED_RUN_ID"
           else
-            run_id=$(gh api \
-              'repos/shirudo-dev/kernel/actions/artifacts?name=kernel-packages-x86-64-ci&per_page=100' \
-              --jq '
-                [.artifacts[] | select(.expired == false and .workflow_run.head_branch == "main")]
-                | sort_by(.created_at)
-                | last
-                | .workflow_run.id
-              ')
-            if [ -z "$run_id" ] || [ "$run_id" = null ]; then
-              echo "no kernel CI package artifact found on main" >&2
-              exit 1
-            fi
+            run_id=42037357652
           fi
           echo "Using kernel package run $run_id"
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
