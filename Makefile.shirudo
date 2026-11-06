@@ -221,6 +221,7 @@ UTIL_SRCS := \
 	$(TLS_SRC) \
     util/loader.c \
     util/upatch.c \
+    util/xdp.c \
     util/measured.c \
     util/keyring.c \
     util/keys.c \
@@ -677,6 +678,7 @@ TEST_HELPERS := $(VERITY_TEST_HELPERS) \
                 testing/helper/test-upatch-serializer-pages \
                 testing/helper/test-signed-load \
                 testing/helper/test-upatch-link-lockdown \
+                testing/helper/test-xdp \
                 testing/helper/test-exec-churn \
 		testing/end2end/exec-paths \
 		testing/end2end/policy-exec
@@ -806,6 +808,10 @@ testing/helper/test-perf-attach: testing/helper/test-perf-attach.c
 testing/helper/test-upatch-link-lockdown: testing/helper/test-upatch-link-lockdown.c
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -I$(BPF_UAPI_INCLUDE) -o $@ $^
+
+testing/helper/test-xdp: testing/helper/test-xdp.c $(LIBBPF_A)
+	@printf '  CC      $@\n'
+	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(LIBELF_LIBS) $(ZLIB_LIBS)
 
 # Needs the vendored uapi bpf.h (excl_prog_hash / fd_array_cnt / keyring_id
 # are newer than a stock system header) and libcrypto for SHA-256.

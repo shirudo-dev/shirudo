@@ -62,6 +62,7 @@
 #define LSM_LINK_PIN		BPFFS_DIR "/lsm_link"
 #define LSM_PROG_LOAD_LINK_PIN	BPFFS_DIR "/bpf2_bpf_prog_load_link"
 #define LSM_BPF_MAP_LINK_PIN	BPFFS_DIR "/bpf2_bpf_map_link"
+#define LSM_BPF_PROG_LINK_PIN	BPFFS_DIR "/bpf2_bpf_prog_link"
 #define SB_UMOUNT_LINK_PIN	BPFFS_DIR "/bpf2_sb_umount_link"
 #define MOVE_MOUNT_LINK_PIN	BPFFS_DIR "/bpf2_move_mount_link"
 #define SB_MOUNT_LINK_PIN	BPFFS_DIR "/bpf2_sb_mount_link"

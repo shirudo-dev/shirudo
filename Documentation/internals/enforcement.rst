@@ -133,8 +133,10 @@ Descriptors and pins
     such a task, read-only or writable. ``lsm/file_open`` refuses such a
     task the opening of anything but a directory in the private bpffs,
     since a pin opened as a file reads a map's contents; directories stay
-    listable. ``BPF_PROG_GET_FD_BY_ID`` and ``BPF_BTF_GET_FD_BY_ID`` stay
-    allowed. Root without runtime authority therefore cannot read
+    listable. ``BPF_PROG_GET_FD_BY_ID`` stays allowed for types other than
+    XDP. ``lsm/bpf_prog`` keeps XDP descriptors to runtime authority,
+    since netlink can attach them without passing through ``bpf()``.
+    ``BPF_BTF_GET_FD_BY_ID`` stays allowed. Root without authority cannot read
     shirudo's maps or hold one of its links open by pin or by id.
     ``lsm/file_ioctl`` refuses ``PERF_EVENT_IOC_SET_BPF``, which binds a
     program to a perf event without a ``bpf()`` command, to the same
@@ -211,7 +213,8 @@ order:
    the recorder notes the mount, and freeze that record.
 #. Load ``seal`` on the shared maps, freeze its scratch map, and attach
    its twenty-seven hooks, then ``mmap_file`` and ``file_mprotect``.
-#. Attach ``lsm/bpf_map``, then ``lsm/bpf_prog_load``, then ``lsm/bpf``.
+#. Attach ``lsm/bpf_map``, then ``lsm/bpf_prog``, then
+   ``lsm/bpf_prog_load``, then ``lsm/bpf``.
 
 ``init`` pins every link as it attaches it, before the next fallible
 step. A link that is not pinned detaches when ``init`` exits, and a
@@ -306,6 +309,12 @@ when the record it needs is missing.
      - Every map descriptor to a task without authority.
      - ``EACCES``
      - ``MapFdWrite`` (writable), ``ObjGet`` (read-only)
+     - Closed.
+   * - ``lsm/bpf_prog`` (``bpf2``)
+     - An XDP program descriptor to a task without authority, including
+       acquisition by program ID. Other program types stay allowed.
+     - ``EACCES``
+     - ``ObjGet``
      - Closed.
    * - ``lsm/file_open`` (``bpf2``)
      - Opening a non-directory inode of the private bpffs, through any
@@ -575,7 +584,8 @@ The hooks decide only what reaches them. These paths do not:
 - The ``kernel`` argument is true for every ``bpf()`` call through a
   kernel pointer, including BPF that kernel code loads with
   ``kern_sys_bpf()``, such as a light skeleton in a module.
-- ``BPF_PROG_GET_FD_BY_ID`` stays open. ``lsm/bpf`` and
+- ``BPF_PROG_GET_FD_BY_ID`` stays open except for XDP descriptors,
+  which ``lsm/bpf_prog`` guards. ``lsm/bpf`` and
   ``lsm/file_ioctl`` refuse the ``bpf()`` attach commands and the perf
   ioctl to tasks without authority; other kernel interfaces that take a
   program descriptor are not hooked here.

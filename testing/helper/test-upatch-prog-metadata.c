@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include <shirudo/misc.h>
+#include <shirudo/string.h>
 
 #include "upatch.h"
 
@@ -206,7 +207,7 @@ int main(int argc, char **argv)
 	const char *mode = "serializer";
 	int ret;
 
-	if (argc != 2 && argc != 3 && argc != 6)
+	if (argc != 2 && argc != 3 && argc != 4 && argc != 6)
 		return fail("usage: test-upatch-prog-metadata <file.upatch> [mode [path pattern count]]");
 	if (argc >= 3)
 		mode = argv[2];
@@ -235,11 +236,27 @@ int main(int argc, char **argv)
 		ret = expect_attach(&u,
 				    UPATCH_ATTACH_NETFILTER_IPV6_PRE_ROUTING,
 				    NULL, 0);
-	} else if (strcmp(mode, "uprobe-multi") == 0 && argc == 6) {
-		char *end = NULL;
-		__u64 count = strtoul(argv[5], &end, 10);
+	} else if (strcmp(mode, "xdp") == 0 && argc == 4) {
+		struct prog_spec *specs = NULL;
+		const void *attach;
+		__u32 len;
+		__u64 mask;
 
-		if (!end || *end || count > UINT32_MAX)
+		attach = upatch_signed_attach(&u, &len);
+		ret = parse_u64(argv[3], strlen(argv[3]), UPATCH_XDP_ALL, &mask);
+		if (!ret)
+			ret = prog_specs_parse(attach, len, u.hdr.nr_maps,
+					       u.hdr.nr_progs, &specs);
+		if (!ret) {
+			if (u.hdr.nr_progs != 1 || specs[0].kind != UPATCH_ATTACH_XDP ||
+			    specs[0].device_classes != mask)
+				ret = fail("XDP metadata mismatch");
+			prog_specs_free(specs, u.hdr.nr_progs);
+		}
+	} else if (strcmp(mode, "uprobe-multi") == 0 && argc == 6) {
+		__u64 count;
+
+		if (parse_u64(argv[5], strlen(argv[5]), UINT32_MAX, &count))
 			ret = fail("invalid expected uprobe offset count");
 		else
 			ret = expect_uprobe_multi(&u, argv[3], argv[4],

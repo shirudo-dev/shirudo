@@ -593,12 +593,13 @@ void prog_specs_free(struct prog_spec *specs, __u32 nr_progs)
 int prog_specs_parse(const void *metadata, __u32 metadata_len,
 		     __u32 nr_maps, __u32 nr_progs, struct prog_spec **out)
 {
+	__u32 magic, version, count, i, nr_uprobes = 0;
+	const struct upatch_prog_entry empty = {};
 	struct upatch_prog_metadata md;
 	struct prog_spec *specs = NULL;
 	const __u8 *cursor, *end;
-	size_t base_len;
-	__u32 magic, version, count, i, nr_uprobes = 0;
 	int ret = -EINVAL;
+	size_t base_len;
 
 	*out = NULL;
 	if (!metadata || metadata_len < sizeof(__u32))
@@ -686,6 +687,16 @@ int prog_specs_parse(const void *metadata, __u32 metadata_len,
 				goto out;
 			nr_uprobes++;
 			break;
+		case UPATCH_ATTACH_XDP:
+			spec->device_classes = le32_to_cpu(prog.xdp.device_classes);
+			if (!spec->device_classes ||
+			    (spec->device_classes & ~UPATCH_XDP_ALL) ||
+			    prog.xdp.reserved ||
+			    memcmp(prog.target, empty.target, sizeof(prog.target)) ||
+			    memcmp(prog.map, empty.map, sizeof(prog.map)))
+				goto out;
+			spec->kind = kind;
+			continue;
 		default:
 			goto out;
 		}

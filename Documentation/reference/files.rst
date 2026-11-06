@@ -327,7 +327,7 @@ by ``BPF_OBJ_GET`` (``ObjGet``). Directories stay listable.
    * - ``lsm_link``
      - Link of ``lsm/bpf``, the ``bpf()`` admission hook. Its presence
        makes the ``LsmAttached`` condition report ``OK``.
-   * - ``bpf2_bpf_map_link``, ``bpf2_bpf_prog_load_link``,
+   * - ``bpf2_bpf_map_link``, ``bpf2_bpf_prog_link``, ``bpf2_bpf_prog_load_link``,
        ``bpf2_inode_unlink_link``, ``bpf2_inode_setxattr_link``,
        ``bpf2_inode_removexattr_link``, ``bpf2_key_permission_link``,
        ``bpf2_tpm_command_link``
@@ -378,9 +378,11 @@ written as ``~d``.
    * - Pin
      - Content
    * - ``link``
-     - The link of the only attached program.
+     - The link of the only attached program, when the artifact has no XDP.
    * - ``link_<n>``
-     - The link of attached program ``<n>`` when there are several.
+     - Attachment ``<n>`` when there are several programs or the artifact
+       contains XDP. XDP can produce multiple links per program, ordered
+       by program and then ifindex; skipped devices consume no pin number.
    * - ``test``
      - A program with the test-run role.
    * - ``serializers/<map>``

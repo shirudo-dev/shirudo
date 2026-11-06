@@ -66,6 +66,10 @@ the link against the metadata and pins it.
      - netfilter
      - ``BPF_LINK_CREATE``, ``BPF_NETFILTER``, IPv6 pre-routing
      - ``CONFIG_NETFILTER``, ``CONFIG_NETFILTER_BPF_LINK``
+   * - ``xdp/<decimal-mask>``
+     - XDP
+     - ``BPF_LINK_CREATE``, ``BPF_XDP``, native driver mode
+     - native XDP support on selected devices
    * - ``syscall``, named ``shirudo_serialize__<map>``
      - syscall
      - not attached, run by ``shirudo upatch map``
@@ -83,6 +87,8 @@ Every attached program becomes one link pinned at
 ``/run/shirudo/bpffs/upatches/<name>/link`` when the upatch has one attach
 program, and at ``link_0``, ``link_1`` and so on, in the order of the
 object, when it has several. ``<name>`` has every ``.`` written as ``~d``.
+An upatch containing XDP always uses ``link_0``, ``link_1`` and so on,
+because one program can attach to several interfaces.
 
 fentry and fexit
 ----------------
@@ -235,6 +241,73 @@ defragmentation, so it sees fragments as they arrive. It receives a
 shirudo fixes the family, hook and priority. The section name carries
 none of them. A shield that needs another family or hook is written as a
 ``cgroup_skb`` or ``lsm`` program.
+
+XDP
+---
+
+``xdp/<decimal-mask>`` signs a device-class selection, rather than a
+device name or an ifindex. For example, ``SEC("xdp/3")`` selects network
+ports and virtual devices; ``SEC("xdp/27")`` selects all classes. The
+mask is mandatory, nonzero and contains only the bits below. Bare
+``xdp``, ``xdp.frags``, devmap and cpumap sections are refused.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 12 22 66
+
+   * - Bit
+     - Class
+     - Devices
+   * - 1
+     - Network-facing
+     - Hardware-backed NICs and physical devlink ports.
+   * - 2
+     - Virtual
+     - Software interfaces, host tap devices and devlink representors.
+   * - 8
+     - VM
+     - Guest adapters using virtio-net, vmxnet3, Hyper-V netvsc or Xen
+       netfront. Emulated hardware and passthrough NICs use their
+       hardware class.
+   * - 16
+     - Unknown
+     - Devices without sufficient classification evidence. This bit is
+       a catchall class, not a wildcard; 27 selects every class.
+
+Bit 4 is not a class, and a mask with it is refused. Loopback has no
+native XDP, so it has no class and no mask selects it. Every other
+interface has exactly one class. shirudo checks the driver names ``virtio_net``, ``vmxnet3``, ``hv_netvsc``,
+``xen-netfront`` and ``vif`` for VM adapters. Next it uses devlink port
+flavour: physical ports are network-facing; CPU, DSA, PCI PF, VF, SF
+and virtual ports are virtual; other flavours are unknown. Without a
+devlink port, ``netdevsim`` is virtual, a device with a hardware parent
+bus is network-facing, a device with a kernel software link kind is
+virtual, and the rest are unknown. Facts come from rtnetlink, devlink
+and ethtool, without interface-name or sysfs heuristics.
+
+At load and boot restore, shirudo snapshots interfaces in the initial
+network namespace, selects matching classes and attaches in increasing
+ifindex order. A veth pair gets one attachment: the endpoint in the
+initial namespace when its peer is elsewhere, or the lower ifindex when
+both ends are in that namespace. Peer namespace information prevents
+equal ifindexes in separate namespaces from being mistaken for a pair.
+Pairs entirely outside the initial namespace are excluded.
+
+Links use ``XDP_FLAGS_DRV_MODE``. Devices that refuse native XDP with
+``EOPNOTSUPP``, such as a bridge, are logged and skipped. Every XDP
+program must attach to at least one device, else the load fails with
+``attach_target_missing``. Other errors, including an occupied XDP
+attachment point or changed device scope, undo the load's links. Existing
+XDP programs are never replaced. Device classification and peer identity
+are rechecked around attachment, and the returned link's ifindex is
+checked before pinning.
+
+Discovery runs once per load or restore. New devices require reload;
+there is no background reconciliation. Removing a device can detach its
+XDP link while its pin remains. The signed artifact and TPM measurement
+cover the class policy, not a fixed device inventory.
+Boot restore requires a matching native-XDP interface to be present when
+``init`` restores the archive; otherwise initialization fails.
 
 Programs that attach nowhere
 ----------------------------

@@ -75,7 +75,8 @@ The binary embeds three BPF objects, compiled from :src:`bpf/` and included
 with ``.incbin`` in :src:`util/loader.c`:
 
 ``bpf2``
-    BPF admission (``lsm/bpf``, ``lsm/bpf_map``, ``lsm/bpf_prog_load``),
+    BPF admission (``lsm/bpf``, ``lsm/bpf_map``, ``lsm/bpf_prog``,
+    ``lsm/bpf_prog_load``),
     the guards of the private bpffs and of ``/run/shirudo``, the mount
     guards, the keyring and TPM command guards, the kexec refusal, the
     device-mapper and perf ioctl guards and the dm-verity device records.

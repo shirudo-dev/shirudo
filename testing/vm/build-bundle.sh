@@ -363,6 +363,7 @@ testing/helper/test-upatch-decode
 testing/helper/test-upatch-serializer-pages
 testing/helper/test-signed-load
 testing/helper/test-upatch-link-lockdown
+testing/helper/test-xdp
 testing/helper/test-exec-churn
 testing/end2end/exec-paths
 testing/end2end/policy-exec
@@ -743,6 +744,9 @@ queue_fixture build_fixture uprobe-multi.bpf.c shirudo-test-uprobe-multi "$FIXTU
 queue_fixture build_fixture scope-netfilter.bpf.c shirudo-test-scope-netfilter "$FIXTURE_WORK/trusted"
 queue_fixture build_fixture scope-cgroup.bpf.c shirudo-test-scope-cgroup "$FIXTURE_WORK/trusted"
 queue_fixture build_fixture scope-kprobe.bpf.c shirudo-test-scope-kprobe "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture xdp-virtual.bpf.c shirudo-test-xdp-virtual "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture xdp-virtual.bpf.c shirudo-test-xdp-conflict "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture xdp-vm.bpf.c shirudo-test-xdp-vm "$FIXTURE_WORK/trusted"
 queue_fixture build_fixture basic.bpf.c shirudo-test-foreign "$FIXTURE_WORK/foreign"
 queue_fixture build_fixture basic.bpf.c shirudo-test-own-keyring "$FIXTURE_WORK/own"
 queue_fixture build_policy_labels_fixture
@@ -786,6 +790,18 @@ observability_payload="$($REPO_ROOT/shirudo upatch info \
 observability_anomaly_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/kernel-obs-cred-anomaly.upatch" --json |
 	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+for xdp_kind in virtual conflict vm; do
+	xdp_name="shirudo-test-xdp-$xdp_kind"
+	xdp_payload="$($REPO_ROOT/shirudo upatch info \
+		"$TMP_DIR/fixtures/$xdp_name.upatch" --json | \
+		python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+	"$REPO_ROOT/tools/shirudo-build/shirudo-build" --unload "$xdp_name" \
+		--payload-sha256 "$xdp_payload" \
+		-o "$TMP_DIR/fixtures/$xdp_name.unload.upatch" \
+		--key "$FIXTURE_WORK/trusted/signing_key.pem" \
+		--cert "$FIXTURE_WORK/trusted/cert.der"
+done
+
 for scope in netfilter cgroup kprobe; do
 	scope_payload="$($REPO_ROOT/shirudo upatch info \
 		"$TMP_DIR/fixtures/shirudo-test-scope-$scope.upatch" --json |

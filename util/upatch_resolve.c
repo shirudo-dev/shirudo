@@ -7,6 +7,7 @@
 
 #include <errno.h>
 #include <limits.h>
+#include <net/if.h>
 #include <linux/bpf.h>
 #include <stdio.h>
 #include <string.h>
@@ -139,6 +140,14 @@ int upatch_resolve_location(struct btf *vbtf, const char *name,
 		return ret;
 	}
 	close(link_fd);
+	if (linfo.type == BPF_LINK_TYPE_XDP) {
+		char device[IF_NAMESIZE];
+
+		if (linfo.xdp.ifindex && if_indextoname(linfo.xdp.ifindex, device))
+			return strsprintf(out, cap, "xdp/%s", device) < 0 ? -E2BIG : 0;
+		return strsprintf(out, cap, "xdp/ifindex:%u", linfo.xdp.ifindex) < 0 ?
+		       -E2BIG : 0;
+	}
 	if (linfo.type == BPF_LINK_TYPE_TRACING)
 		attach_type = linfo.tracing.attach_type;
 	if (linfo.type == BPF_LINK_TYPE_NETFILTER &&

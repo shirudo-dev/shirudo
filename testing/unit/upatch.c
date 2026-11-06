@@ -125,6 +125,53 @@ static void name_fits_its_pin_directory(void)
 	EXPECT_FALSE(upatch_name_valid(name));
 }
 
+static void xdp_masks_are_signed_and_bounded(void)
+{
+	struct upatch_prog_entry prog = {};
+	struct prog_spec *specs = NULL;
+	__u8 buf[ONE_PROG_LEN];
+	__u32 mask;
+
+	EXPECT_UEQ(sizeof(prog), 160);
+	for (mask = 1; mask <= 31; mask++) {
+		one_raw_tracepoint(buf, 0);
+		prog.kind = cpu_to_le32(UPATCH_ATTACH_XDP);
+		prog.xdp.device_classes = cpu_to_le32(mask);
+		memcpy(buf + sizeof(struct upatch_prog_metadata), &prog, sizeof(prog));
+		if (mask & ~(__u32)UPATCH_XDP_ALL) {
+			EXPECT_TRUE(prog_specs_parse(buf, sizeof(buf), 0, 1, &specs) < 0);
+			continue;
+		}
+		ASSERT_EQ(prog_specs_parse(buf, sizeof(buf), 0, 1, &specs), 0);
+		EXPECT_UEQ(specs[0].kind, UPATCH_ATTACH_XDP);
+		EXPECT_UEQ(specs[0].device_classes, mask);
+		EXPECT_UEQ(specs[0].offset, 0);
+		prog_specs_free(specs, 1);
+	}
+	for (mask = 0; mask < 7; mask++) {
+		memset(&prog, 0, sizeof(prog));
+		prog.kind = cpu_to_le32(UPATCH_ATTACH_XDP);
+		prog.xdp.device_classes = cpu_to_le32(UPATCH_XDP_ALL);
+		if (mask == 0)
+			prog.xdp.device_classes = 0;
+		else if (mask == 1)
+			prog.xdp.device_classes = cpu_to_le32(32);
+		else if (mask == 2)
+			prog.xdp.reserved = cpu_to_le32(1);
+		else if (mask == 3)
+			prog.target[0] = 'x';
+		else if (mask == 4)
+			prog.map[0] = 'x';
+		else if (mask == 5)
+			prog.target[sizeof(prog.target) - 1] = 'x';
+		else
+			prog.map[sizeof(prog.map) - 1] = 'x';
+		memcpy(buf + sizeof(struct upatch_prog_metadata), &prog, sizeof(prog));
+		EXPECT_EQ(prog_specs_parse(buf, sizeof(buf), 0, 1, &specs), -EINVAL);
+		EXPECT_FALSE(specs);
+	}
+}
+
 static const struct unit_case cases[] = {
 	UNIT_CASE(prog_specs_take_the_signed_counts),
 	UNIT_CASE(prog_specs_refuse_another_header_count),
@@ -133,6 +180,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(name_signed_is_the_header_name),
 	UNIT_CASE(member_is_a_name_and_a_payload),
 	UNIT_CASE(name_fits_its_pin_directory),
+	UNIT_CASE(xdp_masks_are_signed_and_bounded),
 	{}
 };
 

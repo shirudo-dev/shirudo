@@ -170,6 +170,8 @@ signed config image.
      - Attach kinds the builder refuses
    * - ``t3011-string-bounds``
      - Names and the tree repository are refused rather than cut
+   * - ``t3012-xdp-metadata``
+     - Signed XDP device-class masks, object inputs and invalid sections
    * - ``t3101-target-fixtures``
      - Prebuilt fixtures load and unload, foreign and own-keyring
        fixtures are refused, a map fixture exports
@@ -194,6 +196,13 @@ signed config image.
        maps
    * - ``t3110-double-load``
      - A second load of a loaded upatch is refused as ``already_loaded``
+   * - ``t3111-xdp``
+     - Native XDP class selection, veth pair deduplication with both
+       endpoint index orderings, cross-namespace pairs, a bridge without
+       native XDP skipped, rollback, signed unload and descriptor
+       and alternate-attachment lockdown; a repeated init adopts the
+       archived XDP without another event. Each case cleans up its state
+       so a failed assertion does not contaminate later cases.
 
 ``tpm`` (4)
 ~~~~~~~~~~~
@@ -281,7 +290,8 @@ signed config image.
    * - ``t5103-verity-cli``
      - Key and repository changes require a signed config
    * - ``t5104-verity-revocation``
-     - Signed revocation unlinks the signer and purges its upatch
+     - Signed revocation unlinks the signer and purges its measured
+       tracing and XDP upatches and their archives
    * - ``t5105-verity-interruption``
      - An interruption after measurement blocks changes and attestation
 

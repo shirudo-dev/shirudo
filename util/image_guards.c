@@ -132,6 +132,9 @@ shirudo_gate_guards[GATE_HOOK_COUNT] = {
 	[GUARD_BPF_MAP] = {
 		"shirudo_lsm_bpf_map", LSM_BPF_MAP_LINK_PIN,
 	},
+	[GUARD_BPF_PROG] = {
+		"shirudo_lsm_bpf_prog", LSM_BPF_PROG_LINK_PIN,
+	},
 	[GUARD_PROG_LOAD] = {
 		"shirudo_lsm_bpf_prog_load", LSM_PROG_LOAD_LINK_PIN,
 	},

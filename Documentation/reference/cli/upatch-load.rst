@@ -86,6 +86,13 @@ them before it acts.
 LSM still apply. ``bpm`` passes it when it loads the upatches of a
 package.
 
+For XDP, the signed device-class mask selects interfaces present in the
+initial network namespace at load time, with one endpoint per veth pair.
+Each program can produce several ``link_<n>`` pins. Native XDP is
+required: unsupported devices are logged and skipped, and no attachable
+device is ``attach_target_missing``. Other errors undo all links the load
+created. :doc:`/upatches/write/attach-kinds` defines the classes and limits.
+
 Options
 -------
 
@@ -176,11 +183,13 @@ Exit status and failure categories
      - The upatch is loaded and measured.
    * - 1
      - Refused or failed. The report and the message name the category.
+       Includes XDP with no attachable target (``ENODEV``).
    * - 2
      - A usage error: an unknown option, an option given last without
        its value, a second file, no file, or an ``--expect-chain`` that
-       is not 64 hexadecimal characters. Also the category
-       ``attach_target_missing``.
+       is not 64 hexadecimal characters. Also ``attach_target_missing``
+       for missing probe targets; XDP ``ENODEV`` returns 1 so tree sync
+       does not advance past an unattached device policy.
 
 ``load`` reports these categories: ``version_mismatch``,
 ``kernel_abi_unsupported``, ``keyring_missing``, ``tampered``,

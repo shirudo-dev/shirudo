@@ -26,6 +26,7 @@
 
 #include <linux/bpf.h>
 #include <linux/perf_event.h>
+#include <linux/if_link.h>
 #include <linux/keyctl.h>
 
 #include <bpf/bpf.h>
@@ -64,6 +65,7 @@
 #include "util/upatch_resolve.h"
 #include "util/upatch_table.h"
 #include "util/version.h"
+#include "util/xdp.h"
 
 #ifndef NFPROTO_IPV6
 #define NFPROTO_IPV6			10
@@ -1049,6 +1051,8 @@ static const char *attach_kind_name(__u32 kind)
 		return "netfilter/ipv6-pre-routing";
 	case UPATCH_ATTACH_UPROBE_MULTI:
 		return "uprobe.multi";
+	case UPATCH_ATTACH_XDP:
+		return "xdp";
 	default:
 		return "unknown";
 	}
@@ -1214,7 +1218,7 @@ static int netns_initial(void)
  * link is pinned; -EXDEV when they differ.
  */
 static int link_matches_spec(int link_fd,
-			     const struct prog_spec *spec)
+			     const struct prog_spec *spec, __u32 ifindex)
 {
 	char func[UPATCH_ATTACH_TARGET_MAX] = {};
 	struct bpf_link_info info = {};
@@ -1232,6 +1236,11 @@ static int link_matches_spec(int link_fd,
 		return info.cgroup.cgroup_id == ROOT_CGROUP_ID ?
 		       0 : -EXDEV;
 	switch (spec->kind) {
+	case UPATCH_ATTACH_XDP:
+		if (info.type != BPF_LINK_TYPE_XDP || !ifindex ||
+		    info.xdp.ifindex != ifindex)
+			return -EXDEV;
+		return netns_initial();
 	case UPATCH_ATTACH_CGROUP_SKB_INGRESS:
 	case UPATCH_ATTACH_CGROUP_SKB_EGRESS:
 		return -EXDEV;
@@ -1322,6 +1331,60 @@ static int prog_pin_path(char *pin, size_t sz, const char *dir,
 	return n < 0 ? -ENAMETOOLONG : 0;
 }
 
+static int attach_xdp_devices(int prog_fd, const struct prog_spec *spec,
+			      const struct xdp_device *devices, size_t count,
+			      const char *dir, __u32 *pinned)
+{
+	LIBBPF_OPTS(bpf_link_create_opts, opts, .flags = XDP_FLAGS_DRV_MODE);
+	__u32 attached = 0;
+	size_t i;
+
+	for (i = 0; i < count; i++) {
+		const struct xdp_device *dev = &devices[i];
+		char pin[PATH_MAX + 32];
+		int fd, ret;
+
+		if (!xdp_device_selected(devices, count, i, spec->device_classes))
+			continue;
+		if (*pinned == UINT32_MAX)
+			return -EOVERFLOW;
+		if (strsprintf(pin, sizeof(pin), "%s/link_%u", dir, *pinned) < 0)
+			return -ENAMETOOLONG;
+		ret = xdp_device_verify(dev);
+		if (ret)
+			return ret;
+		fd = bpf_link_create(prog_fd, (int)dev->ifindex, BPF_XDP, &opts);
+		if (fd == -EOPNOTSUPP) {
+			pr_warn("XDP: skipping %s (ifindex %u, class %u): native XDP unsupported",
+				dev->name, dev->ifindex, xdp_device_class(dev));
+			continue;
+		}
+		if (fd < 0) {
+			pr_err("XDP: attach %s (ifindex %u): %s", dev->name,
+			       dev->ifindex, strerror(-fd));
+			return fd;
+		}
+		ret = link_matches_spec(fd, spec, dev->ifindex);
+		if (!ret)
+			ret = xdp_device_verify(dev);
+		if (!ret)
+			ret = obj_pin(fd, pin);
+		close(fd);
+		if (ret)
+			return ret;
+		(*pinned)++;
+		attached++;
+		pr_info("XDP: attached %s (ifindex %u, class %u) at %s",
+			dev->name, dev->ifindex, xdp_device_class(dev), pin);
+	}
+	if (!attached) {
+		pr_err("XDP: no attachable interface matches signed class mask %u",
+		       spec->device_classes);
+		return -ENODEV;
+	}
+	return 0;
+}
+
 /*
  * Serializers are pinned as programs for `upatch map`; the rest as links.
  * A failure unpins what this call pinned: the upatch is then neither
@@ -1333,9 +1396,13 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 				const struct prog_spec *specs)
 {
 	char dir[PATH_MAX], serializers_dir[PATH_MAX + 16];
-	__u32 i, attach_count = 0, attach_seen = 0;
 	bool made_dir = false, made_serializers = false;
+	__u32 i, attach_count = 0, attach_seen = 0;
+	struct xdp_device *devices = NULL;
 	char pin[PATH_MAX + 32];
+	__u32 pinned_links = 0;
+	size_t nr_devices = 0;
+	bool has_xdp = false;
 	bool *made = NULL;
 	int test_fd = -1;
 	int ret;
@@ -1346,6 +1413,9 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 	}
 	if (upatch_pin_path(dir, sizeof(dir), name, NULL))
 		return -ENAMETOOLONG;
+	for (i = 0; i < nr_progs; i++)
+		if (specs[i].kind == UPATCH_ATTACH_XDP)
+			has_xdp = true;
 
 	ret = mkdir_if_absent(BPFFS_UPATCHES_DIR, 0700, NULL);
 	if (ret) {
@@ -1359,6 +1429,13 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 	made = xcalloc(nr_progs, sizeof(*made));
 	if (!made)
 		return -ENOMEM;
+	if (has_xdp) {
+		ret = netns_initial();
+		if (!ret)
+			ret = xdp_devices_read(&devices, &nr_devices);
+		if (ret)
+			goto out;
+	}
 	ret = mkdir_if_absent(dir, 0700, &made_dir);
 	if (ret) {
 		pr_err("mkdir %s: %s", dir, strerror(-ret));
@@ -1436,6 +1513,24 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 			continue;
 		}
 		attach_seen++;
+		if (spec->kind == UPATCH_ATTACH_XDP) {
+			ret = attach_xdp_devices(inner_fd, spec, devices, nr_devices,
+						 dir, &pinned_links);
+			if (ret)
+				goto out;
+			continue;
+		}
+		if (has_xdp) {
+			if (pinned_links == UINT32_MAX) {
+				ret = -EOVERFLOW;
+				goto out;
+			}
+			if (strsprintf(pin, sizeof(pin), "%s/link_%u", dir,
+				       pinned_links) < 0) {
+				ret = -ENAMETOOLONG;
+				goto out;
+			}
+		}
 
 		link_fd = prog_attach_for_spec(inner_fd, spec);
 		if (link_fd < 0) {
@@ -1456,7 +1551,7 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 			goto out;
 		}
 		/* Unpinned, a closed link detaches. */
-		ret = link_matches_spec(link_fd, spec);
+		ret = link_matches_spec(link_fd, spec, 0);
 		if (ret) {
 			pr_err("attach prog %u (%s %s): the link is not at "
 			       "the site the metadata names: %s", i,
@@ -1472,6 +1567,8 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 			goto out;
 		}
 		made[i] = true;
+		if (has_xdp)
+			pinned_links++;
 		pr_info("upatch load: program %u (%s) pinned at %s",
 			i, attach_kind_name(spec->kind), pin);
 	}
@@ -1492,9 +1589,16 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 	}
 out:
 	if (ret) {
+		while (pinned_links) {
+			pinned_links--;
+			if (strsprintf(pin, sizeof(pin), "%s/link_%u", dir,
+				       pinned_links) >= 0)
+				unlink(pin);
+		}
 		attach_seen = 0;
 		for (i = 0; i < nr_progs; i++) {
 			if (made[i] &&
+			    !(has_xdp && specs[i].role == UPATCH_PROG_ROLE_ATTACH) &&
 			    !prog_pin_path(pin, sizeof(pin), dir,
 					   serializers_dir, &specs[i],
 					   attach_count, attach_seen))
@@ -1507,6 +1611,7 @@ out:
 		if (made_dir)
 			rmdir(dir);
 	}
+	xfree(devices, size_mul(nr_devices, sizeof(*devices)));
 	xfree(made, nr_progs * sizeof(*made));
 	return ret;
 }
@@ -2149,7 +2254,7 @@ static int __upatch_apply(const char *path, bool verify_only,
 		int e = -ret;
 		const char *cat;
 
-		if (e == ENOENT || e == ENOTDIR)
+		if (e == ENOENT || e == ENOTDIR || e == ENODEV)
 			cat = "attach_target_missing";
 		else if (e == ESTALE)
 			cat = "binary_mismatch";
@@ -2932,7 +3037,7 @@ static int upatch_load(const struct load_args *args)
 done:
 	eventlog_unlock(lock);
 	if (ret == 1 && rep.category &&
-	    !strcmp(rep.category, "attach_target_missing"))
+	    !strcmp(rep.category, "attach_target_missing") && rep.err != ENODEV)
 		ret = UPATCH_INSTALL_TARGET_MISSING;
 	if (staged[0])
 		unlink(staged);

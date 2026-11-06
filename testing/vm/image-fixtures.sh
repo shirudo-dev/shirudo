@@ -175,6 +175,14 @@ done
 	--key "$output/private/live/signing_key.pem" \
 	--cert "$output/public/live.der"
 
+"$builder" "$source_dir/testing/fixtures/xdp-virtual.bpf.c" \
+	-o "$output/public/shirudo-test-revoked-xdp.upatch" \
+	--name shirudo-test-revoked-xdp \
+	--vmlinux "$source_dir/vendor/linux/vmlinux.h" \
+	--extra-cflags "-I$source_dir/vendor/libbpf" \
+	--key "$output/private/boot/signing_key.pem" \
+	--cert "$output/public/boot.der"
+
 # These host checks validate the fixture graph before the real target test.
 mkdir "$output/check-live" "$output/check-boot"
 "$validator" "$keys_dir/cert.der" "$output/source/config-boot-keys" \

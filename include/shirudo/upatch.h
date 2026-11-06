@@ -178,7 +178,8 @@ struct upatch_decoder_blob {
  * Programs without a special attach kind use RAW_TRACEPOINT, preserving
  * the original attach_btf_id behavior. The program bytes are hash-locked
  * by the signed loader; the site a kprobe, uprobe, cgroup or netfilter
- * program attaches at comes from here, which is why it is signed.
+ * program attaches at, and the classes XDP may attach to, come from
+ * here, which is why it is signed.
  */
 #define UPATCH_ATTACH_TARGET_MAX	128u
 #define UPATCH_PROG_MAGIC	0x4d475055u	/* "UPGM" le */
@@ -199,6 +200,16 @@ enum upatch_attach_kind {
 	UPATCH_ATTACH_FMOD_RET = 5,
 	UPATCH_ATTACH_NETFILTER_IPV6_PRE_ROUTING = 6,
 	UPATCH_ATTACH_UPROBE_MULTI = 7,
+	UPATCH_ATTACH_XDP = 8,
+};
+
+/* Bit 4 is not a class: loopback has no native XDP, so nothing selects it. */
+enum upatch_xdp_device_class {
+	UPATCH_XDP_NETWORK = 1,
+	UPATCH_XDP_VIRTUAL = 2,
+	UPATCH_XDP_VM = 8,
+	UPATCH_XDP_UNKNOWN = 16,
+	UPATCH_XDP_ALL = 27,
 };
 
 enum upatch_prog_role {
@@ -210,7 +221,13 @@ enum upatch_prog_role {
 struct upatch_prog_entry {
 	__le32		role;		/* enum upatch_prog_role */
 	__le32		kind;		/* enum upatch_attach_kind */
-	__le64		offset;		/* kprobe offset; zero for kretprobe */
+	union {
+		__le64 offset;		/* kprobe offset */
+		struct {
+			__le32 device_classes;
+			__le32 reserved;
+		} xdp;
+	};
 	char		target[UPATCH_ATTACH_TARGET_MAX]; /* kprobe symbol */
 	char		map[UPATCH_PROG_MAP_MAX];
 };

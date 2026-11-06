@@ -62,6 +62,18 @@ hooks and the trusted ``d_parent`` are not in bpf-next;
 :doc:`kernel-patches` lists the patches the test kernel carries. A
 kernel is admitted by the ABI check below, not by its release string.
 
+XDP attachment
+--------------
+
+XDP uses ``BPF_LINK_CREATE`` with ``attach_type=BPF_XDP``,
+``target_ifindex`` from runtime discovery and ``flags=XDP_FLAGS_DRV_MODE``.
+shirudo verifies ``BPF_LINK_TYPE_XDP`` and the returned ``xdp.ifindex``
+before pinning. Discovery uses kernel ``RTM_GETLINK`` replies,
+``ETHTOOL_GDRVINFO`` and devlink ``DEVLINK_CMD_PORT_GET``; it does not
+read sysfs to classify devices. The ``lsm/bpf_prog`` guard refuses XDP
+descriptors to unauthorized callers, including ``BPF_PROG_GET_FD_BY_ID``,
+because netlink accepts these descriptors outside ``bpf()``.
+
 Signing ABI check
 -----------------
 
@@ -188,12 +200,17 @@ where the caller is the loader.
        ``BPF_TRACE_UPROBE_MULTI``, ``offsets``, ``cnt``, ``flags``
        ``BPF_F_UPROBE_MULTI_PATH_FD``, ``path_fd`` a descriptor of the
        target binary opened and checked by build ID.
+       Kind 8, XDP: ``target_ifindex`` a selected device,
+       ``attach_type`` ``BPF_XDP``, ``flags`` ``XDP_FLAGS_DRV_MODE``.
    * - ``BPF_OBJ_GET_INFO_BY_FD``
      - On each link before it is pinned. Cgroup links: ``cgroup_id`` 1.
        Netfilter: ``pf``, ``hooknum``, ``priority`` as set, and the
        caller's network namespace cookie (``SO_NETNS_COOKIE``) 7. Kprobe:
        perf event type, function name and offset as signed. Uprobe:
        offset count. ``fmod_ret``: ``BPF_MODIFY_RETURN``.
+       XDP: ``BPF_LINK_TYPE_XDP`` and ``xdp.ifindex`` matching the selected
+       device; the initial namespace, device class and peer scope are
+       rechecked around attachment.
    * - ``BPF_OBJ_PIN``
      - Links at ``upatches/<name>/link`` or ``link_<n>``, serializer
        programs at ``serializers/<map>``, the test-run program at

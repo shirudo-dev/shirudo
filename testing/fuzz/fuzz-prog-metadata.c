@@ -2,8 +2,7 @@
 /*
  * Copyright (c) 2026 Authors of shirudo
  *
- * prog_specs_parse() on a load upatch's program metadata, which
- * the loader signature does not cover.
+ * prog_specs_parse() on a load upatch's signed program metadata.
  */
 
 #include <stdint.h>

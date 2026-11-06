@@ -129,11 +129,14 @@ Categories
        ``shirudo upatch info``.
    * - ``attach_target_missing``
      - ``target_verify``, ``link_create``
-     - ``ENOENT``, ``ENOTDIR``
+     - ``ENOENT``, ``ENOTDIR``, ``ENODEV``
      - The uprobe binary, the kprobe symbol or its module is absent.
        ``upatch load`` exits 2. ``bpm tree sync`` records the operation as
        ``skipped: module not loaded`` and continues.
-     - Load the module or install the binary, then load again.
+       XDP with no attachable interface reports ``ENODEV`` and exits 1;
+       tree sync fails without advancing that operation.
+     - Load the module, install the binary or provide an interface with
+       native XDP support in a selected class, then load again.
    * - ``binary_mismatch``
      - ``target_verify``, ``link_create``
      - ``ESTALE``
@@ -175,6 +178,8 @@ Categories
        metadata names: a cgroup link not at the root cgroup, a netfilter
        link outside the initial network namespace or at another hook or
        priority, a kprobe at another function or offset.
+       For XDP, a non-initial network namespace, changed device class or
+       peer scope, or a returned link with another ifindex.
      - Run the load in the host's initial cgroup and network namespaces
        and with the host's sysfs.
    * - ``already_loaded``

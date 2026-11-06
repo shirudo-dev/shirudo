@@ -113,7 +113,7 @@ test_expect_success 'generic cgroup skb sections require ingress or egress' '
 		"$WORK/cgroup-skb-generic.out"
 '
 
-test_expect_success 'a section the target cannot attach is rejected' '
+test_expect_success 'XDP without an explicit signed device class mask is rejected' '
 	! ( cd .. && "$B" "$WORK/xdp.bpf.c" \
 		-o "$WORK/xdp.upatch" \
 		--vmlinux vendor/linux/vmlinux.h --name xdp \

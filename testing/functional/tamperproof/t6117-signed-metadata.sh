@@ -60,6 +60,21 @@ elif what == "section":
     data[start + i:start + i + len(old)] = new.encode().ljust(len(old), b"\0")
     payload = bytes(data[loader_off:loader_off + loader_len]) + bytes(data[data_off:data_off + data_len])
     data[272:304] = hashlib.sha256(payload).digest()
+elif what == "xdp-mask":
+    magic, version, directory, count = struct.unpack_from(
+        "<4sIII", data, data_off + data_len - 16)
+    assert magic == b"SGTR" and version == 1
+    for i in range(count):
+        tag, _, off, length = struct.unpack_from(
+            "<4sIII", data, data_off + directory + i * 16)
+        if tag == b"UPGM":
+            assert struct.unpack_from("<I", data, data_off + off + 20)[0] == 8
+            struct.pack_into("<I", data, data_off + off + 24, 27)
+            break
+    else:
+        raise AssertionError("no signed XDP metadata")
+    payload = data[loader_off:loader_off + loader_len] + data[data_off:data_off + data_len]
+    data[272:304] = hashlib.sha256(payload).digest()
 pathlib.Path(dst).write_bytes(data)
 PY
 }
@@ -72,6 +87,13 @@ test_expect_success 'the kernel refuses a load whose kprobe symbol was edited' '
 	mutate "$KP" "$WORK/resited.upatch" section UPGM do_nanosleep=do_exit &&
 	[ "$(category upatch load "$WORK/resited.upatch")" = signature_rejected ] &&
 	[ ! -e "$B/shirudo-test-scope-kprobe" ]
+'
+
+test_expect_success 'the kernel refuses a widened signed XDP device mask' '
+	mutate "$FIXTURES/shirudo-test-xdp-virtual.upatch" \
+		"$WORK/xdp-widened.upatch" xdp-mask &&
+	[ "$(category upatch load "$WORK/xdp-widened.upatch")" = signature_rejected ] &&
+	[ ! -e "$B/shirudo-test-xdp-virtual" ]
 '
 
 test_expect_success 'a load whose header name differs from the signed name is refused' '

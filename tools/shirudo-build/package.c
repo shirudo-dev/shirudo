@@ -659,6 +659,10 @@ static __u32 attach_kind_from_section(const char *sec,
 		return UPATCH_ATTACH_FMOD_RET;
 	if (strcmp(sec, "netfilter") == 0)
 		return UPATCH_ATTACH_NETFILTER_IPV6_PRE_ROUTING;
+	if (strncmp(sec, "xdp/", 4) == 0 && sec[4]) {
+		*target = sec + 4;
+		return UPATCH_ATTACH_XDP;
+	}
 	return UPATCH_ATTACH_RAW_TRACEPOINT;
 }
 
@@ -1310,7 +1314,7 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 		kind = attach_kind_from_section(sec, &target);
 		if (kind == UPATCH_ATTACH_RAW_TRACEPOINT &&
 		    !default_attach_section(sec)) {
-			pr_err("unsupported section '%s'; supported are fentry, fexit, fmod_ret, lsm, tp_btf, kprobe, kretprobe, uprobe.multi, cgroup_skb and netfilter",
+			pr_err("unsupported section '%s'; supported are fentry, fexit, fmod_ret, lsm, tp_btf, kprobe, kretprobe, uprobe.multi, cgroup_skb, netfilter and xdp/<mask>",
 			       sec);
 			err = -EOPNOTSUPP;
 			goto err_free;
@@ -1318,7 +1322,21 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 		md->progs[i].role =
 			cpu_to_le32(UPATCH_PROG_ROLE_ATTACH);
 		md->progs[i].kind = cpu_to_le32(kind);
-		if (kind == UPATCH_ATTACH_UPROBE_MULTI) {
+		if (kind == UPATCH_ATTACH_XDP) {
+			__u64 mask;
+
+			err = parse_u64(target, strlen(target), UPATCH_XDP_ALL,
+					&mask);
+			if (err || !mask || (mask & ~(__u64)UPATCH_XDP_ALL)) {
+				pr_err("invalid XDP device class mask in section '%s'; use xdp/<decimal-mask>, a sum of 1, 2, 8 and 16",
+				       sec);
+				err = -EINVAL;
+				goto err_free;
+			}
+			md->progs[i].xdp.device_classes = cpu_to_le32((__u32)mask);
+			i++;
+			continue;
+		} else if (kind == UPATCH_ATTACH_UPROBE_MULTI) {
 			struct build_uprobe_target *ut =
 				&uprobe_targets[nr_uprobe_targets];
 
@@ -1474,6 +1492,8 @@ static int set_target_attach_types(struct bpf_object *obj)
 			type = BPF_CGROUP_INET_INGRESS;
 		else if (strcmp(sec, "cgroup_skb/egress") == 0)
 			type = BPF_CGROUP_INET_EGRESS;
+		else if (!strncmp(sec, "xdp/", 4))
+			type = BPF_XDP;
 		else
 			continue;
 
@@ -1486,7 +1506,7 @@ static int set_target_attach_types(struct bpf_object *obj)
 	return 0;
 }
 
-static int register_target_attach_types(int handler_ids[2])
+static int register_target_attach_types(int handler_ids[3])
 {
 	handler_ids[0] = libbpf_register_prog_handler("cgroup_skb/ingress",
 						      BPF_PROG_TYPE_CGROUP_SKB,
@@ -1504,17 +1524,29 @@ static int register_target_attach_types(int handler_ids[2])
 		handler_ids[0] = -1;
 		return handler_ids[1];
 	}
+	handler_ids[2] = libbpf_register_prog_handler("xdp/", BPF_PROG_TYPE_XDP,
+						      BPF_XDP, NULL);
+	if (handler_ids[2] < 0) {
+		libbpf_unregister_prog_handler(handler_ids[1]);
+		libbpf_unregister_prog_handler(handler_ids[0]);
+		handler_ids[1] = -1;
+		handler_ids[0] = -1;
+		return handler_ids[2];
+	}
 	return 0;
 }
 
-static void unregister_target_attach_types(int handler_ids[2])
+static void unregister_target_attach_types(int handler_ids[3])
 {
+	if (handler_ids[2] >= 0)
+		libbpf_unregister_prog_handler(handler_ids[2]);
 	if (handler_ids[1] >= 0)
 		libbpf_unregister_prog_handler(handler_ids[1]);
 	if (handler_ids[0] >= 0)
 		libbpf_unregister_prog_handler(handler_ids[0]);
 	handler_ids[0] = -1;
 	handler_ids[1] = -1;
+	handler_ids[2] = -1;
 }
 
 /*
@@ -1771,7 +1803,7 @@ int build_package_load(const char *bpf_o, const char *src_path,
 	__u32 label_len = 0, policy_map_idx = 0, socket_policy_map_idx = 0;
 	struct upatch_policy_label_header *label_blob = NULL;
 	struct bpf_map *map, *task_map, *sock_map;
-	int handler_ids[2] = {-1, -1};
+	int handler_ids[3] = { -1, -1, -1 };
 	struct bpf_object *obj;
 	__u32 map_idx = 0;
 	int err;
@@ -1781,7 +1813,7 @@ int build_package_load(const char *bpf_o, const char *src_path,
 		return err;
 	err = register_target_attach_types(handler_ids);
 	if (err) {
-		pr_err("register cgroup_skb section handlers: %d", err);
+		pr_err("register target section handlers: %d", err);
 		return err;
 	}
 

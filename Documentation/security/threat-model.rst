@@ -583,8 +583,11 @@ refuses ``BPF_OBJ_GET``, ``BPF_MAP_GET_FD_BY_ID`` and
 ``lsm/file_open`` in the ``bpf2`` object refuses them the opening of any
 non-directory inode in the private bpffs (``ObjGet``). Directories stay
 listable. ``BPF_PROG_GET_FD_BY_ID`` and ``BPF_BTF_GET_FD_BY_ID`` stay
-open, because a descriptor of a program type shirudo ships attaches
-nowhere without the commands above or the ioctl below (R18).
+open for other program types. ``lsm/bpf_prog`` refuses an XDP descriptor
+to a task without runtime authority (``ObjGet``), including acquisition by
+ID, because netlink accepts it outside the ``bpf()`` attach guard. Other
+shipped types attach nowhere without the commands above or the ioctl
+below (R18).
 
 The one attach that does not pass through ``bpf()`` is
 ``PERF_EVENT_IOC_SET_BPF``, which binds a program reached by id to a
@@ -622,11 +625,15 @@ caller's network namespace, and a kprobe through the PMU that sysfs
 names. The load compares the link the kernel reports with the signed
 attach metadata before it pins the link, and refuses
 ``attach_scope_mismatch``.
+XDP discovery requires the initial network namespace, classifies devices
+from kernel interfaces and expands the signed device-class mask there.
+It selects one endpoint per veth pair and checks device class, peer scope
+and the returned link's ifindex around attachment.
 
 .. rst-class:: facts
 
 :Adversary: ADV-B, root on the target without the signing key
-:Enforced at: ``lsm/bpf``, ``lsm/file_open``, ``lsm/file_ioctl``,
+:Enforced at: ``lsm/bpf``, ``lsm/bpf_prog``, ``lsm/file_open``, ``lsm/file_ioctl``,
    ``lsm/file_ioctl_compat``, ``lsm/inode_unlink``,
    ``lsm/inode_rename``, ``lsm/inode_mkdir``, ``lsm/inode_symlink``,
    ``lsm/inode_link``, ``lsm/inode_rmdir``, ``lsm/inode_setxattr``,
@@ -639,7 +646,7 @@ attach metadata before it pins the link, and refuses
    ``PerfAttach``, ``PinUnlink``, ``PinRename``, ``PinEntry``,
    ``PinXattr``, ``BpffsUmount``, ``BpffsUmountAbove``, ``BpffsMount``
 :Tests: ``t6105``, ``t6106``, ``t6107``, ``t6108``, ``t6109``,
-   ``t6116``, ``t6119``, ``t6120``, ``t6121``, ``t6138``
+   ``t6116``, ``t6119``, ``t6120``, ``t6121``, ``t6138``, ``t3111``
 :Residual: R1, R2, R3, U17
 
 .. _tm-t3:
@@ -1509,11 +1516,12 @@ R18 BPF outside the gates
    loaded through ``kern_sys_bpf()``, such as the ``bpf_preload`` module,
    which a signed module can bring in (A4). Classic BPF, for seccomp
    filters and ``SO_ATTACH_FILTER``, does not use ``bpf()``. Program
-   descriptors stay open to root, and the attach paths outside
+   descriptors other than XDP stay open to root, and the attach paths outside
    ``bpf()`` that take one, socket options and netlink among them,
    accept only program types those paths support. The operator's build
-   refuses sections of those types; the kernel does not refuse them in
-   a signed loader.
+   refuses sections of those types except XDP, whose descriptors
+   ``lsm/bpf_prog`` guards; the kernel does not refuse these types in a
+   signed loader.
 
 R19 Raw device and offline writes bypass the seal
    The seal guards file operations. A write to the block device under
@@ -1532,12 +1540,19 @@ R20 The TPM owner password is not a secret on the target
    owner hierarchy.
    An image shared across a fleet shares the password.
 
-R21 upatches can be neutralized without detaching them
+R21 upatches can be neutralized by changing their targets
    An upatch stays loaded and measured while root makes it ineffective:
    by unloading the module a kprobe targets, by replacing the binary a
    ``uprobe.multi`` target names with a new inode, or, without lockdown
    (A4), by disabling kprobes through debugfs. These are readings of the
    kernel source and are not tested.
+
+   XDP discovery is a load-time snapshot: creating interfaces later does
+   not attach the upatch to them. Removing a device can detach its XDP
+   link while its pin remains, and changing topology can bypass the
+   selected ingress path. TPM evidence covers the signed class mask and
+   loaded artifact, not the live device inventory. ``t3111`` exercises
+   load-time selection and signed unload; hotplug is not reconciled.
 
 R22 Labeled inodes are interchangeable
    The label carries no identity. Any labeled inode passes shirudo's

@@ -131,6 +131,9 @@ loader inside the kernel, which ``lsm/bpf`` sees with ``kernel`` true.
      - ``lsm/bpf``, runtime authority (``ProgAttach``). shirudo then
        compares the link the kernel reports with the signed metadata and
        refuses ``attach_scope_mismatch`` when they differ.
+       XDP expands each program's signed class mask into links on matching
+       interfaces in the initial network namespace, with one endpoint per
+       veth pair, using native driver mode only.
    * - userspace
      - ``BPF_OBJ_PIN`` of each link and map
      - ``lsm/bpf``, runtime authority (``ObjPin``), and the bpffs inode
@@ -155,6 +158,10 @@ dot in the name is written as ``~d`` there. The directory carries the
 ``security.bpf.shirudo.payload`` extended attribute with the payload
 digest, which only a task with runtime authority can set.
 :doc:`kernel-interfaces` lists the attributes each call sets.
+Artifacts containing XDP always use ``link_<n>`` pins, including when only
+one link is created. Every XDP program must attach somewhere; unsupported
+native-XDP devices are skipped, and any other attachment failure removes
+all links the load created.
 
 Telling the loader apart from root
 ----------------------------------

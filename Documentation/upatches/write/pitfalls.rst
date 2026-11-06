@@ -35,8 +35,8 @@ program's ``recursion_misses``, which ``struct bpf_prog_info`` reports:
   and twice the number of CPUs.
 
 A detector built on these kinds can therefore miss the event it looks
-for, and a count it keeps is a lower bound. ``lsm`` programs are never
-skipped.
+for, and a count it keeps is a lower bound. ``lsm`` and ``xdp`` programs
+are never skipped.
 
 Enforce in lsm programs
 -----------------------
@@ -77,7 +77,29 @@ was running. There ``bpf_get_current_pid_tgid()``,
 ``bpf_get_current_task_btf()``, ``bpf_get_current_comm()`` and
 ``bpf_get_current_cgroup_id()`` describe that task, not the packet.
 Attribute a packet by its socket, with ``bpf_skb_cgroup_id()`` or
-socket storage, and keep such programs off task storage.
+socket storage, and keep such programs off task storage. An ``xdp``
+program runs there too, before the packet has a socket, so nothing
+attributes it: decide on the packet alone.
+
+What an xdp program does not see
+--------------------------------
+
+``xdp`` runs in the driver on receive, before the kernel builds an
+``sk_buff``:
+
+- It sees what a device receives, not what the host sends out of it. On
+  a veth pair with one endpoint attached, it sees only what arrives at
+  that endpoint.
+- It sees only the devices it is attached to, and a device with no program
+  passes everything. :doc:`attach-kinds` says which devices are selected
+  and when.
+- It sees packets as they arrive, before GRO joins them, so a transfer
+  is many runs.
+- A VLAN tag the NIC stripped is not in the packet.
+- It sees one buffer per packet. ``xdp/<mask>`` programs are loaded without
+  multi-buffer support, as ``xdp.frags`` is refused, and a driver refuses
+  them outright on a device whose MTU does not fit one buffer, which
+  leaves that device uncovered.
 
 RCU pointers in sleepable programs
 ----------------------------------

@@ -200,10 +200,11 @@ counter.
        from any caller
      - ``EACCES``
    * - ``ObjGet``
-     - pin, map or link opened by another executable
+     - pin, map, link or XDP program opened by another executable
      - ``lsm/bpf``: ``BPF_OBJ_GET``, ``BPF_MAP_GET_FD_BY_ID``,
        ``BPF_LINK_GET_FD_BY_ID``; ``lsm/bpf_map``: a read-only
-       descriptor; ``lsm/file_open`` in the ``bpf2`` object: a
+       descriptor; ``lsm/bpf_prog``: an XDP program descriptor;
+       ``lsm/file_open`` in the ``bpf2`` object: a
        non-directory inode in the private bpffs
      - ``EACCES``
    * - ``SealSignal``

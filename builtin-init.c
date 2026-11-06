@@ -579,22 +579,24 @@ static int record_ek_name(struct identity *id)
 
 static int init_lsm(void)
 {
-	struct bpf_link *image_links[IMAGE_OBSERVER_HOOK_COUNT] = {};
-	struct bpf_link *image_seal[IMAGE_SEAL_HOOK_COUNT] = {};
-	struct bpf_link *link_setx = NULL, *link_rmx = NULL, *link_pload = NULL;
 	struct bpf_link *identity_links[ARRAY_SIZE(shirudo_observer_guards)] = {};
+	struct bpf_link *link_setx = NULL, *link_rmx = NULL, *link_pload = NULL;
 	struct bpf_link *mount_links[ARRAY_SIZE(shirudo_mount_guards)] = {};
 	struct bpf_program *p_bpf, *p_bpf_map, *p_unlink, *p_setx, *p_rmx;
-	const struct embedded_bpf *blob = bpf2_blob();
-	struct bpf_link *seal_links[SEAL_HOOK_COUNT] = {};
+	struct bpf_link *image_links[IMAGE_OBSERVER_HOOK_COUNT] = {};
+	struct bpf_link *image_seal[IMAGE_SEAL_HOOK_COUNT] = {};
 	struct bpf_link *link_bpf = NULL, *link_bpf_map = NULL;
-	struct bpf_object *obj = NULL, *seal_obj = NULL;
 	struct bpf_link *link_keyperm = NULL, *link_tpm = NULL;
+	struct bpf_link *seal_links[SEAL_HOOK_COUNT] = {};
+	struct bpf_object *obj = NULL, *seal_obj = NULL;
+	const struct embedded_bpf *blob = bpf2_blob();
+	struct bpf_link *link_bpf_prog = NULL;
 	struct bpf_link *link_unlink = NULL;
-	struct identity id = {};
+	struct bpf_program *p_key, *p_tpm;
+	struct bpf_program *p_bpf_prog;
 	struct anchor_keys keys = {};
 	struct bpf_program *p_pload;
-	struct bpf_program *p_key, *p_tpm;
+	struct identity id = {};
 	key_serial_t keyring;
 	struct bpf_map *m_sb;
 	int err, map_fd, i;
@@ -757,11 +759,12 @@ static int init_lsm(void)
 	p_rmx = guard_program(obj, GUARD_REMOVEXATTR);
 	p_pload = guard_program(obj, GUARD_PROG_LOAD);
 	p_bpf_map = guard_program(obj, GUARD_BPF_MAP);
+	p_bpf_prog = guard_program(obj, GUARD_BPF_PROG);
 	p_key = guard_program(obj, GUARD_KEY_PERMISSION);
 	p_tpm = guard_program(obj, GUARD_TPM_COMMAND);
 	p_bpf = guard_program(obj, GUARD_BPF);
 	if (!p_unlink || !p_setx || !p_rmx || !p_pload || !p_bpf_map ||
-	    !p_bpf ||
+	    !p_bpf || !p_bpf_prog ||
 	    !p_key || !p_tpm) {
 		pr_err("expected programs missing in bpf2 object");
 		err = -ENOENT;
@@ -825,6 +828,12 @@ static int init_lsm(void)
 		goto out;
 	}
 
+	err = attach_guard(p_bpf_prog, GUARD_BPF_PROG, &link_bpf_prog);
+	if (err) {
+		pr_err("attach lsm/bpf_prog: %s", strerror(-err));
+		goto out;
+	}
+
 	err = attach_guard(p_pload, GUARD_PROG_LOAD, &link_pload);
 	if (err) {
 		pr_err("attach lsm/bpf_prog_load: %s", strerror(-err));
@@ -868,7 +877,8 @@ out:
 	}
 	if (err) {
 		struct bpf_link *links[] = {
-			link_bpf, link_bpf_map, link_pload, link_keyperm, link_tpm,
+			link_bpf, link_bpf_map, link_bpf_prog, link_pload,
+			link_keyperm, link_tpm,
 			link_rmx, link_setx, link_unlink,
 		};
 
@@ -886,6 +896,7 @@ out:
 	bpf_object__close(seal_obj);
 	bpf_link__destroy(link_bpf);
 	bpf_link__destroy(link_bpf_map);
+	bpf_link__destroy(link_bpf_prog);
 	bpf_link__destroy(link_pload);
 	bpf_link__destroy(link_keyperm);
 	bpf_link__destroy(link_tpm);

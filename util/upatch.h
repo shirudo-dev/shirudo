@@ -148,6 +148,7 @@ int upatch_select(const struct dirent *e);
 struct prog_spec {
 	__u32 role;
 	__u32 kind;
+	__u32 device_classes;
 	__u64 offset;
 	char target[UPATCH_ATTACH_TARGET_MAX];
 	char map[UPATCH_PROG_MAP_MAX];
@@ -178,9 +179,8 @@ int upatch_install(const char *path);
 int upatch_remove(const char *path);
 
 /*
- * upatch_install() when the signed payload is valid but its
- * kprobe target is not there, because the module that has it is not
- * loaded.
+ * A missing optional kprobe module permits tree projection advancement;
+ * an XDP selection without an attachable device must fail instead.
  */
 #define UPATCH_INSTALL_TARGET_MISSING	2
 

@@ -73,7 +73,7 @@ runtime authority:
      - ``MapFdWrite``
    * - ``BPF_OBJ_GET``, ``BPF_MAP_GET_FD_BY_ID``,
        ``BPF_LINK_GET_FD_BY_ID``, a read-only map descriptor, opening a
-       pin in shirudo's private bpffs
+       pin in shirudo's private bpffs, an XDP program descriptor
      - ``ObjGet``
    * - ``BPF_LINK_CREATE``, ``BPF_RAW_TRACEPOINT_OPEN``
      - ``ProgAttach``

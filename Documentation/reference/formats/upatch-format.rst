@@ -360,9 +360,11 @@ Each program entry is 160 bytes:
        roles.
    * - +8
      - 8
-     - ``offset``
-     - Byte offset into the function for ``kprobe``. 0 for every other
-       kind and role.
+     - ``offset`` / ``xdp``
+     - Byte offset into the function for ``kprobe``. For XDP, a
+       little-endian ``u32 device_classes`` followed by ``u32 reserved``
+       (0). The mask is nonzero and uses only bits 1, 2, 4, 8 and 16.
+       0 for every other kind and role.
    * - +16
      - 128
      - ``target``
@@ -424,8 +426,16 @@ Each program entry is 160 bytes:
    * - 7
      - uprobe.multi entry probe
      - ``uprobe.multi/<absolute-path>:<function-glob>``
+   * - 8
+     - native XDP device classes
+     - ``xdp/<decimal-mask>``
 
 :doc:`/upatches/write/attach-kinds` describes how the target attaches each kind.
+XDP retains the 160-byte entry and UPGM version 1; readers that do not
+know kind 8 refuse it. Its ``target`` and ``map`` are empty. Device-class
+bits mean network-facing (1), virtual (2), VM (8) and unknown (16); 27
+selects all classes. Bit 4 is not a class, and a reader refuses a mask
+that sets it or any bit above 16.
 
 When any entry has kind 7, one ``UPUT`` block follows the program entries
 and ends the section. Without a kind 7 entry the section ends after the

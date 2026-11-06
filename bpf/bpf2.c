@@ -147,6 +147,17 @@ int BPF_PROG(shirudo_lsm_bpf_map, struct bpf_map *map, fmode_t fmode,
 	return shirudo_self_or_deny(TAMPER_OBJ_GET);
 }
 
+/* XDP descriptors also authorize netlink attachment, outside lsm/bpf. */
+SEC("lsm/bpf_prog")
+int BPF_PROG(shirudo_lsm_bpf_prog, struct bpf_prog *prog, int ret)
+{
+	if (ret)
+		return ret;
+	if (BPF_CORE_READ(prog, type) == BPF_PROG_TYPE_XDP)
+		return shirudo_self_or_deny(TAMPER_OBJ_GET);
+	return 0;
+}
+
 /*
  * Admission gate. Fires from a single call site inside the verifier
  * (bpf_check), after the kernel has verified any PKCS#7 signature and
