@@ -162,6 +162,63 @@ jobs:
             shirudo-static.tar.gz.spdx.json
           if-no-files-found: error
 
+  image-assets:
+    needs: deb
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install image tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            binutils \
+            ca-certificates \
+            clang \
+            coreutils \
+            cryptsetup-bin \
+            dpkg-dev \
+            e2fsprogs \
+            file \
+            libcap2-bin \
+            libcurl4 \
+            libssl3t64 \
+            libtss2-tctildr0 \
+            openssl \
+            python3 \
+            xz-utils
+
+      - name: Install clang 23
+        run: sudo sh .github/scripts/install-clang.sh
+
+      - name: Download Debian packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: shirudo-deb
+          path: ${{ runner.temp }}/shirudo-packages
+
+      - name: Build image assets with a temporary signer
+        env:
+          SHIRUDO_DIR: ${{ github.workspace }}
+          SHIRUDO_PACKAGE_DIR: ${{ runner.temp }}/shirudo-packages
+          OUTPUT_DIR: ${{ runner.temp }}/shirudo-image-assets
+        run: .github/scripts/build-image-assets.sh
+
+      - name: Upload image assets
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: shirudo-image-assets-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/shirudo-image-assets/shirudo-image-assets.tar.gz
+            ${{ runner.temp }}/shirudo-image-assets/shirudo-image-assets.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
+
   rpm-target:
     outputs:
       version: ${{ steps.build-version.outputs.version }}
