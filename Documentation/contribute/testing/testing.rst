@@ -89,6 +89,11 @@ unit, CI check, functional and end-to-end tiers in that order. The fuzz
 targets and the proofs run on their own, and CI does not run the
 proofs: :doc:`proofs` says which to run for a change.
 
+Each functional family with target tests gets a fresh VM. The VM runner
+caches the generated dracut initrd in ``build/test-vm/cache/initrd/``
+using the kernel, bundle and initrd inputs as the cache key. Every VM
+still gets its own copy of the cached initrd and its own guest state.
+
 Test numbers and families
 -------------------------
 

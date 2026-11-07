@@ -27,10 +27,11 @@ make -C testing help
 Host tests run as they are. A target test, `t?1??`, runs in a fresh VM
 per family, which needs root, KVM, the test kernel and the bundle; see
 below. The VM always boots the dm-verity runtime and the signed config
-from a dracut initrd, and CI runs the same suite through
-`.github/scripts/tests.sh`. A change to `util/<m>.c` adds or updates its cases in
-`testing/unit/<m>.c`, and a parser of input from outside the host gets
-a target in `testing/fuzz/`.
+from a dracut initrd. The runner caches the initrd by kernel, bundle and
+initrd inputs, while each family keeps its own VM and guest state. CI
+runs the same suite through `.github/scripts/tests.sh`. A change to
+`util/<m>.c` adds or updates its cases in `testing/unit/<m>.c`, and a
+parser of input from outside the host gets a target in `testing/fuzz/`.
 
 ## Reading results
 

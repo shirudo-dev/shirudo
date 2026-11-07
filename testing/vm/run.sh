@@ -1000,16 +1000,20 @@ kernel_release_of()
 # identity and the cloud-init stage later finds the files in place.
 build_initrd()
 {
-	local kver gen unit seed trusted fp cert
+	local kver gen unit seed trusted fp cert work_dir
 	local -a args
+	work_dir="${RUN_DIR}"
+	if [[ -n "${INITRD_CACHE_BUILD_DIR:-}" ]]; then
+		work_dir="$INITRD_CACHE_BUILD_DIR"
+	fi
 
 	kver="$(kernel_release_of "$KERNEL")" ||
 		die "cannot read the kernel release from $KERNEL"
 	gen="$REPO_ROOT/tools/gen-initrd/shirudo-gen-initrd"
-	unit="$RUN_DIR/shirudo-initrd.service"
+	unit="$work_dir/shirudo-initrd.service"
 	sed 's|@bindir@|/usr/local/bin|g' \
 		"$REPO_ROOT/systemd/shirudo-initrd.service.in" >"$unit"
-	seed="$RUN_DIR/initrd-seed"
+	seed="$work_dir/initrd-seed"
 	mkdir -p "$seed/usr/lib/systemd/system/initrd.target.wants"
 	cp "$REPO_ROOT/testing/vm/files/shirudo-test-seed.service" \
 		"$seed/usr/lib/systemd/system/shirudo-test-seed.service"
@@ -1019,7 +1023,7 @@ build_initrd()
 		"$seed/usr/lib/systemd/system/initrd.target.wants/shirudo-test-seed.service"
 	# The bundle's own-keyring certificate rides along as a second
 	# trusted certificate, for the tests of the enrolled set.
-	trusted="$RUN_DIR/trusted"
+	trusted="$work_dir/trusted"
 	mkdir -p "$trusted"
 	fp="$("$TEST_VM_HOST_BUNDLE/root/usr/local/bin/shirudo" bpm key fingerprint \
 		"$TEST_VM_HOST_BUNDLE/fixtures/own.der" 2>/dev/null)" ||
@@ -1039,9 +1043,9 @@ build_initrd()
 		"$seed/shirudo-test-seed-images.sh"
 	cat "$REPO_ROOT/testing/vm/files/shirudo-test-seed-images.conf" \
 		>>"$seed/usr/lib/systemd/system/shirudo-test-seed.service"
-	cert="$RUN_DIR/cert.der"
+	cert="$work_dir/cert.der"
 	cp "$TEST_VM_HOST_BUNDLE/fixtures/cert.der" "$cert"
-	args=(--kver "$kver" --output "$RUN_DIR/initrd.img"
+	args=(--kver "$kver" --output "$work_dir/initrd.img"
 	      --binary "$TEST_VM_HOST_BUNDLE/root/usr/local/bin/shirudo"
 	      --binary-path /usr/local/bin/shirudo
 	      --cert "$cert"
@@ -1061,7 +1065,55 @@ build_initrd()
 		tail -40 "$RUN_DIR/initrd-build.log" >&2
 		die "initrd build failed; see $RUN_DIR/initrd-build.log"
 	fi
+	INITRD="$work_dir/initrd.img"
+}
+
+initrd_cache_key()
+{
+	local kver
+	kver="$(kernel_release_of "$KERNEL")" ||
+		die "cannot read the kernel release from $KERNEL"
+	{
+		printf '%s\n' "$kver" "$(dracut --version)"
+		sha256sum "$KERNEL"
+		if [[ -n "$KERNEL_ARTIFACT_DIR" ]]; then
+			sha256sum "$KERNEL_ARTIFACT_DIR/${TEST_VM_ARCH_KIMAGE}.sha256sum"
+		fi
+		sha256sum "$TEST_VM_HOST_BUNDLE/root/usr/local/bin/shirudo" \
+			"$TEST_VM_HOST_BUNDLE/fixtures/cert.der" \
+			"$TEST_VM_HOST_BUNDLE/fixtures/own.der" \
+			"$TEST_VM_HOST_BUNDLE/fixtures/own.vouch" \
+			"$REPO_ROOT/tools/gen-initrd/shirudo-gen-initrd" \
+			"$REPO_ROOT/systemd/shirudo-initrd.service.in" \
+			"$REPO_ROOT/testing/vm/files/shirudo-test-seed.service" \
+			"$REPO_ROOT/testing/vm/files/seed-root.sh" \
+			"$REPO_ROOT/testing/vm/files/seed-images.sh" \
+			"$REPO_ROOT/testing/vm/files/shirudo-test-seed-images.conf"
+		(
+			cd "$TEST_VM_HOST_BUNDLE" &&
+			find verity -type f -print0 | sort -z | xargs -0 sha256sum
+		)
+	} | sha256sum | awk '{print $1}'
+}
+
+prepare_initrd()
+{
+	local key cache_dir build_dir lock_fd
+	key="$(initrd_cache_key)"
+	cache_dir="$CACHE_DIR/initrd/$key"
+	mkdir -p "$CACHE_DIR/initrd"
+	exec {lock_fd}>"$CACHE_DIR/initrd.lock"
+	flock "$lock_fd"
+	if [[ ! -s "$cache_dir/initrd.img" ]]; then
+		build_dir="$cache_dir.tmp.$$"
+		mkdir -p "$build_dir"
+		INITRD_CACHE_BUILD_DIR="$build_dir" build_initrd
+		mv "$build_dir" "$cache_dir"
+	fi
 	INITRD="$RUN_DIR/initrd.img"
+	cp "$cache_dir/initrd.img" "$INITRD"
+	flock -u "$lock_fd"
+	exec {lock_fd}>&-
 }
 
 resolve_kernel()
@@ -1289,7 +1341,7 @@ mkdir -p "$CACHE_DIR"
 allocate_run_dir
 allocate_ssh_access
 KERNEL="$(resolve_kernel)"
-[[ "$VM_INITRD" == 0 ]] || build_initrd
+[[ "$VM_INITRD" == 0 ]] || prepare_initrd
 
 [[ "$TEST_VM_ARCH_SUPPORTED" == 1 ]] ||
 	die "test-vm supports x86_64 and aarch64 hosts only, not $TEST_VM_ARCH"
