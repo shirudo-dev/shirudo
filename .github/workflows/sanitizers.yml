@@ -111,6 +111,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Restore the LVH OpenSSL toolchain
+        id: lvh-openssl
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/host-openssl
+          key: host-openssl-lvh-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/vm-toolchain.sh') }}
+
       # Every run starts from the corpus the last nightly run kept; the
       # newest one is restored, as each is saved under a key of its own.
       - name: Restore the fuzz corpora
@@ -138,9 +145,16 @@ jobs:
             cd /host
             .github/scripts/vm-toolchain.sh libclang-rt-23-dev
             . build/vm-toolchain.env
-            make -C testing fuzz \
+            make -j"\$(nproc)" -C testing fuzz \
               FUZZ_SECONDS=${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 600 || 60 }} \
               FUZZ_CORPUS=/host/build/fuzz-corpus
+
+      - name: Save the LVH OpenSSL toolchain
+        if: always() && steps.lvh-openssl.outputs.cache-hit != 'true' && hashFiles('build/host-openssl/.shirudo-openssl-built') != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/host-openssl
+          key: ${{ steps.lvh-openssl.outputs.cache-primary-key }}
 
       # Only the nightly and manual runs save, so that each push does not
       # add a corpus to the cache the kernel and the VM images share.
