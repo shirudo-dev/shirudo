@@ -10,7 +10,9 @@ systemd units and timers
 
 The units the target package installs, from ``systemd/*.in`` and
 ``systemd/*.timer``. Every service is ``Type=oneshot``: shirudo runs no
-daemon.
+daemon. Every service sets ``SyslogIdentifier=shirudo``, so what it writes
+to standard error reaches the journal under the same identifier as what
+it sends to syslog, whatever the name of the process that runs the binary.
 
 Units
 -----

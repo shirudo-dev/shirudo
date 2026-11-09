@@ -31,6 +31,7 @@ RequiresMountsFor=/sysroot/var/lib/shirudo
 
 [Service]
 Type=oneshot
+SyslogIdentifier=shirudo
 LimitMEMLOCK=infinity
 RemainAfterExit=yes
 KeyringMode=inherit

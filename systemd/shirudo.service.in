@@ -25,6 +25,7 @@ ConditionPathIsMountPoint=/run/shirudo/runtime
 
 [Service]
 Type=oneshot
+SyslogIdentifier=shirudo
 LimitMEMLOCK=infinity
 RemainAfterExit=yes
 KeyringMode=inherit

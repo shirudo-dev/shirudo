@@ -9,6 +9,7 @@ RequiresMountsFor=/etc/shirudo/bpm /var/lib/shirudo
 
 [Service]
 Type=oneshot
+SyslogIdentifier=shirudo
 LimitMEMLOCK=infinity
 TimeoutStartSec=30min
 EnvironmentFile=-/etc/shirudo/bpm/environment

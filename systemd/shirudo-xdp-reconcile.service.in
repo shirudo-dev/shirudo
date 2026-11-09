@@ -9,6 +9,7 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
+SyslogIdentifier=shirudo
 LimitMEMLOCK=infinity
 TimeoutStartSec=2min
 ExecStart=@bindir@/shirudo upatch reconcile
