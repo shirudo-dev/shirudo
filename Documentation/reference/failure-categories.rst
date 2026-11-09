@@ -8,7 +8,7 @@
 Failure categories and exit status
 ==================================
 
-``shirudo upatch load`` and ``shirudo upatch unload`` classify every
+``shirudo upatch load``, ``unload`` and ``reconcile`` classify every
 refusal by a phase and a category. Both appear in the operation report
 (``--report``) and in the ``upatch unload failed:`` journal line. Other
 commands report failures as messages and exit status only.
@@ -106,9 +106,17 @@ Categories
      - The ``.bpf`` keyring is not the frozen anchor (no errno), the
        ``lsm_link`` pin cannot be opened, the register differs from
        ``--expect-chain`` or cannot be read (``EPERM``), or the register
-       is not the one ``init`` bound (``EACCES``, the load is undone).
+       is not the one ``init`` bound (``EACCES``, the load is undone). From
+       ``upatch reconcile``: the archive of a loaded XDP upatch differs
+       from what the records say was loaded, or its program pin is missing.
      - Do not retry. Keep the eventlog and the journal and handle the
        target as an incident: :doc:`/operate/troubleshoot/incident-tampered`.
+   * - ``not_initialized``
+     - ``pre_flight``
+     - none
+     - ``upatch reconcile`` ran outside the initial network namespace, or
+       before ``init`` finished on the root file system.
+     - Wait for ``shirudo.service``; the timer runs the pass again.
    * - ``eventlog_full``
      - ``pre_flight``
      - ``ENOSPC``
@@ -308,6 +316,9 @@ every verdict, ``tampered`` included. Parse ``.status`` of
    * - ``upatch unload``
      - 0, ``already_unloaded`` included; 1 on refusal or failure; 2 for a
        usage error.
+   * - ``upatch reconcile``
+     - 0 when the pass finishes, whatever each device's outcome; 1 when it
+       stops; 2 for a usage error.
    * - ``upatch list``, ``upatch info``
      - 0; 1 on failure; 2 for a usage error.
    * - ``upatch get``

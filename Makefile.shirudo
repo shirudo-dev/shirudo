@@ -279,6 +279,7 @@ UTIL_SRCS := \
     util/upatch_maps_otel.c \
     util/elf_target.c \
     util/upatch_pins.c \
+    util/upatch_verify.c \
     util/upatch_resolve.c \
     util/upatch_table.c
 

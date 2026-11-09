@@ -22,7 +22,7 @@
  * Category strings: ok, tampered, keyring_missing, lsm_denied,
  *   signature_rejected, verifier_rejected, parser_rejected,
  *   payload_mismatch, already_loaded, already_unloaded, detach_failed,
- *   tpm_error, unknown.
+ *   tpm_error, not_initialized, unknown.
  */
 struct op_report {
 	bool		ok;

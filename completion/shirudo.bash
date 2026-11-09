@@ -61,6 +61,9 @@ _shirudo()
 					--expect-version-id --no-precheck \
 					--no-version-check --report" -- "$cur") )
 				;;
+			reconcile)
+				COMPREPLY=( $(compgen -W "--report" -- "$cur") )
+				;;
 			info|list)
 				COMPREPLY=( $(compgen -W "--json" -- "$cur") )
 				;;

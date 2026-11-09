@@ -203,6 +203,14 @@ signed config image.
        and alternate-attachment lockdown; a repeated init adopts the
        archived XDP without another event. Each case cleans up its state
        so a failed assertion does not contaminate later cases.
+   * - ``t3112-xdp-reconcile``
+     - ``upatch reconcile`` attaches a device added after load, adds no
+       pin or event on a second pass, leaves a device another program
+       occupies, removes a gone device's pin without reusing a live
+       index, does nothing after unload, and leaves the link on a veth
+       end moved to another namespace. A changed archive is covered by
+       the ``upatch_verify`` unit cases. An unload racing a pass is not
+       reported as tampering.
 
 ``tpm`` (4)
 ~~~~~~~~~~~

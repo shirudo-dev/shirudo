@@ -96,6 +96,16 @@ static void unresolved_devices_sit_out(void)
 	EXPECT_FALSE(xdp_device_selected(devs, 3, 2, UPATCH_XDP_ALL));
 }
 
+static void reconcile_never_touches_another_program(void)
+{
+	EXPECT_EQ(xdp_reconcile_action(false, 0, 7), XDP_RECONCILE_NONE);
+	EXPECT_EQ(xdp_reconcile_action(false, 7, 7), XDP_RECONCILE_NONE);
+	EXPECT_EQ(xdp_reconcile_action(false, 9, 7), XDP_RECONCILE_NONE);
+	EXPECT_EQ(xdp_reconcile_action(true, 0, 7), XDP_RECONCILE_ATTACH);
+	EXPECT_EQ(xdp_reconcile_action(true, 7, 7), XDP_RECONCILE_COVERED);
+	EXPECT_EQ(xdp_reconcile_action(true, 9, 7), XDP_RECONCILE_OCCUPIED);
+}
+
 static size_t add_attr(__u8 *buf, size_t len, __u16 type,
 		       const void *value, size_t size)
 {
@@ -166,6 +176,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(veth_peers_are_namespace_aware),
 	UNIT_CASE(veth_without_a_peer_is_not_selected),
 	UNIT_CASE(unresolved_devices_sit_out),
+	UNIT_CASE(reconcile_never_touches_another_program),
 	UNIT_CASE(link_messages_are_checked),
 	UNIT_CASE(kernel_discovery_revalidates_devices),
 	{}

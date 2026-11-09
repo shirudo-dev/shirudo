@@ -64,6 +64,7 @@
 #include "util/upatch_maps_otel.h"
 #include "util/upatch_pins.h"
 #include "util/upatch_resolve.h"
+#include "util/upatch_verify.h"
 #include "util/upatch_table.h"
 #include "util/version.h"
 #include "util/xdp.h"
@@ -4180,6 +4181,469 @@ static int cmd_upatch_get(int argc, const char **argv)
 	return ret;
 }
 
+static const struct help upatch_reconcile_help = {
+	.usage   = "shirudo upatch reconcile [--report=<path>]",
+	.summary = "Attach each loaded XDP upatch to the devices its signed "
+		   "classes select\nand that it is not attached to yet, and "
+		   "remove the pins of devices that\nare gone. One pass; udev "
+		   "and a timer run it.",
+};
+
+struct xdp_work {
+	char			name[UPATCH_NAME_MAX + 1];
+	__u8			payload[UPATCH_PAYLOAD_HASH_LEN];
+	struct upatch		u;
+	struct prog_spec	*specs;
+};
+
+static void xdp_work_free(struct xdp_work *work, size_t count)
+{
+	size_t i;
+
+	for (i = 0; i < count; i++) {
+		prog_specs_free(work[i].specs, work[i].u.hdr.nr_progs);
+		upatch_close(&work[i].u);
+	}
+	xfree(work, size_mul(count, sizeof(*work)));
+}
+
+/* Whether this boot's records hold the upatch with the payload pinned now. */
+static int pin_is_measured(const char *name, __u8 *payload, bool *held)
+{
+	char hex[2 * UPATCH_PAYLOAD_HASH_LEN + 1];
+	struct measured_set *set;
+	int ret;
+
+	*held = false;
+	ret = measured_set_boot(&set);
+	if (ret)
+		return ret;
+	if (!get_pin_payload(name, payload)) {
+		hex_encode(payload, UPATCH_PAYLOAD_HASH_LEN, hex);
+		*held = measured_holds(set, name, hex);
+	}
+	measured_set_free(set);
+	return 0;
+}
+
+static int reconcile_read(struct xdp_work *w)
+{
+	const void *attach;
+	__u32 len;
+	int ret;
+
+	if (get_pin_payload(w->name, w->payload))
+		return -ENODATA;
+	ret = upatch_archive_verify(w->name, w->payload, &w->u);
+	if (ret)
+		return ret;
+	attach = upatch_signed_attach(&w->u, &len);
+	ret = attach ? prog_specs_parse(attach, len, w->u.hdr.nr_maps,
+					w->u.hdr.nr_progs, &w->specs) : -ESTALE;
+	if (ret) {
+		upatch_close(&w->u);
+		return ret == -ENOMEM ? ret : -ESTALE;
+	}
+	return 0;
+}
+
+static int reconcile_fail_verify(const char *name, int err,
+				 struct op_report *rep)
+{
+	if (err == -ESTALE || err == -ENODATA) {
+		pr_err("upatch reconcile: the archive of %s is not what was "
+		       "loaded (tampered)", name);
+		rep_fail(rep, "pre_flight", "tampered", 0,
+			 "archive differs from the loaded payload");
+	} else {
+		pr_err("upatch reconcile: cannot check %s: %s", name,
+		       strerror(-err));
+		rep_fail(rep, "pre_flight", "unknown", err, "archive check failed");
+	}
+	return 1;
+}
+
+/*
+ * A load in progress has pins before it has an archive, and one that died
+ * leaves pins without a record, which status reports as such. Only the
+ * register lock tells those from an upatch the records hold whose archive
+ * has changed, which is the one this refuses.
+ */
+static int reconcile_open(struct xdp_work *w, bool *skip,
+			  struct op_report *rep)
+{
+	bool held;
+	int lock, ret;
+
+	*skip = false;
+	if (!reconcile_read(w))
+		return 0;
+	lock = eventlog_lock();
+	if (lock < 0) {
+		rep_fail(rep, "pre_flight", "tpm_error", lock,
+			 "cannot take the register lock");
+		return 1;
+	}
+	ret = pin_is_measured(w->name, w->payload, &held);
+	if (!ret && !held) {
+		*skip = true;
+		eventlog_unlock(lock);
+		return 0;
+	}
+	if (!ret)
+		ret = reconcile_read(w);
+	eventlog_unlock(lock);
+	return ret ? reconcile_fail_verify(w->name, ret, rep) : 0;
+}
+
+static int reconcile_collect(struct xdp_work **out, size_t *count,
+			     struct op_report *rep)
+{
+	struct xdp_work *work = NULL;
+	size_t nr = 0;
+	struct dirent *e;
+	int ret = 0;
+	DIR *d;
+
+	*out = NULL;
+	*count = 0;
+	d = opendir(BPFFS_UPATCHES_DIR);
+	if (!d) {
+		if (errno == ENOENT)
+			return 0;
+		rep_fail(rep, "pre_flight", "unknown", errno,
+			 "cannot read the pin directory");
+		return 1;
+	}
+	while (!ret && (e = readdir(d))) {
+		char name[UPATCH_NAME_MAX + 1];
+		struct upatch_pins pins;
+		struct xdp_work *grown;
+		bool skip;
+
+		if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..") ||
+		    upatch_name_from_bpffs(name, sizeof(name), e->d_name) ||
+		    upatch_pins_read(name, &pins) || !pins.nr_xdp_progs)
+			continue;
+		grown = xreallocarray(work, nr, nr + 1, sizeof(*work));
+		if (!grown) {
+			rep_fail(rep, "pre_flight", "unknown", ENOMEM,
+				 "out of memory");
+			ret = 1;
+			break;
+		}
+		work = grown;
+		memset(&work[nr], 0, sizeof(work[nr]));
+		strscpy(work[nr].name, name, sizeof(work[nr].name));
+		ret = reconcile_open(&work[nr], &skip, rep);
+		if (!ret && !skip)
+			nr++;
+	}
+	closedir(d);
+	if (ret) {
+		xdp_work_free(work, nr);
+		return ret;
+	}
+	*out = work;
+	*count = nr;
+	return 0;
+}
+
+static int xdp_prog_open(const char *name, __u32 index, __u32 *id)
+{
+	struct bpf_prog_info info = {};
+	__u32 len = sizeof(info);
+	char pin[PATH_MAX];
+	char entry[32];
+	int fd, ret;
+
+	if (strsprintf(entry, sizeof(entry), XDP_PROG_PIN_PREFIX "%u", index) < 0 ||
+	    upatch_pin_path(pin, sizeof(pin), name, entry, NULL))
+		return -ENAMETOOLONG;
+	fd = bpf_obj_get(pin);
+	if (fd < 0)
+		return -errno;
+	ret = bpf_prog_get_info_by_fd(fd, &info, &len);
+	if (!ret && info.type != BPF_PROG_TYPE_XDP)
+		ret = -ESTALE;
+	if (ret) {
+		close(fd);
+		return ret;
+	}
+	*id = info.id;
+	return fd;
+}
+
+struct link_scan {
+	__u32	next;
+	bool	dead;
+	bool	collect;
+};
+
+/* The kernel clears a link's ifindex for good when its device goes away. */
+static int scan_link(__u32 index, const char *pin, void *ctx)
+{
+	struct bpf_link_info info = {};
+	struct link_scan *scan = ctx;
+	__u32 len = sizeof(info);
+	int fd, ret;
+
+	fd = bpf_obj_get(pin);
+	if (fd < 0)
+		return -errno;
+	ret = bpf_link_get_info_by_fd(fd, &info, &len);
+	close(fd);
+	if (ret)
+		return ret;
+	if (info.type == BPF_LINK_TYPE_XDP && !info.xdp.ifindex) {
+		scan->dead = true;
+		if (scan->collect) {
+			if (unlink(pin))
+				return -errno;
+			pr_info("XDP: removed %s, its device is gone", pin);
+			return 0;
+		}
+	}
+	if (index == UINT32_MAX)
+		return -EOVERFLOW;
+	if (index >= scan->next)
+		scan->next = index + 1;
+	return 0;
+}
+
+static int reconcile_attach(int prog_fd, const char *name,
+			    const struct prog_spec *spec,
+			    const struct xdp_device *dev, __u32 *next,
+			    struct op_report *rep)
+{
+	char dir[PATH_MAX], pin[PATH_MAX + 32];
+	int ret;
+
+	if (*next == UINT32_MAX ||
+	    upatch_pin_path(dir, sizeof(dir), name, NULL) ||
+	    strsprintf(pin, sizeof(pin), "%s/link_%u", dir, *next) < 0) {
+		rep_fail(rep, "link_create", "unknown", ENAMETOOLONG,
+			 "no pin name left for the link");
+		return 1;
+	}
+	ret = xdp_attach_one(prog_fd, spec, dev, pin);
+	if (!ret) {
+		(*next)++;
+		pr_audit("XDP: upatch=%s attached device=%s ifindex=%u class=%u",
+			 name, dev->name, dev->ifindex, xdp_device_class(dev));
+	} else if (ret == -EACCES || ret == -EPERM) {
+		rep_fail(rep, "link_create", "lsm_denied", ret,
+			 "the guards refused the XDP link");
+		return 1;
+	}
+	/*
+	 * Anything else is about this device alone: it is occupied, has no
+	 * native XDP, or changed or went away. The next pass looks again.
+	 */
+	return 0;
+}
+
+static int reconcile_prog_failed(const char *name, __u32 index, int err,
+				 struct op_report *rep)
+{
+	pr_err("upatch reconcile: program %u of %s: %s", index, name,
+	       strerror(-err));
+	if (err == -EACCES || err == -EPERM)
+		rep_fail(rep, "pre_flight", "lsm_denied", err,
+			 "the guards refused the XDP program pin");
+	else
+		rep_fail(rep, "pre_flight", "tampered", err,
+			 "an XDP program pin is missing or not XDP");
+	return 1;
+}
+
+/*
+ * With next NULL only says whether a device needs attaching, or that the
+ * pins need a look under the register lock.
+ */
+static int reconcile_walk(const struct xdp_work *w,
+			  const struct xdp_device *devices, size_t count,
+			  __u32 *next, bool *needed, struct op_report *rep)
+{
+	__u32 i;
+
+	for (i = 0; i < w->u.hdr.nr_progs; i++) {
+		const struct prog_spec *spec = &w->specs[i];
+		__u32 prog_id = 0;
+		size_t j;
+		int fd;
+
+		if (spec->kind != UPATCH_ATTACH_XDP)
+			continue;
+		fd = xdp_prog_open(w->name, i, &prog_id);
+		if (fd < 0) {
+			if (!next) {
+				*needed = true;
+				return 0;
+			}
+			return reconcile_prog_failed(w->name, i, fd, rep);
+		}
+		for (j = 0; j < count; j++) {
+			bool selected = xdp_device_selected(devices, count, j,
+							    spec->device_classes);
+			__u32 attached = 0;
+
+			if (selected &&
+			    bpf_xdp_query_id((int)devices[j].ifindex,
+					     XDP_FLAGS_DRV_MODE, &attached))
+				continue;
+			if (xdp_reconcile_action(selected, attached, prog_id) !=
+			    XDP_RECONCILE_ATTACH)
+				continue;
+			*needed = true;
+			if (next && reconcile_attach(fd, w->name, spec,
+						     &devices[j], next, rep)) {
+				close(fd);
+				return 1;
+			}
+		}
+		close(fd);
+	}
+	return 0;
+}
+
+static int reconcile_apply(const struct xdp_work *w,
+			   const struct xdp_device *devices, size_t count,
+			   struct op_report *rep)
+{
+	__u8 payload[UPATCH_PAYLOAD_HASH_LEN];
+	struct link_scan scan = { .collect = true };
+	struct upatch again;
+	bool held, needed = false;
+	int lock, ret;
+
+	lock = eventlog_lock();
+	if (lock < 0) {
+		rep_fail(rep, "pre_flight", "tpm_error", lock,
+			 "cannot take the register lock");
+		return 1;
+	}
+	ret = pin_is_measured(w->name, payload, &held);
+	if (ret) {
+		rep_fail(rep, "pre_flight", "tpm_error", ret,
+			 "cannot read this boot's records");
+		ret = 1;
+		goto out;
+	}
+	if (!held || memneq_explicit(payload, w->payload, sizeof(payload)))
+		goto out;
+	ret = upatch_archive_verify(w->name, payload, &again);
+	if (ret) {
+		ret = reconcile_fail_verify(w->name, ret, rep);
+		goto out;
+	}
+	upatch_close(&again);
+	ret = upatch_each_link(w->name, scan_link, &scan);
+	if (ret) {
+		rep_fail(rep, "link_create", ret == -EACCES || ret == -EPERM ?
+			 "lsm_denied" : "unknown", ret, "cannot read the links");
+		ret = 1;
+		goto out;
+	}
+	ret = reconcile_walk(w, devices, count, &scan.next, &needed, rep);
+out:
+	eventlog_unlock(lock);
+	return ret;
+}
+
+static int reconcile_preflight(struct op_report *rep)
+{
+	key_serial_t keyring, serial;
+
+	if (netns_initial()) {
+		rep_fail(rep, "pre_flight", "not_initialized", 0,
+			 "not in the initial network namespace");
+		return 1;
+	}
+	if (!path_exists(LSM_LINK_PIN) || path_exists(eventlog_pending_path())) {
+		rep_fail(rep, "pre_flight", "not_initialized", 0,
+			 "init has not finished on the root file system");
+		return 1;
+	}
+	return trust_anchor_keyring(&keyring, &serial, rep) ? 1 : 0;
+}
+
+static int reconcile_upatch(const struct xdp_work *w,
+			    const struct xdp_device *devices, size_t count,
+			    struct op_report *rep)
+{
+	struct link_scan scan = {};
+	bool needed = false;
+
+	/*
+	 * Without the register lock a missing pin may be an unload or an
+	 * upgrade, so a failure here only sends the upatch on to
+	 * reconcile_apply(), which can tell.
+	 */
+	if (upatch_each_link(w->name, scan_link, &scan))
+		needed = true;
+	else if (reconcile_walk(w, devices, count, NULL, &needed, rep))
+		return 1;
+	if (!needed && !scan.dead)
+		return 0;
+	return reconcile_apply(w, devices, count, rep);
+}
+
+/*
+ * Every upatch is checked before any is attached: a changed archive stops
+ * the pass, so nothing keeps acting on a host in that state.
+ */
+static int cmd_upatch_reconcile(int argc, const char **argv)
+{
+	struct op_report rep = { .op = "upatch_reconcile", .phase = "done" };
+	size_t nr_work = 0, nr_devices = 0, n;
+	struct xdp_device *devices = NULL;
+	struct xdp_work *work = NULL;
+	const char *report = NULL;
+	int ret = 1;
+	size_t i;
+
+	for (i = 1; i < (size_t)argc; i++) {
+		const char *a = argv[i], *v = NULL;
+		enum opt_status r;
+
+		if (is_help(a)) {
+			print_help(&upatch_reconcile_help);
+			return 0;
+		}
+		if (!opt_arg("--report", a, argc, argv, &i, &v, &r) ||
+		    r == OPT_MISSING) {
+			fprintf(stderr, "upatch reconcile: bad option '%s'\n", a);
+			return 2;
+		}
+		report = v;
+	}
+	if (reconcile_preflight(&rep) ||
+	    reconcile_collect(&work, &nr_work, &rep))
+		goto done;
+	if (nr_work) {
+		int err = xdp_devices_read(&devices, &nr_devices);
+
+		if (err) {
+			rep_fail(&rep, "pre_flight", "unknown", err,
+				 "cannot read the interfaces");
+			goto done;
+		}
+	}
+	for (n = 0; n < nr_work; n++)
+		if (reconcile_upatch(&work[n], devices, nr_devices, &rep))
+			goto done;
+	rep.ok = true;
+	ret = 0;
+done:
+	xfree(devices, size_mul(nr_devices, sizeof(*devices)));
+	xdp_work_free(work, nr_work);
+	if (report)
+		report_emit(report, &rep);
+	report_free(&rep);
+	return ret;
+}
+
 static const struct help_item upatch_subcmds[] = {
 	{ "load",   "load a signed .upatch into the target kernel (target-only)" },
 	{ "unload", "apply a signed UNLOAD directive (forward chain extension)" },
@@ -4187,6 +4651,7 @@ static const struct help_item upatch_subcmds[] = {
 	{ "info",   "describe a .upatch file (any host; offline, no kernel state)" },
 	{ "get",    "dump source of a loaded upatch from the target kernel (BTF line_info)" },
 	{ "map",    "read pinned map contents (target-only; BTF type-aware)" },
+	{ "reconcile", "attach loaded XDP upatches to devices that appeared later (target-only)" },
 };
 
 static const struct help_section upatch_help_sections[] = {
@@ -4233,5 +4698,7 @@ int cmd_upatch(int argc, const char **argv)
 		return cmd_upatch_get(argc - 1, argv + 1);
 	if (strcmp(canonical, "map") == 0)
 		return cmd_upatch_map(argc - 1, argv + 1);
+	if (strcmp(canonical, "reconcile") == 0)
+		return cmd_upatch_reconcile(argc - 1, argv + 1);
 	return 2;	/* unreachable */
 }

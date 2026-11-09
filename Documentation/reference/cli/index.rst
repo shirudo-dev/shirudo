@@ -33,6 +33,7 @@ for common tasks.
    upatch-info
    upatch-get
    upatch-map
+   upatch-reconcile
    bpm
    attest
    attest-verify

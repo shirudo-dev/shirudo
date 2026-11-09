@@ -1547,12 +1547,16 @@ R21 upatches can be neutralized by changing their targets
    (A4), by disabling kprobes through debugfs. These are readings of the
    kernel source and are not tested.
 
-   XDP discovery is a load-time snapshot: creating interfaces later does
-   not attach the upatch to them. Removing a device can detach its XDP
-   link while its pin remains, and changing topology can bypass the
-   selected ingress path. TPM evidence covers the signed class mask and
-   loaded artifact, not the live device inventory. ``t3111`` exercises
-   load-time selection and signed unload; hotplug is not reconciled.
+   XDP coverage is reconciled, not continuous. A device added after load
+   runs without the upatch until ``upatch reconcile`` next runs, and is
+   unfiltered until then. A device stays uncovered while its XDP slot is
+   occupied or it has no native XDP. A veth end moved to another namespace
+   keeps its link, so a pair can hold two attachments, one of them running
+   in that namespace. Reconcile adds no register event: TPM evidence covers
+   the signed class mask and loaded artifact, not the device inventory or
+   which devices are covered. ``t3111`` and ``t3112`` exercise selection,
+   reconcile and unload; driver behaviour across a namespace move is
+   tested only for veth.
 
 R22 Labeled inodes are interchangeable
    The label carries no identity. Any labeled inode passes shirudo's

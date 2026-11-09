@@ -28,6 +28,17 @@ struct xdp_device {
 	bool unresolved;
 };
 
+enum xdp_reconcile {
+	XDP_RECONCILE_NONE,
+	XDP_RECONCILE_COVERED,
+	XDP_RECONCILE_ATTACH,
+	XDP_RECONCILE_OCCUPIED,
+};
+
+/* attached is what the device runs now, 0 for nothing. */
+enum xdp_reconcile xdp_reconcile_action(bool selected, __u32 attached,
+					__u32 prog_id);
+
 int xdp_device_parse(const void *data, size_t len, struct xdp_device *out);
 __u32 xdp_device_class(const struct xdp_device *dev);
 bool xdp_device_selected(const struct xdp_device *devs, size_t count,

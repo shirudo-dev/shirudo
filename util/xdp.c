@@ -346,6 +346,16 @@ bool xdp_device_selected(const struct xdp_device *devs, size_t count,
 	return peer && dev->ifindex < peer->ifindex;
 }
 
+enum xdp_reconcile xdp_reconcile_action(bool selected, __u32 attached,
+					__u32 prog_id)
+{
+	if (!selected)
+		return XDP_RECONCILE_NONE;
+	if (!attached)
+		return XDP_RECONCILE_ATTACH;
+	return attached == prog_id ? XDP_RECONCILE_COVERED : XDP_RECONCILE_OCCUPIED;
+}
+
 struct device_list {
 	struct xdp_device *devices;
 	size_t count;
