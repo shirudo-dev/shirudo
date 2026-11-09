@@ -148,7 +148,7 @@ size_t conditions(const struct conditions_input *in,
 				   in->xdp_tampered_detail : "?");
 		else if (in->links_lost)
 			set_detail(&c[n], "ALERT",
-				   "%d upatches are missing a link: %s",
+				   "%d upatches are missing a link or their archive: %s",
 				   in->links_lost,
 				   in->links_lost_detail ?
 				   in->links_lost_detail : "?");
@@ -164,6 +164,10 @@ size_t conditions(const struct conditions_input *in,
 				   "%d pinned or archived without a record of this boot: %s",
 				   in->pins_unmeasured,
 				   in->pins_detail ? in->pins_detail : "?");
+		else if (in->checks_rc)
+			set_detail(&c[n], "WARN",
+				   "links or archives not checked: %s",
+				   strerror(-in->checks_rc));
 		else
 			set_detail(&c[n], "OK",
 				   "every pinned or archived upatch is in this boot's records");
@@ -266,7 +270,8 @@ void status_reason(const struct conditions_input *in,
 			strscpy(buf, "the archive of a loaded XDP upatch differs from what was loaded",
 				cap);
 		else if (in->links_lost)
-			strscpy(buf, "a loaded upatch is missing a link", cap);
+			strscpy(buf, "a loaded upatch is missing a link or its archive",
+				cap);
 		else if (in->pins_unmeasured)
 			strscpy(buf, "a upatch is pinned or archived without a record of this boot",
 				cap);

@@ -860,6 +860,7 @@ int cmd_status(int argc, const char **argv)
 	struct measured_set *mset = NULL;
 	int xdp_tampered = 0;
 	int links_lost = 0;
+	int checks_rc = 0;
 	char config_root_hex[65] = "";
 	__u8 config_root[32];
 	int unmeasured, lock;
@@ -972,9 +973,10 @@ int cmd_status(int argc, const char **argv)
 				     unmeasured + archived;
 		}
 		xdp_tampered = upatch_xdp_archives_changed(mset, note_unmeasured,
-							   xdp_tampered_names);
+							   xdp_tampered_names,
+							   &checks_rc);
 		links_lost = upatch_links_lost(mset, note_unmeasured,
-					       links_lost_names);
+					       links_lost_names, &checks_rc);
 		measured_set_free(mset);
 	}
 	eventlog_unlock(lock);
@@ -1044,6 +1046,7 @@ int cmd_status(int argc, const char **argv)
 	cin.xdp_tampered_detail = xdp_tampered_names;
 	cin.links_lost = max(links_lost, 0);
 	cin.links_lost_detail = links_lost_names;
+	cin.checks_rc = checks_rc;
 	keyring_cond_input(&cin, &bpf, &dmv);
 
 	if (json) {

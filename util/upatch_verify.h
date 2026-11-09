@@ -26,8 +26,8 @@ int upatch_archive_verify(const char *name,
 
 /*
  * 1 when every link the signed metadata of the archive at path implies is
- * pinned for name, 0 when one is missing, or a negative errno when that
- * cannot be told.
+ * pinned for name, 0 when one is missing, -ESTALE when the archive is gone
+ * or unusable, or another negative errno when that cannot be told.
  */
 int upatch_links_complete(const char *name, const char *path);
 
@@ -36,15 +36,16 @@ struct measured_set;
 /*
  * The XDP upatches the set holds whose archive is not what was loaded. cb
  * runs for each and a non-zero return ends the walk with that value. The
- * number found, or -errno when the pins cannot be read. A check that
- * could not run counts as nothing found.
+ * number found. The first check that could not run leaves its -errno in
+ * *check_err, unless that already holds one.
  */
 int upatch_xdp_archives_changed(const struct measured_set *s,
 				int (*cb)(const char *name, void *ctx),
-				void *ctx);
+				void *ctx, int *check_err);
 
-/* As upatch_xdp_archives_changed(), for upatches that have lost a link. */
+/* As upatch_xdp_archives_changed(), for a lost link or an unusable archive. */
 int upatch_links_lost(const struct measured_set *s,
-		      int (*cb)(const char *name, void *ctx), void *ctx);
+		      int (*cb)(const char *name, void *ctx), void *ctx,
+		      int *check_err);
 
 #endif /* SHIRUDO_UTIL_UPATCH_VERIFY_H */

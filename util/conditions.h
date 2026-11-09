@@ -53,6 +53,7 @@ struct conditions_input {
 	const char	*xdp_tampered_detail;	/* their names, when any */
 	int		links_lost;	/* loaded upatches missing a link */
 	const char	*links_lost_detail;	/* their names, when any */
+	int		checks_rc;	/* -errno of a link or archive check that could not run */
 };
 
 struct condition {

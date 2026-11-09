@@ -69,8 +69,26 @@ static void a_lost_link_is_tampered(void)
 	row = upatches_measured(&in, c);
 	ASSERT_TRUE(row);
 	EXPECT_STREQ(row->status, "ALERT");
-	EXPECT_TRUE(strstr(row->detail, "missing a link: fix"));
+	EXPECT_TRUE(strstr(row->detail, "missing a link or their archive: fix"));
 	EXPECT_STREQ(status_verdict(&in), "tampered");
+}
+
+static void a_check_that_could_not_run_warns(void)
+{
+	struct conditions_input in = {
+		.reachable = true,
+		.parsed = true,
+		.lsm_attached = 1,
+		.checks_rc = -EACCES,
+	};
+	struct condition c[CONDITIONS_MAX];
+	const struct condition *row;
+
+	row = upatches_measured(&in, c);
+	ASSERT_TRUE(row);
+	EXPECT_STREQ(row->status, "WARN");
+	EXPECT_TRUE(strstr(row->detail, "not checked"));
+	EXPECT_TRUE(strcmp(status_verdict(&in), "tampered"));
 }
 
 static void no_change_leaves_the_condition_alone(void)
@@ -93,6 +111,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(changed_xdp_archive_is_tampered),
 	UNIT_CASE(a_changed_archive_outranks_a_pin_warning),
 	UNIT_CASE(a_lost_link_is_tampered),
+	UNIT_CASE(a_check_that_could_not_run_warns),
 	UNIT_CASE(no_change_leaves_the_condition_alone),
 	{}
 };

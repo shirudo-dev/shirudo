@@ -125,12 +125,20 @@ static void a_missing_archive_is_stale(void)
 					payload, &u), -ESTALE);
 }
 
+static void links_of_a_missing_archive_are_stale(void)
+{
+	EXPECT_EQ(upatch_links_complete("shirudo-unit-no-such-upatch",
+					"/nonexistent/shirudo-unit.upatch"),
+		  -ESTALE);
+}
+
 static const struct unit_case cases[] = {
 	UNIT_CASE(the_loaded_bytes_verify),
 	UNIT_CASE(another_payload_is_stale),
 	UNIT_CASE(changed_data_under_an_intact_header_is_stale),
 	UNIT_CASE(a_truncated_file_is_stale),
 	UNIT_CASE(a_missing_archive_is_stale),
+	UNIT_CASE(links_of_a_missing_archive_are_stale),
 	{}
 };
 

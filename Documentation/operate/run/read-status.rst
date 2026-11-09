@@ -238,13 +238,15 @@ verdict is derived from them.
        upatch has changed, or is gone, so ``upatch reconcile`` refuses to
        run and new devices stay uncovered. Handle it as an incident:
        :doc:`/operate/troubleshoot/incident-tampered`. ``ALERT`` ``<n>
-       upatches are missing a link: <names>``: a loaded upatch has fewer
-       link pins than its signed metadata implies, so part of it is
-       detached. For an upatch with XDP that means an ``xdp_prog_<i>`` pin
+       upatches are missing a link or their archive: <names>``: a loaded
+       upatch has fewer link pins than its signed metadata implies, so part
+       of it is detached, or its sealed archive is gone or unusable. For an upatch with XDP that means an ``xdp_prog_<i>`` pin
        or the link of another attach program; a device going away is not
        a missing link. Handle it the same way. ``WARN`` ``no
        record of this boot to check the pins against`` before ``init``, or
-       ``pins not checked against the records: <error>``.
+       ``pins not checked against the records: <error>``. ``WARN`` ``links
+       or archives not checked: <error>`` means one of those checks could
+       not run, which says nothing either way.
    * - ``TpmMeasured``
      - The NV index is defined, written and readable. ``WARN`` ``NV
        index 0x01818E00 not bound this boot`` or ``no TPM answered``.
