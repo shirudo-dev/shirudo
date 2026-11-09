@@ -3,6 +3,8 @@
 # Copyright (c) 2026 Authors of shirudo
 #
 # Prepare the immutable runtime image used as the backing image for test VMs.
+# --setup-script runs a script in the image after the packages, in the same
+# network environment.
 
 set -euo pipefail
 
@@ -12,6 +14,7 @@ set -euo pipefail
 ROOTFS=
 CACHE_DIR=
 PACKAGE_FILE=
+SETUP_SCRIPT=
 RUNTIME_KEY=
 KEY_OUTPUT=
 RUNTIME_DISK_SIZE=${TEST_VM_RUNTIME_DISK_SIZE:-8G}
@@ -23,6 +26,7 @@ while [[ $# -gt 0 ]]; do
 	--rootfs) ROOTFS=$2; shift 2 ;;
 	--cache-dir) CACHE_DIR=$2; shift 2 ;;
 	--package-file) PACKAGE_FILE=$2; shift 2 ;;
+	--setup-script) SETUP_SCRIPT=$2; shift 2 ;;
 	--runtime-key) RUNTIME_KEY=$2; shift 2 ;;
 	--runtime-disk-size) RUNTIME_DISK_SIZE=$2; shift 2 ;;
 	--key-output) KEY_OUTPUT=$2; shift 2 ;;
@@ -32,6 +36,7 @@ done
 
 [[ -s "$ROOTFS" ]] || die "base rootfs is missing: $ROOTFS"
 [[ -s "$PACKAGE_FILE" ]] || die "runtime package manifest is missing: $PACKAGE_FILE"
+[[ -z "$SETUP_SCRIPT" || -s "$SETUP_SCRIPT" ]] || die "setup script is missing: $SETUP_SCRIPT"
 [[ -n "$CACHE_DIR" && -n "$RUNTIME_KEY" && -n "$KEY_OUTPUT" ]] ||
 	die "rootfs, cache directory, runtime key, and key output are required"
 [[ "$RUNTIME_DISK_SIZE" =~ ^[1-9][0-9]*(K|M|G|T)$ ]] ||
@@ -116,6 +121,14 @@ done
 	PROXY_OPTS+=" -o Acquire::http::Proxy=$APT_HTTP_PROXY"
 [[ -z "$APT_HTTPS_PROXY" ]] ||
 	PROXY_OPTS+=" -o Acquire::https::Proxy=$APT_HTTPS_PROXY"
+# A setup script runs apt and curl itself, which take the proxy from the
+# environment.
+SETUP_COMMAND=
+SETUP_ARGS=()
+if [[ -n "$SETUP_SCRIPT" ]]; then
+	SETUP_COMMAND="env${APT_HTTP_PROXY:+ http_proxy=$APT_HTTP_PROXY}${APT_HTTPS_PROXY:+ https_proxy=$APT_HTTPS_PROXY} sh /root/shirudo-setup"
+	SETUP_ARGS=(--upload "$SETUP_SCRIPT:/root/shirudo-setup")
+fi
 # shellcheck disable=SC2016 # expanded in the appliance
 INSTALL_SCRIPT='set -e
 export DEBIAN_FRONTEND=noninteractive
@@ -124,7 +137,8 @@ if ! grep -q "^nameserver" /etc/resolv.conf; then
 fi
 apt_opts="-q -y -o Dpkg::Options::=--force-confnew'"$PROXY_OPTS"'"
 apt-get $apt_opts update
-apt-get $apt_opts install '"$PACKAGES"
+apt-get $apt_opts install '"$PACKAGES"'
+'"$SETUP_COMMAND"
 
 printf '[test-vm-runtime] preparing %s\n' "$IMAGE" >&2
 CUSTOMIZE_LOG="${TMP_IMAGE}.virt-customize.log"
@@ -134,8 +148,9 @@ if ! TMPDIR="$GUESTFS_TMP_DIR" XDG_RUNTIME_DIR="$GUESTFS_RUNTIME_DIR" \
 	-a "$TMP_IMAGE" --network --no-selinux-relabel \
 	--run-command 'growpart /dev/sda 1 && resize2fs /dev/sda1' \
 	--upload "$NAMESERVERS:/root/shirudo-nameservers" \
+	"${SETUP_ARGS[@]}" \
 	--run-command "$INSTALL_SCRIPT" \
-	--run-command 'rm -f /root/shirudo-nameservers' \
+	--run-command 'rm -f /root/shirudo-nameservers /root/shirudo-setup' \
 	--upload "$MARKER:/etc/shirudo-test-vm-runtime" \
 	--run-command 'apt-get clean' \
 	--run-command 'rm -rf /var/lib/apt/lists/*' \
