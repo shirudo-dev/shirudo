@@ -59,6 +59,7 @@
 #include "util/tamper.h"
 #include "util/upatch_resolve.h"
 #include "util/upatch_table.h"
+#include "util/upatch_verify.h"
 #include "util/version.h"
 
 #define UNMEASURED_NAMES	256
@@ -854,7 +855,9 @@ int cmd_status(int argc, const char **argv)
 	const char *otel_status = NULL;
 	bool otel_endpoint_configured = false;
 	char unmeasured_names[UNMEASURED_NAMES] = "";
+	char xdp_tampered_names[UNMEASURED_NAMES] = "";
 	struct measured_set *mset = NULL;
+	int xdp_tampered = 0;
 	char config_root_hex[65] = "";
 	__u8 config_root[32];
 	int unmeasured, lock;
@@ -966,6 +969,8 @@ int cmd_status(int argc, const char **argv)
 			unmeasured = archived < 0 ? archived :
 				     unmeasured + archived;
 		}
+		xdp_tampered = upatch_xdp_archives_changed(mset, note_unmeasured,
+							   xdp_tampered_names);
 		measured_set_free(mset);
 	}
 	eventlog_unlock(lock);
@@ -1031,6 +1036,8 @@ int cmd_status(int argc, const char **argv)
 	cin.pins_rc = min(unmeasured, 0);
 	cin.pins_unmeasured = max(unmeasured, 0);
 	cin.pins_detail = unmeasured_names;
+	cin.xdp_tampered = max(xdp_tampered, 0);
+	cin.xdp_tampered_detail = xdp_tampered_names;
 	keyring_cond_input(&cin, &bpf, &dmv);
 
 	if (json) {

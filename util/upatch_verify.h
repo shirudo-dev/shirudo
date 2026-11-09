@@ -24,4 +24,16 @@ int upatch_archive_verify(const char *name,
 			  const __u8 payload[UPATCH_PAYLOAD_HASH_LEN],
 			  struct upatch *out);
 
+struct measured_set;
+
+/*
+ * The XDP upatches the set holds whose archive is not what was loaded. cb
+ * runs for each and a non-zero return ends the walk with that value. The
+ * number found, or -errno when the pins cannot be read. A check that
+ * could not run counts as nothing found.
+ */
+int upatch_xdp_archives_changed(const struct measured_set *s,
+				int (*cb)(const char *name, void *ctx),
+				void *ctx);
+
 #endif /* SHIRUDO_UTIL_UPATCH_VERIFY_H */

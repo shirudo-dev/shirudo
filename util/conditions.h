@@ -49,6 +49,8 @@ struct conditions_input {
 	int		pins_rc;	/* 0 when the pins were checked, else -errno */
 	int		pins_unmeasured;	/* pinned or archived without a record this boot */
 	const char	*pins_detail;	/* their names, when any */
+	int		xdp_tampered;	/* loaded XDP upatches whose archive changed */
+	const char	*xdp_tampered_detail;	/* their names, when any */
 };
 
 struct condition {

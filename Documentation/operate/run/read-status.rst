@@ -233,9 +233,13 @@ verdict is derived from them.
        this boot: <names>`` is what a load stopped between its pins and
        its extend leaves, or an archive root brought back after its
        unload, which the next ``upatch load`` or ``upatch unload``
-       undoes before it acts. ``WARN`` ``no record of this boot to check
-       the pins against`` before ``init``, or ``pins not checked against
-       the records: <error>``.
+       undoes before it acts. ``ALERT`` ``<n> XDP archives differ from
+       the loaded payload: <names>``: the sealed archive of a loaded XDP
+       upatch has changed, or is gone, so ``upatch reconcile`` refuses to
+       run and new devices stay uncovered. Handle it as an incident:
+       :doc:`/operate/troubleshoot/incident-tampered`. ``WARN`` ``no
+       record of this boot to check the pins against`` before ``init``, or
+       ``pins not checked against the records: <error>``.
    * - ``TpmMeasured``
      - The NV index is defined, written and readable. ``WARN`` ``NV
        index 0x01818E00 not bound this boot`` or ``no TPM answered``.

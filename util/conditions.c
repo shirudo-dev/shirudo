@@ -140,7 +140,13 @@ size_t conditions(const struct conditions_input *in,
 	}
 	if (n < cap) {
 		c[n].type = "UpatchesMeasured";
-		if (in->pins_rc == -ENOENT)
+		if (in->xdp_tampered)
+			set_detail(&c[n], "ALERT",
+				   "%d XDP archives differ from the loaded payload: %s",
+				   in->xdp_tampered,
+				   in->xdp_tampered_detail ?
+				   in->xdp_tampered_detail : "?");
+		else if (in->pins_rc == -ENOENT)
 			set_detail(&c[n], "WARN",
 				   "no record of this boot to check the pins against");
 		else if (in->pins_rc)
@@ -222,7 +228,7 @@ const char *status_verdict(const struct conditions_input *in)
 	if (!in->parsed)
 		return "unparseable";
 	if ((in->cm_seen && !in->chain_matches) || in->pins_unmeasured ||
-	    keyring_tampered(in) || config_untrusted(in))
+	    in->xdp_tampered || keyring_tampered(in) || config_untrusted(in))
 		return "tampered";
 	if (!in->lsm_attached)
 		return "lsm-off";
@@ -249,6 +255,9 @@ void status_reason(const struct conditions_input *in,
 	} else if (strcmp(v, "tampered") == 0) {
 		if (in->cm_seen && !in->chain_matches)
 			strscpy(buf, "live register differs from the eventlog replay", cap);
+		else if (in->xdp_tampered)
+			strscpy(buf, "the archive of a loaded XDP upatch differs from what was loaded",
+				cap);
 		else if (in->pins_unmeasured)
 			strscpy(buf, "a upatch is pinned or archived without a record of this boot",
 				cap);
