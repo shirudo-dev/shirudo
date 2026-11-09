@@ -54,6 +54,17 @@ test_xdp_success 'a pass with no XDP upatch does nothing' '
 	reconcile
 '
 
+test_xdp_success 'an upatch with no device yet attaches when one appears' '
+	load "$NAME" &&
+	[ -e "$B/$NAME/xdp_prog_0" ] && [ ! -e "$B/$NAME/link_0" ] &&
+	"$SHIRUDO_BIN" upatch list | grep -q "$NAME" &&
+	"$SHIRUDO_BIN" upatch get "$NAME" >/dev/null &&
+	add_pair xdpa 30000 xdpb 30001 &&
+	reconcile &&
+	[ -e "$B/$NAME/link_0" ] &&
+	[ "$("$H" query xdpa)" -gt 0 ]
+'
+
 test_xdp_success 'a device added after load is attached, once' '
 	add_pair xdpa 30000 xdpb 30001 &&
 	load "$NAME" &&

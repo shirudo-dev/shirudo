@@ -298,11 +298,13 @@ the snapshot, or a veth whose peer is not in it, is left out rather than
 failing the load.
 
 Links use ``XDP_FLAGS_DRV_MODE``. Devices that refuse native XDP with
-``EOPNOTSUPP``, such as a bridge, are logged and skipped. Every XDP
-program must attach to at least one device, else the load fails with
-``attach_target_missing``. Other errors, including an occupied XDP
-attachment point or changed device scope, undo the load's links. Existing
-XDP programs are never replaced. Device classification and peer identity
+``EOPNOTSUPP``, such as a bridge, are logged and skipped. A device that
+changes or goes away during attachment is skipped too. An XDP program
+with no device to attach to still loads: a pin of its own, ``xdp_prog_<i>``,
+keeps it, and ``status`` shows it as ``xdp (waiting for a device)``. Other
+errors undo the load's links, including an occupied XDP attachment point;
+at boot restore an occupied device is skipped instead. Existing XDP
+programs are never replaced. Device classification and peer identity
 are rechecked around attachment, and the returned link's ifindex is
 checked before pinning.
 
@@ -314,8 +316,6 @@ detaches its XDP link. The signed artifact and TPM measurement
 cover the class policy, not a fixed device inventory. The location
 ``status`` and ``upatch get`` report names the first device still
 attached and how many more there are, as in ``xdp/eth0 (+1)``.
-Boot restore requires a matching native-XDP interface to be present when
-``init`` restores the archive; otherwise initialization fails.
 
 Programs that attach nowhere
 ----------------------------

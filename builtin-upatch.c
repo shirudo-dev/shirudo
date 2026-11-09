@@ -1378,9 +1378,26 @@ static int xdp_attach_one(int prog_fd, const struct prog_spec *spec,
 	return ret;
 }
 
+/*
+ * A device that changed or went away is not this upatch's failure. An
+ * occupied one is at load, where the operator can act on it, but not at
+ * boot, where two upatches that loaded with no device yet can meet on a
+ * device that has appeared since, and one failure would stop the rest of
+ * restore. The kernel reports a vanished ifindex as EINVAL, so ask.
+ */
+static bool xdp_attach_skippable(int err, const struct xdp_device *dev,
+				 bool restoring)
+{
+	if (err >= 0)
+		return false;
+	if (err == -EBUSY || err == -EEXIST)
+		return restoring;
+	return err == -EXDEV || err == -ENODEV || xdp_device_verify(dev);
+}
+
 static int attach_xdp_devices(int prog_fd, const struct prog_spec *spec,
 			      const struct xdp_device *devices, size_t count,
-			      const char *dir, __u32 *pinned)
+			      const char *dir, __u32 *pinned, bool restoring)
 {
 	__u32 attached = 0;
 	size_t i;
@@ -1402,6 +1419,11 @@ static int attach_xdp_devices(int prog_fd, const struct prog_spec *spec,
 				dev->name, dev->ifindex, xdp_device_class(dev));
 			continue;
 		}
+		if (xdp_attach_skippable(ret, dev, restoring)) {
+			pr_warn("XDP: skipping %s (ifindex %u): %s", dev->name,
+				dev->ifindex, strerror(-ret));
+			continue;
+		}
 		if (ret < 0) {
 			pr_err("XDP: attach %s (ifindex %u): %s", dev->name,
 			       dev->ifindex, strerror(-ret));
@@ -1412,11 +1434,9 @@ static int attach_xdp_devices(int prog_fd, const struct prog_spec *spec,
 		pr_info("XDP: attached %s (ifindex %u, class %u) at %s",
 			dev->name, dev->ifindex, xdp_device_class(dev), pin);
 	}
-	if (!attached) {
-		pr_err("XDP: no attachable interface matches signed class mask %u",
-		       spec->device_classes);
-		return -ENODEV;
-	}
+	if (!attached)
+		pr_info("XDP: no attachable interface matches signed class mask %u yet",
+			spec->device_classes);
 	return 0;
 }
 
@@ -1428,7 +1448,7 @@ static int attach_xdp_devices(int prog_fd, const struct prog_spec *spec,
 static int attach_and_pin_progs(const struct loader_ctx *cx,
 				size_t prog_desc_off, __u32 nr_progs,
 				const char *name,
-				const struct prog_spec *specs)
+				const struct prog_spec *specs, bool restoring)
 {
 	char dir[PATH_MAX], serializers_dir[PATH_MAX + 16];
 	bool made_dir = false, made_serializers = false;
@@ -1554,7 +1574,7 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 				goto out;
 			made[i] = true;
 			ret = attach_xdp_devices(inner_fd, spec, devices, nr_devices,
-						 dir, &pinned_links);
+						 dir, &pinned_links, restoring);
 			if (ret)
 				goto out;
 			continue;
@@ -2292,12 +2312,12 @@ static int __upatch_apply(const char *path, bool verify_only,
 	 * exits.
 	 */
 	ret = attach_and_pin_progs(cx, prog_desc_off, u.hdr.nr_progs,
-				   upatch_name, prog_specs);
+				   upatch_name, prog_specs, !rep);
 	if (ret) {
 		int e = -ret;
 		const char *cat;
 
-		if (e == ENOENT || e == ENOTDIR || e == ENODEV)
+		if (e == ENOENT || e == ENOTDIR)
 			cat = "attach_target_missing";
 		else if (e == ESTALE)
 			cat = "binary_mismatch";
@@ -3080,7 +3100,7 @@ static int upatch_load(const struct load_args *args)
 done:
 	eventlog_unlock(lock);
 	if (ret == 1 && rep.category &&
-	    !strcmp(rep.category, "attach_target_missing") && rep.err != ENODEV)
+	    !strcmp(rep.category, "attach_target_missing"))
 		ret = UPATCH_INSTALL_TARGET_MISSING;
 	if (staged[0])
 		unlink(staged);

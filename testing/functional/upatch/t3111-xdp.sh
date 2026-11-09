@@ -52,13 +52,15 @@ test_xdp_success() {
 	cleanup
 }
 
-test_xdp_success 'a device without native XDP alone is no attachable target' '
+test_xdp_success 'a device without native XDP alone loads and waits for a device' '
 	ip link add xdpbr type bridge && ip link set xdpbr up &&
-	status=0 &&
-	report=$("$SHIRUDO_BIN" upatch load "$FIXTURES/$NAME.upatch" \
-		--no-precheck --report=- 2>/dev/null) || status=$?
-	[ "$status" = 1 ] &&
-	[ "$(printf "%s\n" "$report" | report_field category)" = attach_target_missing ] &&
+	load "$NAME" &&
+	[ -e "$B/$NAME/xdp_prog_0" ] && [ ! -e "$B/$NAME/link_0" ] &&
+	"$SHIRUDO_BIN" status | grep -q "waiting for a device" &&
+	before=$(wc -l </var/lib/shirudo/eventlog) &&
+	"$SHIRUDO_BIN" init &&
+	[ "$(wc -l </var/lib/shirudo/eventlog)" = "$before" ] &&
+	unload "$NAME" &&
 	[ ! -e "$B/$NAME" ]
 '
 

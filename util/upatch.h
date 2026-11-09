@@ -178,10 +178,7 @@ int upatch_apply(const char *path);
 int upatch_install(const char *path);
 int upatch_remove(const char *path);
 
-/*
- * A missing optional kprobe module permits tree projection advancement;
- * an XDP selection without an attachable device must fail instead.
- */
+/* A missing optional kprobe module permits tree projection advancement. */
 #define UPATCH_INSTALL_TARGET_MISSING	2
 
 struct cert;
