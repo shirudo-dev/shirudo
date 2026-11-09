@@ -70,6 +70,11 @@ parser of input from outside the host gets a target in `testing/fuzz/`.
   host, which appends their output to the same `guest.log`; there
   `result/status` is only the guest's preparation, and `the SSH session
   that ran the target tests failed` is the channel failing, not a test.
+- `end2end` runs an operator VM, `end2end-<pid>-operator`, around node
+  A and node B. A failure there reads `host.sh failed with status <n>`;
+  the `end2end operator:` lines say which step, the package build log
+  is its `result/operator-build.log`, and what it published and verified
+  is in its `result/end2end/`.
 - A fuzz failure leaves its input in `testing/fuzz/crash-<target>-*`.
   Run the target binary on that file to reproduce it. An `abort()` in
   the harness is a property that failed, which can be the harness's own.
@@ -91,6 +96,10 @@ parser of input from outside the host gets a target in `testing/fuzz/`.
   `Cannot select: ... AtomicStore`. Make does not rebuild the helper
   when only that variable changes: remove
   `tools/shirudo-build/compile.o` first.
+- `end2end` prepares the operator VM's image on first use, with network
+  access for clang 23 from apt.llvm.org, and caches it beside the
+  runtime image; every run then builds the operator package in that VM,
+  which takes minutes. Say so before starting.
 
 ## Run unconfined
 
@@ -145,6 +154,10 @@ checkout's `build/test-vm/vms/<name>/`, and the guest mounts that
 checkout's source. Consider only VMs of the current checkout. Other QEMU
 processes on the host, such as little-vm-helper guests, are not shirudo
 targets.
+
+A VM named `<name>-operator` or `<name>-end2end` belongs to an
+end-to-end run, which stops it when it ends; `vm-ssh` reaches it while
+the run lasts, but never reuse, stop or clean it.
 
 A VM under `build/test-vm/vms/<name>/` can be reused when all of these
 hold:

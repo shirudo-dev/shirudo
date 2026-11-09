@@ -2,13 +2,13 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 #
-# t9105 -- the delivery path end to end. The operator built kernel-obs into
-# a package, pushed it to an OCI registry and appended it to a signed
+# t9105 -- the delivery path end to end. The operator VM built kernel-obs
+# into a package, pushed it to an OCI registry and appended it to a signed
 # upatch tree, and an OpenTelemetry Collector listens (end2end/host.sh).
 # The target activates the signed config that points at both, and the
 # units it ships pull the tree, verify and load the package, and export
-# what it observes; the TPM-signed evidence goes back to the host, which
-# checks it and the collector against what it published.
+# what it observes; the TPM-signed evidence goes back to the operator,
+# which checks it against what it published.
 
 cd "$(dirname "$0")/.."
 . ./integration-lib.sh
@@ -24,16 +24,10 @@ OUT=/mnt/shirudo-out/end2end
 [ -s "$CONFIG.img" ] || test_skip_all "missing config-end2end image"
 [ ! -e "$PIN" ] || test_skip_all "kernel-obs is loaded"
 mkdir -p "$OUT"
-W=$(mktemp -d)
-python3 end2end/tcp_forward.py 127.0.0.1:15443 10.0.2.2:15443 "$W/ready" &
-FORWARD=$!
-trap 'kill "$FORWARD" 2>/dev/null || true; rm -rf "$W"' EXIT
-i=0
-until [ -e "$W/ready" ]; do
-	i=$((i + 1))
-	[ "$i" -lt 50 ] || test_skip_all "the registry forwarder did not start"
-	sleep 0.1
-done
+# The tree names the registry as the operator pushed to it, at QEMU's
+# address for the host.
+sed -E -i '/^[^#]*[[:space:]]registry\.test([[:space:]]|$)/d' /etc/hosts
+printf '10.0.2.2 registry.test\n' >>/etc/hosts
 
 # Start a unit and wait for it; its journal is what a failure needs.
 unit_ok() {

@@ -26,7 +26,11 @@ stack_prepare()
 	openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
 		-keyout "$TLS_DIR/server.key" -out "$TLS_DIR/server.csr" \
 		-subj /CN=shirudo-end2end 2>/dev/null
-	printf 'subjectAltName=IP:127.0.0.1,IP:10.0.2.2\n' >"$TLS_DIR/server.ext"
+	# The end-to-end VMs name the registry registry.test; guests reach the
+	# collector, and other guests the registry, at QEMU's address for the
+	# host, and the host reaches both on its loopback.
+	printf 'subjectAltName=DNS:registry.test,IP:127.0.0.1,IP:10.0.2.2\n' \
+		>"$TLS_DIR/server.ext"
 	openssl x509 -req -in "$TLS_DIR/server.csr" -CA "$W/ca.pem" \
 		-CAkey "$TLS_DIR/ca.key" -CAcreateserial -out "$TLS_DIR/server.pem" \
 		-days 3650 -extfile "$TLS_DIR/server.ext" 2>/dev/null

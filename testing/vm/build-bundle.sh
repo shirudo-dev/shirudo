@@ -312,6 +312,12 @@ validate_host_private_dir
 
 resolve_rootfs
 prepare_runtime_image
+# run.sh prepares the operator VM's image with prepare-runtime.sh as well,
+# and needs the appliance kernel chosen above.
+mkdir -p "$WORK_DIR/cache/libguestfs"
+for name in SUPERMIN_KERNEL SUPERMIN_MODULES SUPERMIN_KERNEL_VERSION; do
+	[[ -z "${!name:-}" ]] || printf 'export %s=%q\n' "$name" "${!name}"
+done >"$WORK_DIR/cache/libguestfs/supermin.env"
 
 if bundle_is_current; then
 	log "reusing current host bundle: $BUNDLE_DIR"

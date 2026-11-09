@@ -1,12 +1,16 @@
 #!/bin/sh
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
-# testing/end2end/host.sh -- run the operator side of the end-to-end VM test.
-# Its arguments are the command that runs the suite in node A; node B, a
-# second target with a TPM of its own, boots beside it. After node A, a
-# fresh edge node boots in its place and t9109 and t9110 run here against
-# it and node B. A second fresh edge node and node B then take their
-# place, on a registry that holds no tree, and t9111 runs against them.
+# testing/end2end/host.sh -- the runner of the end-to-end test. It starts the
+# registry, the collectors and the keepalive backend, and boots the operator
+# VM, which runs this script again with its name once it is ready; in that
+# run the operator publishes, node A runs its tests with node B, a second
+# target with a TPM of its own, booting beside it, and the operator verifies
+# what node A attests, each step over SSH. Then the runner checks the
+# collector and node B. A fresh edge node boots in node A's place and t9109
+# and t9110 run here against it and node B. A second fresh edge node and
+# node B then take their place, on a registry that holds no tree, and t9111
+# runs against them.
 
 set -eu
 
@@ -17,6 +21,10 @@ HOST_PRIVATE_DIR="${TEST_VM_HOST_PRIVATE_DIR:-/tmp/shirudo-test-vm-private-$(id 
 KEYS=$HOST_PRIVATE_DIR/operator-keys/keys
 W=$REPO/build/test-vm/end2end
 TLS_DIR=$HOST_PRIVATE_DIR/end2end-tls
+# The operator's SSH key and disk, which holds its own key, stay out of the
+# checkout, which the target VMs mount, or a target could log in to the
+# operator and read the signing key.
+OPERATOR_PRIVATE_DIR=$HOST_PRIVATE_DIR/end2end-operator
 REGISTRY=127.0.0.1:15443
 COLLECTOR=127.0.0.1:14318
 CLICKHOUSE=127.0.0.1:18123
@@ -28,10 +36,13 @@ STACK_PERSIST=0
 S=$REPO/shirudo
 export SHIRUDO_BUILD="$REPO/tools/shirudo-build/shirudo-build"
 export BPM_OCI_CA_FILE="$W/ca.pem"
-VM_NAME=${VM_NAME:-end2end-$$}
-export VM_NAME
-RESULT=$REPO/build/test-vm/vms/$VM_NAME-end2end/result/end2end
-POLICY_FIXTURE=$TEST_VM_HOST_BUNDLE/fixtures/shirudo-test-policy-exec-graph.upatch
+MAKE=${MAKE:-make}
+E2E_VM=${E2E_VM:-${VM_NAME:-end2end-$$}}
+export E2E_VM
+RESULT=$REPO/build/test-vm/vms/$E2E_VM-end2end/result/end2end
+BEE=$W/pkg/kernel-obs-1.0.0.bee
+OPERATOR_SH=/workspace/shirudo/testing/end2end/operator.sh
+OPERATOR_OUT=/mnt/shirudo-out/end2end
 CHECKER=$REPO/tools/quote-check/shirudo-quote-check
 KEEPALIVE=$REPO/testing/fixtures/keepalive
 NODES_DIR=$W
@@ -52,12 +63,17 @@ down() {
 	node_down b "$NODE_B_PID"
 	NODE_B_PID=
 	stack_down
-	rm -rf -- "$TLS_DIR"
+	rm -rf -- "$TLS_DIR" "$OPERATOR_PRIVATE_DIR"
+}
+
+# A command in the operator VM, over SSH.
+operator() {
+	VM_NAME=$OPERATOR_VM VM_SSH_COMMAND="$*" "$REPO/testing/vm/run.sh" --ssh
 }
 
 # The state directory of node $1's VM.
 node_run_dir() {
-	printf '%s/build/test-vm/vms/%s%s-end2end-%s\n' "$REPO" "$VM_NAME" \
+	printf '%s/build/test-vm/vms/%s%s-end2end-%s\n' "$REPO" "$E2E_VM" \
 		"$NODE_ROUND" "$1"
 }
 
@@ -68,7 +84,7 @@ node_boot() {
 	run=$(node_run_dir "$1")
 	mkdir -p "$NODES_DIR/node-$1"
 	if "${MAKE:-make}" -C "$REPO/testing" vm-node-end2end END2END_NODE="$1" \
-		VM_NAME="$VM_NAME$NODE_ROUND" \
+		VM_NAME="$E2E_VM$NODE_ROUND" \
 		TEST_VM_CPUS=2 TEST_VM_MEMORY="${TEST_VM_NODE_MEMORY:-2G}" \
 		>"$W/node-$1$NODE_ROUND.log" 2>&1 &&
 	   cp "$run/ssh.port" "$NODES_DIR/node-$1/port" &&
@@ -90,7 +106,7 @@ node_down() {
 
 node_stop() {
 	[ ! -d "$(node_run_dir "$1")" ] ||
-		VM_NAME=$VM_NAME$NODE_ROUND-end2end-$1 "$REPO/testing/vm/run.sh" --stop \
+		VM_NAME=$E2E_VM$NODE_ROUND-end2end-$1 "$REPO/testing/vm/run.sh" --stop \
 			>/dev/null 2>&1 || :
 }
 
@@ -148,7 +164,7 @@ second_pair() {
 	rm -rf -- "$NODES_DIR/node-edge" "$NODES_DIR/node-b"
 	docker rm -fv "$STACK_NAME-registry" >/dev/null 2>&1 || :
 	stack_oci || die "the registry did not come up again"
-	say "a second fresh edge node and node B, in $VM_NAME$NODE_ROUND-end2end-edge and -b"
+	say "a second fresh edge node and node B, in $E2E_VM$NODE_ROUND-end2end-edge and -b"
 	node_boot edge &
 	NODE_EDGE_PID=$!
 	node_boot b &
@@ -243,6 +259,41 @@ print("sha256:" + hashlib.sha256(raw).hexdigest())
 PY
 }
 
+# The operator VM serves this, with its own name as the argument.
+if [ $# -eq 1 ]; then
+	OPERATOR_VM=$1
+	say "the operator builds, pushes and publishes kernel-obs"
+	operator "$OPERATOR_SH" publish
+	operator cat "$OPERATOR_OUT/nonce" >"$W/nonce"
+	if [ -n "${BACKEND-}" ]; then
+		say "the keepalive backend of $BACKEND loads the example tree"
+		operator cat "$OPERATOR_OUT/pkg/kernel-obs-1.0.0.bee" >"$BEE"
+		publish_document shirudo/fleet-base >"$W/backend-tree.digest" ||
+			die "cannot publish the example tree"
+		CLICKHOUSE_CLIENT="docker exec -i $STACK_NAME-backend-clickhouse clickhouse-client" \
+			SHIRUDO="$S" "$BACKEND/jobs/tree-ingest" --cert "$KEYS/cert.der" \
+			"oci://$REGISTRY/shirudo/fleet-base" >"$W/tree-ingest.out" 2>&1 || {
+			cat "$W/tree-ingest.out" >&2
+			rm -f "$W/backend-tree.digest"
+			die "the tree ingest job did not load the example tree"
+		}
+	fi
+	# Node B outlives this run, which ends with its boot over, or with it
+	# stopped when the run fails.
+	trap '[ $? -eq 0 ] || node_down b "$NODE_B_PID"' EXIT
+	say "node A, in $E2E_VM-end2end, and node B, in $E2E_VM-end2end-b"
+	node_boot b &
+	NODE_B_PID=$!
+	"$MAKE" -C "$REPO/testing" vm-test-end2end VM_NAME="$E2E_VM"
+	say "the operator verifies the evidence and records node A returned"
+	[ -s "$RESULT/evidence.json" ] || die "node A left no evidence in $RESULT"
+	operator "cat >$OPERATOR_OUT/evidence.json" <"$RESULT/evidence.json"
+	operator "$OPERATOR_SH" verify
+	wait "$NODE_B_PID" || :
+	exit 0
+fi
+[ $# -eq 0 ] || die "usage: $0"
+
 command -v docker >/dev/null 2>&1 || die "docker is required"
 private_dir="$(realpath -m "$HOST_PRIVATE_DIR")"
 repo_dir="$(realpath -m "$REPO")"
@@ -252,7 +303,6 @@ repo_dir="$(realpath -m "$REPO")"
 install -d -m 0700 "$HOST_PRIVATE_DIR"
 chmod 0700 "$HOST_PRIVATE_DIR"
 [ -s "$KEYS/signing_key.pem" ] || die "no host-only operator key: $KEYS"
-[ -s "$POLICY_FIXTURE" ] || die "no policy exec graph fixture: $POLICY_FIXTURE"
 rm -rf "$W"
 mkdir -p "$W/out" "$W/pkg"
 chmod 0777 "$W/out"
@@ -261,130 +311,49 @@ install -d -m 0755 "$TLS_DIR"
 trap down EXIT
 
 stack_prepare
-openssl rand -hex 16 >"$W/nonce"
 say "the registry, collector and ClickHouse"
 stack_oci || die "the registry did not come up"
 stack_telemetry || die "the telemetry stack did not come up"
 
-say "the operator builds, pushes and publishes kernel-obs"
-cp -R upatches/kernel-obs "$W/pkg/kernel-obs"
-ln -s "$REPO/vendor" "$W/pkg/kernel-obs/vendor"
-ln -s "$REPO/bpf" "$W/pkg/kernel-obs/bpf"
-sed -i '/^source = "kernel-obs.bpf.c"$/a\
-\
-[upatches.tree]\
-id = "kernel-obs"\
-\
-[upatches.tree.selector.labels]\
-role = ["edge"]' "$W/pkg/kernel-obs/Beefile"
-(cd "$W/pkg" && "$S" bpm build kernel-obs --version 1.0.0 --keys-dir "$KEYS")
-BEE=$W/pkg/kernel-obs-1.0.0.bee
-"$S" bpm push "$BEE" "oci://$REGISTRY/shirudo/kernel-obs" --keys-dir "$KEYS" \
-	--new-index
-"$S" bpm tree append "$BEE" "oci://$REGISTRY/shirudo/end2end-tree" \
-	--keys-dir "$KEYS"
-tar -xzf "$BEE" -C "$W/pkg"
-"$S" upatch info --json "$W/pkg/kernel-obs-1.0.0/upatches/kernel-obs.upatch" |
-	python3 -c 'import json, sys; print(json.load(sys.stdin)["payload_sha256"])' \
-	>"$W/payload"
-"$S" upatch info --json "$POLICY_FIXTURE" |
-	python3 -c 'import json, sys; print(json.load(sys.stdin)["payload_sha256"])' \
-	>"$W/policy-payload"
-
+BACKEND=
 if backend_find; then
-	say "the keepalive backend of $BACKEND loads the example tree"
+	say "the keepalive backend of $BACKEND"
 	[ -x "$CHECKER" ] || die "no quote checker: $CHECKER"
 	stack_backend "$BACKEND" "$CHECKER" ||
 		die "the keepalive backend did not come up"
-	publish_document shirudo/fleet-base >"$W/backend-tree.digest" ||
-		die "cannot publish the example tree"
-	CLICKHOUSE_CLIENT="docker exec -i $STACK_NAME-backend-clickhouse clickhouse-client" \
-		SHIRUDO="$S" "$BACKEND/jobs/tree-ingest" --cert "$KEYS/cert.der" \
-		"oci://$REGISTRY/shirudo/fleet-base" >"$W/tree-ingest.out" 2>&1 || {
-		cat "$W/tree-ingest.out" >&2
-		rm -f "$W/backend-tree.digest"
-		die "the tree ingest job did not load the example tree"
-	}
 else
 	say "no keepalive backend at ../backend and no BACKEND_DIR: t9107 and t9109 to t9111 do not run"
 fi
+export BACKEND
 
-say "node A, in $VM_NAME-end2end, and node B, in $VM_NAME-end2end-b"
-node_boot b &
-NODE_B_PID=$!
-"$@"
+say "the operator, in $E2E_VM-operator"
+# Each VM's name goes on make's command line, where a VM_NAME the caller
+# gave make reaches every sub-make and overrides the environment.
+TEST_VM_SERVE_COMMAND="$REPO/testing/end2end/host.sh" \
+	TEST_VM_PRIVATE_DIR="$OPERATOR_PRIVATE_DIR" \
+	"$MAKE" -C "$REPO/testing" vm-operator-end2end \
+	VM_NAME="$E2E_VM-operator"
 
-# The fresh edge node takes node A's place, so that two guests run at most.
+# The fresh edge node takes the place of node A and the operator, so that
+# two guests run at most.
 if [ -s "$W/backend-tree.digest" ]; then
-	say "the fresh edge node, in $VM_NAME-end2end-edge"
+	say "the fresh edge node, in $E2E_VM-end2end-edge"
 	node_boot edge &
 	NODE_EDGE_PID=$!
 fi
 
-say "the evidence verifies and records what was published"
-[ -s "$RESULT/evidence.json" ] || die "the target left no evidence in $RESULT"
-ak=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["ak"]["name"])' \
-	"$RESULT/evidence.json")
-"$S" attest verify --evidence="$RESULT/evidence.json" --nonce="$(cat "$W/nonce")" \
-	--ak-name="$ak" --allow-runtime-events --require-initrd \
-	>"$W/verify.out" 2>&1 || {
-	cat "$W/verify.out" >&2
-	die "the evidence does not verify"
-}
-grep -qx 'verdict: ok' "$W/verify.out" || die "the evidence does not verify"
-# The records replay to the register the TPM certified, so the last load
-# and tree operation they name are the target's.
-python3 - "$RESULT/evidence.json" "$(cat "$W/payload")" \
-	"$(cat "$W/policy-payload")" "$W/ca.pem" "$REGISTRY" <<'PY' || \
-	die "the target did not load what was published"
-import json, ssl, sys, urllib.request
-
-evidence, payload, policy_payload, ca, registry = sys.argv[1:6]
-ctx = ssl.create_default_context(cafile=ca)
-
-
-def get(path, accept=None):
-    request = urllib.request.Request(f"https://{registry}/v2/{path}")
-    if accept:
-        request.add_header("Accept", accept)
-    return urllib.request.urlopen(request, context=ctx).read()
-
-
-repo = "shirudo/end2end-tree"
-manifest = json.loads(get(f"{repo}/manifests/stable",
-                          "application/vnd.oci.image.manifest.v1+json"))
-published = None
-for layer in manifest["layers"]:
-    try:
-        document = json.loads(get(f"{repo}/blobs/{layer['digest']}"))
-    except ValueError:
-        continue
-    if isinstance(document, dict) and "operations" in document:
-        published = document["operations"][-1]
-assert published, "no publication in the tree"
-records = json.load(open(evidence))["eventlog"]
-loads = [r["upatch"] for r in records if r["type"] == "upatch_load"]
-assert {"name": "kernel-obs", "payload_sha256": payload} in loads, loads
-assert loads[-1] == {"name": "policy-exec-graph",
-                     "payload_sha256": policy_payload}, loads[-1]
-ops = [r["tree"] for r in records if r["type"] == "tree_op"]
-assert ops[-1] == {key: published[key] for key in
-                   ("seq", "op", "id", "operation_digest")}, (ops[-1], published)
-PY
-
 say "the collector holds what kernel-obs observed"
-python3 "$REPO/testing/end2end/check-otlp.py" \
-	"$REPO/build/test-vm/vms/$VM_NAME-end2end/result/end2end/otel" \
+python3 "$REPO/testing/end2end/check-otlp.py" "$RESULT/otel" \
 	"$W/out/otlp.json" "http://$CLICKHOUSE/" || \
 	die "the collector or ClickHouse snapshots differ from the map exports"
 
 say "node B booted with an attestation key and a role of its own"
-wait "$NODE_B_PID" || :
-NODE_B_PID=
 node_wait b 0 || {
 	tail -n 40 "$W/node-b.log" >&2
 	die "node B did not boot; see $W/node-b.log"
 }
+ak=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["ak"]["name"])' \
+	"$RESULT/evidence.json")
 node_sh b "/usr/local/bin/shirudo-runtime attest --nonce=$(cat "$W/nonce")" \
 	>"$W/node-b-evidence.json" || die "node B gave no evidence"
 # Node B loads nothing of its own: a test gives it only what a tree holds.
@@ -403,7 +372,7 @@ print(evidence["ak"]["name"])' "$W/node-b-evidence.json") ||
 [ "$ak_b" != "$ak" ] || die "node A and node B share an attestation key"
 [ "$(node_sh b cat /run/shirudo/config/etc/shirudo/node.labels)" = role=core ] ||
 	die "node B is not labelled role=core"
-image_identity A "$REPO/build/test-vm/vms/$VM_NAME-end2end/result/keepalive.json"
+image_identity A "$REPO/build/test-vm/vms/$E2E_VM-end2end/result/keepalive.json"
 image_identity B "$(node_run_dir b)/result/keepalive.json" \
 	"$(cat "$TEST_VM_HOST_BUNDLE/verity/config-core.root")"
 

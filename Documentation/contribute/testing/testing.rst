@@ -39,7 +39,9 @@ Before you begin
   bundle carries the TPM simulator helper, so
   :src:`testing/vm/build-bundle.sh` builds no bundle without
   ``libtpms-dev``.
-- For the end-to-end tests: Docker on the host.
+- For the end-to-end tests: Docker on the host, and network access the
+  first time, when the runner adds clang 23 from apt.llvm.org and the
+  operator's build dependencies to the image of the operator VM.
 
 The ``CI suite`` workflow uses the x86-64 CI kernel package from
 ``shirudo-dev/kernel`` for every trigger. By default, it selects the
@@ -76,8 +78,8 @@ Test tiers
      - ``make -C testing functional``
    * - End-to-end
      - :src:`testing/end2end/`
-     - Around one VM, with a registry and a collector in containers on
-       the host
+     - In an operator VM and a target VM, with a registry and a
+       collector in containers on the host
      - ``make -C testing end2end``
    * - Fuzz
      - :src:`testing/fuzz/`
@@ -331,8 +333,10 @@ family runs, the end-to-end run and the interactive VM all boot it.
 
 A family's VM runs its target tests itself and powers off. The
 end-to-end VM prepares itself the same way and waits while the host runs
-its target tests over SSH, then powers off. The interactive VM stays up
-until you stop it.
+its target tests over SSH, then powers off. The operator VM of the
+end-to-end test has no TPM and no shirudo kernel arguments; it builds
+and installs the operator package and serves the end-to-end run. The
+interactive VM stays up until you stop it.
 
 Build the test kernel
 ~~~~~~~~~~~~~~~~~~~~~
@@ -405,7 +409,9 @@ the signing key outside the checkout, which every guest can read, in
 ``TEST_VM_HOST_PRIVATE_DIR`` names another directory, which must lie
 outside the repository. Every target that boots a VM rebuilds the bundle
 when one of its inputs changed, or when that directory does not hold the
-key the bundle's fixtures are signed with. Build it alone with:
+key the bundle's fixtures are signed with. The end-to-end test builds it
+once, before its two VMs: the target must trust the key the operator
+signs with. Build it alone with:
 
 .. code-block:: console
 
@@ -620,20 +626,43 @@ Run the end-to-end tests
 ------------------------
 
 ``make -C testing end2end`` runs ``t9001`` on the host, then
-:src:`testing/end2end/host.sh` plays the operator around node A, which
-runs the target tests, node B beside it, and with a keepalive backend a
-fresh edge node after node A (see :ref:`testing-two-nodes`). It starts
-an OCI registry, an OpenTelemetry Collector and ClickHouse in Docker
-containers pinned by digest. The registry and collector use a throwaway
-CA. It builds ``kernel-obs`` into a package with ``bpm build``, pushes
-it with ``bpm push`` and appends it to a signed upatch tree with
-``bpm tree append``. The target
-activates a signed config that points at the tree and the collector,
-and its units pull, verify, load and export. The VM's tests, ``t91??``,
-run over SSH from the host, which writes what they print to
-``result/guest.log`` as a family's VM does. The host then verifies the
-target's TPM evidence with ``attest verify`` and checks that the
-collector holds the package's records. The earlier ``kernel-obs`` tests
+:src:`testing/end2end/host.sh` runs the test with an operator VM and the
+target nodes: node A, which runs the target tests, node B beside it, and
+with a keepalive backend a fresh edge node after node A (see
+:ref:`testing-two-nodes`). It starts an OCI registry, an OpenTelemetry
+Collector and ClickHouse in Docker containers pinned by digest. The
+registry and collector use a throwaway CA.
+
+The operator VM boots from the runtime image with clang 23 and the build
+dependencies of the operator package added, which the runner prepares
+once and caches beside it. The VM has no TPM, boots without the shirudo
+kernel arguments, and is the only VM that sees the signing key. The host
+keeps the key it logs in to it with and the VM's disk, which holds the
+guest's own key, outside the checkout, in
+``/tmp/shirudo-test-vm-private-<uid>/end2end-operator/``: a VM's keys
+and disk lie in its state directory, which the target VMs read through
+their share of the checkout. The operator VM builds the operator package
+from the files git sees in the checkout and installs it. Once it is
+ready, the host has it run :src:`testing/end2end/operator.sh` over SSH:
+the operator builds ``kernel-obs`` into a package with ``bpm build``,
+against the headers and ``vmlinux.h`` of the package, pushes it with
+``bpm push``, appends it to a signed upatch tree with
+``bpm tree append`` and picks the nonce the targets attest with. The
+operator VM and node A name the registry ``registry.test``, at QEMU's
+address for the host, so the tree names it as node A reaches it. The
+host's own build and the operator key it keeps still play the operator
+for the keepalive backend's example tree and for ``t9109`` to ``t9111``,
+which run on the host.
+
+Node A and node B boot next. Node A activates a signed config that
+points at the tree and the collector, and its units pull, verify, load
+and export. Its tests, ``t91??``, run over SSH from the host, which
+writes what they print to ``result/guest.log`` as a family's VM does.
+The host hands node A's TPM evidence to the operator, which verifies it
+with ``attest verify`` and checks that its records name the package and
+the tree operation it published. Once the operator VM has stopped, the
+host checks that the collector holds the package's records. The earlier
+``kernel-obs`` tests
 export each map snapshot as local JSON and OTLP from one read; the host
 compares the snapshots with the collector's JSON output and queries the
 ClickHouse log and sum metric tables to check that both collector exports
@@ -651,9 +680,15 @@ tests.
 
    $ make -C testing end2end
 
-The host side writes to ``build/test-vm/end2end/``. The guest reaches
-the registry and collector through QEMU's address for the host. ClickHouse
-is available to the collector on the test's Docker network.
+The host side writes to ``build/test-vm/end2end/``. The VMs are named
+``end2end-<pid>-operator`` and ``end2end-<pid>-end2end``, or
+``<name>-operator`` and ``<name>-end2end`` with ``VM_NAME=<name>``; the
+operator's package build log is in its ``result/operator-build.log`` and
+what it published and verified in its ``result/end2end/``. While the run lasts,
+``make -C testing vm-ssh VM_NAME=<name>`` opens a shell on either VM.
+The guests reach the registry and collector through QEMU's address for
+the host. ClickHouse is available to the collector on the test's Docker
+network.
 
 ``t9107`` runs the reference keepalive backend, which lives in a
 repository of its own, ``shirudo-dev/backend``. ``host.sh`` finds it
@@ -688,7 +723,9 @@ The nodes
 ~~~~~~~~~
 
 The tier boots up to five targets, at most two at once, each with its
-own software TPM and so its own attestation key. Node A is the family's
+own software TPM and so its own attestation key. The operator VM runs
+beside the first two, node A and node B, and stops before the others
+boot. Node A is the family's
 VM, named ``<name>-end2end``, and runs the target tests in number order.
 Node B, ``<name>-end2end-b``, boots beside it. With a keepalive backend,
 the fresh edge node, ``<name>-end2end-edge``, boots once node A has
@@ -780,8 +817,8 @@ directory and ``NODES_HOST`` is ``127.0.0.1``. The nodes reach the
 registry and the collectors through QEMU's address for the host, as node
 A does, and have the checkout at ``/workspace/shirudo`` too. A tree at
 ``127.0.0.1:15443`` names its packages there, so a test that syncs a node
-starts ``end2end/tcp_forward.py`` in it, as ``t9105`` does in node A,
-detached from the SSH session:
+starts ``end2end/tcp_forward.py`` in it, detached from the SSH
+session:
 
 .. code-block:: sh
 
@@ -790,10 +827,10 @@ detached from the SSH session:
                      10.0.2.2:15443 /tmp/forward-ready </dev/null >/dev/null 2>&1"
 
 The other nodes have 2 CPUs and ``TEST_VM_NODE_MEMORY``, ``2G`` by
-default; node A keeps ``TEST_VM_CPUS`` and ``TEST_VM_MEMORY``. With the
-defaults the guests take 6 GiB of host memory at most, while node A and
-node B run, and the registry, the two collectors and the two ClickHouse
-servers come on top. ``host.sh`` prints each node's memory use, and their
+default; node A and the operator VM keep ``TEST_VM_CPUS`` and
+``TEST_VM_MEMORY``. With the defaults the guests take 10 GiB of host
+memory at most, while the operator VM, node A and node B run, and the
+registry, the two collectors and the two ClickHouse servers come on top. ``host.sh`` prints each node's memory use, and their
 boot logs are ``build/test-vm/end2end/node-b.log`` and
 ``node-edge.log``, and ``node-b-2.log`` and ``node-edge-2.log`` for the
 second pair.

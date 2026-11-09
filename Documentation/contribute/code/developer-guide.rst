@@ -242,8 +242,10 @@ path, which takes precedence over ``PATH``.
 ``bpm build`` compiles with the package directory as its working
 directory. To build a package with a checkout's ``vmlinux.h`` and BPF
 headers, give the package directory ``vendor`` and ``bpf`` symbolic
-links to the checkout's, as ``t7005`` and :src:`testing/end2end/host.sh`
-do.
+links to the checkout's, as ``t7005`` does. An installed operator package
+needs neither: ``shirudo-build`` falls back to the headers and
+``vmlinux.h`` it installs, as the operator VM of the end-to-end test
+builds ``kernel-obs``.
 
 Build the target binary
 -----------------------

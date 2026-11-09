@@ -19,6 +19,7 @@ UPPER=/var/tmp/shirudo-upper
 OVERLAY_WORK=/var/tmp/shirudo-overlay-work
 WORKSPACE=/workspace/shirudo
 VM_MODE="${VM_MODE:-test}"
+VM_ROLE="${TEST_VM_ROLE:-target}"
 SHIRUDO_BIN=/usr/local/bin/shirudo
 VM_INITRD="${TEST_VM_INITRD:-1}"
 
@@ -276,6 +277,52 @@ write_target_test_env()
 	} >/etc/shirudo-test-vm.env
 }
 
+# The operator holds the signing key and is no target: it has no TPM, and its
+# shirudo is the operator package, built here for the distribution it runs
+# on, as that package must be, from the files git sees in the checkout,
+# which the host lists.
+prepare_operator()
+{
+	local src=/var/tmp/shirudo-operator-src
+	local build_log=/mnt/shirudo-out/operator-build.log
+	local files=/mnt/shirudo-out/source-files
+	local debs
+
+	if [[ -e /dev/tpm0 || -e /dev/tpmrm0 ]]; then
+		log "the operator VM has a TPM"
+		return 1
+	fi
+	[[ -s /mnt/shirudo-operator-keys/signing_key.pem ]] || {
+		log "the operator VM has no signing key"
+		return 1
+	}
+	[[ -s "$files" ]] || {
+		log "the host listed no files of the checkout"
+		return 1
+	}
+	sed -E -i '/^[^#]*[[:space:]]registry\.test([[:space:]]|$)/d' /etc/hosts
+	printf '%s\n' '10.0.2.2 registry.test' >>/etc/hosts
+
+	log "building the operator package"
+	rm -rf -- "$src"
+	mkdir -p "$src"
+	rsync -a --from0 --files-from="$files" --ignore-missing-args \
+		"$LOWER"/ "$src"/
+	if ! make -C "$src/packaging" -j"$(nproc)" bindeb-pkg PKG_ROLES=operator \
+		>"$build_log" 2>&1; then
+		tail -40 "$build_log"
+		log "the operator package did not build; see operator-build.log"
+		return 1
+	fi
+	debs=("$src"/shirudo-operator_*.deb)
+	[[ ${#debs[@]} -eq 1 && -s "${debs[0]}" ]] || {
+		log "expected one operator package in $src"
+		return 1
+	}
+	dpkg -i "${debs[0]}"
+	shirudo version
+}
+
 configure_oci_ca
 configure_bpm_oci_repository
 configure_map_export
@@ -318,6 +365,12 @@ else
 fi
 
 cd "$WORKSPACE"
+
+if [[ "$VM_ROLE" == operator ]]; then
+	prepare_operator
+	log "operator prepared; the host runs its steps over SSH"
+	exit 0
+fi
 
 log "installing networking modules from the booted kernel artifact"
 install_kernel_modules

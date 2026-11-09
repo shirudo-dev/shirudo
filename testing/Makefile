@@ -29,7 +29,8 @@ test-vm-arch = $(shell TEST_VM_ARCH='$(TEST_VM_ARCH)'; \
 .DEFAULT_GOAL := all
 .PHONY: all help clean unit ci-checks functional end2end build-operator build-unit \
 	test-helpers \
-	fuzz bundle test-vm-bundle kernel bpf-next vm vm-console vm-ssh vm-stop vm-clean
+	fuzz bundle test-vm-bundle kernel bpf-next vm vm-console vm-ssh vm-stop vm-clean \
+	vm-operator-end2end
 
 KERNEL_PATCHES ?= $(if $(wildcard $(ROOT)/kernel/*.patch),$(ROOT)/kernel/,)
 override KERNEL_PATCHES := $(if $(strip $(KERNEL_PATCHES)),$(call root-path,$(KERNEL_PATCHES)),)
@@ -310,29 +311,51 @@ $(addprefix functional/,$(FAMILIES)): functional/%: build-operator
 	$(Q)$(ROOT)/testing/run-tests.sh functional/$*
 	+$(Q)$(call vm-tests,$(filter $*,$(VM_SUITES)))
 
-# The end-to-end VM runs between the operator's publication to a registry
-# and the host's checks of what the target attests and exports.
+# The end-to-end test boots the operator VM, which builds the operator
+# package and alone gets the signing key on its own disk; while it serves,
+# host.sh has it publish kernel-obs, runs node A and has it verify what
+# node A attests. The host's own build plays the operator for the keepalive
+# backend and for the tests host.sh runs against the other nodes. The goals
+# host.sh boots the VMs with build nothing: all VMs boot this bundle, and a
+# rebuild between them, for an input changed meanwhile, would replace the
+# key the operator signs with and the targets trust.
 end2end: build-operator
 	$(Q)$(ROOT)/testing/run-tests.sh end2end
 	+$(Q)$(if $(filter 0,$(VM)),:,$(MAKE) test-vm-bundle && \
 		TEST_VM_HOST_BUNDLE="$(abspath $(TEST_VM_BUNDLE_DIR))" \
 		TEST_VM_HOST_PRIVATE_DIR="$(abspath $(TEST_VM_HOST_PRIVATE_DIR))" \
-		MAKE="$(MAKE)" \
-		$(ROOT)/testing/end2end/host.sh $(MAKE) -C $(ROOT)/testing vm-test-end2end)
+		MAKE="$(MAKE)" $(ROOT)/testing/end2end/host.sh)
+
+vm-operator-end2end:
+	$(Q)VM_MODE=serve TEST_VM_ROLE=operator TEST_VM_INITRD=0 \
+		VM_VERBOSE="$(TEST_VM_VERBOSE)" VM_NAME="$(VM_NAME)" \
+		TEST_VM_SERVE_COMMAND="$(TEST_VM_SERVE_COMMAND)" \
+		TEST_VM_PRIVATE_DIR="$(TEST_VM_PRIVATE_DIR)" \
+		TEST_VM_OPERATOR_KEYS="$(abspath $(TEST_VM_HOST_PRIVATE_DIR))/operator-keys/keys" \
+		TEST_VM_KERNEL="$(abspath $(VM_KERNEL_IMAGE))" \
+		TEST_VM_WORK_DIR="$(TEST_VM_WORK_DIR)" \
+		TEST_VM_RUNTIME_CACHE_DIR="$(TEST_VM_RUNTIME_CACHE_DIR)" \
+		TEST_VM_MODE="$(TEST_VM_MODE)" \
+		TEST_VM_HOST_BUNDLE="$(abspath $(TEST_VM_BUNDLE_DIR))" \
+		$(ROOT)/testing/vm/run.sh
+
+vm-test-end2end:
+	$(Q)$(call run-target-vm,end2end,$(if $(VM_NAME),$(VM_NAME)-end2end),1)
 
 # A node of the end-to-end run that end2end/host.sh boots and stops,
 # prepared like the suite's VM, but it runs no tests and stays up until it
 # is stopped. END2END_NODE=b is node B, with the core role, beside the
 # suite's VM; edge is a fresh node with the edge role, after it.
 END2END_NODE ?= b
-vm-node-end2end: $(VM_KERNEL_DEP) test-vm-bundle
+vm-node-end2end:
 	$(Q)$(if $(filter-out b edge,$(END2END_NODE)),$(error END2END_NODE must be b or edge))
 	$(Q)TEST_VM_NODE_ROLE=$(if $(filter edge,$(END2END_NODE)),edge,core) \
 		$(call run-target-vm,end2end,$(if $(VM_NAME),$(VM_NAME)-end2end-$(END2END_NODE)),1,node)
 
 vm-test-tpm: vm-test-register
 
-$(addprefix vm-test-,register $(VM_SUITES)): vm-test-%: $(VM_KERNEL_DEP) test-vm-bundle
+$(addprefix vm-test-,register $(filter-out end2end,$(VM_SUITES))): \
+		vm-test-%: $(VM_KERNEL_DEP) test-vm-bundle
 	$(Q)$(call run-target-vm,$*,$(if $(VM_NAME),$(VM_NAME)-$*),$(if $(filter register,$*),0,1))
 
 vm-stop:

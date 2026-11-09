@@ -97,7 +97,8 @@ signed config image.
    * - ``t1007-test-vm-cli``
      - Test VM scripts: kernel selection, host dependencies, arm64
        boot settings, the bundle stamp, serve mode, node mode only for a
-       core or edge node of the end-to-end tier
+       core or edge node of the end-to-end tier, the operator VM's role and
+       its signing key
    * - ``t1008-kernel-ami-config``
      - The slim kernel configuration for NitroTPM CRB, EC2, EFI and SSM
    * - ``t1009-upatch-isa``
@@ -655,7 +656,10 @@ signed config image.
    * - ``t9104-kernel-obs-dns-matrix``
      - DNS over loopback in maps, OTLP and ClickHouse
    * - ``t9105-delivery``
-     - Registry, tree sync, load, export and attestation end to end
+     - The operator package built and installed in an operator VM
+       without a TPM, which publishes ``kernel-obs`` and verifies the
+       evidence; registry, tree sync, load, export and attestation on
+       the target
    * - ``t9106-policy-exec-graph``
      - A signed SHPL section labels five executables; its BPF policy
        allows unlabeled tasks to exec unlabeled files and 0x1, allows

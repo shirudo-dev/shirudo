@@ -536,6 +536,59 @@ test_expect_success 'serve mode runs the end-to-end target tests over SSH' '
 	grep -Fq "while [ ! -e /mnt/shirudo-out/host-done ]" vm/run.sh &&
 	grep -Fq ": >\"\$RUN_DIR/result/host-done\"" vm/run.sh
 '
+
+test_expect_success 'an operator VM serves without a TPM and alone gets the key' '
+	mkdir -p "$WORK/operator-keys" &&
+	! TEST_VM_ROLE=other "$RUNNER" >"$WORK/role.out" 2>&1 &&
+	grep -q "TEST_VM_ROLE must be .target. or .operator." "$WORK/role.out" &&
+	! TEST_VM_ROLE=operator VM_MODE=test TEST_VM_INITRD=0 \
+		"$RUNNER" >"$WORK/operator-mode.out" 2>&1 &&
+	grep -q "an operator VM runs in serve mode" "$WORK/operator-mode.out" &&
+	! TEST_VM_ROLE=operator VM_MODE=serve TEST_VM_INITRD=0 \
+		TEST_VM_SERVE_COMMAND=/bin/true \
+		TEST_VM_OPERATOR_KEYS="$WORK/operator-keys" \
+		"$RUNNER" >"$WORK/operator-keys.out" 2>&1 &&
+	grep -q "TEST_VM_OPERATOR_KEYS must name" "$WORK/operator-keys.out" &&
+	! VM_MODE=serve TEST_VM_OPERATOR_KEYS="$WORK/operator-keys" \
+		"$RUNNER" >"$WORK/target-keys.out" 2>&1 &&
+	grep -q "only an operator VM gets TEST_VM_OPERATOR_KEYS" \
+		"$WORK/target-keys.out" &&
+	! VM_MODE=test TEST_VM_SERVE_COMMAND=/bin/true \
+		"$RUNNER" >"$WORK/serve-command.out" 2>&1 &&
+	grep -q "TEST_VM_SERVE_COMMAND must name a program, in serve mode" \
+		"$WORK/serve-command.out" &&
+	! VM_MODE=serve TEST_VM_PRIVATE_DIR="$PWD/private" \
+		"$RUNNER" >"$WORK/private-repo.out" 2>&1 &&
+	grep -q "TEST_VM_PRIVATE_DIR must name a new directory outside" \
+		"$WORK/private-repo.out" &&
+	mkdir "$WORK/private" &&
+	! VM_MODE=serve TEST_VM_PRIVATE_DIR="$WORK/private" \
+		"$RUNNER" >"$WORK/private-exists.out" 2>&1 &&
+	grep -q "TEST_VM_PRIVATE_DIR must name a new directory outside" \
+		"$WORK/private-exists.out" &&
+	grep -q -- "-u TEST_VM_PRIVATE_DIR" vm/run.sh &&
+	grep -Fq "SSH_KEY=\"\${PRIVATE_DIR:-\$SSH_DIR}/id_ed25519\"" vm/run.sh &&
+	grep -Fq "OVERLAY=\"\${PRIVATE_DIR:-\$RUN_DIR}/rootfs.qcow2\"" vm/run.sh &&
+	grep -Fq "OPERATOR_PRIVATE_DIR=\$HOST_PRIVATE_DIR/" end2end/host.sh &&
+	grep -Fq "TEST_VM_PRIVATE_DIR=\"\$OPERATOR_PRIVATE_DIR\"" end2end/host.sh &&
+	make -n -C .. -f testing/Makefile vm-operator-end2end VM_NAME=e2e-operator \
+		TEST_VM_SERVE_COMMAND=/bin/true TEST_VM_WORK_DIR="$WORK/operator-vm" \
+		TEST_VM_PRIVATE_DIR="$WORK/operator-private" \
+		>"$WORK/operator-make.out" 2>&1 &&
+	grep -q "TEST_VM_ROLE=operator" "$WORK/operator-make.out" &&
+	grep -q "TEST_VM_OPERATOR_KEYS=.*/operator-keys/keys" "$WORK/operator-make.out" &&
+	grep -Fq "TEST_VM_PRIVATE_DIR=\"$WORK/operator-private\"" \
+		"$WORK/operator-make.out" &&
+	make -n -C .. -f testing/Makefile vm-test-end2end VM_NAME=e2e \
+		TEST_VM_WORK_DIR="$WORK/target-vm" >"$WORK/target-make.out" 2>&1 &&
+	grep -q "VM_MODE=serve" "$WORK/target-make.out" &&
+	! grep -q "TEST_VM_OPERATOR_KEYS\|TEST_VM_ROLE\|TEST_VM_PRIVATE_DIR" \
+		"$WORK/target-make.out" &&
+	grep -Fq "[[ \"\$VM_ROLE\" != target ]] || start_swtpm" vm/run.sh &&
+	grep -q "mount_tag=shirudo-operator-keys" vm/run.sh &&
+	grep -q "the operator VM has a TPM" vm/guest.sh &&
+	grep -q "bindeb-pkg PKG_ROLES=operator" vm/guest.sh
+'
 test_expect_success 'make -C testing vm boots a release kernel at or above the floor' '
 	grep -q "VM_KERNEL_MIN := 7.4" ../testing/Makefile &&
 	grep -q "make -C testing vm KERNEL=7.4" ../testing/Makefile &&
