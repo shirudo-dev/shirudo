@@ -1568,6 +1568,16 @@ R21 upatches can be neutralized by changing their targets
    reconcile and unload; driver behaviour across a namespace move is
    tested only for veth.
 
+   No record says which per-device XDP link pins should exist, because
+   they come and go with devices. A pin that disappears while its device
+   remains looks like a device not yet attached: ``init`` and ``status``
+   do not report it, and the next reconcile attaches again. This assumes
+   the private bpffs guards hold: removing or renaming a pin needs runtime
+   authority, and an attempt without it is refused and counted as
+   ``PinUnlink`` or ``PinRename``. A task that has that authority, or gets
+   past the guards, can detach an XDP link unreported until the next pass.
+   Every other pin an upatch must hold is checked.
+
 R22 Labeled inodes are interchangeable
    The label carries no identity. Any labeled inode passes shirudo's
    checks at any sealed path, and ``lsm/sb_mount`` does not guard the
