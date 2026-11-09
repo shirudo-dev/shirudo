@@ -26,7 +26,10 @@ upatch-rodata		-I ../../../vendor/libbpf/include/uapi -I ../../../vendor/libbpf 
 string-number-model	--unwind 6
 measured-fold-model	--unwind 7
 bpm-tree-follows	--unwind 4
-bpm-tree-sync-model	--object-bits 10 --unwind 60 --max-field-sensitivity-array-size 257 LEN=0-2
+bpm-tree-sync-model	--object-bits 10 --unwind 8 --unwindset memcmp.0:33,memneq_explicit.0:33,hex_encode.0:33,hex_decode.0:33,model_hash.0:33,any_node.0:33,run.0:33,same_digest.0:33,want_write.0:33,want_write.1:33,strcmp.0:66,strlen.0:66 --max-field-sensitivity-array-size 257 --slice-formula LEN=0-1
+bpm-tree-sync-application	--object-bits 10 --unwind 8 --unwindset memcmp.0:33,memneq_explicit.0:33,hex_encode.0:33,hex_decode.0:33,model_hash.0:33,any_node.0:33,run.0:33,same_digest.0:33,want_write.0:33,want_write.1:33,strcmp.0:66,strlen.0:66 --max-field-sensitivity-array-size 257 --slice-formula LEN=2
+bpm-tree-sync-pending	--object-bits 10 --unwind 8 --unwindset memcmp.0:33,memneq_explicit.0:33,hex_encode.0:33,hex_decode.0:33,model_hash.0:33,any_node.0:33,run.0:33,same_digest.0:33,want_write.0:33,want_write.1:33,strcmp.0:66,strlen.0:66 --max-field-sensitivity-array-size 257 --slice-formula LEN=2
+bpm-tree-recovery-model	--object-bits 10 --unwind 8 --unwindset memcmp.0:33,memneq_explicit.0:33,hex_encode.0:33,hex_decode.0:33,model_hash.0:33,any_node.0:33,same_digest.0:33,want_write.0:33,want_write.1:33,strcmp.0:66,strlen.0:66,recovery_start.0:33,recovery_state_matches.0:33 --max-field-sensitivity-array-size 257 --slice-formula LEN=0-2
 bpm-tree-signers	--unwind 8
 bpm-upatch-member	--unwind 30 LEN=0-18
 tpm-reader		--unwind 1

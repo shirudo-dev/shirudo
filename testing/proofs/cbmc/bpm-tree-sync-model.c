@@ -55,6 +55,7 @@ struct write {
 
 static struct write want[MAX_WRITES];
 static int n_got, n_want;
+static __u32 fail_at, fail_call;
 static bool failed;
 
 /* What the node holds, what the registry serves and what the checks say. */
@@ -70,10 +71,14 @@ static bool sel_match[LEN ? LEN : 1], sel_fail[LEN ? LEN : 1];
 static __s64 measure_seq;
 static __u8 measure_d[32];
 
+/* A failed I/O stops sync before another modeled I/O call. */
 static bool fail_here(void)
 {
 	bool fail;
 
+	__CPROVER_assert(fail_call <= fail_at,
+			 "no I/O call after a failed I/O");
+	fail = fail_call++ == fail_at;
 	if (fail)
 		failed = true;
 	return fail;
@@ -85,7 +90,7 @@ static void copy_short(char dst[2], const char *src)
 	dst[1] = '\0';
 }
 
-static bool same_write(const struct write *a, const struct write *b);
+static bool same_write(const struct write *a, int index);
 
 /* A write sync makes, checked against the model's at its place. */
 static void record(const struct write *w)
@@ -93,7 +98,7 @@ static void record(const struct write *w)
 	__CPROVER_assert(!failed, "nothing written after a failure");
 	__CPROVER_assert(n_got < n_want, "no write the model does not make");
 	if (n_got < n_want)
-		__CPROVER_assert(same_write(w, &want[n_got]),
+		__CPROVER_assert(same_write(w, n_got),
 				 "the model's write at its place");
 	n_got++;
 }
@@ -587,40 +592,55 @@ struct mstate {
 static void want_write(int kind, int op, __s64 seq, const __u8 *d,
 		       const struct mstate *st)
 {
-	struct write *w;
+	int index;
 
-	__CPROVER_assume(n_want < MAX_WRITES);
-	w = &want[n_want++];
-	w->kind = kind;
-	w->op = op;
-	w->seq = st ? st->last_seq : seq;
+	__CPROVER_assert(n_want < MAX_WRITES, "expected write log fits");
+	index = n_want++;
+	want[index].kind = kind;
+	want[index].op = op;
+	want[index].seq = st ? st->last_seq : seq;
 	if (d)
-		memcpy(w->d, d, 32);
+		for (int i = 0; i < 32; i++)
+			want[index].d[i] = d[i];
 	if (st) {
-		memcpy(w->d, st->root, 32);
-		w->generation = st->generation;
-		copy_short(w->manifest, st->manifest);
-		copy_short(w->tree_id, st->tree_id);
+		for (int i = 0; i < 32; i++)
+			want[index].d[i] = st->root[i];
+		want[index].generation = st->generation;
+		want[index].manifest[0] = st->manifest[0];
+		want[index].manifest[1] = '\0';
+		want[index].tree_id[0] = st->tree_id[0];
+		want[index].tree_id[1] = '\0';
 	}
 }
 
-static bool same_write(const struct write *a, const struct write *b)
+static bool same_digest(const struct write *actual, int index)
 {
-	if (a->kind != b->kind)
+	for (int i = 0; i < 32; i++)
+		if (actual->d[i] != want[index].d[i])
+			return false;
+	return true;
+}
+
+static bool same_write(const struct write *a, int index)
+{
+	if (a->kind != want[index].kind)
 		return false;
 	switch (a->kind) {
 	case W_PENDING:
-		return a->op == b->op;
+		return a->op == want[index].op;
 	case W_MEASURE:
-		return a->seq == b->seq && !memcmp(a->d, b->d, 32);
+		return a->seq == want[index].seq && same_digest(a, index);
 	case W_APPEND:
-		return a->op == b->op && a->seq == b->seq &&
-		       !memcmp(a->d, b->d, 32);
+		return a->op == want[index].op &&
+		       a->seq == want[index].seq && same_digest(a, index);
 	case W_STATE:
-		return a->seq == b->seq && a->generation == b->generation &&
-		       !memcmp(a->d, b->d, 32) &&
-		       !strcmp(a->manifest, b->manifest) &&
-		       !strcmp(a->tree_id, b->tree_id);
+		return a->seq == want[index].seq &&
+		       a->generation == want[index].generation &&
+		       same_digest(a, index) &&
+		       a->manifest[0] == want[index].manifest[0] &&
+		       a->manifest[1] == want[index].manifest[1] &&
+		       a->tree_id[0] == want[index].tree_id[0] &&
+		       a->tree_id[1] == want[index].tree_id[1];
 	default:
 		return true;
 	}
@@ -804,10 +824,9 @@ static void any_node(void)
 	disk_state.generation = state_there ? generation : 0;
 	disk_state.last_seq = state_there ? last_seq : 0;
 	for (int i = 0; i < 32; i++) {
-		__u8 b, r;
+		__u8 b;
 
 		disk_state.projection_root[i] = state_there ? (char)b : '\0';
-		replay_root[i] = r;
 	}
 	__CPROVER_assume(seq > 0 && id && digest);
 	disk_pending.seq = pending_there ? seq : 0;
@@ -817,14 +836,52 @@ static void any_node(void)
 	replay_kind = replay;
 }
 
+/* Recovery only asks whether replay equals the previous or next root. */
+static void any_replay_root(void)
+{
+	__u8 previous[32], digest[32], next[32], other = 0;
+	int relation;
+
+	if (!have_pending || replay_kind != 2)
+		return;
+	if (have_state)
+		memcpy(previous, disk_state.projection_root, sizeof(previous));
+	else
+		memset(previous, '0', sizeof(previous));
+	digest_of(disk_pending.operation_digest, digest);
+	model_hash(previous, digest, next);
+	__CPROVER_assume(relation >= 0 && relation <= 2);
+	if (relation == 1)
+		memcpy(replay_root, next, sizeof(replay_root));
+	else
+		memcpy(replay_root, previous, sizeof(replay_root));
+	if (relation != 2)
+		return;
+	if (other == previous[0] || other == next[0])
+		other = 1;
+	if (other == previous[0] || other == next[0])
+		other = 2;
+	__CPROVER_assert(other != previous[0] && other != next[0],
+			 "the third replay class differs from both roots");
+	replay_root[0] = other;
+}
+
 void harness(void)
 {
 	const char *argv[2];
+	__u32 first_failure;
 
+	fail_at = first_failure;
 	argv[0] = "tree";
 	argv[1] = "sync";
 	any_node();
+#ifdef TREE_SYNC_APPLICATION_ONLY
+	__CPROVER_assume(!have_pending);
+#elif defined(TREE_SYNC_PENDING_ONLY)
+	__CPROVER_assume(have_pending);
+#endif
 	any_publication();
+	any_replay_root();
 	run();
 	cmd_bpm_tree_sync(2, argv);
 	__CPROVER_assert(failed || n_got == n_want,

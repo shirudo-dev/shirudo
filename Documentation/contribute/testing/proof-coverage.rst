@@ -209,13 +209,33 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
    * - ``bpm-tree-sync-model``
      - ``cmd_bpm_tree_sync()``, ``tree_recover_pending()``,
        ``tree_publication_check()``, ``tree_publication_follows()``
-     - Every state, pending record, tree eventlog replay and record of the
-       pending operation, publications of 0 to 2 operations that
-       ``tree_parse()`` lets through, every selector answer and every
-       failure below sync, including loading and checking the active signing
-       set; strings of one byte
-     - The writes of the Lean model ``Shirudo.TreeSync``, in its order,
-       none after a failure, all of them when nothing fails
+     - The full command with 0 or 1 operation, every pending state,
+       selector answer and first failing I/O call, or no failure.
+       Names have one byte and the previous root has 32 symbolic bytes.
+     - Writes match the Lean model ``Shirudo.TreeSync`` in order;
+       nothing is written after a failure and every expected write
+       happens when nothing fails
+   * - ``bpm-tree-sync-application``
+     - ``cmd_bpm_tree_sync()``
+     - Two operations with no pending record; every selector answer
+       and first failing I/O call, or no failure. The previous root
+       has 32 symbolic bytes.
+     - The same ordered-write properties as ``bpm-tree-sync-model``
+   * - ``bpm-tree-sync-pending``
+     - ``cmd_bpm_tree_sync()``, ``tree_recover_pending()``
+     - Two operations with a pending record; every selector answer,
+       measured state and first failing I/O call, or no failure. TPM
+       replay equals the previous root, the next root, or neither;
+       the previous root has 32 symbolic bytes.
+     - The same ordered-write properties as ``bpm-tree-sync-model``
+   * - ``bpm-tree-recovery-model``
+     - ``tree_recover_pending()``
+     - Publications with 0 to 2 operations, a matching or unrelated
+       pending record, each TPM replay class, the measured flag and
+       every first failing I/O call. The previous root has all 32
+       symbolic bytes.
+     - The return decision, ordered writes, cursor, tree ID, manifest
+       and both projection roots match the independent recovery model
    * - ``bpm-upatch-member``
      - ``bpm_upatch_member()``, ``bpm_upatch_pair()``
      - Lengths 0 to 18
@@ -709,8 +729,9 @@ the model follows the C.
        each write whole, one sync at a time; the unlink of ``pending.json``
        succeeds; an extend and its eventlog record are one write
      - CBMC: ``bpm-tree-follows`` for ``tree_publication_follows()``,
-       ``bpm-tree-sync-model`` for the writes of a sync of up to two
-       operations; ``tree_parse()`` by review
+       ``bpm-tree-sync-model`` and its two-operation variants for
+       sync writes, ``bpm-tree-recovery-model`` for pending recovery;
+       ``tree_parse()`` by review
 
 Not covered yet
 ---------------
