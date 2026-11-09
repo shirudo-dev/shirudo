@@ -13,6 +13,7 @@
 #include <linux/devlink.h>
 #include <linux/ethtool.h>
 #include <linux/genetlink.h>
+#include <linux/netdev.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <linux/sockios.h>
@@ -390,7 +391,7 @@ static int receive_family(const void *data, size_t len, void *ctx)
 			   CTRL_ATTR_FAMILY_ID, ctx, sizeof(__u16), NULL);
 }
 
-static int devlink_family(__u16 *id)
+static int genl_family(const char *name, __u16 *id)
 {
 	struct nl_request req = {
 		.hdr.nlmsg_len = NLMSG_LENGTH(GENL_HDRLEN),
@@ -401,8 +402,7 @@ static int devlink_family(__u16 *id)
 	int ret;
 
 	memcpy(req.data, &genl, sizeof(genl));
-	ret = attr_put(&req, CTRL_ATTR_FAMILY_NAME, DEVLINK_GENL_NAME,
-		       sizeof(DEVLINK_GENL_NAME));
+	ret = attr_put(&req, CTRL_ATTR_FAMILY_NAME, name, strlen(name) + 1);
 	return ret ? ret : nl_exchange(NETLINK_GENERIC, &req, receive_family, id);
 }
 
@@ -459,7 +459,7 @@ static int device_details(struct xdp_device *dev)
 		};
 		__u16 family = 0;
 
-		ret = devlink_family(&family);
+		ret = genl_family(DEVLINK_GENL_NAME, &family);
 		if (ret || !family)
 			return ret ? ret : -EINVAL;
 		req.hdr.nlmsg_type = family;
@@ -478,6 +478,63 @@ static int device_details(struct xdp_device *dev)
 		return nl_exchange(NETLINK_GENERIC, &req, receive_port, dev);
 	}
 	return 0;
+}
+
+int xdp_features_parse(const void *data, size_t len, __u64 *features)
+{
+	bool present = false;
+	int ret;
+
+	if (len < GENL_HDRLEN)
+		return -EINVAL;
+	ret = attr_number((const __u8 *)data + GENL_HDRLEN, len - GENL_HDRLEN,
+			  NETDEV_A_DEV_XDP_FEATURES, features,
+			  sizeof(*features), &present);
+	return ret ? ret : present ? 0 : -EINVAL;
+}
+
+static int receive_features(const void *data, size_t len, void *ctx)
+{
+	return xdp_features_parse(data, len, ctx);
+}
+
+int xdp_device_features(__u32 ifindex, __u64 *features)
+{
+	struct nl_request req = {
+		.hdr.nlmsg_len = NLMSG_LENGTH(GENL_HDRLEN),
+		.hdr.nlmsg_flags = NLM_F_REQUEST,
+	};
+	struct genlmsghdr genl = {
+		.cmd = NETDEV_CMD_DEV_GET,
+		.version = NETDEV_FAMILY_VERSION,
+	};
+	__u16 family = 0;
+	int ret;
+
+	/* -ENOENT would read as a missing attach target and be skipped. */
+	ret = genl_family(NETDEV_FAMILY_NAME, &family);
+	if (ret == -ENOENT)
+		return -EOPNOTSUPP;
+	if (ret || !family)
+		return ret ? ret : -EINVAL;
+	req.hdr.nlmsg_type = family;
+	memcpy(req.data, &genl, sizeof(genl));
+	ret = attr_put(&req, NETDEV_A_DEV_IFINDEX, &ifindex, sizeof(ifindex));
+	return ret ? ret : nl_exchange(NETLINK_GENERIC, &req, receive_features,
+				       features);
+}
+
+bool xdp_multibuf_refused(__u64 features)
+{
+	return (features & NETDEV_XDP_ACT_BASIC) &&
+	       !(features & NETDEV_XDP_ACT_RX_SG);
+}
+
+const char *xdp_attach_strerror(int err)
+{
+	if (err == XDP_ERR_NO_MULTIBUF)
+		return "the device does not report multi-buffer XDP support";
+	return strerror(-err);
 }
 
 static int device_compare(const void *a, const void *b)

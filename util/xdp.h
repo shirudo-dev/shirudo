@@ -4,12 +4,16 @@
 #ifndef SHIRUDO_XDP_H
 #define SHIRUDO_XDP_H
 
+#include <errno.h>
 #include <stdbool.h>
 #include <stddef.h>
 
 #include <shirudo/misc.h>
 
 #define XDP_IFNAME_MAX 16
+
+/* Every XDP program is loaded with frags, so the device must report them. */
+#define XDP_ERR_NO_MULTIBUF	(-EMEDIUMTYPE)
 
 struct xdp_device {
 	char devlink_device[128];
@@ -49,5 +53,11 @@ bool xdp_device_selected(const struct xdp_device *devs, size_t count,
 			 size_t index, __u32 mask);
 int xdp_devices_read(struct xdp_device **out, size_t *count);
 int xdp_device_verify(const struct xdp_device *expected);
+int xdp_features_parse(const void *data, size_t len, __u64 *features);
+int xdp_device_features(__u32 ifindex, __u64 *features);
+
+/* Native XDP without multi-buffer; a device with neither fails on its own. */
+bool xdp_multibuf_refused(__u64 features);
+const char *xdp_attach_strerror(int err);
 
 #endif /* SHIRUDO_XDP_H */

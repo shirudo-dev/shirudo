@@ -142,6 +142,14 @@ Categories
        ``upatch load`` exits 2. ``bpm tree sync`` records the operation as
        ``skipped: module not loaded`` and continues.
      - Load the module or install the binary, then load again.
+   * - ``xdp_multibuf_unsupported``
+     - ``link_create``
+     - ``EMEDIUMTYPE``
+     - A selected device has native XDP but does not report multi-buffer
+       support (``NETDEV_XDP_ACT_RX_SG``). The load was undone.
+     - Narrow the signed device-class mask, or configure or change the
+       device so that it reports multi-buffer XDP. See
+       :doc:`/upatches/write/attach-kinds`.
    * - ``binary_mismatch``
      - ``target_verify``, ``link_create``
      - ``ESTALE``

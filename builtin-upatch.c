@@ -1359,11 +1359,18 @@ static int xdp_attach_one(int prog_fd, const struct prog_spec *spec,
 			  const struct xdp_device *dev, const char *pin)
 {
 	LIBBPF_OPTS(bpf_link_create_opts, opts, .flags = XDP_FLAGS_DRV_MODE);
+	__u64 features = 0;
 	int fd, ret;
 
 	ret = xdp_device_verify(dev);
 	if (ret)
 		return ret;
+	/* Before the attach: it can reconfigure a NIC, and reconcile retries. */
+	ret = xdp_device_features(dev->ifindex, &features);
+	if (ret)
+		return ret;
+	if (xdp_multibuf_refused(features))
+		return XDP_ERR_NO_MULTIBUF;
 	fd = bpf_link_create(prog_fd, (int)dev->ifindex, BPF_XDP, &opts);
 	if (fd == -EOPNOTSUPP)
 		return XDP_ATTACH_UNSUPPORTED;
@@ -1404,12 +1411,12 @@ static int attach_xdp_devices(int prog_fd, const struct prog_spec *spec,
 		}
 		if (xdp_attach_skippable(ret, dev, restoring)) {
 			pr_warn("XDP: skipping %s (ifindex %u): %s", dev->name,
-				dev->ifindex, strerror(-ret));
+				dev->ifindex, xdp_attach_strerror(ret));
 			continue;
 		}
 		if (ret < 0) {
 			pr_err("XDP: attach %s (ifindex %u): %s", dev->name,
-			       dev->ifindex, strerror(-ret));
+			       dev->ifindex, xdp_attach_strerror(ret));
 			return ret;
 		}
 		(*pinned)++;
@@ -2304,6 +2311,8 @@ static int __upatch_apply(const char *path, bool verify_only,
 			cat = "attach_target_missing";
 		else if (e == ESTALE)
 			cat = "binary_mismatch";
+		else if (e == EMEDIUMTYPE)
+			cat = "xdp_multibuf_unsupported";
 		else if (e == EXDEV)
 			cat = "attach_scope_mismatch";
 		else if (e == EOPNOTSUPP)
@@ -4441,7 +4450,7 @@ static int reconcile_attach(int prog_fd, const char *name,
 	} else if (ret < 0 && ret != -EBUSY && ret != -EEXIST &&
 		   !xdp_attach_skippable(ret, dev, false)) {
 		pr_warn("XDP: upatch %s: attach %s (ifindex %u): %s", name,
-			dev->name, dev->ifindex, strerror(-ret));
+			dev->name, dev->ifindex, xdp_attach_strerror(ret));
 	}
 	/* All of this is about this device alone; the next pass looks again. */
 	return 0;

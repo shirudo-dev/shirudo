@@ -4,6 +4,8 @@
 #include <errno.h>
 #include <net/if.h>
 #include <linux/devlink.h>
+#include <linux/genetlink.h>
+#include <linux/netdev.h>
 #include <linux/rtnetlink.h>
 
 #include <shirudo/upatch.h>
@@ -121,7 +123,9 @@ static void reconcile_never_touches_another_program(void)
 static void restore_fails_on_a_driver_refusal(void)
 {
 	static const int skipped[] = { -EBUSY, -EEXIST, -EXDEV, -ENODEV };
-	static const int refused[] = { -EINVAL, -ENOSPC, -ERANGE };
+	static const int refused[] = {
+		-EINVAL, -ENOSPC, -ERANGE, XDP_ERR_NO_MULTIBUF,
+	};
 	/* No device has this index, so the kernel answers ENODEV. */
 	struct xdp_device *devices = NULL, gone = { .ifindex = 0x7ffffff0 };
 	/* Index 0 names no device, so the lookup itself fails with EINVAL. */
@@ -158,6 +162,21 @@ static void load_stops_on_an_occupied_device(void)
 	EXPECT_TRUE(xdp_attach_skippable(-EXDEV, &dev, false));
 	EXPECT_TRUE(xdp_attach_skippable(-ENODEV, &dev, false));
 	EXPECT_FALSE(xdp_attach_skippable(0, &dev, false));
+}
+
+static void multibuf_is_required_of_native_xdp_alone(void)
+{
+	const __u64 basic = NETDEV_XDP_ACT_BASIC;
+	const __u64 sg = NETDEV_XDP_ACT_RX_SG;
+
+	EXPECT_TRUE(xdp_multibuf_refused(basic));
+	EXPECT_TRUE(xdp_multibuf_refused(basic | NETDEV_XDP_ACT_REDIRECT));
+	EXPECT_FALSE(xdp_multibuf_refused(basic | sg));
+	EXPECT_FALSE(xdp_multibuf_refused(0));
+	EXPECT_FALSE(xdp_multibuf_refused(sg));
+	EXPECT_STREQ(xdp_attach_strerror(XDP_ERR_NO_MULTIBUF),
+		     "the device does not report multi-buffer XDP support");
+	EXPECT_STREQ(xdp_attach_strerror(-EINVAL), strerror(EINVAL));
 }
 
 static size_t add_attr(__u8 *buf, size_t len, __u16 type,
@@ -206,6 +225,25 @@ static void link_messages_are_checked(void)
 	EXPECT_EQ(xdp_device_parse(buf, len, &dev), -EINVAL);
 }
 
+static void device_features_are_checked(void)
+{
+	__u64 value = NETDEV_XDP_ACT_BASIC | NETDEV_XDP_ACT_RX_SG, out = 0;
+	__u32 ifindex = 7, small = 1;
+	__u8 buf[64] = {};
+	size_t len;
+
+	len = add_attr(buf, GENL_HDRLEN, NETDEV_A_DEV_IFINDEX, &ifindex,
+		       sizeof(ifindex));
+	EXPECT_EQ(xdp_features_parse(buf, len, &out), -EINVAL);
+	EXPECT_EQ(xdp_features_parse(buf, GENL_HDRLEN - 1, &out), -EINVAL);
+	len = add_attr(buf, len, NETDEV_A_DEV_XDP_FEATURES, &value, sizeof(value));
+	ASSERT_EQ(xdp_features_parse(buf, len, &out), 0);
+	EXPECT_UEQ(out, value);
+	len = add_attr(buf, GENL_HDRLEN, NETDEV_A_DEV_XDP_FEATURES, &small,
+		       sizeof(small));
+	EXPECT_EQ(xdp_features_parse(buf, len, &out), -EINVAL);
+}
+
 static void kernel_discovery_revalidates_devices(void)
 {
 	struct xdp_device *devices = NULL;
@@ -234,6 +272,8 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(reconcile_never_touches_another_program),
 	UNIT_CASE(restore_fails_on_a_driver_refusal),
 	UNIT_CASE(load_stops_on_an_occupied_device),
+	UNIT_CASE(multibuf_is_required_of_native_xdp_alone),
+	UNIT_CASE(device_features_are_checked),
 	UNIT_CASE(link_messages_are_checked),
 	UNIT_CASE(kernel_discovery_revalidates_devices),
 	{}

@@ -92,7 +92,8 @@ Each program can produce several ``link_<n>`` pins. Native XDP is
 required: unsupported devices are logged and skipped. An upatch with no
 attachable device yet still loads, and
 :doc:`/reference/cli/upatch-reconcile` attaches it when one appears. A
-device that is occupied, and any other error, undoes all links the load
+device that is occupied or does not report multi-buffer XDP, and any other
+error, undoes all links the load
 created. :doc:`/upatches/write/attach-kinds` defines the classes and limits.
 
 Options
@@ -196,7 +197,8 @@ Exit status and failure categories
 ``eventlog_full``, ``already_loaded``, ``parser_rejected``,
 ``signature_rejected``, ``signature_unsupported``, ``lsm_denied``,
 ``verifier_rejected``, ``attach_target_missing``, ``binary_mismatch``,
-``attach_scope_mismatch``, ``tpm_error`` and ``unknown``.
+``attach_scope_mismatch``, ``xdp_multibuf_unsupported``, ``tpm_error`` and
+``unknown``.
 :doc:`/reference/failure-categories` gives the cause and the action for
 each. Handle ``tampered`` as an incident
 (:doc:`/operate/troubleshoot/incident-tampered`).

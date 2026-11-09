@@ -70,7 +70,12 @@ XDP uses ``BPF_LINK_CREATE`` with ``attach_type=BPF_XDP``,
 shirudo verifies ``BPF_LINK_TYPE_XDP`` and the returned ``xdp.ifindex``
 before pinning. Discovery uses kernel ``RTM_GETLINK`` replies,
 ``ETHTOOL_GDRVINFO`` and devlink ``DEVLINK_CMD_PORT_GET``; it does not
-read sysfs to classify devices. The ``lsm/bpf_prog`` guard refuses XDP
+read sysfs to classify devices. Before attaching, shirudo reads
+``NETDEV_A_DEV_XDP_FEATURES`` with ``NETDEV_CMD_DEV_GET`` on the ``netdev``
+generic netlink family and refuses a device that reports
+``NETDEV_XDP_ACT_BASIC`` without ``NETDEV_XDP_ACT_RX_SG``, as the kernel
+never compares a program's multi-buffer flag with the device's. The
+``lsm/bpf_prog`` guard refuses XDP
 descriptors to unauthorized callers, including ``BPF_PROG_GET_FD_BY_ID``,
 because netlink accepts these descriptors outside ``bpf()``.
 
