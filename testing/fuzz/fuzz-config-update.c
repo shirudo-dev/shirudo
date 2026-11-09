@@ -22,6 +22,7 @@ static int dir_fd = -1;
 static void remove_dir(void)
 {
 	unlinkat(dir_fd, "events", 0);
+	unlinkat(dir_fd, "next-boot", 0);
 	rmdir(dir);
 }
 
@@ -58,5 +59,12 @@ int LLVMFuzzerTestOneInput(const __u8 *data, size_t size)
 	close(fd);
 	events_scan(&update, &last, value, NULL, false, NULL, NULL);
 	events_scan(&update, &last, value, NULL, true, NULL, NULL);
+	fd = openat(dir_fd, "next-boot", O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC,
+		    0600);
+	if (fd < 0)
+		return 0;
+	if (!write_complete(fd, data, size))
+		config_update_stage_read(&update, &record);
+	close(fd);
 	return 0;
 }

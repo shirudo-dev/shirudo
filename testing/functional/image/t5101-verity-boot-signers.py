@@ -110,6 +110,17 @@ def config_keyring():
     require(0 < length <= len(buffer) and length % 4 == 0,
             "dm-verity keyring has no boot certificate")
     before = buffer.raw[:length]
+    members = {key: describe(key) for (key,) in struct.iter_unpack("=i", before)}
+    expected = {certificate_description(FIXTURES / name)
+                for name in ("config-c.der", "config-d.der")}
+    require(len(expected) == 2 and
+            {fields[4] for fields in members.values()} == expected,
+            f"wrong config verification keys: {members}")
+    for key in members:
+        expect_error(errno.EACCES, KEYCTL, 2, key, 0, 0, 0)  # REVOKE
+        expect_error(errno.EACCES, KEYCTL, 21, key, 0, 0, 0)  # INVALIDATE
+        expect_error(errno.EACCES, KEYCTL, 5, key, 0, 0, 0)  # SETPERM
+        expect_error(errno.EACCES, KEYCTL, 9, key, special, 0, 0)  # UNLINK
     live = certificate_description(FIXTURES / "live.der")
     require(all(describe(key)[4] != live for (key,) in
                 struct.iter_unpack("=i", before)),

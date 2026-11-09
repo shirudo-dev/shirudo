@@ -1,0 +1,2 @@
+config.verification_key = /run/shirudo/runtime/keys/config-A.der
+config.verification_key = /run/shirudo/runtime/keys/config-A.der

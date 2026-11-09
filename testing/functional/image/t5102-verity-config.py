@@ -209,14 +209,34 @@ def main():
         after = snapshot(mode + "-after")
         differences = [key for key in before if before[key] != after[key]]
         require(not differences, f"{mode} changed state: {differences}")
+    elif mode == "config-keys":
+        public = Path(os.environ["SHIRUDO_TEST_KEY_FIXTURES"])
+        status = json.loads(run("config-keys", "status", "--json"))
+        keys = status["dm_verity_keyring"]
+        expected = {hashlib.sha256((public / name).read_bytes()).hexdigest()
+                    for name in ("config-c.der", "config-d.der")}
+        require(len(expected) == 2, "config key fixtures are not distinct")
+        require({cert["sha256"] for cert in keys["certs"]} == expected,
+                "runtime did not enroll both designated config certificates")
+        require(keys["other_links"] == [] and keys["serial_matches"], keys)
+        require(all(cert["frozen"] and cert["config"] and cert["key_serial"]
+                    for cert in keys["certs"]), keys)
+    elif mode == "untrusted":
+        before = snapshot("untrusted-before")
+        run("untrusted-update", "image", "update", IMAGES / "config-untrusted",
+            success=False)
+        after = snapshot("untrusted-after")
+        require(before == after, "unapproved signer changed config state")
     elif mode == "builtin":
         before = snapshot("builtin-before")
         public = Path(os.environ["SHIRUDO_TEST_KEY_FIXTURES"])
         require((public / "builtin.der").read_bytes() !=
                 (RUNTIME / "etc/shirudo/config-cert.der").read_bytes(),
                 "built-in certificate duplicates the boot-enrolled config certificate")
-        run("builtin-update", "image", "update", IMAGES / "config-builtin")
-        changed(before, snapshot("builtin-after"), "config-builtin")
+        run("builtin-update", "image", "update", IMAGES / "config-builtin",
+            success=False)
+        after = snapshot("builtin-after")
+        require(before == after, "non-designated signer changed config state")
     elif mode in ("corrupt-data", "corrupt-hash", "corrupt-root", "corrupt-signature"):
         before = snapshot(mode + "-before")
         with tempfile.TemporaryDirectory(prefix="shirudo-image-") as directory:

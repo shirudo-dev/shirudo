@@ -1,0 +1,17 @@
+config.verification_key = /run/shirudo/runtime/keys/config-0.der
+config.verification_key = /run/shirudo/runtime/keys/config-1.der
+config.verification_key = /run/shirudo/runtime/keys/config-2.der
+config.verification_key = /run/shirudo/runtime/keys/config-3.der
+config.verification_key = /run/shirudo/runtime/keys/config-4.der
+config.verification_key = /run/shirudo/runtime/keys/config-5.der
+config.verification_key = /run/shirudo/runtime/keys/config-6.der
+config.verification_key = /run/shirudo/runtime/keys/config-7.der
+config.verification_key = /run/shirudo/runtime/keys/config-8.der
+config.verification_key = /run/shirudo/runtime/keys/config-9.der
+config.verification_key = /run/shirudo/runtime/keys/config-10.der
+config.verification_key = /run/shirudo/runtime/keys/config-11.der
+config.verification_key = /run/shirudo/runtime/keys/config-12.der
+config.verification_key = /run/shirudo/runtime/keys/config-13.der
+config.verification_key = /run/shirudo/runtime/keys/config-14.der
+config.verification_key = /run/shirudo/runtime/keys/config-15.der
+config.verification_key = /run/shirudo/runtime/keys/config-16.der

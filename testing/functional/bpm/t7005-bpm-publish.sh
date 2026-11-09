@@ -159,7 +159,7 @@ REGISTRY="127.0.0.1:$PORT"
 # Verify a detached CMS blob against the operator certificate.
 cms_verify() {
 	openssl cms -verify -binary -inform DER -in "$1" -content "$2" \
-		-certfile "$WORK/cert.pem" -CAfile "$WORK/cert.pem" -purpose any \
+		-certfile "${3:-$WORK/cert.pem}" -CAfile "${3:-$WORK/cert.pem}" -purpose any \
 		-out /dev/null 2>/dev/null
 }
 
@@ -379,6 +379,46 @@ test_expect_success 'the operator commands are reachable directly in shirudo-bui
 test_expect_success 'tree append needs readable signing material' '
 	! "$S" bpm tree append "$WORK/t7005-1.0.0.bee" "oci://$REGISTRY/ns/tree" \
 		--key "$WORK/missing.pem" --cert "$WORK/keys/cert.der" >/dev/null 2>&1
+'
+
+test_expect_success 'a new signing key does not silently replace the previous tree signer' '
+	"$S" genkey --keys-dir "$WORK/next-key" >/dev/null &&
+	openssl x509 -inform DER -in "$WORK/next-key/cert.der" -out "$WORK/next-key.pem" &&
+	cp "$REG/ns/tree/manifests/stable" "$WORK/before-rotation.manifest" &&
+	! "$S" bpm tree append "$WORK/t7005-1.0.0.bee" "oci://$REGISTRY/ns/tree" \
+		--keys-dir "$WORK/next-key" >/dev/null 2>&1 &&
+	cmp "$REG/ns/tree/manifests/stable" "$WORK/before-rotation.manifest"
+'
+
+test_expect_success 'previous-cert verifies A while B signs the next publication' '
+	"$S" bpm tree append "$WORK/t7005-1.0.0.bee" "oci://$REGISTRY/ns/tree" \
+		--keys-dir "$WORK/next-key" --previous-cert "$WORK/keys/cert.der" >/dev/null &&
+	split_layers "$REG/ns/tree/manifests/stable" "$REG/ns/tree" "$WORK/rotated" &&
+	cms_verify "$WORK/rotated.sig" "$WORK/rotated.payload" "$WORK/next-key.pem" &&
+	! cms_verify "$WORK/rotated.sig" "$WORK/rotated.payload" &&
+	python3 - "$WORK/rotated.payload" "$WORK/before-rotation.manifest" <<"PYTEST"
+import hashlib, json, pathlib, sys
+publication = json.loads(pathlib.Path(sys.argv[1]).read_bytes())
+parent = pathlib.Path(sys.argv[2]).read_bytes()
+assert publication["parent_manifest_digest"] == "sha256:" + hashlib.sha256(parent).hexdigest()
+assert publication["generation"] == 3 and publication["head"] == {"seq": 3}
+PYTEST
+'
+
+test_expect_success 'later B publications use B to verify the predecessor by default' '
+	"$S" bpm tree append "$WORK/t7005-1.0.0.bee" "oci://$REGISTRY/ns/tree" \
+		--keys-dir "$WORK/next-key" >/dev/null &&
+	split_layers "$REG/ns/tree/manifests/stable" "$REG/ns/tree" "$WORK/after-rotation" &&
+	cms_verify "$WORK/after-rotation.sig" "$WORK/after-rotation.payload" "$WORK/next-key.pem" &&
+	python3 -c "import json, sys; p=json.load(open(sys.argv[1])); assert p[\"generation\"] == 4" \
+		"$WORK/after-rotation.payload"
+'
+
+test_expect_success 'a wrong explicit predecessor certificate leaves the tree unchanged' '
+	cp "$REG/ns/tree/manifests/stable" "$WORK/rotated.manifest" &&
+	! "$S" bpm tree append "$WORK/t7005-1.0.0.bee" "oci://$REGISTRY/ns/tree" \
+		--keys-dir "$WORK/next-key" --previous-cert="$WORK/keys/cert.der" >/dev/null 2>&1 &&
+	cmp "$REG/ns/tree/manifests/stable" "$WORK/rotated.manifest"
 '
 
 test_done

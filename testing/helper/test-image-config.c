@@ -16,6 +16,7 @@ static int read_bootstrap(int argc, char **argv)
 {
 	struct image_bootstrap boot = {};
 	char root[65];
+	size_t i;
 	int ret;
 
 	ret = image_bootstrap_read(argv[2], &boot, true);
@@ -23,9 +24,11 @@ static int read_bootstrap(int argc, char **argv)
 		ret = image_bootstrap_read(argv[3], &boot, false);
 	if (!ret) {
 		hex_encode(boot.runtime_root, 32, root);
-		printf("runtime=%s\nroot=%s\nconfig=%s\ncertificate=%s\npcr=%u\n",
-		       boot.runtime, root, boot.config, boot.certificates[0],
-		       boot.pcr);
+		printf("runtime=%s\nroot=%s\nconfig=%s\npcr=%u\n",
+		       boot.runtime, root, boot.config, boot.pcr);
+		printf("certificates=%zu\n", boot.n_certificates);
+		for (i = 0; i < boot.n_certificates; i++)
+			printf("certificate=%s\n", boot.certificates[i]);
 	}
 	printf("rc=%d\n", ret);
 	return ret ? 1 : 0;

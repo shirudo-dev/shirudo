@@ -55,6 +55,27 @@ test_expect_success 'the set digest is order-free and attest predict agrees' '
 	[ "$p1" != "$p3" ]
 '
 
+test_expect_success 'either active key verifies an exact detached signature' '
+	python3 - "$W/c/cert.der" "$W/payload" <<"PYTEST" &&
+from pathlib import Path
+import sys
+Path(sys.argv[2]).write_bytes(b"shirudo-key-vouch\0" + Path(sys.argv[1]).read_bytes())
+PYTEST
+	$SHB keys vouch "$W/c/cert.der" --keys-dir "$W/a" -o "$W/signed-a" >/dev/null &&
+	$SHB keys vouch "$W/c/cert.der" --keys-dir "$W/b" -o "$W/signed-b" >/dev/null &&
+	./$H verify-signature "$W/keys" "$W/payload" "$W/signed-a" >"$W/verified-a" &&
+	./$H verify-signature "$W/keys" "$W/payload" "$W/signed-b" >"$W/verified-b" &&
+	grep -qx "$(../shirudo bpm key fingerprint "$W/a/cert.der")" "$W/verified-a" &&
+	grep -qx "$fp_b" "$W/verified-b"
+'
+
+test_expect_success 'a valid signature from outside the active key set is rejected' '
+	mkdir "$W/primary-only" && cp "$W/a/cert.der" "$W/primary-only/cert.der" &&
+	! ./$H verify-signature "$W/primary-only" "$W/payload" "$W/signed-b" &&
+	cp "$W/payload" "$W/changed-payload" && printf changed >>"$W/changed-payload" &&
+	! ./$H verify-signature "$W/keys" "$W/changed-payload" "$W/signed-b"
+'
+
 test_expect_success 'a revoked certificate is left out of the set' '
 	cp "$W/c/cert.der" "$W/keys/revoked/$fp_c.der" &&
 	./$H load "$W/keys" >"$W/set2" &&
@@ -85,6 +106,13 @@ test_expect_success 'image revocation preserves historical vouches while excludi
 	grep -q "^$(sha "$W/c/cert.der") $fp_c trusted " "$W/image-set" &&
 	! grep -q "^$(sha "$W/a/cert.der") " "$W/image-set" &&
 	! grep -q "^$(sha "$W/b/cert.der") " "$W/image-set"
+'
+
+test_expect_success 'revoking A leaves B signatures valid and refuses earlier A signatures' '
+	rm "$W/keys/revoked/$fp_b.der" &&
+	./$H verify-signature "$W/keys" "$W/payload" "$W/signed-b" >"$W/remaining" &&
+	grep -qx "$fp_b" "$W/remaining" &&
+	! ./$H verify-signature "$W/keys" "$W/payload" "$W/signed-a"
 '
 
 

@@ -13,7 +13,7 @@ target_guard
 mountpoint -q /run/shirudo/runtime && mountpoint -q /run/shirudo/config ||
 	verity_required "dm-verity image mode is not active"
 command -v python3 >/dev/null 2>&1 || verity_required "no python3"
-for name in config-a config-b config-bad; do
+for name in config-a config-b config-bad config-untrusted; do
 	for suffix in img verity roothash p7s; do
 		[ -r "/var/lib/shirudo/images/$name.$suffix" ] ||
 			verity_required "missing signed CONFIG fixture: $name.$suffix"
@@ -34,6 +34,14 @@ test_expect_success 'current CONFIG and PCR evidence verify' '
 	python3 functional/image/t5102-verity-config.py initial "$work"
 '
 
+test_expect_success 'both config certificates are enrolled and frozen' '
+	python3 functional/image/t5102-verity-config.py config-keys "$work"
+'
+
+test_expect_success 'a config signed by an unapproved certificate leaves state unchanged' '
+	python3 functional/image/t5102-verity-config.py untrusted "$work"
+'
+
 test_expect_success 'trusted caller without a root nomination gets no CONFIG classification' '
 	python3 functional/image/t5102-verity-config.py root-missing "$work"
 '
@@ -47,7 +55,7 @@ test_expect_success 'exact root nomination classifies CONFIG once and is cleared
 '
 
 if [ -f "$SHIRUDO_TEST_KEY_FIXTURES/builtin.der" ]; then
-	test_expect_success 'kernel built-in certificate accepts a signed config root' '
+	test_expect_success 'kernel built-in trust alone cannot authorize a config signer' '
 		python3 functional/image/t5102-verity-config.py builtin "$work"
 	'
 else
@@ -63,12 +71,12 @@ test_expect_success 'hash padding corruption fails before PCR or journal changes
 	python3 functional/image/t5102-verity-config.py corrupt-hash "$work"
 '
 
-test_expect_success 'kernel rejects a modified root or detached root signature' '
+test_expect_success 'a modified root or detached root signature is rejected' '
 	python3 functional/image/t5102-verity-config.py corrupt-root "$work" &&
 	python3 functional/image/t5102-verity-config.py corrupt-signature "$work"
 '
 
-test_expect_success 'live CONFIG A to B extends PCR once and replaces config' '
+test_expect_success 'config signed by the second key extends PCR once and replaces config' '
 	python3 functional/image/t5102-verity-config.py update "$work"
 '
 

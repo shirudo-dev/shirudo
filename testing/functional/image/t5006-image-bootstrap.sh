@@ -27,6 +27,46 @@ test_expect_success 'runtime settings preserve the root authenticated by the ini
 	grep -qx "pcr=15" "$WORK/result"
 '
 
+test_expect_success 'two config verification keys preserve their order and runtime root' '
+	cp "$WORK/runtime.conf" "$WORK/overlap.conf" &&
+	printf "config.verification_key = /run/shirudo/runtime/etc/shirudo/config-cert-2.der\n" \
+		>>"$WORK/overlap.conf" &&
+	"$H" bootstrap "$WORK/initrd.conf" "$WORK/overlap.conf" >"$WORK/result" &&
+	grep -qx "root=$root" "$WORK/result" &&
+	grep -qx "certificates=2" "$WORK/result" &&
+	sed -n "s/^certificate=//p" "$WORK/result" >"$WORK/certificates" &&
+	printf "%s\n" /run/shirudo/runtime/etc/shirudo/config-cert.der \
+		/run/shirudo/runtime/etc/shirudo/config-cert-2.der >"$WORK/expected" &&
+	cmp "$WORK/certificates" "$WORK/expected"
+'
+
+test_expect_success 'duplicate config verification paths are rejected' '
+	cp "$WORK/runtime.conf" "$WORK/bad.conf" &&
+	printf "config.verification_key = /run/shirudo/runtime/etc/shirudo/config-cert.der\n" \
+		>>"$WORK/bad.conf" &&
+	! "$H" bootstrap "$WORK/initrd.conf" "$WORK/bad.conf"
+'
+
+test_expect_success 'an invalid later verification key rejects the whole bootstrap config' '
+	cp "$WORK/runtime.conf" "$WORK/bad.conf" &&
+	printf "config.verification_key = /etc/attacker.der\n" >>"$WORK/bad.conf" &&
+	! "$H" bootstrap "$WORK/initrd.conf" "$WORK/bad.conf"
+'
+
+test_expect_success 'config verification keys have a bounded count' '
+	python3 - ../util/keys.h "$WORK/max.conf" "$WORK/too-many.conf" <<"PYTEST" &&
+import re, sys
+from pathlib import Path
+limit = int(re.search(r"#define KEYS_MAX\s+(\d+)", Path(sys.argv[1]).read_text())[1])
+lines = [f"config.verification_key = /run/shirudo/runtime/keys/config-{i}.der\n"
+         for i in range(limit + 1)]
+Path(sys.argv[2]).write_text("".join(lines[:-1]))
+Path(sys.argv[3]).write_text("".join(lines))
+PYTEST
+	"$H" bootstrap "$WORK/initrd.conf" "$WORK/max.conf" >/dev/null &&
+	! "$H" bootstrap "$WORK/initrd.conf" "$WORK/too-many.conf"
+'
+
 test_expect_success 'runtime settings cannot replace the executable image or its root' '
 	for setting in "runtime.image = /var/lib/shirudo/other" \
 		"runtime.root_hash = $root"; do

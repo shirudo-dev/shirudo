@@ -19,7 +19,8 @@ sed 's/@config_image@/config-boot-keys/g' "$templates/runtime.conf.in" \
 "$source_dir/tools/gen-image/shirudo-gen-runtime" \
 	--binary "$bundle/root/usr/local/bin/shirudo" \
 	--bootstrap-conf "$work/runtime.conf" --cert "$keys/cert.der" \
-	--config-cert "$keys/cert.der" --output "$bundle/verity/runtime" \
+	--config-cert "$work/verity/public/config-c.der" \
+	--config-cert "$work/verity/public/config-d.der" --output "$bundle/verity/runtime" \
 	--keys-dir "$keys" --builder "$source_dir/tools/shirudo-build/shirudo-build" \
 	--size 64 \
 	--extra-binary "$source_dir/build/verity-tests/shirudo-policy-probe" \

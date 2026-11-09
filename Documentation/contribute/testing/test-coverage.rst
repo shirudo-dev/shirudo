@@ -119,7 +119,8 @@ signed config image.
        keys, a one-bit change in the signed bytes
    * - ``t2003-keys-set``
      - The trusted set and its digest, revoked certificates left out,
-       ``attest predict`` agreement
+       ``attest predict`` agreement, signatures accepted from either
+       active signer and refused after that signer is revoked
    * - ``t2004-keys-vouch``
      - ``keys vouch``, and ``keys add`` admitting only vouched
        certificates
@@ -243,7 +244,7 @@ signed config image.
    * - ``t5001-config-image``
      - Image builder and ``veritysetup`` format, superblock and size
        checks, the ML-DSA-87 root signature, runtime acceptance by the
-       exact root, the generator scripts
+       exact root, the generator scripts and multiple config certificates
    * - ``t5002-image-config``
      - Settings a config may set, symbolic links and special files
    * - ``t5003-image-keys``
@@ -254,16 +255,26 @@ signed config image.
    * - ``t5005-image-cleanup``
      - Candidate removal and its ``EBUSY`` retries
    * - ``t5006-image-bootstrap``
-     - Bootstrap settings in the initrd
+     - Bootstrap settings in the initrd, ordered config verification keys,
+       duplicate paths and too many keys
    * - ``t5007-config-update``
      - Activation events, the pending latch, interruption, locks,
        symbolic links in state
    * - ``t5008-text-lines``
      - Long lines and NUL bytes in settings files
+   * - ``t5009-config-stage``
+     - Staging without activation or measurement, selection on the next
+       TPM boot, cancellation, stale parents, malformed records and
+       process death while replacing a staged selection
+   * - ``t5100-verity-stage``
+     - A new signer may be staged without live enrollment, activation or
+       measurement; same-boot init leaves it staged and cancellation is
+       idempotent
    * - ``t5101-verity-boot-signers``
      - The ``.dm-verity`` keyring, boot enrollment of a vouched signer
    * - ``t5102-verity-config``
-     - Config classification, corruption, live activation from A to B
+     - Config classification, corruption, live activation from A to B,
+       refusal of a kernel-trusted config signer not named by the runtime
    * - ``t5103-verity-cli``
      - Key and repository changes require a signed config
    * - ``t5104-verity-revocation``
@@ -424,7 +435,8 @@ signed config image.
        scriptlets, as text
    * - ``t7005-bpm-publish``
      - ``bpm build``, ``bpm push`` with a signed index, ``bpm tree
-       append``
+       append``, A-to-B tree signing-key rotation with explicit
+       predecessor verification
    * - ``t7006-policy-labels``
      - Beefile policy declarations are serialized into the signed
        upatch section
@@ -807,12 +819,8 @@ Most of these attacks are open threats in
 Tests that assert behavior the threat model lists as a threat to
 resolve. They change when that threat is resolved:
 
-- ``t5102`` asserts that a config root signed under a kernel built-in
-  certificate is accepted.
 - ``t2003`` and ``t5003`` assert that a revoked signer's earlier
   vouches stay valid.
-- ``t5004`` asserts that tree publications verify against the runtime
-  trust anchor.
 - ``t7003`` adds a certificate from an OCI reference without a
   fingerprint to compare it with.
 

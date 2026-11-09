@@ -298,6 +298,54 @@ if command -v mkfs.ext4 >/dev/null 2>&1 && command -v debugfs >/dev/null 2>&1; t
 			>"$W/extracted.der" 2>/dev/null &&
 		cmp "$W/extracted.der" "$W/other/cert.der"
 	'
+	test_expect_success 'runtime generator packages both config verification keys and their settings' '
+		../tools/gen-image/shirudo-gen-runtime --binary "$W/static-probe" \
+			--bootstrap-conf "$W/bootstrap.conf" --cert "$W/keys/cert.der" \
+			--config-cert "$W/keys/cert.der" --config-cert "$W/other/cert.der" \
+			--keys-dir "$W/keys" --builder "$B" --output "$W/runtime-overlap" --size 8 &&
+		verify "$W/runtime-overlap" "$W/keys/cert.der" &&
+		debugfs -R "cat /etc/shirudo/shirudo.conf" "$W/runtime-overlap.img" \
+			>"$W/overlap.conf" 2>/dev/null &&
+		sed -n "s/^[[:space:]]*config.verification_key[[:space:]]*=[[:space:]]*//p" \
+			"$W/overlap.conf" >"$W/config-keys" &&
+		printf "%s\n" \
+			/run/shirudo/runtime/etc/shirudo/config-cert.der \
+			/run/shirudo/runtime/etc/shirudo/config-cert-2.der >"$W/expected-keys" &&
+		cmp "$W/config-keys" "$W/expected-keys" &&
+		debugfs -R "cat /etc/shirudo/config-cert.der" "$W/runtime-overlap.img" \
+			>"$W/first.der" 2>/dev/null &&
+		debugfs -R "cat /etc/shirudo/config-cert-2.der" "$W/runtime-overlap.img" \
+			>"$W/second.der" 2>/dev/null &&
+		cmp "$W/first.der" "$W/keys/cert.der" &&
+		cmp "$W/second.der" "$W/other/cert.der"
+	'
+
+	test_expect_success 'retired runtime keeps only its supplied config key' '
+		../tools/gen-image/shirudo-gen-runtime --binary "$W/static-probe" \
+			--bootstrap-conf "$W/overlap.conf" --cert "$W/keys/cert.der" \
+			--config-cert "$W/other/cert.der" \
+			--keys-dir "$W/keys" --builder "$B" --output "$W/runtime-retired" --size 8 &&
+		verify "$W/runtime-retired" "$W/keys/cert.der" &&
+		debugfs -R "cat /etc/shirudo/shirudo.conf" "$W/runtime-retired.img" \
+			>"$W/retired.conf" 2>/dev/null &&
+		sed -n "s/^[[:space:]]*config.verification_key[[:space:]]*=[[:space:]]*//p" \
+			"$W/retired.conf" >"$W/retired-keys" &&
+		printf "%s\n" /run/shirudo/runtime/etc/shirudo/config-cert.der \
+			>"$W/expected-retired-key" &&
+		cmp "$W/retired-keys" "$W/expected-retired-key" &&
+		debugfs -R "cat /etc/shirudo/config-cert.der" "$W/runtime-retired.img" \
+			>"$W/retired.der" 2>/dev/null &&
+		cmp "$W/retired.der" "$W/other/cert.der"
+	'
+
+	test_expect_success 'runtime generator refuses the same config certificate twice' '
+		! ../tools/gen-image/shirudo-gen-runtime --binary "$W/static-probe" \
+			--bootstrap-conf "$W/bootstrap.conf" --cert "$W/keys/cert.der" \
+			--config-cert "$W/keys/cert.der" --config-cert "$W/keys/cert.der" \
+			--keys-dir "$W/keys" --builder "$B" --output "$W/runtime-duplicate" --size 8 &&
+		! test -e "$W/runtime-duplicate.img"
+	'
+
 	test_expect_success 'static runtime images run directly without a packaged loader' '
 		../tools/gen-image/shirudo-gen-runtime --binary "$W/static-probe" \
 			--bootstrap-conf "$W/bootstrap.conf" --cert "$W/keys/cert.der" \

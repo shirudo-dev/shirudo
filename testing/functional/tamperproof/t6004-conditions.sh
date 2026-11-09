@@ -69,7 +69,7 @@ test_expect_success 'a config key that is gone is tampered' '
 	out=$(SHIRUDO_TEST_DMV_KEY=missing ./$H 1 bpf 100 100 match) &&
 	echo "$out" | grep -qx "status=tampered" &&
 	echo "$out" | grep -qx "reason=the config key init froze is gone" &&
-	echo "$out" | grep -qx "KeyringSealed ALERT the config key init froze is gone from the dm-verity keyring"
+	echo "$out" | grep -qx "KeyringSealed ALERT a config key init froze is gone from the dm-verity keyring"
 '
 
 test_expect_success 'a bpf keyring swap is reported before the dm-verity state' '

@@ -5,7 +5,7 @@
 # t2101 -- the enrolled certificate set: the bundle's own-keyring
 # certificate was installed as a second trusted certificate before
 # init, so the bpf keyring holds two keys, keys lists them and the
-# dm-verity keyring's config key as init froze them, and a upatch signed
+# dm-verity keyring's two config keys as init froze them, and a upatch signed
 # by either loads.
 
 cd "$(dirname "$0")/../.."
@@ -58,7 +58,7 @@ test_expect_success 'keys lists both keyrings, every member frozen' '
 	python3 - "$W/keys" <<"PY"
 import re, subprocess, sys
 text = open(sys.argv[1], encoding="utf-8").read()
-for label, members in ((".bpf", 2), (".dm-verity", 1)):
+for label, members in ((".bpf", 2), (".dm-verity", 2)):
     section = text.split("Keyring (%s):\n" % label, 1)[1].split("\n\n", 1)[0]
     ring = int(re.search(r"^  Serial: +(\d+)$", section, re.M).group(1))
     assert re.search(r"^  Frozen serial: +%d  \(matches\)$" % ring, section,

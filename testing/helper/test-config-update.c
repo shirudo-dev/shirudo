@@ -37,6 +37,7 @@ struct test_context {
 	struct simulated_tpm sim;
 	struct tpm *tpm;
 	const char *directory;
+	bool staging;
 };
 
 static int simulator_save(struct test_context *ctx)
@@ -195,6 +196,10 @@ static int test_activate(void *opaque,
 
 static int test_seal(void *opaque, int fd)
 {
+	struct test_context *ctx = opaque;
+
+	if (ctx->staging && getenv("SHIRUDO_TEST_CONFIG_STAGE_CRASH"))
+		_exit(99);
 	return getenv("SHIRUDO_TEST_CONFIG_SEAL_FAIL") ? -EPERM : 0;
 }
 
@@ -271,6 +276,11 @@ static void inspect(struct test_context *ctx)
 		hex_encode(record.target.root_hash, 32, hex);
 		printf("root_hash=%s\n", hex);
 	}
+	ret = config_update_stage_read(ctx->update, &record);
+	printf("stage_rc=%d\n", ret);
+	if (!ret)
+		printf("stage_prefix=%s\nstage_sequence=%llu\n",
+		       record.target.prefix, (__u64)record.sequence);
 	ret = config_update_events(ctx->update, show_event, &count);
 	printf("events_rc=%d\nevents=%u\n", ret, count);
 }
@@ -331,6 +341,24 @@ int main(int argc, char **argv)
 			ret = config_update_complete_boot(&update);
 	} else if (!strcmp(argv[2], "update")) {
 		ret = config_update_begin(&update, &target, pcr);
+	} else if (!strcmp(argv[2], "stage")) {
+		ctx.staging = true;
+		ret = config_update_stage(&update, &target);
+	} else if (!strcmp(argv[2], "cancel-stage")) {
+		ret = config_update_clear_staged(&update);
+	} else if (!strcmp(argv[2], "staged")) {
+		struct config_update_record previous;
+
+		ret = config_update_read(&update, &previous);
+		if (!ret)
+			ret = config_update_staged(&update, &previous,
+						   ctx.sim.reset_count,
+						   ctx.sim.restart_count, &target);
+		printf("eligible=%d\n", ret);
+		if (ret == 1) {
+			printf("candidate=%s\n", target.prefix);
+			ret = 0;
+		}
 	} else if (!strcmp(argv[2], "complete")) {
 		ret = config_update_complete_boot(&update);
 	} else if (!strcmp(argv[2], "check")) {

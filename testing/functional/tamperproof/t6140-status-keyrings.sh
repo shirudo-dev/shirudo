@@ -24,7 +24,7 @@ esac
 DM_RING=$(awk '$8 == "keyring" && $9 == ".dm-verity:" { print $1 }' /proc/keys)
 [ -n "$DM_RING" ] || test_skip_all "no dm-verity keyring"
 DM_RING=$((0x$DM_RING))
-CONFIG_CERT=/run/shirudo/runtime/etc/shirudo/config-cert.der
+RUNTIME_CONF=/run/shirudo/runtime/etc/shirudo/shirudo.conf
 
 test_expect_success 'both keyrings are the ones init froze, with nothing added' '
 	python3 - "$W/status.json" "$RING" "$DM_RING" <<"PY"
@@ -62,21 +62,26 @@ for c in bpf["certs"]:
     assert c["frozen"] is (True if c["key_serial"] else None), c
     assert c["subject"] and c["algorithm"] and c["not_before"], c
 dmv = d["dm_verity_keyring"]
-assert len(dmv["certs"]) == 1, dmv["certs"]
-c = dmv["certs"][0]
-assert c["config"] and c["frozen"] is True, c
-assert [c["key_serial"]] == links(sys.argv[3]), (c, links(sys.argv[3]))
+assert dmv["certs"], dmv["certs"]
+for c in dmv["certs"]:
+    assert c["config"] and c["frozen"] is True, c
+held = sorted(c["key_serial"] for c in dmv["certs"])
+assert held == links(sys.argv[3]), (held, links(sys.argv[3]))
 PY
 '
 
-test_expect_success 'the config certificate is the one the runtime image carries' '
-	[ -s "$CONFIG_CERT" ] &&
-	python3 - "$W/status.json" "$CONFIG_CERT" <<"PY"
+test_expect_success 'config certificates are the exact set the runtime image designates' '
+	[ -s "$RUNTIME_CONF" ] &&
+	python3 - "$W/status.json" "$RUNTIME_CONF" <<"PY"
 import hashlib, json, sys
+from pathlib import Path
 d = json.load(open(sys.argv[1], encoding="utf-8"))
-with open(sys.argv[2], "rb") as stream:
-    digest = hashlib.sha256(stream.read()).hexdigest()
-assert d["dm_verity_keyring"]["certs"][0]["sha256"] == digest, digest
+paths = [line.split("=", 1)[1].strip()
+         for line in Path(sys.argv[2]).read_text().splitlines()
+         if line.split("=", 1)[0].strip() == "config.verification_key"]
+expected = {hashlib.sha256(Path(path).read_bytes()).hexdigest() for path in paths}
+actual = {cert["sha256"] for cert in d["dm_verity_keyring"]["certs"]}
+assert expected and len(expected) == len(paths) and expected == actual, (expected, actual)
 PY
 '
 

@@ -27,6 +27,7 @@ string-number-model	--unwind 6
 measured-fold-model	--unwind 7
 bpm-tree-follows	--unwind 4
 bpm-tree-sync-model	--object-bits 10 --unwind 60 --max-field-sensitivity-array-size 257 LEN=0-2
+bpm-tree-signers	--unwind 8
 bpm-upatch-member	--unwind 30 LEN=0-18
 tpm-reader		--unwind 1
 tpm-signature		--unwind 1 --unwindset bytes_at.0:33
@@ -41,6 +42,7 @@ config-image		--unwind 6 --unwindset memcmp.0:89,harness.0:33 LEN=0,511,512,4096
 config-auth		--unwind 18 LEN=0-16
 config-hosts		--unwind 9 LEN=0-7
 config-update-follows	--unwind 33
+image-bootstrap-certificates --unwind 64 --max-field-sensitivity-array-size 32 LEN=0-16
 image-bootstrap		--unwind 12 --unwindset bootstrap_parse.0:2,hex_decode.0:1 LEN=0-8
 image-path		--unwind 11
 dm-names		--unwind 10

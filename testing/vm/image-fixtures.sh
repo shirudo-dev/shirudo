@@ -63,12 +63,18 @@ live_fp=$(cat "$output/public/live.fingerprint")
 [[ "$boot_fp" =~ ^[a-f0-9]{64}$ ]] && [[ "$live_fp" =~ ^[a-f0-9]{64}$ ]]
 [ "$boot_fp" != "$live_fp" ]
 cp "$keys_dir/cert.der" "$output/public/primary.der"
+primary_fp=$("$operator" bpm key fingerprint "$keys_dir/cert.der")
+for name in config-c config-d config-untrusted; do
+	"$operator" genkey --keys-dir "$output/private/$name" \
+		>"$output/$name-genkey.log" 2>&1
+	cp "$output/private/$name/cert.der" "$output/public/$name.der"
+done
 
-for name in config-boot-keys config-live-new-key config-a config-b config-bad config-revoke \
+for name in config-boot-keys config-live-new-key config-live-revoke-a config-a config-b config-bad config-revoke \
 	config-tree-stable config-tree-updated config-tree-deleted config-tree-restored \
 	config-tree-kconfig config-tree-reloaded \
 	config-otel config-jsonl config-jsonl-bad config-interrupted config-end2end \
-	config-builtin; do
+	config-builtin config-untrusted; do
 	[ "$name" != config-builtin ] || [ -n "$builtin_key" ] || continue
 	root="$output/source/$name"
 	mkdir -p "$root/etc/shirudo" "$root/keys/trusted" "$root/keys/revoked"
@@ -100,14 +106,16 @@ for name in config-boot-keys config-live-new-key config-a config-b config-bad co
 	"$builder" keys vouch "$output/public/boot.der" \
 		-o "$root/keys/trusted/$boot_fp.vouch" --keys-dir "$keys_dir" \
 		>"$output/$name-boot-vouch.log" 2>&1
-	if [ "$name" = config-live-new-key ]; then
+	if [[ "$name" == config-live-new-key || "$name" == config-live-revoke-a ]]; then
 		cp "$output/public/live.der" "$root/keys/trusted/$live_fp.der"
 		"$builder" keys vouch "$output/public/live.der" \
 			-o "$root/keys/trusted/$live_fp.vouch" \
 			--keys-dir "$output/private/boot" \
 			>"$output/$name-live-vouch.log" 2>&1
 	fi
-	if [[ "$name" == config-revoke || "$name" == config-interrupted ]]; then
+	if [ "$name" = config-live-revoke-a ]; then
+		cp "$output/public/primary.der" "$root/keys/revoked/$primary_fp.der"
+	elif [[ "$name" == config-revoke || "$name" == config-interrupted ]]; then
 		cp "$output/public/boot.der" "$root/keys/revoked/$boot_fp.der"
 	elif [ "$name" = config-bad ]; then
 		printf 'invalid certificate\n' >"$root/keys/revoked/$boot_fp.der"
@@ -117,9 +125,15 @@ for name in config-boot-keys config-live-new-key config-a config-b config-bad co
 		expected=2
 		[[ "$name" != config-revoke && "$name" != config-interrupted ]] || expected=1
 		[ "$name" != config-live-new-key ] || expected=3
+		[ "$name" != config-live-revoke-a ] || expected=2
 		grep -q "signers=$expected" "$output/$name-validation.log"
 	fi
-	verify_cert="$keys_dir/cert.der"
+	signing_keys="$output/private/config-c"
+	case "$name" in
+	config-b|config-live-revoke-a) signing_keys="$output/private/config-d" ;;
+	config-untrusted) signing_keys="$output/private/config-untrusted" ;;
+	esac
+	verify_cert="$signing_keys/cert.der"
 	if [ "$name" = config-builtin ]; then
 		truncate -s 8M "$output/private/builtin.img"
 		mkfs.ext4 -q -F -b 4096 -O '^has_journal' -E root_owner=0:0 \
@@ -131,7 +145,7 @@ for name in config-boot-keys config-live-new-key config-a config-b config-bad co
 		cp "$builtin_cert" "$output/public/builtin.der"
 	else
 		"$source_dir/tools/gen-image/shirudo-gen-image" --source "$root" \
-			--output "$output/public/$name" --keys-dir "$keys_dir" \
+			--output "$output/public/$name" --keys-dir "$signing_keys" \
 			--builder "$builder" >"$output/$name-build.log" 2>&1
 	fi
 	SHIRUDO_BUILD="$builder" "$operator" image verify "$output/public/$name" \
@@ -146,6 +160,14 @@ done
 	--extra-cflags "-I$source_dir/vendor/libbpf" \
 	--key "$output/private/boot/signing_key.pem" \
 	--cert "$output/public/boot.der"
+
+"$builder" "$source_dir/testing/fixtures/basic.bpf.c" \
+	-o "$output/public/shirudo-test-live-key.upatch" \
+	--name shirudo-test-live-key \
+	--vmlinux "$source_dir/vendor/linux/vmlinux.h" \
+	--extra-cflags "-I$source_dir/vendor/libbpf" \
+	--key "$output/private/live/signing_key.pem" \
+	--cert "$output/public/live.der"
 
 # These host checks validate the fixture graph before the real target test.
 mkdir "$output/check-live" "$output/check-boot"

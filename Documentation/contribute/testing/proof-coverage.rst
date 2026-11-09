@@ -198,6 +198,14 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
        generation unless the same manifest, naming the recorded parent
        when the next generation, with the node's cursor between its base
        and head; without a state, one that starts at 0
+   * - ``bpm-tree-signers``
+     - ``tree_fetch_publication()``
+     - Active or inactive image config; every signing-set count through
+       capacity, every unvouched count through the set size, and parse,
+       allocation, load, check and fetch failures
+     - An active image fetch receives the same set whose load and check
+       succeeded, only when it is nonempty and fully vouched; preflight
+       failures refuse the fetch and every allocated set is released
    * - ``bpm-tree-sync-model``
      - ``cmd_bpm_tree_sync()``, ``tree_recover_pending()``,
        ``tree_publication_check()``, ``tree_publication_follows()``
@@ -473,6 +481,13 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
      - A bounded set of certificates under the runtime directory; a PCR
        only one the config accepts; nothing changes the runtime outside
        the initial settings
+   * - ``image-bootstrap-certificates``
+     - ``bootstrap_add_certificate()``
+     - Every earlier key count through capacity, present or absent paths,
+       paths outside the runtime and parent traversal
+     - Only a distinct runtime path joins a non-full set; duplicates,
+       invalid paths and overflow leave the count unchanged; earlier
+       paths keep their order
    * - ``image-path``
      - ``image_path_valid()``
      - Up to 8 bytes
