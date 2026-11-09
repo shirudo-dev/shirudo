@@ -16,12 +16,16 @@ struct upatch_pins {
 	bool	has_link;
 	__u32	nr_links;
 	__u32	first_link;
+	__u32	last_link;
 	__u32	nr_xdp_progs;
 	__u32	first_xdp_prog;
 };
 
 void upatch_pins_note(struct upatch_pins *pins, const char *entry);
 bool upatch_pins_loaded(const struct upatch_pins *pins);
+
+/* Whether the pins are the links of an upatch of nr_attach non-XDP programs. */
+bool upatch_pins_complete(const struct upatch_pins *pins, __u32 nr_attach);
 
 /* 0, or a negative errno; -ENOENT when the upatch has no pin directory. */
 int upatch_pins_read(const char *name, struct upatch_pins *out);

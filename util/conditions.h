@@ -51,6 +51,8 @@ struct conditions_input {
 	const char	*pins_detail;	/* their names, when any */
 	int		xdp_tampered;	/* loaded XDP upatches whose archive changed */
 	const char	*xdp_tampered_detail;	/* their names, when any */
+	int		links_lost;	/* loaded upatches missing a link */
+	const char	*links_lost_detail;	/* their names, when any */
 };
 
 struct condition {

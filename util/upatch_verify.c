@@ -74,22 +74,63 @@ int upatch_archive_verify(const char *name,
 	return 0;
 }
 
+int upatch_links_complete(const char *name, const char *path)
+{
+	struct prog_spec *specs = NULL;
+	struct upatch_pins pins;
+	__u32 len, i, nr_attach = 0;
+	const void *attach;
+	bool has_xdp = false;
+	struct upatch u;
+	int ret;
+
+	ret = upatch_open(path, &u);
+	if (ret)
+		return ret;
+	attach = upatch_signed_attach(&u, &len);
+	ret = attach ? prog_specs_parse(attach, len, u.hdr.nr_maps,
+					u.hdr.nr_progs, &specs) : -EINVAL;
+	if (ret)
+		goto out;
+	for (i = 0; i < u.hdr.nr_progs; i++) {
+		if (specs[i].role == UPATCH_PROG_ROLE_ATTACH)
+			nr_attach++;
+		if (specs[i].kind == UPATCH_ATTACH_XDP)
+			has_xdp = true;
+	}
+	ret = upatch_pins_read(name, &pins);
+	if (!ret)
+		ret = has_xdp || upatch_pins_complete(&pins, nr_attach);
+	prog_specs_free(specs, u.hdr.nr_progs);
+out:
+	upatch_close(&u);
+	return ret;
+}
+
+/* Whether the set holds name with the payload its pin directory records. */
+static bool pin_measured(const struct measured_set *s, const char *name,
+			 __u8 payload[UPATCH_PAYLOAD_HASH_LEN])
+{
+	char hex[2 * UPATCH_PAYLOAD_HASH_LEN + 1];
+	char dir[PATH_MAX];
+
+	if (upatch_pin_path(dir, sizeof(dir), name, NULL) ||
+	    getxattr(dir, XATTR_PAYLOAD, payload, UPATCH_PAYLOAD_HASH_LEN) !=
+	    UPATCH_PAYLOAD_HASH_LEN)
+		return false;
+	hex_encode(payload, UPATCH_PAYLOAD_HASH_LEN, hex);
+	return measured_holds(s, name, hex);
+}
+
 static bool xdp_archive_changed(const struct measured_set *s, const char *name)
 {
 	__u8 payload[UPATCH_PAYLOAD_HASH_LEN];
-	char hex[2 * UPATCH_PAYLOAD_HASH_LEN + 1];
 	struct upatch_pins pins;
-	char dir[PATH_MAX];
 	struct upatch u;
 	int ret;
 
 	if (upatch_pins_read(name, &pins) || !pins.nr_xdp_progs ||
-	    upatch_pin_path(dir, sizeof(dir), name, NULL) ||
-	    getxattr(dir, XATTR_PAYLOAD, payload, sizeof(payload)) !=
-	    (ssize_t)sizeof(payload))
-		return false;
-	hex_encode(payload, sizeof(payload), hex);
-	if (!measured_holds(s, name, hex))
+	    !pin_measured(s, name, payload))
 		return false;
 	ret = upatch_archive_verify(name, payload, &u);
 	if (!ret)
@@ -97,12 +138,24 @@ static bool xdp_archive_changed(const struct measured_set *s, const char *name)
 	return ret == -ESTALE;
 }
 
-int upatch_xdp_archives_changed(const struct measured_set *s,
-				int (*cb)(const char *name, void *ctx),
-				void *ctx)
+static bool links_lost(const struct measured_set *s, const char *name)
+{
+	__u8 payload[UPATCH_PAYLOAD_HASH_LEN];
+	char path[PATH_MAX];
+
+	if (!pin_measured(s, name, payload) ||
+	    strsprintf(path, sizeof(path), "%s/%s.upatch", UPATCHES_DIR,
+		       name) < 0)
+		return false;
+	return !upatch_links_complete(name, path);
+}
+
+static int walk_pinned(const struct measured_set *s,
+		       bool (*hit)(const struct measured_set *s, const char *name),
+		       int (*cb)(const char *name, void *ctx), void *ctx)
 {
 	struct dirent *e;
-	int changed = 0;
+	int found = 0;
 	int ret = 0;
 	DIR *d;
 
@@ -114,11 +167,24 @@ int upatch_xdp_archives_changed(const struct measured_set *s,
 
 		if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..") ||
 		    upatch_name_from_bpffs(name, sizeof(name), e->d_name) ||
-		    !xdp_archive_changed(s, name))
+		    !hit(s, name))
 			continue;
-		changed++;
+		found++;
 		ret = cb(name, ctx);
 	}
 	closedir(d);
-	return ret ? ret : changed;
+	return ret ? ret : found;
+}
+
+int upatch_xdp_archives_changed(const struct measured_set *s,
+				int (*cb)(const char *name, void *ctx),
+				void *ctx)
+{
+	return walk_pinned(s, xdp_archive_changed, cb, ctx);
+}
+
+int upatch_links_lost(const struct measured_set *s,
+		      int (*cb)(const char *name, void *ctx), void *ctx)
+{
+	return walk_pinned(s, links_lost, cb, ctx);
 }

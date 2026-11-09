@@ -41,6 +41,8 @@ void upatch_pins_note(struct upatch_pins *pins, const char *entry)
 	} else if (pin_index(entry, "link_", &index)) {
 		if (!pins->nr_links || index < pins->first_link)
 			pins->first_link = index;
+		if (!pins->nr_links || index > pins->last_link)
+			pins->last_link = index;
 		pins->nr_links++;
 	} else if (pin_index(entry, XDP_PROG_PIN_PREFIX, &index)) {
 		if (!pins->nr_xdp_progs || index < pins->first_xdp_prog)
@@ -59,6 +61,16 @@ bool upatch_pins_loaded(const struct upatch_pins *pins)
 {
 	return pins->has_link || (pins->nr_links && !pins->first_link) ||
 	       pins->nr_xdp_progs;
+}
+
+bool upatch_pins_complete(const struct upatch_pins *pins, __u32 nr_attach)
+{
+	if (!nr_attach)
+		return true;
+	if (nr_attach == 1)
+		return pins->has_link;
+	return pins->nr_links == nr_attach && !pins->first_link &&
+	       pins->last_link == nr_attach - 1;
 }
 
 int upatch_pins_read(const char *name, struct upatch_pins *out)

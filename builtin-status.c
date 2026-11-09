@@ -856,8 +856,10 @@ int cmd_status(int argc, const char **argv)
 	bool otel_endpoint_configured = false;
 	char unmeasured_names[UNMEASURED_NAMES] = "";
 	char xdp_tampered_names[UNMEASURED_NAMES] = "";
+	char links_lost_names[UNMEASURED_NAMES] = "";
 	struct measured_set *mset = NULL;
 	int xdp_tampered = 0;
+	int links_lost = 0;
 	char config_root_hex[65] = "";
 	__u8 config_root[32];
 	int unmeasured, lock;
@@ -971,6 +973,8 @@ int cmd_status(int argc, const char **argv)
 		}
 		xdp_tampered = upatch_xdp_archives_changed(mset, note_unmeasured,
 							   xdp_tampered_names);
+		links_lost = upatch_links_lost(mset, note_unmeasured,
+					       links_lost_names);
 		measured_set_free(mset);
 	}
 	eventlog_unlock(lock);
@@ -1038,6 +1042,8 @@ int cmd_status(int argc, const char **argv)
 	cin.pins_detail = unmeasured_names;
 	cin.xdp_tampered = max(xdp_tampered, 0);
 	cin.xdp_tampered_detail = xdp_tampered_names;
+	cin.links_lost = max(links_lost, 0);
+	cin.links_lost_detail = links_lost_names;
 	keyring_cond_input(&cin, &bpf, &dmv);
 
 	if (json) {

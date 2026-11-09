@@ -59,6 +59,7 @@
 #include "util/upatch.h"
 #include "util/upatch_pins.h"
 #include "util/upatch_resolve.h"
+#include "util/upatch_verify.h"
 
 static void print_preflight(const struct preflight_result *r)
 {
@@ -1014,6 +1015,14 @@ static int boot_restore_locked(bool recorded,
 				       "payload other than the archived one "
 				       "(tampered)", set[cnt].name);
 				ret = -EINVAL;
+				goto next;
+			}
+			if (upatch_links_complete(set[cnt].name, path) != 1) {
+				pr_err("boot-restore: %s is loaded without every "
+				       "link its signed metadata implies "
+				       "(tampered); unload it or reboot",
+				       set[cnt].name);
+				ret = -EPERM;
 				goto next;
 			}
 			pr_info("boot-restore: %s already loaded",

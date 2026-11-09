@@ -58,6 +58,34 @@ static void loaded_needs_the_first_link_or_a_program(void)
 	EXPECT_TRUE(upatch_pins_loaded(&pins));
 }
 
+static void complete_means_every_link(void)
+{
+	struct upatch_pins pins = {};
+
+	EXPECT_TRUE(upatch_pins_complete(&pins, 0));
+	EXPECT_FALSE(upatch_pins_complete(&pins, 1));
+	upatch_pins_note(&pins, "link");
+	EXPECT_TRUE(upatch_pins_complete(&pins, 1));
+
+	memset(&pins, 0, sizeof(pins));
+	upatch_pins_note(&pins, "link_0");
+	EXPECT_FALSE(upatch_pins_complete(&pins, 1));
+	EXPECT_FALSE(upatch_pins_complete(&pins, 2));
+	upatch_pins_note(&pins, "link_1");
+	EXPECT_TRUE(upatch_pins_complete(&pins, 2));
+	EXPECT_FALSE(upatch_pins_complete(&pins, 3));
+
+	memset(&pins, 0, sizeof(pins));
+	upatch_pins_note(&pins, "link_1");
+	upatch_pins_note(&pins, "link_2");
+	EXPECT_FALSE(upatch_pins_complete(&pins, 2));
+
+	memset(&pins, 0, sizeof(pins));
+	upatch_pins_note(&pins, "link_0");
+	upatch_pins_note(&pins, "link_2");
+	EXPECT_FALSE(upatch_pins_complete(&pins, 2));
+}
+
 static void absent_upatch_has_no_pins(void)
 {
 	struct upatch_pins pins = { .has_link = true };
@@ -72,6 +100,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(names_are_parsed_strictly),
 	UNIT_CASE(lowest_index_is_kept_in_any_order),
 	UNIT_CASE(loaded_needs_the_first_link_or_a_program),
+	UNIT_CASE(complete_means_every_link),
 	UNIT_CASE(absent_upatch_has_no_pins),
 	{}
 };

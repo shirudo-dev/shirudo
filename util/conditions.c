@@ -146,6 +146,12 @@ size_t conditions(const struct conditions_input *in,
 				   in->xdp_tampered,
 				   in->xdp_tampered_detail ?
 				   in->xdp_tampered_detail : "?");
+		else if (in->links_lost)
+			set_detail(&c[n], "ALERT",
+				   "%d upatches are missing a link: %s",
+				   in->links_lost,
+				   in->links_lost_detail ?
+				   in->links_lost_detail : "?");
 		else if (in->pins_rc == -ENOENT)
 			set_detail(&c[n], "WARN",
 				   "no record of this boot to check the pins against");
@@ -228,7 +234,8 @@ const char *status_verdict(const struct conditions_input *in)
 	if (!in->parsed)
 		return "unparseable";
 	if ((in->cm_seen && !in->chain_matches) || in->pins_unmeasured ||
-	    in->xdp_tampered || keyring_tampered(in) || config_untrusted(in))
+	    in->xdp_tampered || in->links_lost || keyring_tampered(in) ||
+	    config_untrusted(in))
 		return "tampered";
 	if (!in->lsm_attached)
 		return "lsm-off";
@@ -258,6 +265,8 @@ void status_reason(const struct conditions_input *in,
 		else if (in->xdp_tampered)
 			strscpy(buf, "the archive of a loaded XDP upatch differs from what was loaded",
 				cap);
+		else if (in->links_lost)
+			strscpy(buf, "a loaded upatch is missing a link", cap);
 		else if (in->pins_unmeasured)
 			strscpy(buf, "a upatch is pinned or archived without a record of this boot",
 				cap);
