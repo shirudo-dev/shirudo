@@ -98,6 +98,8 @@ test_xdp_success 'a gone device loses its pin and no live index is reused' '
 	load "$NAME" &&
 	[ -e "$B/$NAME/link_0" ] && [ -e "$B/$NAME/link_1" ] &&
 	ip link del xdpa &&
+	"$SHIRUDO_BIN" status --check &&
+	"$SHIRUDO_BIN" init &&
 	add_pair xdpe 30020 xdpf 30021 &&
 	reconcile &&
 	[ ! -e "$B/$NAME/link_0" ] &&

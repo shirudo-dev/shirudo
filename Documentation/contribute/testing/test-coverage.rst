@@ -206,8 +206,8 @@ signed config image.
    * - ``t3112-xdp-reconcile``
      - ``upatch reconcile`` attaches a device added after load, adds no
        pin or event on a second pass, leaves a device another program
-       occupies, removes a gone device's pin without reusing a live
-       index, does nothing after unload, and leaves the link on a veth
+       occupies, does not read a gone device as tampering, removes its
+       pin without reusing a live index, does nothing after unload, and leaves the link on a veth
        end moved to another namespace. A changed archive is covered by
        the ``upatch_verify`` unit cases. An unload racing a pass is not
        reported as tampering.

@@ -9,8 +9,12 @@
 #include <errno.h>
 #include <limits.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/xattr.h>
 #include <unistd.h>
+
+#include <bpf/bpf.h>
+#include <linux/bpf.h>
 
 #include <shirudo/string.h>
 
@@ -74,6 +78,58 @@ int upatch_archive_verify(const char *name,
 	return 0;
 }
 
+static int count_non_xdp_link(__u32 index, const char *pin, void *ctx)
+{
+	struct bpf_link_info info = {};
+	__u32 len = sizeof(info);
+	__u32 *found = ctx;
+	int fd, ret;
+
+	fd = bpf_obj_get(pin);
+	if (fd < 0)
+		return -errno;
+	ret = bpf_link_get_info_by_fd(fd, &info, &len);
+	close(fd);
+	if (ret)
+		return ret;
+	if (info.type != BPF_LINK_TYPE_XDP)
+		(*found)++;
+	return 0;
+}
+
+/*
+ * XDP links come and go with devices, so their number says nothing. What
+ * cannot change is a program pin for each XDP program and a link for each
+ * other attach program. Link numbers are shared and shift with the devices,
+ * so the kernel says which links are which.
+ */
+static int xdp_upatch_complete(const char *name, const struct prog_spec *specs,
+			       __u32 nr_progs, __u32 nr_attach)
+{
+	__u32 i, nr_xdp = 0, found = 0;
+	char pin[PATH_MAX];
+	char entry[32];
+	struct stat st;
+	int ret;
+
+	for (i = 0; i < nr_progs; i++) {
+		if (specs[i].kind != UPATCH_ATTACH_XDP)
+			continue;
+		nr_xdp++;
+		if (strsprintf(entry, sizeof(entry), XDP_PROG_PIN_PREFIX "%u", i) < 0 ||
+		    upatch_pin_path(pin, sizeof(pin), name, entry, NULL))
+			return -ENAMETOOLONG;
+		if (stat(pin, &st))
+			return errno == ENOENT ? 0 : -errno;
+	}
+	if (nr_attach == nr_xdp)
+		return 1;
+	ret = upatch_each_link(name, count_non_xdp_link, &found);
+	if (ret)
+		return ret;
+	return found == nr_attach - nr_xdp;
+}
+
 int upatch_links_complete(const char *name, const char *path)
 {
 	struct prog_spec *specs = NULL;
@@ -98,9 +154,13 @@ int upatch_links_complete(const char *name, const char *path)
 		if (specs[i].kind == UPATCH_ATTACH_XDP)
 			has_xdp = true;
 	}
-	ret = upatch_pins_read(name, &pins);
-	if (!ret)
-		ret = has_xdp || upatch_pins_complete(&pins, nr_attach);
+	if (has_xdp) {
+		ret = xdp_upatch_complete(name, specs, u.hdr.nr_progs, nr_attach);
+	} else {
+		ret = upatch_pins_read(name, &pins);
+		if (!ret)
+			ret = upatch_pins_complete(&pins, nr_attach);
+	}
 	prog_specs_free(specs, u.hdr.nr_progs);
 out:
 	upatch_close(&u);

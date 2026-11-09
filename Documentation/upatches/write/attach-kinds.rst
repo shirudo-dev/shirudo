@@ -312,7 +312,10 @@ Load and restore each discover devices once.
 :doc:`/reference/cli/upatch-reconcile` repeats that discovery later: it
 attaches a loaded upatch to any selected device it does not run on yet
 and removes the pin of a link whose device has gone. Removing a device
-detaches its XDP link. The signed artifact and TPM measurement
+detaches its XDP link, so ``init`` and ``status`` do not count XDP link
+pins as they do other links: they require the ``xdp_prog_<i>`` pin of each
+XDP program and a link for each other attach program of the upatch.
+The signed artifact and TPM measurement
 cover the class policy, not a fixed device inventory. The location
 ``status`` and ``upatch get`` report names the first device still
 attached and how many more there are, as in ``xdp/eth0 (+1)``.

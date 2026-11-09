@@ -240,7 +240,9 @@ verdict is derived from them.
        :doc:`/operate/troubleshoot/incident-tampered`. ``ALERT`` ``<n>
        upatches are missing a link: <names>``: a loaded upatch has fewer
        link pins than its signed metadata implies, so part of it is
-       detached. Handle it the same way. ``WARN`` ``no
+       detached. For an upatch with XDP that means an ``xdp_prog_<i>`` pin
+       or the link of another attach program; a device going away is not
+       a missing link. Handle it the same way. ``WARN`` ``no
        record of this boot to check the pins against`` before ``init``, or
        ``pins not checked against the records: <error>``.
    * - ``TpmMeasured``
