@@ -35,6 +35,18 @@ static void classes_are_exclusive(void)
 	EXPECT_FALSE(xdp_device_selected(&dev, 1, 0, UPATCH_XDP_ALL));
 }
 
+static void netdevsim_is_virtual_whatever_its_port_says(void)
+{
+	struct xdp_device dev = {};
+
+	memcpy(dev.driver, "netdevsim", sizeof("netdevsim"));
+	memcpy(dev.parent_bus, "netdevsim", sizeof("netdevsim"));
+	EXPECT_UEQ(xdp_device_class(&dev), UPATCH_XDP_VIRTUAL);
+	dev.devlink_port = true;
+	dev.port_flavour = DEVLINK_PORT_FLAVOUR_PHYSICAL;
+	EXPECT_UEQ(xdp_device_class(&dev), UPATCH_XDP_VIRTUAL);
+}
+
 static void veth_peers_are_namespace_aware(void)
 {
 	struct xdp_device devs[4] = {};
@@ -215,6 +227,7 @@ static void kernel_discovery_revalidates_devices(void)
 
 static const struct unit_case cases[] = {
 	UNIT_CASE(classes_are_exclusive),
+	UNIT_CASE(netdevsim_is_virtual_whatever_its_port_says),
 	UNIT_CASE(veth_peers_are_namespace_aware),
 	UNIT_CASE(veth_without_a_peer_is_not_selected),
 	UNIT_CASE(unresolved_devices_sit_out),

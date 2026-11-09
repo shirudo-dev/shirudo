@@ -277,10 +277,11 @@ mask is mandatory, nonzero and contains only the bits below. Bare
 Bit 4 is not a class, and a mask with it is refused. Loopback has no
 native XDP, so it has no class and no mask selects it. Every other
 interface has exactly one class. shirudo checks the driver names ``virtio_net``, ``vmxnet3``, ``hv_netvsc``,
-``xen-netfront`` and ``vif`` for VM adapters. Next it uses devlink port
+``xen-netfront`` and ``vif`` for VM adapters, then ``netdevsim``, which
+is virtual whatever its devlink port says. Next it uses devlink port
 flavour: physical ports are network-facing; CPU, DSA, PCI PF, VF, SF
 and virtual ports are virtual; other flavours are unknown. Without a
-devlink port, ``netdevsim`` is virtual, a device with a hardware parent
+devlink port, a device with a hardware parent
 bus is network-facing, a device with a kernel software link kind is
 virtual, and the rest are unknown. Facts come from rtnetlink, devlink
 and ethtool, without interface-name or sysfs heuristics.

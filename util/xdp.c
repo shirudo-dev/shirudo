@@ -289,6 +289,9 @@ __u32 xdp_device_class(const struct xdp_device *dev)
 	for (i = 0; i < ARRAY_SIZE(vm_drivers); i++)
 		if (!strcmp(dev->driver, vm_drivers[i]))
 			return UPATCH_XDP_VM;
+	/* Its ports are simulated, whatever flavour they claim. */
+	if (!strcmp(dev->driver, "netdevsim"))
+		return UPATCH_XDP_VIRTUAL;
 	if (dev->devlink_port) {
 		switch (dev->port_flavour) {
 		case DEVLINK_PORT_FLAVOUR_PHYSICAL:
@@ -304,8 +307,6 @@ __u32 xdp_device_class(const struct xdp_device *dev)
 			return UPATCH_XDP_UNKNOWN;
 		}
 	}
-	if (!strcmp(dev->driver, "netdevsim"))
-		return UPATCH_XDP_VIRTUAL;
 	if (dev->parent_bus[0])
 		return UPATCH_XDP_NETWORK;
 	if (dev->kind[0])
