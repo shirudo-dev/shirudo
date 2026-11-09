@@ -25,6 +25,7 @@ struct xdp_device {
 	__u16 port_flavour;
 	bool peer_other_netns;
 	bool devlink_port;
+	bool unresolved;
 };
 
 int xdp_device_parse(const void *data, size_t len, struct xdp_device *out);

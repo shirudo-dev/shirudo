@@ -291,7 +291,11 @@ ifindex order. A veth pair gets one attachment: the endpoint in the
 initial namespace when its peer is elsewhere, or the lower ifindex when
 both ends are in that namespace. Peer namespace information prevents
 equal ifindexes in separate namespaces from being mistaken for a pair.
-Pairs entirely outside the initial namespace are excluded.
+Pairs entirely outside the initial namespace are excluded. Discovery
+tolerates interfaces changing under it: a snapshot the kernel reports
+as interrupted is retried, and an interface renamed or removed during
+the snapshot, or a veth whose peer is not in it, is left out rather than
+failing the load.
 
 Links use ``XDP_FLAGS_DRV_MODE``. Devices that refuse native XDP with
 ``EOPNOTSUPP``, such as a bridge, are logged and skipped. Every XDP

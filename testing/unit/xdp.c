@@ -61,6 +61,41 @@ static void veth_peers_are_namespace_aware(void)
 	EXPECT_TRUE(xdp_device_selected(devs, 4, 1, UPATCH_XDP_VIRTUAL));
 }
 
+static void veth_without_a_peer_is_not_selected(void)
+{
+	struct xdp_device devs[2] = {};
+
+	memcpy(devs[0].kind, "veth", sizeof("veth"));
+	memcpy(devs[1].kind, "veth", sizeof("veth"));
+	devs[0].ifindex = 10;
+	devs[0].peer_ifindex = 99;
+	devs[1].ifindex = 11;
+	devs[1].peer_ifindex = 11;
+	EXPECT_FALSE(xdp_device_selected(devs, 2, 0, UPATCH_XDP_ALL));
+	EXPECT_FALSE(xdp_device_selected(devs, 2, 1, UPATCH_XDP_ALL));
+}
+
+static void unresolved_devices_sit_out(void)
+{
+	struct xdp_device devs[3] = {};
+	size_t i;
+
+	for (i = 0; i < 3; i++) {
+		memcpy(devs[i].kind, "veth", sizeof("veth"));
+		devs[i].ifindex = (__u32)i + 10;
+	}
+	devs[0].peer_ifindex = 11;
+	devs[1].peer_ifindex = 10;
+	devs[2].peer_ifindex = 7;
+	devs[2].peer_other_netns = true;
+	devs[1].unresolved = true;
+	EXPECT_FALSE(xdp_device_selected(devs, 3, 0, UPATCH_XDP_ALL));
+	EXPECT_FALSE(xdp_device_selected(devs, 3, 1, UPATCH_XDP_ALL));
+	EXPECT_TRUE(xdp_device_selected(devs, 3, 2, UPATCH_XDP_ALL));
+	devs[2].unresolved = true;
+	EXPECT_FALSE(xdp_device_selected(devs, 3, 2, UPATCH_XDP_ALL));
+}
+
 static size_t add_attr(__u8 *buf, size_t len, __u16 type,
 		       const void *value, size_t size)
 {
@@ -129,6 +164,8 @@ static void kernel_discovery_revalidates_devices(void)
 static const struct unit_case cases[] = {
 	UNIT_CASE(classes_are_exclusive),
 	UNIT_CASE(veth_peers_are_namespace_aware),
+	UNIT_CASE(veth_without_a_peer_is_not_selected),
+	UNIT_CASE(unresolved_devices_sit_out),
 	UNIT_CASE(link_messages_are_checked),
 	UNIT_CASE(kernel_discovery_revalidates_devices),
 	{}

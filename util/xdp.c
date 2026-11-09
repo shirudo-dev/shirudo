@@ -25,6 +25,7 @@
 #include "xdp.h"
 
 #define NETLINK_BUFFER_SIZE 65536U
+#define DEVICES_READ_ATTEMPTS 5U
 
 struct nl_request {
 	struct nlmsghdr hdr;
@@ -312,25 +313,37 @@ __u32 xdp_device_class(const struct xdp_device *dev)
 	return UPATCH_XDP_UNKNOWN;
 }
 
+static const struct xdp_device *veth_peer(const struct xdp_device *devs,
+					  size_t count,
+					  const struct xdp_device *dev)
+{
+	size_t i;
+
+	for (i = 0; i < count; i++) {
+		const struct xdp_device *peer = &devs[i];
+
+		if (peer->ifindex != dev->ifindex &&
+		    peer->ifindex == dev->peer_ifindex &&
+		    peer->peer_ifindex == dev->ifindex &&
+		    !peer->peer_other_netns && !peer->unresolved &&
+		    !strcmp(peer->kind, "veth"))
+			return peer;
+	}
+	return NULL;
+}
+
 bool xdp_device_selected(const struct xdp_device *devs, size_t count,
 			 size_t index, __u32 mask)
 {
 	const struct xdp_device *dev = &devs[index];
-	size_t i;
+	const struct xdp_device *peer;
 
-	if (!(xdp_device_class(dev) & mask))
+	if (dev->unresolved || !(xdp_device_class(dev) & mask))
 		return false;
 	if (strcmp(dev->kind, "veth") || dev->peer_other_netns)
 		return true;
-	for (i = 0; i < count; i++) {
-		const struct xdp_device *peer = &devs[i];
-
-		if (peer->ifindex == dev->peer_ifindex &&
-		    peer->peer_ifindex == dev->ifindex &&
-		    !peer->peer_other_netns && !strcmp(peer->kind, "veth"))
-			return dev->ifindex < peer->ifindex;
-	}
-	return false;
+	peer = veth_peer(devs, count, dev);
+	return peer && dev->ifindex < peer->ifindex;
 }
 
 struct device_list {
@@ -464,57 +477,62 @@ static int device_compare(const void *a, const void *b)
 	       (left->ifindex < right->ifindex);
 }
 
-int xdp_devices_read(struct xdp_device **out, size_t *count)
+static int devices_read_once(struct device_list *list)
 {
 	struct nl_request req = {
 		.hdr.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifinfomsg)),
 		.hdr.nlmsg_type = RTM_GETLINK,
 		.hdr.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP,
 	};
-	struct device_list list = {};
 	size_t i;
 	int ret;
 
+	ret = nl_exchange(NETLINK_ROUTE, &req, receive_device, list);
+	if (ret)
+		return ret;
+	qsort(list->devices, list->count, sizeof(*list->devices),
+	      device_compare);
+	for (i = 0; i < list->count; i++) {
+		struct xdp_device *dev = &list->devices[i];
+
+		if (i && list->devices[i - 1].ifindex == dev->ifindex)
+			return -EAGAIN;
+		/*
+		 * A rename or removal racing the dump says nothing about
+		 * the other devices; without its facts this one can't be
+		 * classified, so it sits out this discovery.
+		 */
+		ret = device_details(dev);
+		if (ret == -EXDEV || ret == -ENODEV)
+			dev->unresolved = true;
+		else if (ret)
+			return ret;
+	}
+	return 0;
+}
+
+int xdp_devices_read(struct xdp_device **out, size_t *count)
+{
+	struct device_list list = {};
+	int ret = -EAGAIN;
+	__u32 attempt;
+
 	*out = NULL;
 	*count = 0;
-	ret = nl_exchange(NETLINK_ROUTE, &req, receive_device, &list);
-	if (ret)
-		goto out;
-	qsort(list.devices, list.count, sizeof(*list.devices), device_compare);
-	for (i = 0; i < list.count; i++) {
-		const struct xdp_device *dev = &list.devices[i];
-		bool found = false;
-		size_t j;
-
-		if (i && list.devices[i - 1].ifindex == list.devices[i].ifindex) {
-			ret = -EXDEV;
-			goto out;
-		}
-		ret = device_details(&list.devices[i]);
-		if (ret)
-			goto out;
-		if (strcmp(dev->kind, "veth") || dev->peer_other_netns)
-			continue;
-		for (j = 0; j < list.count; j++) {
-			const struct xdp_device *peer = &list.devices[j];
-
-			if (peer->ifindex != dev->ifindex &&
-			    peer->ifindex == dev->peer_ifindex &&
-			    peer->peer_ifindex == dev->ifindex &&
-			    !peer->peer_other_netns && !strcmp(peer->kind, "veth"))
-				found = true;
-		}
-		if (!found) {
-			ret = -EXDEV;
-			goto out;
+	for (attempt = 0; attempt < DEVICES_READ_ATTEMPTS && ret == -EAGAIN;
+	     attempt++) {
+		ret = devices_read_once(&list);
+		if (ret) {
+			xfree(list.devices,
+			      size_mul(list.count, sizeof(*list.devices)));
+			list = (struct device_list){};
 		}
 	}
+	if (ret)
+		return ret;
 	*out = list.devices;
 	*count = list.count;
 	return 0;
-out:
-	xfree(list.devices, size_mul(list.count, sizeof(*list.devices)));
-	return ret;
 }
 
 int xdp_device_verify(const struct xdp_device *expected)
