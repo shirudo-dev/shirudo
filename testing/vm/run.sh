@@ -1657,10 +1657,13 @@ if user_systemd_available; then
 	SWTPM_PID="$(user_unit_pid "$SWTPM_UNIT")" || die "could not determine swtpm systemd PID"
 	printf '%s\n' "$SWTPM_PID" >"$SWTPM_PIDFILE"
 else
+	# Ubuntu's AppArmor profile for swtpm closes an inherited terminal, and
+	# swtpm --daemon never returns when it starts without fds 0 to 2.
 	swtpm socket --tpmstate "dir=${RUN_DIR}/tpm,mode=0700" \
 		--ctrl "type=unixio,path=tpm/swtpm-sock" \
 		--tpm2 --log "file=${RUN_DIR}/swtpm.log,level=20" \
-		--pid "file=${SWTPM_PIDFILE}" --daemon
+		--pid "file=${SWTPM_PIDFILE}" --daemon </dev/null 2>&1 |
+		sed 's/^/[test-vm] swtpm: /' >&2
 fi
 for _ in {1..50}; do
 	[[ -S "$SWTPM_SOCKET" ]] && break
