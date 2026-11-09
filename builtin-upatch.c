@@ -1331,6 +1331,27 @@ static int prog_pin_path(char *pin, size_t sz, const char *dir,
 	return n < 0 ? -ENAMETOOLONG : 0;
 }
 
+/*
+ * Links exist only per device, so with none attached the pin is what keeps
+ * the program loaded, and its index is what ties it to its signed classes.
+ */
+static int pin_xdp_prog(int prog_fd, const char *dir, __u32 index)
+{
+	char pin[PATH_MAX + 32];
+	struct stat st;
+	int ret;
+
+	if (strsprintf(pin, sizeof(pin), "%s/" XDP_PROG_PIN_PREFIX "%u", dir,
+		       index) < 0)
+		return -ENAMETOOLONG;
+	if (stat(pin, &st) == 0 && unlink(pin))
+		return -errno;
+	ret = obj_pin(prog_fd, pin);
+	if (ret)
+		pr_err("pin XDP program %s: %s", pin, strerror(-ret));
+	return ret;
+}
+
 static int attach_xdp_devices(int prog_fd, const struct prog_spec *spec,
 			      const struct xdp_device *devices, size_t count,
 			      const char *dir, __u32 *pinned)
@@ -1514,6 +1535,10 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 		}
 		attach_seen++;
 		if (spec->kind == UPATCH_ATTACH_XDP) {
+			ret = pin_xdp_prog(inner_fd, dir, i);
+			if (ret)
+				goto out;
+			made[i] = true;
 			ret = attach_xdp_devices(inner_fd, spec, devices, nr_devices,
 						 dir, &pinned_links);
 			if (ret)
@@ -1597,6 +1622,10 @@ out:
 		}
 		attach_seen = 0;
 		for (i = 0; i < nr_progs; i++) {
+			if (made[i] && specs[i].kind == UPATCH_ATTACH_XDP &&
+			    strsprintf(pin, sizeof(pin),
+				       "%s/" XDP_PROG_PIN_PREFIX "%u", dir, i) >= 0)
+				unlink(pin);
 			if (made[i] &&
 			    !(has_xdp && specs[i].role == UPATCH_PROG_ROLE_ATTACH) &&
 			    !prog_pin_path(pin, sizeof(pin), dir,

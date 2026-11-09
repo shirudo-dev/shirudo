@@ -383,6 +383,9 @@ written as ``~d``.
      - Attachment ``<n>`` when there are several programs or the artifact
        contains XDP. XDP can produce multiple links per program, ordered
        by program and then ifindex; skipped devices consume no pin number.
+   * - ``xdp_prog_<i>``
+     - XDP program ``<i>`` of the artifact's signed metadata. It holds the
+       program loaded whatever devices it is attached to.
    * - ``test``
      - A program with the test-run role.
    * - ``serializers/<map>``

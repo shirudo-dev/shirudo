@@ -69,6 +69,7 @@ test_xdp_success 'one endpoint of a host veth pair receives native XDP' '
 	[ "$("$H" query xdph1)" -gt 0 ] &&
 	[ "$("$H" query xdph0)" = 0 ] &&
 	[ -e "$B/$NAME/link_0" ] && [ ! -e "$B/$NAME/link_1" ] &&
+	[ -e "$B/$NAME/xdp_prog_0" ] &&
 	before=$(wc -l </var/lib/shirudo/eventlog) &&
 	"$SHIRUDO_BIN" init &&
 	[ "$(wc -l </var/lib/shirudo/eventlog)" = "$before" ] &&

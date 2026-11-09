@@ -40,6 +40,7 @@
  */
 #define RUN_DIR			"/run/shirudo"
 #define BPFFS_DIR		RUN_DIR "/bpffs"
+#define XDP_PROG_PIN_PREFIX	"xdp_prog_"
 /* The init record written from the initrd, until the root adopts it. */
 #define EVENTLOG_PENDING_PATH	RUN_DIR "/eventlog.pending"
 /* On a target with a config image these are the image's, opened from its root. */
