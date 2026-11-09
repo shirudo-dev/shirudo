@@ -46,7 +46,7 @@ config-auth		--unwind 18 LEN=0-16
 config-hosts		--unwind 9 LEN=0-7
 config-update-follows	--unwind 33
 image-bootstrap-certificates --unwind 64 --max-field-sensitivity-array-size 32 LEN=0-16
-image-bootstrap		--unwind 12 --unwindset bootstrap_parse.0:2,hex_decode.0:1 LEN=0-8
+image-bootstrap		--unwind 10 --unwindset bootstrap_parse.0:2,hex_decode.0:1 --max-field-sensitivity-array-size 32 --slice-formula LEN=0-8
 image-path		--unwind 11
 dm-names		--unwind 10
 kernel-notes		--unwind 1 --unwindset kernel_build_id_from_notes.0:5,hex_encode.0:29,strnlen.0:58,harness.0:58,first_note.0:29,memcmp.0:5 LEN=0-24,28,32,36,40

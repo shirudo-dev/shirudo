@@ -496,11 +496,11 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
        initial value and root
    * - ``image-bootstrap``
      - ``bootstrap_parse()`` with ``read_text_line()``
-     - One settings line of 0 to 8 bytes, every earlier state, failed
-       reads and allocations
-     - A bounded set of certificates under the runtime directory; a PCR
-       only one the config accepts; nothing changes the runtime outside
-       the initial settings
+     - One settings line of 0 to 8 bytes, failed reads and allocations,
+       and an initially empty state with the root flag and runtime
+       presence varied. These lines cannot contain a complete setting.
+     - A short line cannot add a certificate or set a PCR; the runtime
+       and root presence flags stay unchanged
    * - ``image-bootstrap-certificates``
      - ``bootstrap_add_certificate()``
      - Every earlier key count through capacity, present or absent paths,
