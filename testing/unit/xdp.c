@@ -106,6 +106,48 @@ static void reconcile_never_touches_another_program(void)
 	EXPECT_EQ(xdp_reconcile_action(true, 9, 7), XDP_RECONCILE_OCCUPIED);
 }
 
+static void restore_fails_on_a_driver_refusal(void)
+{
+	static const int skipped[] = { -EBUSY, -EEXIST, -EXDEV, -ENODEV };
+	static const int refused[] = { -EINVAL, -ENOSPC, -ERANGE };
+	/* No device has this index, so the kernel answers ENODEV. */
+	struct xdp_device *devices = NULL, gone = { .ifindex = 0x7ffffff0 };
+	/* Index 0 names no device, so the lookup itself fails with EINVAL. */
+	struct xdp_device unaskable = {};
+	size_t count = 0, i;
+	int ret;
+
+	for (i = 0; i < ARRAY_SIZE(skipped); i++)
+		EXPECT_TRUE(xdp_attach_skippable(skipped[i], &gone, true));
+	EXPECT_TRUE(xdp_attach_skippable(-EINVAL, &gone, true));
+	EXPECT_FALSE(xdp_attach_skippable(-EINVAL, &unaskable, true));
+	EXPECT_FALSE(xdp_attach_skippable(-EINVAL, &unaskable, false));
+	EXPECT_FALSE(xdp_attach_skippable(-EACCES, &gone, true));
+	EXPECT_FALSE(xdp_attach_skippable(-EPERM, &gone, true));
+	EXPECT_FALSE(xdp_attach_skippable(0, &gone, true));
+	EXPECT_FALSE(xdp_attach_skippable(1, &gone, true));
+
+	ret = xdp_devices_read(&devices, &count);
+	if (ret == -EPERM || ret == -EACCES || ret == -EAFNOSUPPORT)
+		unit_skip("kernel network discovery unavailable");
+	ASSERT_EQ(ret, 0);
+	ASSERT_TRUE(count > 0);
+	for (i = 0; i < ARRAY_SIZE(refused); i++)
+		EXPECT_FALSE(xdp_attach_skippable(refused[i], &devices[0], true));
+	xfree(devices, count * sizeof(*devices));
+}
+
+static void load_stops_on_an_occupied_device(void)
+{
+	struct xdp_device dev = {};
+
+	EXPECT_FALSE(xdp_attach_skippable(-EBUSY, &dev, false));
+	EXPECT_FALSE(xdp_attach_skippable(-EEXIST, &dev, false));
+	EXPECT_TRUE(xdp_attach_skippable(-EXDEV, &dev, false));
+	EXPECT_TRUE(xdp_attach_skippable(-ENODEV, &dev, false));
+	EXPECT_FALSE(xdp_attach_skippable(0, &dev, false));
+}
+
 static size_t add_attr(__u8 *buf, size_t len, __u16 type,
 		       const void *value, size_t size)
 {
@@ -177,6 +219,8 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(veth_without_a_peer_is_not_selected),
 	UNIT_CASE(unresolved_devices_sit_out),
 	UNIT_CASE(reconcile_never_touches_another_program),
+	UNIT_CASE(restore_fails_on_a_driver_refusal),
+	UNIT_CASE(load_stops_on_an_occupied_device),
 	UNIT_CASE(link_messages_are_checked),
 	UNIT_CASE(kernel_discovery_revalidates_devices),
 	{}

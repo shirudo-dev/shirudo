@@ -1552,8 +1552,15 @@ R21 upatches can be neutralized by changing their targets
    unfiltered until then: normally seconds after its udev event, and up to
    one pass plus five seconds when udev gives no signal, as for a veth
    peer moving namespace. A device stays uncovered while its XDP slot is
-   occupied, it has no native XDP, or root stops the timer and the udev
-   rule, and ``status`` does not list such devices. A veth end moved to another namespace
+   occupied, it has no native XDP, its driver refuses the program, or
+   root stops the timer and the udev rule, and ``status`` does not list
+   such devices.
+   At boot restore a device whose driver refuses fails ``init``: the
+   register stays unbound, so attestation fails, and that upatch and every
+   archive after it in name order stay unloaded that boot. A setting that
+   survives a reboot, in the NIC's firmware or the hypervisor, therefore
+   cannot take a device out of an upatch unseen, at the price of a host
+   that boots without those upatches. A veth end moved to another namespace
    keeps its link, so a pair can hold two attachments, one of them running
    in that namespace. Reconcile adds no register event: TPM evidence covers
    the signed class mask and loaded artifact, not the device inventory or

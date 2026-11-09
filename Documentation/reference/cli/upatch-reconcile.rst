@@ -85,7 +85,8 @@ Exit status
    * - 0
      - The pass finished. A device that is occupied, has no native XDP, or
        changed or went away during the pass is left for the next pass and
-       does not change the status.
+       does not change the status. Neither does a driver refusing the
+       program, but that is logged as a warning on every pass.
    * - 1
      - The pass stopped: see the category in the report.
    * - 2

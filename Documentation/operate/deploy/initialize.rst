@@ -263,7 +263,8 @@ one that fails, with ``boot-restore: failed to apply <file>`` and
 blocked``. The upatches it loaded before that one stay loaded, and no
 register measures them. The archive is sealed, so the next boot tries
 the same upatch again. The usual cause is a kernel on which the upatch
-no longer loads. :ref:`boot-restore-lockout` describes the way out.
+no longer loads, or a device that an XDP upatch selects whose driver
+refuses it. :ref:`boot-restore-lockout` describes the way out.
 
 Register binding failures
 ~~~~~~~~~~~~~~~~~~~~~~~~~

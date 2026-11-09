@@ -210,7 +210,8 @@ signed config image.
        pin without reusing a live index, does nothing after unload, and leaves the link on a veth
        end moved to another namespace. A changed archive is covered by
        the ``upatch_verify`` unit cases. An unload racing a pass is not
-       reported as tampering.
+       reported as tampering, and a veth whose peer MTU is too large for
+       XDP is warned about without stopping the pass.
 
 ``tpm`` (4)
 ~~~~~~~~~~~

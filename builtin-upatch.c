@@ -1378,23 +1378,6 @@ static int xdp_attach_one(int prog_fd, const struct prog_spec *spec,
 	return ret;
 }
 
-/*
- * A device that changed or went away is not this upatch's failure. An
- * occupied one is at load, where the operator can act on it, but not at
- * boot, where two upatches that loaded with no device yet can meet on a
- * device that has appeared since, and one failure would stop the rest of
- * restore. The kernel reports a vanished ifindex as EINVAL, so ask.
- */
-static bool xdp_attach_skippable(int err, const struct xdp_device *dev,
-				 bool restoring)
-{
-	if (err >= 0)
-		return false;
-	if (err == -EBUSY || err == -EEXIST)
-		return restoring;
-	return err == -EXDEV || err == -ENODEV || xdp_device_verify(dev);
-}
-
 static int attach_xdp_devices(int prog_fd, const struct prog_spec *spec,
 			      const struct xdp_device *devices, size_t count,
 			      const char *dir, __u32 *pinned, bool restoring)
@@ -4455,11 +4438,12 @@ static int reconcile_attach(int prog_fd, const char *name,
 		rep_fail(rep, "link_create", "lsm_denied", ret,
 			 "the guards refused the XDP link");
 		return 1;
+	} else if (ret < 0 && ret != -EBUSY && ret != -EEXIST &&
+		   !xdp_attach_skippable(ret, dev, false)) {
+		pr_warn("XDP: upatch %s: attach %s (ifindex %u): %s", name,
+			dev->name, dev->ifindex, strerror(-ret));
 	}
-	/*
-	 * Anything else is about this device alone: it is occupied, has no
-	 * native XDP, or changed or went away. The next pass looks again.
-	 */
+	/* All of this is about this device alone; the next pass looks again. */
 	return 0;
 }
 

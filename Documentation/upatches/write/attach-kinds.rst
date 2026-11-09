@@ -302,8 +302,13 @@ Links use ``XDP_FLAGS_DRV_MODE``. Devices that refuse native XDP with
 changes or goes away during attachment is skipped too. An XDP program
 with no device to attach to still loads: a pin of its own, ``xdp_prog_<i>``,
 keeps it, and ``status`` shows it as ``xdp (waiting for a device)``. Other
-errors undo the load's links, including an occupied XDP attachment point;
-at boot restore an occupied device is skipped instead. Existing XDP
+errors undo the load's links, including an occupied XDP attachment point
+or a driver refusing the program. Boot restore fails the same way, and
+``init`` stops with the register unbound. Only a device that went away
+during the restore, or that an upatch restored before this one holds, is
+skipped. That includes a device reconcile only warned about before the
+reboot. A setting root makes after boot is the reconcile pass's to meet,
+which leaves the device unattached and warns. Existing XDP
 programs are never replaced. Device classification and peer identity
 are rechecked around attachment, and the returned link's ifindex is
 checked before pinning.

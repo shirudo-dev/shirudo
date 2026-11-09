@@ -128,6 +128,18 @@ test_xdp_success 'a veth end moved away keeps its link and the host end attaches
 	[ "$("$H" query xdpb)" -gt 0 ]
 '
 
+test_xdp_success 'a driver refusing one device warns and spares the others' '
+	add_pair xdpa 30000 xdpb 30001 &&
+	load "$NAME" &&
+	add_pair xdpc 30010 xdpd 30011 &&
+	ip link set xdpd mtu 9000 &&
+	add_pair xdpe 30020 xdpf 30021 &&
+	out=$(reconcile 2>&1) &&
+	[ "$("$H" query xdpc)" = 0 ] &&
+	[ "$("$H" query xdpe)" -gt 0 ] &&
+	printf "%s\n" "$out" | grep -q "attach xdpc"
+'
+
 test_xdp_success 'an unload racing a pass is not tampering' '
 	add_pair xdpa 30000 xdpb 30001 &&
 	(

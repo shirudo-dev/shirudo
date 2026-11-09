@@ -515,10 +515,16 @@ Meaning
 Causes
    The archived upatch does not load on this kernel, typically after a
    kernel upgrade. The load failure before this message carries its
-   category.
+   category. For an XDP upatch, a line ``XDP: attach <device>`` before
+   it names a device whose driver refused the program: a NIC added since
+   the load, or a setting that survived the reboot, in the NIC's firmware
+   or the hypervisor, such as LRO.
 
 Action
-   A reboot restores the same archive and fails the same way.
+   A reboot restores the same archive and fails the same way. For an XDP
+   device, undo the setting, or remove the device, and reboot. A device
+   that cannot take XDP needs an upatch signed with a class mask that
+   leaves it out.
    :doc:`/operate/maintain/backup-recovery` describes what works and what does
    not.
 
