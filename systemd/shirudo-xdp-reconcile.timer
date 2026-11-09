@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+
+[Unit]
+Description=shirudo: periodically attach XDP upatches to new network devices
+
+[Timer]
+OnBootSec=5s
+OnUnitInactiveSec=5s
+AccuracySec=1s
+Unit=shirudo-xdp-reconcile.service
+
+[Install]
+WantedBy=timers.target

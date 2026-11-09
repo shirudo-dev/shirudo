@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+
+[Unit]
+Description=shirudo: attach XDP upatches to new network devices
+After=shirudo.service
+ConditionPathExists=/run/shirudo/bpffs/lsm_link
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+LimitMEMLOCK=infinity
+TimeoutStartSec=2min
+ExecStart=@bindir@/shirudo upatch reconcile

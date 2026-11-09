@@ -303,7 +303,15 @@ the initrd, from the binary the UKI authenticates.
       ExecStart=
       ExecStart=/run/shirudo/runtime/usr/bin/shirudo bpm tree sync
 
-6. Reload systemd:
+6. Write ``/etc/systemd/system/shirudo-xdp-reconcile.service.d/runtime.conf``:
+
+   .. code-block:: ini
+
+      [Service]
+      ExecStart=
+      ExecStart=/run/shirudo/runtime/usr/bin/shirudo upatch reconcile
+
+7. Reload systemd:
 
    .. code-block:: console
 

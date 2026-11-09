@@ -36,7 +36,8 @@ Agentless targets
 -----------------
 
 A target runs no daemon and opens no listening socket. Every operation
-is a one-shot ``shirudo`` command, started by hand or by a systemd timer.
+is a one-shot ``shirudo`` command, started by hand, by a systemd timer, or
+for ``upatch reconcile`` by systemd when udev reports a new network device.
 
 A long-running process is something root can trace, stop or feed
 input to for as long as it runs, and a socket is an attack surface for
@@ -46,7 +47,10 @@ kernel enforces without a helper, and the TPM keeps the record.
 
 The cost is that nothing on the target watches continuously. Package
 updates and telemetry run on timer periods, and a target reports its
-state only when a command runs.
+state only when a command runs. A new network device is the one event a
+command starts on, because a device left without its XDP upatch for a
+whole period is exposed for that long; the command still does one pass
+and exits.
 
 Pull-based delivery
 -------------------

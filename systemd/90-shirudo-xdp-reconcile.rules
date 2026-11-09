@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+#
+# Through systemd rather than RUN+=: systemd-udevd runs under a seccomp
+# filter that its children inherit, and a filtered exec gets no task mark.
+
+SUBSYSTEM=="net", ACTION!="remove", KERNEL!="lo", TAG+="systemd", ENV{SYSTEMD_WANTS}+="shirudo-xdp-reconcile.service"

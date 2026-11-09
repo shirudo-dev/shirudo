@@ -34,6 +34,7 @@ mandir      ?= $(sharedir)/man
 completionsdir ?= $(sharedir)/bash-completion/completions
 # Absolute by default (systemd does not scan /usr/local); packagers override.
 systemdunitdir ?= /usr/lib/systemd/system
+udevrulesdir ?= /usr/lib/udev/rules.d
 dracutmodulesdir ?= /usr/lib/dracut/modules.d
 
 # Local target dependency build defaults. make target-deps builds a static
@@ -47,7 +48,7 @@ SHIRUDO_TARGET_STATIC_LIBDIR ?= $(TARGET_DEPS_DIR)/lib
 SHIRUDO_TARGET_PKG_CONFIG_PATH ?= $(TARGET_DEPS_CURL_PREFIX)/lib/pkgconfig:$(TARGET_DEPS_OPENSSL_PREFIX)/lib/pkgconfig:$(SHIRUDO_TARGET_STATIC_LIBDIR)/pkgconfig
 
 export prefix exec_prefix bindir libexecdir sharedir libdir mandir completionsdir \
-       systemdunitdir dracutmodulesdir SHIRUDO_TARGET_PKG_CONFIG_PATH \
+       systemdunitdir udevrulesdir dracutmodulesdir SHIRUDO_TARGET_PKG_CONFIG_PATH \
        SHIRUDO_TARGET_STATIC_LIBDIR
 
 .PHONY: all help target target-deps target-deps-clean shirudo-target target-config shirudo-build docs bpf-deps install install-target install-operator clean distclean config tests proofs proofs-cbmc proofs-lean4 sparse

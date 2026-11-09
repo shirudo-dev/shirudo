@@ -32,6 +32,9 @@ Units
    * - ``shirudo-keepalive.service``
      - ``@bindir@/shirudo status --otel --include-system``
      - ``shirudo-keepalive.timer``
+   * - ``shirudo-xdp-reconcile.service``
+     - ``@bindir@/shirudo upatch reconcile``
+     - ``shirudo-xdp-reconcile.timer`` and the udev rule below
    * - ``shirudo-map-export.service``
      - ``@bindir@/shirudo upatch map --all``
      - ``shirudo-map-export.timer``
@@ -158,7 +161,7 @@ installed, ``/etc/shirudo/init.env`` and ``SHIRUDO_INIT_ARGS`` have no
 effect.
 
 The generator writes this drop-in for ``shirudo.service`` only. The
-keepalive, map-export, repository-update and tree-sync services run
+keepalive, reconcile, map-export, repository-update and tree-sync services run
 ``@bindir@/shirudo``. On a target that enforces, a shirudo binary outside
 the runtime image is refused with ``shirudo: image state: Permission
 denied`` and exit status 1, so each of these services needs its own
@@ -188,6 +191,36 @@ shirudo-keepalive.service
 The keepalive is sent only when ``map_export.otel_endpoint``,
 ``OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`` or ``OTEL_EXPORTER_OTLP_ENDPOINT``
 names an endpoint. See :doc:`/reference/formats/otlp`.
+
+shirudo-xdp-reconcile.service
+-----------------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Setting
+     - Value
+   * - ``ExecStart``
+     - ``@bindir@/shirudo upatch reconcile``
+   * - ``After``
+     - ``shirudo.service``
+   * - ``ConditionPathExists``
+     - ``/run/shirudo/bpffs/lsm_link``
+   * - ``StartLimitIntervalSec``
+     - ``0``, as a burst of new veths would otherwise disable it
+   * - ``TimeoutStartSec``
+     - ``2min``
+   * - ``LimitMEMLOCK``
+     - ``infinity``
+
+The rule ``90-shirudo-xdp-reconcile.rules`` in
+``/usr/lib/udev/rules.d`` starts it through ``SYSTEMD_WANTS`` when a
+network device other than ``lo`` appears. It is not ``RUN+=``, because a
+child of ``systemd-udevd`` inherits its seccomp filter and would get no
+task mark. A veth peer moving namespace gives the initial namespace no
+such event, so the timer is what catches it. The unit and the rule are not
+in the initrd. See :doc:`/reference/cli/upatch-reconcile`.
 
 shirudo-map-export.service
 --------------------------
@@ -284,6 +317,8 @@ Timers
      - Schedule
    * - ``shirudo-keepalive.timer``
      - ``OnBootSec=5s``, ``OnUnitInactiveSec=5s``, ``AccuracySec=1s``
+   * - ``shirudo-xdp-reconcile.timer``
+     - ``OnBootSec=5s``, ``OnUnitInactiveSec=5s``, ``AccuracySec=1s``
    * - ``shirudo-map-export.timer``
      - ``OnBootSec=5s``, ``OnUnitInactiveSec=5s``, ``AccuracySec=1s``
    * - ``shirudo-bpm-repo-update.timer``
@@ -315,8 +350,9 @@ Enablement
      - What it enables
    * - Target ``.deb`` and ``.rpm``
      - On install: ``systemctl enable`` of ``shirudo.service`` and the
-       four timers, for the next boot. Nothing is started. On removal:
-       ``disable --now`` of the four timers and ``disable`` of
+       five timers, for the next boot, and ``udevadm control --reload``.
+       Nothing is started. On removal: ``disable --now`` of the five
+       timers and ``disable`` of
        ``shirudo.service``.
    * - Target tarball (``install.sh``)
      - ``systemctl daemon-reload`` only.

@@ -654,7 +654,7 @@ there except ``SealSignal``. A refusal worked, so a counter alone does
 not change any condition or the verdict. It tells you that something on
 the host tried. A ``SealSignal`` tells you that a shirudo command was
 signalled from outside; a load stopped that way shows under
-``UpatchesMeasured`` until the next upatch command undoes it.
+``UpatchesMeasured`` until the next upatch load or unload undoes it.
 
 These four attempts, made as root without shirudo's runtime authority,
 were each refused:

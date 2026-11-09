@@ -307,6 +307,8 @@ TARGET_UNITS=(
 	shirudo-map-export.timer
 	shirudo-keepalive.service
 	shirudo-keepalive.timer
+	shirudo-xdp-reconcile.service
+	shirudo-xdp-reconcile.timer
 	shirudo-bpm-repo-update.service
 	shirudo-bpm-repo-update.timer
 	shirudo-bpm-tree-sync.service
@@ -449,6 +451,10 @@ if [[ "$VM_MODE" == interactive ]]; then
 	systemctl enable shirudo.service
 	systemctl enable --now shirudo-map-export.timer
 	systemctl enable --now shirudo-keepalive.timer
+	install -D -m 0644 "$BUNDLE/root/usr/lib/udev/rules.d/90-shirudo-xdp-reconcile.rules" \
+		/usr/lib/udev/rules.d/90-shirudo-xdp-reconcile.rules
+	udevadm control --reload
+	systemctl enable --now shirudo-xdp-reconcile.timer
 	systemctl enable --now shirudo-bpm-repo-update.timer
 	systemctl enable --now shirudo-bpm-tree-sync.timer
 

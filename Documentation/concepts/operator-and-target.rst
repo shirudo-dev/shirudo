@@ -193,8 +193,9 @@ keepalives every five seconds.
 What must outlive a command is pinned in the private bpffs, and what must
 outlive the boot is archived under ``/var/lib/shirudo`` and restored by
 ``init``. We accept the cost of this design, which is latency: a target
-learns of a new package at its next timer run, and nothing on it reacts
-between runs. In return there is no long-running process for root to
+learns of a new package at its next timer run, and besides a new network
+device starting ``upatch reconcile``, nothing on it reacts between runs.
+In return there is no long-running process for root to
 attack, no socket for the network to reach, and less code in the target's
 trusted computing base.
 

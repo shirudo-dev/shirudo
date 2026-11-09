@@ -35,6 +35,7 @@
 /systemd/shirudo-initrd.service
 /systemd/shirudo-map-export.service
 /systemd/shirudo-keepalive.service
+/systemd/shirudo-xdp-reconcile.service
 /systemd/shirudo-bpm-repo-update.service
 /systemd/shirudo-bpm-tree-sync.service
 

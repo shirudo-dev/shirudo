@@ -521,6 +521,10 @@ systemd/shirudo-keepalive.service: systemd/shirudo-keepalive.service.in
 	@printf '  GEN     $@\n'
 	$(Q)sed 's|@bindir@|$(bindir)|g' $< > $@
 
+systemd/shirudo-xdp-reconcile.service: systemd/shirudo-xdp-reconcile.service.in
+	@printf '  GEN     $@\n'
+	$(Q)sed 's|@bindir@|$(bindir)|g' $< > $@
+
 # The BPM repository refresh is target-only and uses the same installed
 # binary plus the optional BPM OCI environment file.
 systemd/shirudo-bpm-repo-update.service: systemd/shirudo-bpm-repo-update.service.in
@@ -553,6 +557,8 @@ install-target: shirudo-target install-common systemd/shirudo.service \
 		systemd/shirudo-map-export.timer \
 		systemd/shirudo-keepalive.service \
 		systemd/shirudo-keepalive.timer \
+		systemd/shirudo-xdp-reconcile.service \
+		systemd/shirudo-xdp-reconcile.timer \
 		systemd/shirudo-bpm-repo-update.service \
 		systemd/shirudo-bpm-repo-update.timer \
 		systemd/shirudo-bpm-tree-sync.service \
@@ -575,11 +581,17 @@ install-target: shirudo-target install-common systemd/shirudo.service \
 	    systemd/shirudo-map-export.timer \
 	    systemd/shirudo-keepalive.service \
 	    systemd/shirudo-keepalive.timer \
+	    systemd/shirudo-xdp-reconcile.service \
+	    systemd/shirudo-xdp-reconcile.timer \
 	    systemd/shirudo-bpm-repo-update.service \
 	    systemd/shirudo-bpm-repo-update.timer \
 	    systemd/shirudo-bpm-tree-sync.service \
 	    systemd/shirudo-bpm-tree-sync.timer \
 	    $(DESTDIR)$(systemdunitdir)/
+	@printf '  INSTALL $(DESTDIR)$(udevrulesdir)/90-shirudo-xdp-reconcile.rules\n'
+	$(Q)install -d $(DESTDIR)$(udevrulesdir)
+	$(Q)install -m 0644 systemd/90-shirudo-xdp-reconcile.rules \
+	    $(DESTDIR)$(udevrulesdir)/
 
 install-operator: install shirudo-build $(VMLINUX_H) $(BPF_LIBBPF_HEADERS) $(BPF_LIB_HEADERS)
 	@printf '  INSTALL $(DESTDIR)$(libexecdir)/shirudo/shirudo-build\n'

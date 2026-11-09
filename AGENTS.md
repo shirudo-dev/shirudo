@@ -20,7 +20,8 @@ what is present on the machine, never by separate builds:
   initrd under PCRs 9 and 11 and anchored in PCR 9, verifies every
   load, emits TPM-signed evidence on request
   (`shirudo attest`) and is agentless: no daemon, no listening socket,
-  every operation is a one-shot CLI invocation run locally or by the
+  every operation is a one-shot CLI invocation run locally, by systemd
+  when udev reports a new network device (`upatch reconcile`), or by the
   systemd timers that pull packages (`bpm repo update`, `bpm upgrade`,
   `bpm tree sync`) and export status (OTLP). The operator verifies that
   evidence offline (`shirudo attest verify`, `shirudo attest predict`).
@@ -183,7 +184,7 @@ one usually still compiles and passes tests.
   on drift (`tampered`) rather than retrying. Boot restore is exactly one
   register event and a re-run of `init` adds none. A load stopped
   between its pins and its extend leaves pins without a record: `status`
-  reports them (`UpatchesMeasured`) and the next upatch command undoes
+  reports them (`UpatchesMeasured`) and the next upatch load or unload undoes
   them, or refuses when it cannot, under the register lock, which a
   load or an unload holds from before it touches the pins to its
   append, and a purge from its archive read until its pins and archive

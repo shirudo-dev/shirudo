@@ -426,7 +426,7 @@ signed config image.
      - Task policy is inherited by a listener and its accepted socket
    * - ``t6143-unmeasured-load``
      - A load stopped before its extend is counted, reported by status
-       and undone by the next upatch command
+       and undone by the next upatch load or unload
    * - ``t6144-returned-archive``
      - The archive directory with its mark evicted takes nothing and
        lets no labeled archive out; an archive without a record of its

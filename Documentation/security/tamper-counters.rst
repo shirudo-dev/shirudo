@@ -294,7 +294,7 @@ What a non-zero counter means
 A counter that moved means that a guard refused an operation this boot.
 The refusal is what moved it: the operation did not happen. The one
 exception is ``SealSignal``, which counts a signal the seal delivered:
-the task it went to may have been stopped, and the next upatch command
+the task it went to may have been stopped, and the next upatch load or unload
 and ``shirudo status`` find what a stopped load left.
 
 A non-zero counter does not mean:
