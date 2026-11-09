@@ -201,7 +201,9 @@ signed config image.
        endpoint index orderings, cross-namespace pairs, a bridge without
        native XDP skipped, rollback, signed unload and descriptor
        and alternate-attachment lockdown; a repeated init adopts the
-       archived XDP without another event. Each case cleans up its state
+       archived XDP without another event. A veth with a peer MTU of 9000
+       and the ``virtio_net`` guest adapter at MTU 9000 attach, which only a
+       multi-buffer program can. Each case cleans up its state
        so a failed assertion does not contaminate later cases.
    * - ``t3112-xdp-reconcile``
      - ``upatch reconcile`` attaches a device added after load, adds no
@@ -210,8 +212,8 @@ signed config image.
        pin without reusing a live index, does nothing after unload, and leaves the link on a veth
        end moved to another namespace. A changed archive is covered by
        the ``upatch_verify`` unit cases. An unload racing a pass is not
-       reported as tampering, and a veth whose peer MTU is too large for
-       XDP is warned about without stopping the pass.
+       reported as tampering, and a veth with too few rx queues, which
+       its driver refuses, is warned about without stopping the pass.
 
 ``tpm`` (4)
 ~~~~~~~~~~~

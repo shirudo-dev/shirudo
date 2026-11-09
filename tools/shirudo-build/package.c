@@ -1492,10 +1492,17 @@ static int set_target_attach_types(struct bpf_object *obj)
 			type = BPF_CGROUP_INET_INGRESS;
 		else if (strcmp(sec, "cgroup_skb/egress") == 0)
 			type = BPF_CGROUP_INET_EGRESS;
-		else if (!strncmp(sec, "xdp/", 4))
+		else if (!strncmp(sec, "xdp/", 4)) {
 			type = BPF_XDP;
-		else
+			if (bpf_program__set_flags(p, bpf_program__flags(p) |
+						   BPF_F_XDP_HAS_FRAGS) != 0) {
+				pr_err("set multi-buffer XDP for program '%s'",
+				       bpf_program__name(p));
+				return -EINVAL;
+			}
+		} else {
 			continue;
+		}
 
 		if (bpf_program__set_expected_attach_type(p, type) != 0) {
 			pr_err("set expected attach type for program '%s'",

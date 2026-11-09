@@ -69,7 +69,7 @@ the link against the metadata and pins it.
    * - ``xdp/<decimal-mask>``
      - XDP
      - ``BPF_LINK_CREATE``, ``BPF_XDP``, native driver mode
-     - native XDP support on selected devices
+     - native XDP and multi-buffer support on selected devices
    * - ``syscall``, named ``shirudo_serialize__<map>``
      - syscall
      - not attached, run by ``shirudo upatch map``
@@ -249,7 +249,8 @@ XDP
 device name or an ifindex. For example, ``SEC("xdp/3")`` selects network
 ports and virtual devices; ``SEC("xdp/27")`` selects all classes. The
 mask is mandatory, nonzero and contains only the bits below. Bare
-``xdp``, ``xdp.frags``, devmap and cpumap sections are refused.
+``xdp``, ``xdp.frags``, devmap and cpumap sections are refused;
+``xdp/<decimal-mask>`` already means multi-buffer.
 
 .. list-table::
    :header-rows: 1
@@ -313,6 +314,52 @@ which leaves the device unattached and warns. Existing XDP
 programs are never replaced. Device classification and peer identity
 are rechecked around attachment, and the returned link's ifindex is
 checked before pinning.
+
+Every XDP program is loaded with ``BPF_F_XDP_HAS_FRAGS``, so it can run on
+a device whose MTU does not fit one buffer. A selected device with native
+XDP must report multi-buffer support, ``NETDEV_XDP_ACT_RX_SG``. One that
+does not fails ``upatch load`` with ``xdp_multibuf_unsupported``, and the
+load is undone, so a single such device under the signed mask stops it:
+narrow the mask. Boot restore fails on such a device too. Reconcile leaves
+it unattached and logs a warning. In a tree, a failed ``add`` stops ``bpm tree sync`` at
+that operation, so scope it with a node label.
+
+These drivers report multi-buffer XDP in Linux bpf-next at 53435562a725:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Driver
+     - Hardware or use
+   * - ``veth``
+     - Virtual Ethernet pairs
+   * - ``virtio_net``
+     - Virtio guest adapters, with mergeable receive buffers
+   * - ``ice``, ``i40e``, ``idpf``
+     - Intel
+   * - ``mlx5``
+     - NVIDIA ConnectX, with LRO and hardware GRO off
+   * - ``bnxt``
+     - Broadcom NetXtreme
+   * - ``ionic``
+     - AMD Pensando
+   * - ``fbnic``
+     - Meta
+   * - ``atlantic``
+     - Marvell (Aquantia) AQtion
+   * - ``mvneta``
+     - Marvell Armada, without hardware buffer management
+   * - ``enetc``
+     - NXP
+   * - ``bonding``
+     - When every slave supports it
+
+The list is a guide. What counts is what the device reports when it is
+attached, and that can depend on its configuration: a ``veth`` with fewer
+rx queues than its peer has tx queues reports nothing. ``ena``, ``gve``,
+``mana``, ``netvsc``, ``vmxnet3``, ``xen-netfront``, ``igb``, ``igc``,
+``ixgbe`` and ``mlx4`` have native XDP without multi-buffer.
 
 Load and restore each discover devices once.
 :doc:`/reference/cli/upatch-reconcile` repeats that discovery later: it
@@ -381,8 +428,8 @@ it generates a loader.
    * - every other section, ``tp/``, ``raw_tp/``, ``xdp`` and ``tc`` among
        them
      - ``unsupported section '<section>'; supported are fentry, fexit,
-       fmod_ret, lsm, tp_btf, kprobe, kretprobe, uprobe.multi, cgroup_skb
-       and netfilter``
+       fmod_ret, lsm, tp_btf, kprobe, kretprobe, uprobe.multi, cgroup_skb,
+       netfilter and xdp/<mask>``
    * - ``syscall`` with another program name
      - ``SEC("syscall") program '<name>' must be named shirudo_test__<id>``
 

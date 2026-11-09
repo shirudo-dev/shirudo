@@ -37,6 +37,10 @@ cleanup() {
 	for name in "$NAME" "$CONFLICT" "$VM_PATCH"; do
 		unload "$name" >/dev/null 2>&1 || true
 	done
+	if [ -n "${adapter_mtu:-}" ]; then
+		ip link set "$adapter" mtu "$adapter_mtu" >/dev/null 2>&1 || true
+		adapter_mtu=
+	fi
 	for dev in xdph0 xdph1 xdpa xdpc xdpbr; do
 		ip link del "$dev" >/dev/null 2>&1 || true
 	done
@@ -95,6 +99,28 @@ test_xdp_success 'the VM class selects the guest adapter' '
 	[ -n "$adapter" ] && load "$VM_PATCH" &&
 	[ "$("$H" query "$adapter")" -gt 0 ] &&
 	unload "$VM_PATCH" && [ "$("$H" query "$adapter")" = 0 ]
+'
+
+test_xdp_success 'virtio_net attaches above the single-buffer MTU' '
+	adapter=$(ip -o route show default | awk "{print \$5; exit}") &&
+	[ -n "$adapter" ] &&
+	[ "$(basename "$(readlink "/sys/class/net/$adapter/device/driver")")" = virtio_net ] &&
+	adapter_mtu=$(cat "/sys/class/net/$adapter/mtu") &&
+	ip link set "$adapter" mtu 9000 &&
+	load "$VM_PATCH" &&
+	[ "$("$H" query "$adapter")" -gt 0 ] &&
+	unload "$VM_PATCH" &&
+	ip link set "$adapter" mtu "$adapter_mtu" &&
+	adapter_mtu=
+'
+
+test_xdp_success 'veth attaches above the single-buffer MTU' '
+	ip link add xdpa index 30000 type veth peer name xdpc index 30001 &&
+	ip link set xdpc mtu 9000 &&
+	ip link set xdpa up && ip link set xdpc up &&
+	load "$NAME" &&
+	[ "$("$H" query xdpa)" -gt 0 ] &&
+	unload "$NAME"
 '
 
 test_xdp_success 'both host endpoints of separate cross-namespace pairs attach' '

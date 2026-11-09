@@ -262,7 +262,7 @@ with ``attach_scope_mismatch``. For fentry, fexit, ``fmod_ret``, LSM and
 ``tp_btf`` programs the site is the BTF target the verifier bound at load.
 
 It cannot use a program type that has no pinnable link. The builder
-refuses socket filters, ``sk_skb``, ``xdp`` and every other section
+refuses socket filters, ``sk_skb`` and every other section
 outside the list in :doc:`/upatches/write/attach-kinds`, because only a pinned
 link keeps a program attached after the command exits and lets the unload path
 detach it.

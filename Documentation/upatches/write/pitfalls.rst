@@ -96,10 +96,11 @@ What an xdp program does not see
 - It sees packets as they arrive, before GRO joins them, so a transfer
   is many runs.
 - A VLAN tag the NIC stripped is not in the packet.
-- It sees one buffer per packet. ``xdp/<mask>`` programs are loaded without
-  multi-buffer support, as ``xdp.frags`` is refused, and a driver refuses
-  them outright on a device whose MTU does not fit one buffer, which
-  leaves that device uncovered.
+- Direct packet access reaches only a packet's first buffer. Every
+  ``xdp/<mask>`` program is loaded with multi-buffer support, so on a large
+  MTU the rest of a frame is in fragments and ``ctx->data_end`` stops at the
+  first one. Read past it with ``bpf_xdp_load_bytes()``, and take the frame's
+  length from ``bpf_xdp_get_buff_len()``.
 
 RCU pointers in sleepable programs
 ----------------------------------

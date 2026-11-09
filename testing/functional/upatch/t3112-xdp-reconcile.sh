@@ -131,8 +131,9 @@ test_xdp_success 'a veth end moved away keeps its link and the host end attaches
 test_xdp_success 'a driver refusing one device warns and spares the others' '
 	add_pair xdpa 30000 xdpb 30001 &&
 	load "$NAME" &&
-	add_pair xdpc 30010 xdpd 30011 &&
-	ip link set xdpd mtu 9000 &&
+	ip link add xdpc index 30010 numrxqueues 1 type veth \
+		peer name xdpd index 30011 numtxqueues 2 &&
+	ip link set xdpc up && ip link set xdpd up &&
 	add_pair xdpe 30020 xdpf 30021 &&
 	out=$(reconcile 2>&1) &&
 	[ "$("$H" query xdpc)" = 0 ] &&

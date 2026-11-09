@@ -1568,6 +1568,15 @@ R21 upatches can be neutralized by changing their targets
    reconcile and unload; driver behaviour across a namespace move is
    tested only for veth.
 
+   Every XDP program is loaded with multi-buffer support and a selected
+   device must report it. At boot restore one that does not fails
+   ``init``. After boot it stays uncovered, with a warning.
+   The check is made at attach only: a device that later
+   stops reporting it keeps its link, as a bond that later enslaves such a
+   device does, and what happens to a frame too large for one buffer is
+   then the driver's choice. It may drop the frame or never run the
+   program on it.
+
    No record says which per-device XDP link pins should exist, because
    they come and go with devices. A pin that disappears while its device
    remains looks like a device not yet attached: ``init`` and ``status``
