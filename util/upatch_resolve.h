@@ -10,6 +10,8 @@
 
 #include <stddef.h>
 
+#include <shirudo/types.h>
+
 struct btf;
 
 #define UPATCH_LOCATION_MAX	160
@@ -20,6 +22,9 @@ struct btf;
  * Returns a link fd on success, negative errno on failure.
  */
 int upatch_open_first_link(const char *name);
+
+/* From the first link, or from an XDP program pin when it has none. */
+int upatch_first_prog_id(const char *name, __u32 *out);
 
 /* vbtf may be NULL; the location then degrades to the bare prefix. */
 int upatch_resolve_location(struct btf *vbtf, const char *name,

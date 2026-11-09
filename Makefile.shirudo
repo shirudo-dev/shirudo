@@ -278,6 +278,7 @@ UTIL_SRCS := \
     util/upatch_decode.c \
     util/upatch_maps_otel.c \
     util/elf_target.c \
+    util/upatch_pins.c \
     util/upatch_resolve.c \
     util/upatch_table.c
 
@@ -824,7 +825,8 @@ testing/helper/test-otel-map: testing/helper/test-otel-map.c util/upatch_maps.o 
                         util/upatch_maps_otel.o util/crypto_openssl.o \
                         util/tls_openssl.o util/serializer.o util/seal.o \
                         util/config.o util/image_config.o \
-                        util/upatch_decode.o util/upatch_resolve.o \
+                        util/upatch_decode.o util/upatch_pins.o \
+                        util/upatch_resolve.o \
                         util/upatch.o util/json.o util/string.o util/log.o \
                         util/paths.o \
                         util/io.o util/malloc.o $(LIBBPF_A) util/hex.o util/timefmt.o
@@ -842,7 +844,7 @@ testing/helper/test-upatch-prog-metadata: testing/helper/test-upatch-prog-metada
 	$(Q)$(CC) $(CFLAGS) -o $@ $^
 
 testing/helper/test-upatch-serializer-pages: testing/helper/test-upatch-serializer-pages.c \
-                                       util/upatch_maps.o util/upatch_resolve.o \
+                                       util/upatch_maps.o util/upatch_pins.o util/upatch_resolve.o \
                                        util/serializer.o util/seal.o \
                                        util/json.o util/string.o \
                                        util/config.o util/image_config.o \
@@ -1061,8 +1063,8 @@ testing/fuzz/fuzz-elf: testing/fuzz/fuzz-elf.c $(FUZZ_BASE) \
 testing/fuzz/fuzz-elf: FUZZ_CFLAGS += $(LIBELF_CFLAGS)
 testing/fuzz/fuzz-elf: FUZZ_LIBS += $(LIBBPF_A) $(LIBELF_LIBS)
 testing/fuzz/fuzz-serializer: testing/fuzz/fuzz-serializer.c $(FUZZ_BASE) \
-                              util/upatch_maps.c util/upatch_resolve.c \
-                              util/serializer.c $(FUZZ_SEAL) util/io.c util/paths.c \
+                              util/upatch_maps.c util/upatch_pins.c \
+                              util/upatch_resolve.c util/serializer.c $(FUZZ_SEAL) util/io.c util/paths.c \
                               util/timefmt.c $(LIBBPF_A)
 testing/fuzz/fuzz-serializer: FUZZ_CFLAGS += $(LIBELF_CFLAGS)
 testing/fuzz/fuzz-serializer: FUZZ_LIBS += $(LIBBPF_A) $(LIBELF_LIBS)

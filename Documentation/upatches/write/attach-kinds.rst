@@ -309,7 +309,9 @@ checked before pinning.
 Discovery runs once per load or restore. New devices require reload;
 there is no background reconciliation. Removing a device can detach its
 XDP link while its pin remains. The signed artifact and TPM measurement
-cover the class policy, not a fixed device inventory.
+cover the class policy, not a fixed device inventory. The location
+``status`` and ``upatch get`` report names the first device still
+attached and how many more there are, as in ``xdp/eth0 (+1)``.
 Boot restore requires a matching native-XDP interface to be present when
 ``init`` restores the archive; otherwise initialization fails.
 

@@ -57,6 +57,7 @@
 #include "util/seal.h"
 #include "util/tpm.h"
 #include "util/upatch.h"
+#include "util/upatch_pins.h"
 #include "util/upatch_resolve.h"
 
 static void print_preflight(const struct preflight_result *r)
@@ -975,7 +976,6 @@ static int boot_restore_locked(bool recorded,
 		char pinned_hex[2 * UPATCH_PAYLOAD_HASH_LEN + 1];
 		char path[PATH_MAX];
 		struct upatch u;
-		int fd;
 
 		if (ret)
 			goto next;
@@ -1006,9 +1006,7 @@ static int boot_restore_locked(bool recorded,
 				"entry); ignored", names[i]->d_name);
 			goto next;
 		}
-		fd = upatch_open_first_link(set[cnt].name);
-		if (fd >= 0) {
-			close(fd);
+		if (upatch_loaded_pins(set[cnt].name)) {
 			upatch_payload_sha256(set[cnt].name, pinned_hex,
 					      sizeof(pinned_hex));
 			if (strcmp(pinned_hex, set[cnt].payload_hex) != 0) {

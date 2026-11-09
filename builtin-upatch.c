@@ -62,6 +62,7 @@
 #include "util/upatch_decode.h"
 #include "util/upatch_maps.h"
 #include "util/upatch_maps_otel.h"
+#include "util/upatch_pins.h"
 #include "util/upatch_resolve.h"
 #include "util/upatch_table.h"
 #include "util/version.h"
@@ -493,15 +494,9 @@ static bool upatch_is_loaded(const char *name)
 {
 	char pin[PATH_MAX];
 	struct stat st;
-	int fd;
 
-	fd = upatch_open_first_link(name);
-	if (fd < 0)
-		goto test_pin;
-	close(fd);
-	return true;
-
-test_pin:
+	if (upatch_loaded_pins(name))
+		return true;
 	if (upatch_pin_path(pin, sizeof(pin), name, "test", NULL))
 		return false;
 	return stat(pin, &st) == 0;
@@ -3897,13 +3892,12 @@ static void upatch_get_ctx_free(struct upatch_get_ctx *c)
 /* Missing line_info is not a failure: the rest of the get still renders. */
 static int upatch_get_collect(const char *want, struct upatch_get_ctx *c)
 {
-	struct bpf_link_info linfo = {};
 	struct bpf_prog_info info = {};
 	struct btf *vbtf = NULL;
 	void *recs = NULL;
 	size_t recs_sz = 0;
 	__u32 len, nr, rec_size, btf_id;
-	int link_fd = -1, prog_fd = -1, ret = 0;
+	int prog_fd = -1, ret = 0;
 
 	c->upatch = want;
 	c->ents = NULL;
@@ -3915,19 +3909,9 @@ static int upatch_get_collect(const char *want, struct upatch_get_ctx *c)
 	c->payload[0] = '\0';
 	c->prog_id = 0;
 
-	link_fd = upatch_open_first_link(want);
-	if (link_fd < 0)
-		return link_fd;
-	len = sizeof(linfo);
-	if (bpf_link_get_info_by_fd(link_fd, &linfo, &len) != 0) {
-		ret = -errno;
-		close(link_fd);
+	ret = upatch_first_prog_id(want, &c->prog_id);
+	if (ret)
 		return ret;
-	}
-	close(link_fd);
-	if (linfo.prog_id == 0)
-		return -EINVAL;
-	c->prog_id = linfo.prog_id;
 	upatch_loaded_at(want, c->loaded_at, sizeof(c->loaded_at));
 	upatch_payload_sha256(want, c->payload, sizeof(c->payload));
 
@@ -3936,7 +3920,7 @@ static int upatch_get_collect(const char *want, struct upatch_get_ctx *c)
 				sizeof(c->location));
 	btf__free(vbtf);
 
-	prog_fd = bpf_prog_get_fd_by_id(linfo.prog_id);
+	prog_fd = bpf_prog_get_fd_by_id(c->prog_id);
 	if (prog_fd < 0)
 		return -errno;
 	len = sizeof(info);
