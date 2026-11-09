@@ -272,31 +272,45 @@ int keys_vouch_payload(const __u8 *der, size_t der_sz,
 	return 0;
 }
 
+int keys_verify_signature(const struct trusted_set *set,
+			  const __u8 *payload, size_t payload_sz,
+			  const __u8 *sig, size_t sig_sz,
+			  __u8 signer[32])
+{
+	size_t i;
+
+	for (i = 0; i < set->n; i++) {
+		struct cert cert = {};
+		int ret;
+
+		ret = keys_cert_read(&set->certs[i], &cert);
+		if (ret)
+			return ret;
+		ret = verify_detached(payload, payload_sz, sig, sig_sz, &cert);
+		cert_free(&cert);
+		if (!ret) {
+			if (signer)
+				memcpy(signer, set->certs[i].fingerprint, 32);
+			return 0;
+		}
+	}
+	return -EKEYREJECTED;
+}
+
 int keys_verify_vouch(const struct trusted_set *set,
 		      const __u8 *der, size_t der_sz,
 		      const __u8 *sig, size_t sig_sz,
 		      __u8 voucher[32])
 {
-	size_t payload_sz = 0, i;
+	size_t payload_sz = 0;
 	__u8 *payload = NULL;
 	int ret;
 
 	ret = keys_vouch_payload(der, der_sz, &payload, &payload_sz);
 	if (ret)
 		return ret;
-	ret = -EKEYREJECTED;
-	for (i = 0; i < set->n && ret; i++) {
-		struct cert cert = {};
-
-		if (keys_cert_read(&set->certs[i], &cert))
-			continue;
-		if (verify_detached(payload, payload_sz, sig, sig_sz,
-				    &cert) == 0) {
-			memcpy(voucher, set->certs[i].fingerprint, 32);
-			ret = 0;
-		}
-		cert_free(&cert);
-	}
+	ret = keys_verify_signature(set, payload, payload_sz, sig, sig_sz,
+				    voucher);
 	xfree(payload, payload_sz);
 	return ret;
 }

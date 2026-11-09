@@ -29,6 +29,7 @@
 #include "config.h"
 #include "config_image.h"
 #include "config_update.h"
+#include "crypto.h"
 #include "dm_verity.h"
 #include "hex.h"
 #include "identity.h"
@@ -48,6 +49,19 @@
 #include "seal.h"
 #include "tpm.h"
 
+enum config_prepare {
+	CONFIG_PREPARE_BOOT,
+	CONFIG_PREPARE_UPDATE,
+	CONFIG_PREPARE_STAGE,
+};
+
+struct config_certificate {
+	struct cert parsed;
+	__u8 *der;
+	size_t size;
+	__u8 fingerprint[32];
+};
+
 struct image_context {
 	struct config_update_target boot_target;
 	struct dm_verity boot_runtime;
@@ -58,7 +72,7 @@ struct image_context {
 	struct image_bootstrap bootstrap;
 	struct tpm *tpm;
 	int candidate_fd;
-	int certificate_fd;
+	struct config_certificate certificates[KEYS_MAX];
 	int config_state;	/* what current_config() refused status with */
 	bool loaded;
 	bool boot_keys_open;
@@ -67,7 +81,6 @@ struct image_context {
 
 static struct image_context image = {
 	.candidate_fd = -1,
-	.certificate_fd = -1,
 	.update = { .dir_fd = -1, .lock_fd = -1 },
 	.candidate = { .data_fd = -1, .hash_fd = -1, .signature_fd = -1 },
 	.candidate_device = { .data_loop_fd = -1, .hash_loop_fd = -1 },
@@ -263,10 +276,78 @@ static int open_runtime_file(const char *path, dev_t device)
 	return fd;
 }
 
+static void close_config_certificates(void)
+{
+	size_t i;
+
+	for (i = 0; i < KEYS_MAX; i++) {
+		cert_free(&image.certificates[i].parsed);
+		xfree(image.certificates[i].der, image.certificates[i].size);
+		memset(&image.certificates[i], 0, sizeof(image.certificates[i]));
+	}
+}
+
+static int read_config_certificate(size_t index, dev_t device)
+{
+	struct config_certificate *key = &image.certificates[index];
+	char algorithm[32];
+	int fd, ret;
+	size_t i;
+
+	fd = open_runtime_file(image.bootstrap.certificates[index], device);
+	if (fd < 0)
+		return fd;
+	ret = keys_read_der_fd(fd, &key->der, &key->size);
+	close(fd);
+	if (!ret)
+		ret = cert_read_der(key->der, key->size, &key->parsed);
+	if (!ret)
+		ret = cert_key_algorithm(&key->parsed, algorithm, sizeof(algorithm));
+	if (!ret && strcmp(algorithm, "ML-DSA-87"))
+		ret = -EKEYREJECTED;
+	if (!ret)
+		ret = cert_pubkey_digest(&key->parsed, key->fingerprint);
+	if (ret)
+		return ret;
+	for (i = 0; i < index; i++)
+		if (!memcmp(image.certificates[i].fingerprint,
+			    key->fingerprint, 32))
+			return -EEXIST;
+	return 0;
+}
+
+static int verify_config_root(const struct config_image_open *opened, void *ctx)
+{
+	struct image_context *current = ctx;
+	__u8 *signature = NULL;
+	char root[65];
+	size_t size = 0, i;
+	int ret;
+
+	if (!current->bootstrap.n_certificates || opened->signature_fd < 0)
+		return -ENOKEY;
+	ret = read_fd(opened->signature_fd, "config root signature",
+		      CONFIG_IMAGE_SIG_MAX, &signature, &size);
+	if (ret)
+		return ret;
+	hex_encode(opened->image.root_hash, 32, root);
+	ret = -EKEYREJECTED;
+	for (i = 0; i < current->bootstrap.n_certificates; i++) {
+		if (!verify_detached((const __u8 *)root, 64, signature, size,
+				     &current->certificates[i].parsed)) {
+			ret = 0;
+			break;
+		}
+	}
+	xfree(signature, size);
+	return ret;
+}
+
 static int load_runtime_config(bool trusted_boot)
 {
 	struct stat root;
 	int fd, ret;
+	size_t i;
 
 	if (!trusted_boot) {
 		ret = image_guards_ready();
@@ -284,6 +365,7 @@ static int load_runtime_config(bool trusted_boot)
 	fd = open_runtime_file(RUNTIME_CONF_PATH, root.st_dev);
 	if (fd < 0)
 		return fd;
+	image.bootstrap.n_certificates = 0;
 	ret = image_bootstrap_read_fd(fd, &image.bootstrap, false);
 	if (!ret)
 		ret = config_load_fd(&image.bootstrap_config, fd,
@@ -291,19 +373,21 @@ static int load_runtime_config(bool trusted_boot)
 	close(fd);
 	if (ret)
 		return ret;
-	if (!image.bootstrap.config[0] || !image.bootstrap.certificate[0] ||
+	if (!image.bootstrap.config[0] || !image.bootstrap.n_certificates ||
 	    !image.bootstrap.have_pcr)
 		return -EINVAL;
 	ret = image_config_set(&image.bootstrap_config, -1);
 	if (ret)
 		return ret;
 
-	fd = open_runtime_file(image.bootstrap.certificate, root.st_dev);
-	if (fd < 0)
-		return fd;
-	if (image.certificate_fd >= 0)
-		close(image.certificate_fd);
-	image.certificate_fd = fd;
+	close_config_certificates();
+	for (i = 0; i < image.bootstrap.n_certificates; i++) {
+		ret = read_config_certificate(i, root.st_dev);
+		if (ret) {
+			close_config_certificates();
+			return ret;
+		}
+	}
 
 	fd = open_runtime_file(RUNTIME_CERT_PATH, root.st_dev);
 	if (fd < 0)
@@ -313,7 +397,7 @@ static int load_runtime_config(bool trusted_boot)
 	if (ret)
 		return ret;
 
-	/* The verified config certificate stays open through key enrollment. */
+	/* Keep the certificates read from the verified runtime for this command. */
 	return 0;
 }
 
@@ -490,11 +574,14 @@ static int remove_candidate(struct dm_verity *device)
 	return ret;
 }
 
-static int candidate_keys(int fd)
+static noinline_for_stack int candidate_keys(int fd, bool enrolled)
 {
+	struct trusted_set set = {};
 	int ret;
 
-	ret = keys_validate_image(fd);
+	ret = keys_validate_image_set(RUNTIME_CERT_PATH, fd, &set);
+	if (!ret && enrolled)
+		ret = keys_check_image_set(&set);
 	if (ret == -ENOKEY)
 		pr_err("image: BPF signer was not enrolled at boot; "
 		       "reboot with the new trusted key set required");
@@ -529,9 +616,10 @@ static int mount_candidate(struct image_context *current)
 
 static int prepare_config(struct image_context *current,
 			  const struct config_update_target *target,
-			  bool trusted_boot)
+			  enum config_prepare purpose)
 {
 	struct dm_verity *device = &current->candidate_device;
+	bool trusted_boot = purpose == CONFIG_PREPARE_BOOT;
 	bool created = false;
 	int ret, cleanup;
 	char name[128];
@@ -548,6 +636,9 @@ static int prepare_config(struct image_context *current,
 		return ret;
 	if (memcmp(target->root_hash, current->candidate.image.root_hash, 32))
 		return -EKEYREJECTED;
+	ret = verify_config_root(&current->candidate, current);
+	if (ret)
+		return ret;
 	ret = mapping_name(target->root_hash, name);
 	if (ret)
 		return ret;
@@ -573,7 +664,8 @@ static int prepare_config(struct image_context *current,
 	if (!ret)
 		ret = image_config_validate(current->candidate_fd);
 	if (!ret && !trusted_boot)
-		ret = candidate_keys(current->candidate_fd);
+		ret = candidate_keys(current->candidate_fd,
+				     purpose == CONFIG_PREPARE_UPDATE);
 out:
 	if (ret && created) {
 		close_candidate();
@@ -625,7 +717,7 @@ static int activate_config(struct image_context *current, bool boot)
 static int prepare_update(void *ctx,
 			  const struct config_update_target *target)
 {
-	return prepare_config(ctx, target, false);
+	return prepare_config(ctx, target, CONFIG_PREPARE_UPDATE);
 }
 
 static int activate_update(void *ctx,
@@ -679,6 +771,8 @@ static int boot_target(struct config_update_target *target)
 {
 	struct config_update_record previous;
 	struct config_image_open opened;
+	struct config_update_target staged;
+	__u32 reset, restart;
 	const char *prefix;
 	bool selected;
 	int ret;
@@ -688,6 +782,18 @@ static int boot_target(struct config_update_target *target)
 	prefix = selected ? previous.target.prefix : image.bootstrap.config;
 	if (ret && ret != -ENOENT)
 		return ret;
+	if (selected) {
+		ret = tpm_boot_identity(image.tpm, &reset, &restart);
+		if (!ret)
+			ret = config_update_staged(&image.update, &previous,
+						   reset, restart, &staged);
+		if (ret < 0)
+			return ret;
+		if (ret > 0) {
+			*target = staged;
+			return 0;
+		}
+	}
 	ret = config_image_open(prefix, &opened);
 	if (ret)
 		return ret;
@@ -708,26 +814,27 @@ static int boot_keys_error(const char *step, int ret)
 	return ret;
 }
 
-/*
- * The kernel trusts every key in the sealed keyring for config roots, so
- * whether init sealed it now or earlier this boot, it must hold exactly
- * the config certificate.
- */
-static int seal_config_key(key_serial_t ring, const __u8 *der, size_t size)
+static int enroll_config_keys(void)
 {
-	struct keyring_cert cert = { .der = der, .len = size };
-	key_serial_t key;
+	struct keyring_cert certs[KEYS_MAX];
+	bool added = false;
+	key_serial_t ring, key;
+	size_t i;
 	int ret;
 
-	key = keyring_dm_verity_add_cert(der, size);
-	if (key < 0 && key != -EPERM && key != -EACCES)
-		return boot_keys_error("add config verification certificate",
-				       (int)key);
-	if (key < 0 && keyring_holds_exactly(ring, NULL, 0) == 1)
-		return boot_keys_error("dm-verity keyring sealed empty at boot; "
-				       "boot with dm_verity.keyring_unsealed=1",
-				       -ENOKEY);
-	if (key >= 0) {
+	ring = keyring_dm_verity_serial();
+	if (ring < 0)
+		return boot_keys_error("lookup dm-verity keyring", (int)ring);
+	for (i = 0; i < image.bootstrap.n_certificates; i++) {
+		struct config_certificate *cert = &image.certificates[i];
+
+		certs[i] = (struct keyring_cert){ .der = cert->der, .len = cert->size };
+		key = keyring_dm_verity_add_cert(cert->der, cert->size);
+		if (key < 0 && key != -EPERM && key != -EACCES)
+			return boot_keys_error("add config verification certificate", (int)key);
+		added |= key >= 0;
+	}
+	if (added) {
 		ret = keyring_dm_verity_seal();
 		if (ret == -EEXIST)
 			return boot_keys_error("seal dm-verity keyring restricted "
@@ -736,34 +843,15 @@ static int seal_config_key(key_serial_t ring, const __u8 *der, size_t size)
 		if (ret)
 			return boot_keys_error("seal dm-verity keyring", ret);
 	}
-	ret = keyring_holds_exactly(ring, &cert, 1);
-	if (ret <= 0)
-		return boot_keys_error("check dm-verity keyring holds only the "
-				       "config certificate",
-				       ret ? ret : -EKEYREJECTED);
+	if (!added && keyring_holds_exactly(ring, NULL, 0) == 1)
+		return boot_keys_error("dm-verity keyring sealed empty at boot; "
+				       "boot with dm_verity.keyring_unsealed=1",
+				       -ENOKEY);
+	ret = keyring_holds_exactly(ring, certs, image.bootstrap.n_certificates);
+	if (ret != 1)
+		return boot_keys_error("check dm-verity verification keys",
+				       ret < 0 ? ret : -EKEYREJECTED);
 	return 0;
-}
-
-static int enroll_config_key(void)
-{
-	__u8 *der = NULL;
-	key_serial_t ring;
-	size_t size = 0;
-	int ret;
-
-	ret = image.certificate_fd < 0 ? -EBADF :
-	     keys_read_der_fd(image.certificate_fd, &der, &size);
-	if (ret)
-		return boot_keys_error("read config verification certificate", ret);
-	ring = keyring_dm_verity_serial();
-	if (ring < 0) {
-		ret = (int)ring;
-		xfree(der, size);
-		return boot_keys_error("lookup dm-verity keyring", ret);
-	}
-	ret = seal_config_key(ring, der, size);
-	xfree(der, size);
-	return ret;
 }
 
 /* The authenticated initrd validates the boot set before installing guards. */
@@ -778,7 +866,7 @@ int image_boot_keys(struct trusted_set *set)
 	ret = mount_runtime(true);
 	if (ret)
 		return boot_keys_error("mount runtime", ret);
-	ret = enroll_config_key();
+	ret = enroll_config_keys();
 	if (ret)
 		return boot_keys_error("enrol config certificate", ret);
 	ret = open_update();
@@ -787,7 +875,7 @@ int image_boot_keys(struct trusted_set *set)
 	ret = boot_target(&image.boot_target);
 	if (ret)
 		return boot_keys_error("select boot config", ret);
-	ret = prepare_config(&image, &image.boot_target, true);
+	ret = prepare_config(&image, &image.boot_target, CONFIG_PREPARE_BOOT);
 	if (ret)
 		return boot_keys_error("prepare boot config", ret);
 	ret = keys_validate_image_set(RUNTIME_CERT_PATH,
@@ -823,9 +911,7 @@ int image_boot_keys_close(void)
 	if (image.candidate_fd >= 0)
 		close(image.candidate_fd);
 	image.candidate_fd = -1;
-	if (image.certificate_fd >= 0)
-		close(image.certificate_fd);
-	image.certificate_fd = -1;
+	close_config_certificates();
 	if (umount(CONFIG_CANDIDATE_DIR) && errno != EINVAL &&
 	    errno != ENOENT)
 		ret = -errno;
@@ -1021,8 +1107,8 @@ int image_config_state(__u8 root[32])
 
 int image_status(bool json)
 {
-	struct config_update_record record;
-	char buffer[512], root[65];
+	struct config_update_record record, staged;
+	char buffer[768], root[65], next_root[65];
 	struct json_emit emit = {
 		.buf = buffer,
 		.cap = sizeof(buffer),
@@ -1034,10 +1120,19 @@ int image_status(bool json)
 	ret = config_update_read(&image.update, &record);
 	if (ret)
 		return ret;
+	ret = config_update_stage_read(&image.update, &staged);
+	if (ret && ret != -ENOENT)
+		return ret;
+	if (ret == -ENOENT)
+		next_root[0] = 0;
+	else
+		hex_encode(staged.target.root_hash, 32, next_root);
 	hex_encode(record.target.root_hash, 32, root);
 	ret = record.pending ? -EINPROGRESS : current_config();
 	if (!json) {
 		printf("%-22s %s\n", "Config root hash:", root);
+		printf("%-22s %s\n", "Next boot root hash:",
+		       next_root[0] ? next_root : "none");
 		printf("%-22s %d\n", "PCR:", record.pcr);
 		printf("%-22s %lld\n", "Sequence:", (long long)record.sequence);
 		printf("%-22s %lld\n", "TPM reset count:",
@@ -1051,6 +1146,10 @@ int image_status(bool json)
 	}
 	json_obj_open(&emit);
 	json_kv_string(&emit, "root_hash", root);
+	if (next_root[0])
+		json_kv_string(&emit, "next_boot_root_hash", next_root);
+	else
+		json_kv_null(&emit, "next_boot_root_hash");
 	json_kv_int(&emit, "pcr", record.pcr);
 	json_kv_int(&emit, "sequence", record.sequence);
 	json_kv_int(&emit, "reset_count", record.reset_count);
@@ -1074,9 +1173,7 @@ void image_leave(void)
 		config_update_close(&image.update);
 	tpm_close(image.tpm);
 	image.tpm = NULL;
-	if (image.certificate_fd >= 0)
-		close(image.certificate_fd);
-	image.certificate_fd = -1;
+	close_config_certificates();
 	memzero_explicit(&image.bootstrap_config, sizeof(image.bootstrap_config));
 }
 
@@ -1091,9 +1188,38 @@ int image_update(const char *prefix)
 	if (!ret)
 		ret = mkdir_owned(IMAGE_CACHE_DIR);
 	if (!ret)
-		ret = image_cache_fetch(prefix, &target);
+		ret = image_cache_fetch(prefix, &target, verify_config_root, &image);
 	if (!ret)
 		ret = config_update_begin(&image.update, &target,
 					  image.bootstrap.pcr);
 	return ret;
+}
+
+int image_stage(const char *prefix)
+{
+	struct config_update_target target = {};
+	int ret;
+
+	if (image.update.lock_fd < 0)
+		return -ENODEV;
+	ret = current_config();
+	if (!ret)
+		ret = mkdir_owned(IMAGE_CACHE_DIR);
+	if (!ret)
+		ret = image_cache_fetch(prefix, &target, verify_config_root, &image);
+	if (!ret)
+		ret = prepare_config(&image, &target, CONFIG_PREPARE_STAGE);
+	if (!ret)
+		ret = config_update_stage(&image.update, &target);
+	return ret;
+}
+
+int image_stage_cancel(void)
+{
+	int ret;
+
+	if (image.update.lock_fd < 0)
+		return -ENODEV;
+	ret = current_config();
+	return ret ? ret : config_update_clear_staged(&image.update);
 }

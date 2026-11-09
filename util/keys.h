@@ -106,10 +106,15 @@ bool keys_is_revoked(const char *revoked_dir,
 int keys_vouch_payload(const __u8 *der, size_t der_sz,
 		       __u8 **out, size_t *out_sz);
 
+/* Verify a detached signature under a member; signer may be NULL. */
+int keys_verify_signature(const struct trusted_set *set,
+			  const __u8 *payload, size_t payload_sz,
+			  const __u8 *sig, size_t sig_sz,
+			  __u8 signer[32]);
+
 /*
  * Whether a member of the set signed the vouch for this certificate:
- * 0 with the member's fingerprint in voucher, -EKEYREJECTED when none
- * did.
+ * 0 with the member's fingerprint in voucher, -EKEYREJECTED when none did.
  */
 int keys_verify_vouch(const struct trusted_set *set,
 		      const __u8 *der, size_t der_sz,

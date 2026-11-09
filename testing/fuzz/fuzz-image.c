@@ -12,7 +12,7 @@
 
 int LLVMFuzzerTestOneInput(const __u8 *data, size_t size)
 {
-	struct image_bootstrap boot;
+	struct image_bootstrap boot = {};
 	struct config_image image;
 	char path[64];
 	int fd;

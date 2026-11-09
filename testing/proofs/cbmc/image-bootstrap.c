@@ -37,10 +37,12 @@ void harness(void)
 		strscpy(boot.runtime, "/r", sizeof(boot.runtime));
 	if (bootstrap_parse(f, &boot, initial))
 		return;
-	__CPROVER_assert(!boot.certificate[0] ||
-			 !strncmp(boot.certificate, RUNTIME_DIR "/",
-				  sizeof(RUNTIME_DIR)),
-			 "a certificate under the runtime");
+	__CPROVER_assert(boot.n_certificates <= KEYS_MAX,
+			 "bounded config verification certificate set");
+	for (i = 0; i < boot.n_certificates; i++)
+		__CPROVER_assert(!strncmp(boot.certificates[i],
+					  RUNTIME_DIR "/", sizeof(RUNTIME_DIR)),
+				 "a certificate under the runtime");
 	__CPROVER_assert(!boot.have_pcr || !config_measure_pcr_valid(boot.pcr),
 			 "a PCR measurements may use");
 	if (!initial)

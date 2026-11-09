@@ -39,6 +39,26 @@ static char *trim(char *text)
 	return text;
 }
 
+static int bootstrap_add_certificate(struct image_bootstrap *boot,
+				     const char *path)
+{
+	size_t i;
+
+	if (strncmp(path, RUNTIME_DIR "/", sizeof(RUNTIME_DIR)) ||
+	    !image_path_valid(path))
+		return -EPERM;
+	if (boot->n_certificates == KEYS_MAX)
+		return -E2BIG;
+	for (i = 0; i < boot->n_certificates; i++)
+		if (!strcmp(boot->certificates[i], path))
+			return -EEXIST;
+	if (strscpy(boot->certificates[i], path,
+		    sizeof(boot->certificates[i])) < 0)
+		return -ENAMETOOLONG;
+	boot->n_certificates++;
+	return 0;
+}
+
 /* The stream is consumed and closed. */
 static int bootstrap_parse(FILE *file, struct image_bootstrap *boot,
 			   bool initial)
@@ -87,13 +107,7 @@ static int bootstrap_parse(FILE *file, struct image_bootstrap *boot,
 					 sizeof(boot->config)) < 0)
 				ret = -ENAMETOOLONG;
 		} else if (!strcmp(key, "config.verification_key")) {
-			if (strncmp(value, RUNTIME_DIR "/",
-				    sizeof(RUNTIME_DIR)) ||
-			    !image_path_valid(value))
-				ret = -EPERM;
-			else if (strscpy(boot->certificate, value,
-					 sizeof(boot->certificate)) < 0)
-				ret = -ENAMETOOLONG;
+			ret = bootstrap_add_certificate(boot, value);
 		} else if (!strcmp(key, "config.pcr")) {
 			__u64 pcr;
 

@@ -89,7 +89,7 @@ test_expect_success 'repository certificate references cannot escape to host fil
 	done
 '
 
-test_expect_success 'tree publications verify against the runtime trust anchor' '
+test_expect_success 'tree publications use the active config trusted set' '
 	"$H" "$ROOT" tree >"$WORK/certificate" &&
 	grep -qx /run/shirudo/runtime/keys/cert.der "$WORK/certificate"
 '

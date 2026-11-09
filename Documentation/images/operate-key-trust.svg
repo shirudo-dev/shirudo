@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 350" width="760" height="350" font-family="sans-serif" role="img" aria-labelledby="t">
-  <title id="t">Init builds the .bpf keyring from the runtime image's primary certificate and the config image's vouched certificates minus its revocations, and the .dm-verity keyring from the runtime image's config certificate; tree publications verify against the primary alone and package indexes against their repository certificates</title>
+  <title id="t">Init builds the .bpf keyring from the runtime image's primary certificate and the config image's vouched certificates minus its revocations, and the .dm-verity keyring from the runtime image's config certificates; tree publications verify against the active non-revoked BPF set and package indexes against their repository certificates</title>
   <style>@media (prefers-color-scheme: dark) { [fill="#5d6675"] { fill: #b4bcc7; } }</style>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -29,7 +29,7 @@
       <text x="120" y="114">keys/cert.der</text>
       <text x="120" y="130">runtime primary BPF certificate</text>
       <text x="120" y="172">etc/shirudo/config-cert.der</text>
-      <text x="120" y="188">config verification certificate</text>
+      <text x="120" y="188">config verification certificates</text>
       <text x="380" y="64" font-size="13">Config image</text>
       <text x="380" y="80">signed, checked against .dm-verity</text>
       <text x="380" y="114">keys/trusted/&lt;name&gt;.der, .vouch</text>
@@ -45,11 +45,11 @@
       <text x="640" y="151">minus revoked, at most 16</text>
       <text x="640" y="173">checks signed loaders</text>
       <text x="640" y="217" font-size="13">.dm-verity</text>
-      <text x="640" y="235">the config certificate</text>
+      <text x="640" y="235">the config certificates</text>
       <text x="640" y="251">checks config images</text>
       <text x="509" y="190">removes</text>
     </g>
-    <text x="10" y="320">Tree publications verify against the runtime primary alone, whatever the config vouches for or revokes.</text>
+    <text x="10" y="320">Tree publications verify against the active BPF signer set, excluding revoked certificates.</text>
     <text x="10" y="338">Package indexes verify against the certificate their repository definition names.</text>
   </g>
 </svg>

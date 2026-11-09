@@ -74,7 +74,7 @@ other refuses.
      - ``tpm.tcti``, ``tpm.owner_auth``, and the ``config.*`` keys
    * - ``etc/shirudo/shirudo.conf`` on the runtime image
      - ``config.image``, the initial config prefix;
-       ``config.verification_key``, a certificate path under
+       ``config.verification_key``, one or more certificate paths under
        ``/run/shirudo/runtime/``; ``config.pcr``, a PCR from 0 to 15
        other than 9 and 11
      - ``tpm.tcti``, ``tpm.owner_auth``, ``tls.classical_hosts``. Any
@@ -156,13 +156,23 @@ the platform keyring when
 ``CONFIG_DM_VERITY_VERIFY_ROOTHASH_SIG_PLATFORM_KEYRING`` is set, and the
 ``.dm-verity`` keyring last, once it is sealed and holds a key.
 
-``init`` in the initrd enrolls the certificate that
-``config.verification_key`` names in ``.dm-verity`` and seals the
-keyring, which the kernel leaves open only when booted with
-``dm_verity.keyring_unsealed=1``. The keyring must then hold that
-certificate alone, and ``lsm/key_permission`` keeps root from unlinking
-it. The ``.bpf`` keyring is not involved: a valid config signature never
-authorizes BPF, and a BPF signature never authorizes a config.
+The runtime bootstrap lists the allowed config certificates through
+repeated ``config.verification_key`` entries, at most 16. The target
+reads them from the authenticated runtime device, requires ML-DSA-87 and
+rejects duplicate public keys. Before creating any config mapping,
+including the temporary full-read verification mapping, it verifies the
+CMS root signature against this set. A certificate trusted only by
+another kernel keyring cannot authorize a Shirudo config.
+
+``init`` enrolls all these certificates in ``.dm-verity`` and seals it,
+which the kernel leaves open only with
+``dm_verity.keyring_unsealed=1``. It verifies that the keyring holds
+exactly that set and freezes every serial in the identity map.
+``lsm/key_permission`` protects the ring and its certificates.
+
+The ``.bpf`` keyring is separate. A valid config signature does not
+authorize unsigned BPF: every loader still needs a signature under an
+enrolled BPF signing key.
 
 Config contents
 ---------------
@@ -220,6 +230,29 @@ At boot, ``init`` runs the same sequence as a boot event for the selected
 config, but completes it only at the end of ``init``, after the restore
 and the register binding. :doc:`boot-flow` gives the boot order.
 
+Next-boot selection
+-------------------
+
+``shirudo image stage <prefix>`` verifies and caches a config without
+activating it. Unlike a live update, it allows new vouched BPF signers:
+init can enroll them during the next planned boot, before sealing
+``.bpf``. The command leaves the active config mount, keyrings, PCR and register
+unchanged.
+
+The sealed ``next-boot`` file uses the same selection record format as
+``state``. Its target is the candidate and its sequence and TPM reset and
+restart counts identify the completed activation it was staged from.
+Init selects it only in a later TPM boot with that parent still selected.
+It rechecks the exact root, signature, image contents and certificate
+vouches before enrollment. The normal boot event measures its activation.
+
+A live update that activates a different root invalidates the stage.
+Updating to the already active root preserves it. A stale stage is ignored
+with a warning. A valid stage stays on disk until full init succeeds,
+including upatch restore and register binding. An interrupted init uses
+the normal pending-activation recovery rules. Staging again replaces the
+record; ``image stage --cancel`` removes it. Neither operation reboots.
+
 The journal lives in ``/var/lib/shirudo/config-update``: ``state`` holds
 the current selection and whether it is pending, ``events`` the config
 log, and ``lock`` the lock every target command holds while it runs,
@@ -258,7 +291,9 @@ and never after an interruption, a pending or drifted state refuses
 every command but ``status`` and ``image status`` until the TPM boot
 changes, and after a reboot an uninterrupted ``init`` records the boot
 event and admits commands again. The model takes a TPM Restart or Resume
-to come only between commands. CBMC shows that ``event_follows()``
+to come only between commands. These proofs cover activation after a
+target is selected; they do not model next-boot selection authorization.
+The staging tests exercise its parent and TPM boot checks. CBMC shows that ``event_follows()``
 accepts exactly the records the model lets follow. The proofs are in
 :doc:`/contribute/testing/proof-coverage`.
 
@@ -280,6 +315,7 @@ What can change without a reboot
    * - Adding a BPF certificate
      - Not live. The ``.bpf`` keyring is sealed, so activation refuses a
        candidate whose trust set holds a certificate the keyring lacks.
+       ``image stage`` selects such a candidate for the next boot.
    * - The config verification certificate, the config PCR, the TPM
        settings, ``tls.classical_hosts``, the initial BPF certificate
      - Not live. They are on the runtime image, which only a new UKI and
@@ -287,13 +323,15 @@ What can change without a reboot
    * - The shirudo binary
      - Not live, for the same reason.
 
-Two boot-time rules bear on the changes that need a reboot. ``init``
+Two boot-time rules bear on key rotation. ``init``
 selects the config that the journal names, not ``config.image``, once a
-selection exists. And it enrolls the config verification certificate of
-the runtime image before it maps that config. A reboot therefore does not
-pick up a config that was never activated, and a runtime image with
-another config verification certificate needs a selected config that
-certificate verifies. :doc:`/operate/maintain/keys` covers key changes.
+selection exists. A valid next-boot selection overrides that journal target on a later
+TPM boot. Init enrolls the config verification certificates from the
+runtime image before mapping the selected config. A replacement runtime
+must therefore include a certificate that verifies that selection.
+Config-key rotation uses a runtime with both old and new certificates,
+then a config signed by the new key, then a runtime with only the new
+certificate. :doc:`/operate/maintain/keys` covers key changes.
 
 Limits
 ------
@@ -301,10 +339,6 @@ Limits
 These are properties of the design as implemented.
 :doc:`/security/threat-model` gives their consequences.
 
-- Every key the kernel trusts for dm-verity signatures verifies a config:
-  the built-in trusted keys, and the secondary and platform keyrings when
-  the kernel is built to use them. shirudo does not check the signer of a
-  config in userspace.
 - Nothing prevents rollback. Any config ever signed by an accepted key
   can be activated again.
 - Any process that can send ``TPM2_PCR_Extend`` can extend the config

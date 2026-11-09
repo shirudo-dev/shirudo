@@ -77,6 +77,20 @@ int config_update_open(const char *directory,
 void config_update_close(struct config_update *update);
 int config_update_read(struct config_update *update,
 		       struct config_update_record *out);
+/*
+ * next-boot uses the selection record format: its target is the candidate,
+ * and its sequence and TPM counts identify the selection it was staged from.
+ */
+int config_update_stage(struct config_update *update,
+			const struct config_update_target *target);
+int config_update_stage_read(struct config_update *update,
+			     struct config_update_record *out);
+/* 1 selects an eligible staged target, 0 leaves the current selection. */
+int config_update_staged(struct config_update *update,
+			 const struct config_update_record *previous,
+			 __u32 reset, __u32 restart,
+			 struct config_update_target *target);
+int config_update_clear_staged(struct config_update *update);
 int config_update_begin(struct config_update *update,
 			const struct config_update_target *t,
 			__u32 pcr);

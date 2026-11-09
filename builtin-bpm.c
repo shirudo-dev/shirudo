@@ -45,6 +45,9 @@
 #include "util/hex.h"
 #include "util/io.h"
 #include "util/initrd.h"
+#include "util/image_config.h"
+#include "util/image_keys.h"
+#include "util/keys.h"
 #include "util/json.h"
 #include "util/log.h"
 #include "util/malloc.h"
@@ -1613,15 +1616,33 @@ static int tree_fetch_publication(const struct bpm_tree_config *cfg,
 				  char *manifest_digest, size_t digest_sz)
 {
 	struct bpm_oci_client c __cleanup(bpm_oci_client_clear) = {};
+	struct trusted_set *trusted = NULL;
 	char repository[BPM_MAX_ENDPOINT];
-	int ret = bpm_oci_parse_tree_repo(cfg->endpoint, &c,
-					  repository, sizeof(repository));
+	int ret;
 
+	ret = bpm_oci_parse_tree_repo(cfg->endpoint, &c,
+				      repository, sizeof(repository));
 	if (ret)
 		return ret;
-	return bpm_tree_fetch_publication(&c, repository, cfg->reference,
-					  get_cert_path(), pub,
-					  manifest_digest, digest_sz);
+	if (image_config_active()) {
+		trusted = xcalloc(1, sizeof(*trusted));
+		if (!trusted)
+			return -ENOMEM;
+		ret = keys_load_image_root(get_cert_path(), image_config_root_fd(),
+					   true, trusted);
+		if (!ret && (!trusted->n || trusted->n_unvouched))
+			ret = -EKEYREJECTED;
+		if (!ret)
+			ret = keys_check_image_set(trusted);
+		if (ret)
+			goto out;
+	}
+	ret = bpm_tree_fetch_publication(&c, repository, cfg->reference,
+					 get_cert_path(), trusted, pub,
+					 manifest_digest, digest_sz);
+out:
+	xfree(trusted, sizeof(*trusted));
+	return ret;
 }
 
 static int tree_verify_upatch(const char *path, const char *expected,

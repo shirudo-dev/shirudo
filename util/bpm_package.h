@@ -16,6 +16,8 @@
 #include "bpm_oci.h"
 #include "bpm_tree.h"
 
+struct trusted_set;
+
 struct bpm_index_entry {
 	char name[BPM_MAX_NAME];
 	char version[BPM_MAX_NAME];
@@ -95,12 +97,14 @@ int bpm_pkg_load_info(const char *archive, struct bpm_package_info *info);
 
 /*
  * Fetch the signed tree publication at repository:reference, check every
- * layer against its descriptor and the payload against cert_path, and
+ * layer against its descriptor and the payload against trusted, or
+ * cert_path when trusted is NULL, and
  * parse it. -ENOENT when the reference does not exist yet.
  */
 int bpm_tree_fetch_publication(struct bpm_oci_client *c,
 			       const char *repository, const char *reference,
 			       const char *cert_path,
+			       const struct trusted_set *trusted,
 			       struct tree_publication *pub,
 			       char *manifest_digest, size_t digest_sz);
 

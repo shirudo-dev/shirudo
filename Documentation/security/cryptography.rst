@@ -92,11 +92,12 @@ verifies:
        algorithm. The pre-flight check ``cert_algorithm`` refuses
        anything but ML-DSA-87, but in the initrd it reads
        ``/etc/shirudo/keys``, not that set (threat model U4).
-   * - Kernel, config roots
-     - Any key, of any supported algorithm, in the keyrings of
-       assumption A7 (threat model U2).
+   * - Target, config roots
+     - ML-DSA-87 under one of the runtime bootstrap's config certificates.
+       The target checks this exact set before the kernel's dm-verity
+       signature check (threat model A7).
    * - ``shirudo bpm``, indexes and tree publications
-     - Whatever algorithm the repository or primary certificate holds
+     - Whatever algorithm the repository certificate or active BPF signer holds
        (threat model U4).
    * - Vouch check on the target
      - Whatever algorithm the vouching certificate holds; the vouched

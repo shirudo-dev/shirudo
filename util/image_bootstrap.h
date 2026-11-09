@@ -10,10 +10,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "keys.h"
+
 struct image_bootstrap {
 	char runtime[PATH_MAX];
 	char config[PATH_MAX];
-	char certificate[PATH_MAX];
+	char certificates[KEYS_MAX][PATH_MAX];
+	size_t n_certificates;
 	__u8 runtime_root[32];
 	__u32 pcr;
 	bool have_root;

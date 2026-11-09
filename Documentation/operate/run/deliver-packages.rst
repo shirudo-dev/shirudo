@@ -194,7 +194,7 @@ while it runs.
    command writes ``<prefix>.img``, ``<prefix>.verity``,
    ``<prefix>.roothash`` and ``<prefix>.p7s`` and refuses to replace an
    existing file. ``<config-keys-dir>`` holds the key whose certificate
-   the runtime image names in ``config.verification_key``. The path is
+   the runtime image lists in a ``config.verification_key`` entry. The path is
    the operator package's. From a checkout, run
    :src:`tools/gen-image/shirudo-gen-image` and add ``--builder`` with the
    path of ``shirudo-build``.

@@ -245,8 +245,8 @@ systemd-keyring-setup
 :Symptom: ``init`` fails in the initrd. It stops at the ``.dm-verity``
    keyring with one of
    ``initrd boot keys: add config verification certificate: <error>``,
-   ``initrd boot keys: check dm-verity keyring holds only the config
-   certificate: Key was rejected by service`` or, when the tool enrolled
+   ``initrd boot keys: check dm-verity verification keys: Key was rejected
+   by service`` or, when the tool enrolled
    nothing, ``initrd boot keys: dm-verity keyring sealed empty at boot;
    boot with dm_verity.keyring_unsealed=1: Required key not available``,
    which names the boot parameter even when it is set. ``init: BPF

@@ -24,7 +24,7 @@ static int read_bootstrap(int argc, char **argv)
 	if (!ret) {
 		hex_encode(boot.runtime_root, 32, root);
 		printf("runtime=%s\nroot=%s\nconfig=%s\ncertificate=%s\npcr=%u\n",
-		       boot.runtime, root, boot.config, boot.certificate,
+		       boot.runtime, root, boot.config, boot.certificates[0],
 		       boot.pcr);
 	}
 	printf("rc=%d\n", ret);

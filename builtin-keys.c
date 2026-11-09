@@ -1094,8 +1094,8 @@ static int keys_show(int argc, const char **argv)
 			  id.key_serials,
 			  min(id.n_keys, IDENTITY_KEYS_MAX) },
 			{ ".dm-verity", keyring_dm_verity_serial,
-			  id.dm_verity_ring, &id.dm_verity_key,
-			  id.dm_verity_key > 0 },
+			  id.dm_verity_ring, id.dm_verity_keys,
+			  min(id.n_dm_verity_keys, IDENTITY_KEYS_MAX) },
 		};
 		size_t i;
 

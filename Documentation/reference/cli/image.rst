@@ -9,10 +9,10 @@ shirudo image
 =============
 
 Build and verify signed dm-verity images on the operator host, and
-activate a signed config image on a target.
+activate a signed config image on a target, or select one for its next boot.
 
 Runs on: ``build`` and ``verify`` on the operator host, through the
-``shirudo-build`` helper, without the image gate. ``update`` and
+``shirudo-build`` helper, without the image gate. ``update``, ``stage`` and
 ``status`` on a target, as root with the runtime binary. Requires: ``veritysetup`` on the
 operator host. Changes measured state: ``update`` yes, the others no.
 
@@ -27,12 +27,14 @@ Usage
                        [--salt <salt>]
    shirudo image verify <prefix> --cert <certificate>
    shirudo image update <prefix>
+   shirudo image stage <prefix>
+   shirudo image stage --cancel
    shirudo image status [--json]
    shirudo image --list-cmds
 
 The subcommand names must be spelled out. ``image`` without a subcommand
 prints the usage and exits with 2. ``--list-cmds`` prints
-``build verify update status`` on one line.
+``build verify update stage status`` on one line.
 
 An image is four files that share a prefix: ``<prefix>.img`` (the ext4
 file system), ``<prefix>.verity`` (the hash tree), ``<prefix>.roothash``
@@ -79,8 +81,10 @@ is a local path prefix or an ``https://`` URL prefix.
 #. It fetches ``<prefix>.roothash``, ``.p7s``, ``.img`` and ``.verity``
    into a staging directory under ``/var/lib/shirudo/images``, over HTTPS
    with redirects to HTTPS only, or from local regular files.
-#. It checks the signature through the kernel's dm-verity trust path,
-   maps the image read-only and reads it completely.
+#. It verifies the root signature against the config certificates in
+   the authenticated runtime image. It also checks the signature through
+   the kernel's dm-verity trust path, maps the image read-only and reads
+   it completely.
 #. It links the files to ``/var/lib/shirudo/images/<root-hash>.*``. When
    the root hash is the active one, it stops here.
 #. It maps and mounts the candidate, validates its settings, and checks
@@ -93,11 +97,38 @@ is a local path prefix or an ``https://`` URL prefix.
    leaves the ``.bpf`` keyring, the register receives a ``key_revoke``
    event, and every archived upatch the certificate signed is unloaded
    and measured. It mounts the image at ``/run/shirudo/config``.
-#. It clears the pending record.
+#. It clears the pending record and any previous next-boot selection.
+   Updating to the already active root is a no-op and preserves that
+   selection.
 
 When ``update`` stops between steps 5 and 7, the activation stays pending.
 Every command except ``status`` is then refused until the next reboot.
 shirudo does not reboot the target.
+
+image stage
+-----------
+
+``stage <prefix>`` fetches and verifies a config in the same way as
+``update``, but saves it for the next planned reboot instead of activating
+it. It checks the settings and BPF certificate vouches. It permits a
+vouched signer that the current sealed ``.bpf`` keyring does not yet hold.
+
+The current config must be consistent. The staged selection is stored
+in ``/var/lib/shirudo/config-update/next-boot`` and tied to the current
+activation sequence and TPM boot. Staging does not change the mounted
+config, either keyring, the config PCR or the measurement register.
+
+At the next TPM boot, init verifies that the parent selection is
+unchanged, rechecks the candidate and its signature, and enrolls its BPF
+signers before sealing ``.bpf``. It measures the selected config through
+the normal boot path. The next-boot record is removed only after init
+completes. A re-run of init in the current boot cannot activate it.
+
+``stage --cancel`` removes the next-boot selection without changing the
+active config. Staging again replaces it. Activating a different config
+root through a live update invalidates it. An interruption before the atomic selection is saved
+leaves the previous selection in place. A saved selection whose files
+cannot be authenticated causes init to refuse it.
 
 image status
 ------------
@@ -108,7 +139,8 @@ the activation is pending (``no``, or ``yes, until the next reboot``) and
 whether it is consistent with its records (``yes`` or ``no``). With
 ``--json`` it prints one JSON object with ``root_hash``, ``pcr``,
 ``sequence``, ``reset_count``, ``restart_count``, ``pending`` and
-``consistent`` instead.
+``consistent`` instead. The text report also prints the next-boot config
+root, or ``none``. JSON adds ``next_boot_root_hash``, a string or ``null``.
 
 Options
 -------
@@ -146,6 +178,10 @@ Options
      - ``<salt>``, 64 hex characters
      - chosen by ``veritysetup``
      - ``build``: the dm-verity salt.
+   * - ``--cancel``
+     - none
+     - off
+     - ``stage``: cancel the next-boot selection.
    * - ``--json``
      - none
      - off
@@ -174,8 +210,8 @@ Exit status
        activation state on this host``.
    * - 2
      - No subcommand, an unknown subcommand, a wrong number of arguments
-       to ``update`` or ``status``, or ``verify`` arguments in another
-       form.
+       to ``update``, ``stage`` or ``status``, or ``verify`` arguments
+       in another form.
    * - 127
      - ``build``, ``verify``: ``shirudo`` cannot execute the helper.
 
@@ -190,6 +226,8 @@ Files and environment
   ``shirudo-gen-verity``
 - ``update``: ``/var/lib/shirudo/images``, ``/var/lib/shirudo/config-update``,
   ``/run/shirudo/config``, the config PCR and the register
+- ``stage``: the image cache and ``config-update/next-boot``; it leaves
+  the active config and measurements unchanged
 
 Examples
 --------
@@ -218,6 +256,7 @@ Show the active selection:
 
    target# shirudo image status
    Config root hash:      6d5ed552f4487728d1ccec8604ddb44b66b18e3430614c20bb4d284995f99f63
+   Next boot root hash:   none
    PCR:                   14
    Sequence:              1
    TPM reset count:       1

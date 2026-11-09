@@ -313,13 +313,18 @@ int BPF_PROG(shirudo_lsm_key_permission, key_ref_t key_ref,
 	if (id->keyring_serial == 0)
 		return 0;
 	possessed = (unsigned long)key_ref & 1;
-	if (serial != id->keyring_serial && serial != id->dm_verity_ring &&
-	    serial != id->dm_verity_key) {
+	if (serial != id->keyring_serial && serial != id->dm_verity_ring) {
 		for (i = 0; i < IDENTITY_KEYS_MAX; i++)
 			if (i < id->n_keys && id->key_serials[i] == serial)
 				break;
-		if (i == IDENTITY_KEYS_MAX)
-			return 0;	/* not the anchor -- not ours */
+		if (i == IDENTITY_KEYS_MAX) {
+			for (i = 0; i < IDENTITY_KEYS_MAX; i++)
+				if (i < id->n_dm_verity_keys &&
+				    id->dm_verity_keys[i] == serial)
+					break;
+			if (i == IDENTITY_KEYS_MAX)
+				return 0;
+		}
 	}
 	if (need == KEY_NEED_SEARCH && possessed)
 		return 0;

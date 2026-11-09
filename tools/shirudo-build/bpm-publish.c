@@ -44,7 +44,8 @@ static void tree_append_usage(void)
 	fprintf(stderr,
 		"usage: shirudo bpm tree append <package-file> <repository>\n"
 		"                               [--keys-dir <dir>] [--key <signing_key.pem>]\n"
-		"                               [--cert <cert.der>] [--tree-id <id>]\n"
+		"                               [--cert <cert.der>] [--previous-cert <cert.der>]\n"
+		"                               [--tree-id <id>]\n"
 		"                               [--reference <ref>] [--op add|delete]\n\n"
 		"Publishes the [upatches.tree] entries of a built package as the next\n"
 		"operations of the signed tree at <repository>:<ref> (default stable).\n"
@@ -645,6 +646,7 @@ static int cmd_bpm_tree_append(int argc, char **argv)
 	char repository[BPM_MAX_ENDPOINT], repo_ref[BPM_MAX_ENDPOINT];
 	struct bpm_descriptor config, payload_layer, sig_layer;
 	const char *key = NULL, *cert = NULL, *tree_id = NULL;
+	const char *previous_cert = NULL;
 	const char *reference = "stable", *operation = "add";
 	char key_path[PATH_MAX], cert_path[PATH_MAX];
 	char parent[BPM_MAX_DIGEST] = {}, digest[72];
@@ -677,6 +679,10 @@ static int cmd_bpm_tree_append(int argc, char **argv)
 			cert = argv[++i];
 		} else if (!strncmp(a, "--cert=", 7)) {
 			cert = a + 7;
+		} else if (!strcmp(a, "--previous-cert") && i + 1 < argc) {
+			previous_cert = argv[++i];
+		} else if (!strncmp(a, "--previous-cert=", 16)) {
+			previous_cert = a + 16;
 		} else if (!strcmp(a, "--tree-id") && i + 1 < argc) {
 			tree_id = argv[++i];
 		} else if (!strncmp(a, "--tree-id=", 10)) {
@@ -729,6 +735,8 @@ static int cmd_bpm_tree_append(int argc, char **argv)
 	}
 	if (build_check_keys(key, cert))
 		return -EACCES;
+	if (!previous_cert)
+		previous_cert = cert;
 	if (bpm_trim(raw_repository, repo_ref, sizeof(repo_ref))) {
 		pr_err("bpm tree append: repository is longer than %zu bytes",
 		       sizeof(repo_ref) - 1);
@@ -760,8 +768,8 @@ static int cmd_bpm_tree_append(int argc, char **argv)
 		pr_err("bpm tree append: the repository must be oci://registry/repository");
 		goto out;
 	}
-	ret = bpm_tree_fetch_publication(&c, repository, reference, cert, &pub,
-					 parent, sizeof(parent));
+	ret = bpm_tree_fetch_publication(&c, repository, reference, previous_cert,
+					 NULL, &pub, parent, sizeof(parent));
 	if (ret == -ENOENT) {
 		pub = (struct tree_publication){ .schema = 1,
 							 .generation = 1 };

@@ -21,7 +21,8 @@ struct sb_id {
 	__u8	nv_writer_public[TPM_NV_RSA_BYTES];
 	__u8	ek_name[TPM_NAME_LEN];
 	__s32	dm_verity_ring;
-	__s32	dm_verity_key;
+	__u32	n_dm_verity_keys;
+	__s32	dm_verity_keys[IDENTITY_KEYS_MAX];
 	__u32	nv_index;
 };
 

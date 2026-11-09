@@ -171,7 +171,8 @@ static int verify_incoming(const struct config_image_open *opened,
 }
 
 int image_cache_fetch(const char *source,
-		      struct config_update_target *target)
+		      struct config_update_target *target,
+		      image_cache_verify_fn verify, void *ctx)
 {
 	static const struct {
 		const char *suffix;
@@ -189,6 +190,8 @@ int image_cache_fetch(const char *source,
 	int dir = -1, ret;
 	size_t i;
 
+	if (!verify)
+		return -EINVAL;
 	if (!mkdtemp(staging))
 		return -errno;
 	ret = seal_label(staging);
@@ -211,7 +214,9 @@ int image_cache_fetch(const char *source,
 	ret = config_image_open(incoming, &opened);
 	if (ret)
 		goto out;
-	ret = verify_incoming(&opened, staging);
+	ret = verify(&opened, ctx);
+	if (!ret)
+		ret = verify_incoming(&opened, staging);
 	if (!ret) {
 		memcpy(target->root_hash, opened.image.root_hash, 32);
 		hex_encode(target->root_hash, 32, hex);

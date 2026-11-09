@@ -102,7 +102,7 @@ Runtime image
     Mounted at ``/run/shirudo/runtime`` with ``ro,nodev,nosuid``. It holds
     the target binary, its bootstrap ``etc/shirudo/shirudo.conf``, the
     initial BPF certificate ``keys/cert.der`` and the config verification
-    certificate. The UKI names its exact root hash.
+    certificates. The UKI names its exact root hash.
 
 Config image
     Mounted at ``/run/shirudo/config`` with ``ro,nodev,nosuid,noexec``. It
@@ -152,7 +152,7 @@ capability or an executable path.
 
 The keyrings tie the operator to the target. ``init`` enrolls the
 initial certificate and the vouched certificates of the selected config
-in ``.bpf``, the config verification certificate in ``.dm-verity``, and
+in ``.bpf``, the config verification certificates in ``.dm-verity``, and
 seals both. The kernel verifies every upatch loader against ``.bpf`` and
 every config root against its dm-verity trust path. The operator never
 touches either keyring.

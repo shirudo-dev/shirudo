@@ -62,7 +62,7 @@ What is signed
      - None beyond the archive digest.
    * - Tree publication document
      - Detached CMS signature over the exact document bytes.
-     - ``bpm tree sync``, against the runtime image's initial certificate.
+     - ``bpm tree sync``, against the active config's non-revoked BPF signer set.
    * - Tree artifact manifest and ``.upatch`` layer
      - Not signed. Each signed operation pins them by
        ``manifest_digest``, ``layer_digest`` and ``payload_sha256``.
@@ -74,7 +74,8 @@ What is signed
 The detached signatures use the same CMS profile as the ``.upatch``
 signature: DER ``SignedData``, no encapsulated content, no certificates,
 ML-DSA-87, signer named by subject key identifier. The verifier checks it
-against the one configured certificate without a validity-time check.
+without a validity-time check: against the repository certificate for
+an index, or any active, enrolled BPF signer for a tree publication.
 
 Names
 -----

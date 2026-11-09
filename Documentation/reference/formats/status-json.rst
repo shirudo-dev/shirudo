@@ -114,7 +114,7 @@ determined, as noted.
        see `Keyrings`_.
    * - ``dm_verity_keyring``
      - object
-     - The ``.dm-verity`` keyring, the config certificate and its key,
+     - The ``.dm-verity`` keyring, its config certificates and their keys,
        see `Keyrings`_.
    * - ``signing_key_present``
      - boolean
@@ -266,7 +266,7 @@ its details that applies, in the order listed.
      - ``the dm-verity keyring holds <n> link(s) init did not freeze``
    * -
      - ``ALERT``
-     - ``the config key init froze is gone from the dm-verity keyring``
+     - ``a config key init froze is gone from the dm-verity keyring``
    * -
      - ``OK``
      - ``bpf serial <serial>, dm-verity serial <serial>, pins match``
@@ -369,7 +369,7 @@ recorded its serial: every key of ``.bpf`` and the config key of
    * - ``certs``
      - array of object
      - The certificates the keyring should hold: the trusted set for
-       ``.bpf``, the config certificate the runtime image names for
+       ``.bpf``, the config certificates the runtime image names for
        ``.dm-verity``. Each is described below.
    * - ``other_links``
      - array of object

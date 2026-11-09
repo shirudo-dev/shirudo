@@ -4,22 +4,30 @@
 #include "../../builtin-bpm.c"
 #include "util/config.h"
 
-int __wrap_bpm_tree_fetch_publication(struct bpm_oci_client *client,
-				      const char *repository,
-				      const char *reference,
-				      const char *certificate,
-				      struct tree_publication *pub,
-				      char *digest, size_t capacity);
+#include "image-cli.h"
 
 int __wrap_bpm_tree_fetch_publication(struct bpm_oci_client *client,
 				      const char *repository,
 				      const char *reference,
 				      const char *certificate,
+				      const struct trusted_set *trusted,
 				      struct tree_publication *pub,
 				      char *digest, size_t capacity)
 {
 	puts(certificate);
 	return 0;
+}
+
+int __wrap_keys_load_image_root(const char *primary, int root_fd,
+				bool with_trusted, struct trusted_set *set)
+{
+	set->n = 1;
+	return 0;
+}
+
+int __wrap_keys_check_image_set(const struct trusted_set *set)
+{
+	return set->n == 1 ? 0 : -EINVAL;
 }
 
 int main(int argc, const char **argv)

@@ -337,7 +337,7 @@ Keyrings
        ``add_key(..., KEY_SPEC_DM_VERITY_KEYRING)``,
        ``keyctl(KEYCTL_RESTRICT_KEYRING, KEY_SPEC_DM_VERITY_KEYRING, ...)``
      - The same for ``.dm-verity`` (-10) and the config verification
-       certificate.
+       certificates.
    * - ``keyctl(KEYCTL_READ, <ring>)``, ``keyctl(KEYCTL_DESCRIBE, <key>)``
      - List a keyring and compare it with the expected set.
    * - ``keyctl(KEYCTL_UNLINK, <key>, <ring>)``
@@ -490,7 +490,7 @@ Kernel command line
        keyring is sealed empty at boot and ``init`` fails.
    * - ``dm_verity.keyring_unsealed=1``
      - The kernel leaves ``.dm-verity`` open for ``init`` to enroll the
-       config verification certificate and seal.
+       config verification certificates and seal.
    * - ``lsm=`` including ``bpf``
      - When ``CONFIG_LSM`` does not include it.
 

@@ -601,39 +601,44 @@ static void keyring_view_bpf(struct status_keyring *k,
 	}
 }
 
-/* The config certificate comes from the runtime image's bootstrap. */
-static void keyring_view_dm_verity(struct status_keyring *k,
-				   const struct identity *ident)
+/* The config certificates come from the runtime image's bootstrap. */
+static noinline_for_stack void
+keyring_view_dm_verity(struct status_keyring *k,
+		       const struct identity *ident)
 {
 	struct image_bootstrap boot = {};
-	struct status_cert *c = &k->certs[0];
-	__u8 *der = NULL;
-	size_t len = 0;
-	size_t i;
+	size_t i, j, n_frozen = 0;
 
-	keyring_view_links(k, &ident->dm_verity_key,
-			   k->pinned >= 1 && ident->dm_verity_key > 0);
-	if (!k->links_rc && k->pinned >= 1 && ident->dm_verity_key > 0) {
-		k->key_missing = true;
-		for (i = 0; i < k->n_links; i++)
-			if (k->links[i].serial == ident->dm_verity_key)
-				k->key_missing = false;
+	if (k->pinned >= 1)
+		n_frozen = min(ident->n_dm_verity_keys, IDENTITY_KEYS_MAX);
+	keyring_view_links(k, ident->dm_verity_keys, n_frozen);
+	for (i = 0; !k->links_rc && i < n_frozen; i++) {
+		for (j = 0; j < k->n_links; j++)
+			if (k->links[j].serial == ident->dm_verity_keys[i])
+				break;
+		if (j == k->n_links)
+			k->key_missing = true;
 	}
 	k->certs_rc = image_bootstrap_read(RUNTIME_CONF_PATH,
 					   &boot, false);
-	if (!k->certs_rc && !boot.certificate[0])
+	if (!k->certs_rc && !boot.n_certificates)
 		k->certs_rc = -ENOENT;
-	if (!k->certs_rc)
-		k->certs_rc = keys_read_der(boot.certificate, &der, &len);
-	if (!k->certs_rc)
-		k->certs_rc = keys_digest_der(der, len, c->sha256,
-					      c->fingerprint);
-	if (!k->certs_rc) {
-		c->primary = true;
-		k->n_certs = 1;
-		keyring_view_cert(k, c, der, len);
+	for (i = 0; !k->certs_rc && i < boot.n_certificates; i++) {
+		struct status_cert *c = &k->certs[k->n_certs];
+		__u8 *der = NULL;
+		size_t len = 0;
+
+		k->certs_rc = keys_read_der(boot.certificates[i], &der, &len);
+		if (!k->certs_rc)
+			k->certs_rc = keys_digest_der(der, len, c->sha256,
+						      c->fingerprint);
+		if (!k->certs_rc) {
+			c->primary = true;
+			keyring_view_cert(k, c, der, len);
+			k->n_certs++;
+		}
+		xfree(der, len);
 	}
-	xfree(der, len);
 }
 
 static void keyring_cond_input(struct conditions_input *in,

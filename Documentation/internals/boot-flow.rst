@@ -64,14 +64,16 @@ the switch to the root file system. It needs
    ``runtime.root_hash``, read the whole mapping, mount it and read the
    runtime's bootstrap settings: ``config.image``,
    ``config.verification_key`` and ``config.pcr``.
-#. Enroll the config verification certificate in the ``.dm-verity``
-   keyring and seal it; the keyring must then hold that certificate
-   alone.
+#. Enroll every config verification certificate in ``.dm-verity``
+   and seal it. The keyring must hold exactly the configured set, whose
+   serials are frozen and protected by the key permission hook.
 #. Open the TPM and the activation journal under
    ``/var/lib/shirudo/config-update``, and select the config: the one
-   the activation record names, or ``config.image`` on a first boot. Map
-   it, which makes the kernel verify its root signature, read it and
-   validate its contents.
+   the activation record names, or ``config.image`` on a first boot.
+   On a later TPM boot, an eligible ``next-boot`` record selects its
+   candidate instead. Verify its signature against the runtime's config
+   certificates, map it through the kernel's signature check, read it
+   completely and validate its contents.
 #. Build the BPF trust set from the runtime's ``keys/cert.der`` and the
    config's vouched certificates, less its revocations, with the
    runtime certificate always included. Enroll the set in the ``.bpf``
@@ -101,7 +103,8 @@ the switch to the root file system. It needs
    covers the trust set, the restored set and the tree root, extend
    PCR 9 with the anchor, and write the record to
    ``/run/shirudo/eventlog.pending``.
-#. Mark the config selection complete.
+#. Mark the config selection complete and remove its next-boot record,
+   if one was staged.
 #. Detach the ``/var/lib/shirudo`` bind.
 
 The keyrings are sealed before any guard attaches, by the initrd's

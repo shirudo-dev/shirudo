@@ -26,7 +26,7 @@ upatch-rodata		-I ../../../vendor/libbpf/include/uapi -I ../../../vendor/libbpf 
 string-number-model	--unwind 6
 measured-fold-model	--unwind 7
 bpm-tree-follows	--unwind 4
-bpm-tree-sync-model	--unwind 60 --max-field-sensitivity-array-size 257 LEN=0-2
+bpm-tree-sync-model	--object-bits 10 --unwind 60 --max-field-sensitivity-array-size 257 LEN=0-2
 bpm-upatch-member	--unwind 30 LEN=0-18
 tpm-reader		--unwind 1
 tpm-signature		--unwind 1 --unwindset bytes_at.0:33

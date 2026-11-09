@@ -176,8 +176,8 @@ the tree publication, as a JSON document with a detached CMS signature.
 Each generation names the one it replaces.
 
 A target subscribes to a tree through its config image. ``shirudo bpm
-tree sync`` verifies the publication against the runtime image's
-certificate, evaluates each new operation's selector on the target, and
+tree sync`` verifies the publication against the active config's non-revoked BPF
+signer set, evaluates each new operation's selector on the target, and
 applies the matching operations in sequence order. Each applied operation
 loads or unloads the upatch and is then measured as a tree operation
 event. An operation whose selector does not match is passed over for good:

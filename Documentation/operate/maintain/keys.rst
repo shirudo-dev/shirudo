@@ -14,9 +14,10 @@ with a signed config, and some change only with a new runtime image and a
 reboot. This page lists the keys, shows what can change when, and walks
 through vouching for a signer and revoking one.
 
-Plan the BPF signers before the first boot. A target that is already
-initialized cannot enroll a BPF signer that its first config did not
-enroll.
+Enroll replacement keys before switching signing to them. BPF signers
+join the sealed keyring at boot; use ``shirudo image stage`` to select a
+config with additional vouched signers for the next planned reboot.
+Config verification certificates come from the runtime image.
 
 Before you begin
 ----------------
@@ -41,8 +42,8 @@ table lists every key.
    :alt: The .bpf keyring holds the runtime image's primary certificate
          and the config image's vouched certificates minus its
          revocations; the .dm-verity keyring holds the runtime image's
-         config certificate. Tree publications verify against the
-         primary alone, package indexes against their repository
+         config certificates. Tree publications verify against the active,
+         non-revoked BPF signers; package indexes use their repository
          certificate.
 
    Figure 1. The keys a target trusts and the keyrings ``init`` builds
@@ -58,13 +59,13 @@ table lists every key.
    * - Runtime primary BPF certificate
      - ``keys/cert.der`` in the runtime image, read as
        ``/run/shirudo/runtime/keys/cert.der``
-     - Signed loaders of upatches. It is also the only certificate that
-       verifies upatch tree publications, whatever the config revokes or
-       vouches for.
+     - Signed loaders of upatches and, while not revoked, upatch tree
+       publications.
    * - Vouched BPF certificates
      - ``keys/trusted/<name>.der`` with ``keys/trusted/<name>.vouch`` in
        the config image
-     - Signed loaders of upatches. A certificate joins the set when its
+     - Signed loaders of upatches and tree publications. A certificate
+       joins the set when its
        vouch verifies under a certificate already in the set, starting
        from the runtime primary. The set holds at most 16 certificates.
    * - Revocation records
@@ -73,16 +74,17 @@ table lists every key.
        set.
    * - Config verification certificate
      - ``etc/shirudo/config-cert.der`` in the runtime image, named by
-       ``config.verification_key``
-     - Config images. Init enrolls it in the kernel's ``.dm-verity``
-       keyring and seals that keyring around it.
+       the repeatable ``config.verification_key`` setting
+     - Config images. Init enrolls all listed certificates in the
+       kernel's ``.dm-verity`` keyring before sealing it. The runtime
+       generator numbers additional files ``config-cert-2.der`` and on.
    * - Kernel trusted keys
      - The kernel's built-in trusted keyring, and the secondary and
        platform keyrings when the kernel enables them for dm-verity
-     - Config images as well. The kernel checks these keyrings before
-       ``.dm-verity``, so their keys, including the kernel build's module
-       signing key, can sign a config the target activates.
-       :doc:`/operate/plan/hardening` lists the kernel options.
+     - The kernel's dm-verity signature check also consults these rings.
+       Before creating the mapping, shirudo additionally verifies the
+       root signature against the runtime's config certificates, so an
+       unrelated kernel-trusted key does not authorize a config.
    * - Repository index certificates
      - ``etc/shirudo/bpm/keys/`` in the config image, named by
        ``key_file`` in ``etc/shirudo/bpm/registries.d/``
@@ -126,10 +128,10 @@ What can change when
        by a key in the new set, or the boot restore fails.
    * - Vouched BPF certificates
      - Enrolled from the initial config.
-     - Refused when the config adds a certificate that is not in the
-       ``.bpf`` keyring.
-     - Not enrolled. The boot selects the config the activation record
-       names, and that config passed the live check.
+     - Live activation refuses a certificate that is not in the
+       ``.bpf`` keyring. Stage that config for the next boot instead.
+     - Init verifies a staged config and enrolls its vouched signers
+       before sealing the keyring.
    * - Revocation records
      - Applied at boot.
      - Applied at activation.
@@ -137,9 +139,9 @@ What can change when
    * - Config verification certificate
      - Set by the runtime image.
      - Cannot change it.
-     - Init fails at that boot, before enforcement starts: the selected
-       config carries the old key's signature, and the sealed
-       ``.dm-verity`` keyring holds only the new certificate.
+     - Use a runtime containing both old and new certificates, activate a
+       config signed by the new key, then use a runtime containing only
+       that key. A selected config signed by no listed key is refused.
    * - Repository index certificates
      - From the initial config.
      - Change at activation.
@@ -201,8 +203,8 @@ Check what a target trusts
    member by its SPKI fingerprint, with the SHA-256 of its DER and the
    member that vouched for it. ``Keyring (.bpf)`` is what the kernel
    verifies signed loaders against: the serial init froze, and one key
-   per member. ``Keyring (.dm-verity)`` holds the one key the kernel
-   verifies config roots with. ``(frozen)`` marks a member ``init``
+   per member. ``Keyring (.dm-verity)`` holds the configured certificates
+   for config roots. ``(frozen)`` marks a member ``init``
    recorded; a member marked ``(not frozen)`` is trusted by the kernel
    all the same, and ``shirudo status`` reports the target ``tampered``.
 
@@ -235,8 +237,8 @@ Vouch for a standby signer
 
 A standby signer is a second BPF signing key that the initial config
 enrolls, so that you can revoke the primary later and keep signing
-upatches. Tree publications stay with the runtime primary, as `Limits`_
-explains. Do this before the target's first boot with enforcement.
+upatches and tree publications. Include it in the first config or stage
+that config on an existing target and reboot when appropriate.
 
 1. Create the standby key in a directory of its own:
 
@@ -270,11 +272,36 @@ explains. Do this before the target's first boot with enforcement.
    config when a certificate under ``keys/trusted`` has no vouch that
    verifies.
 
-4. Build, sign and place the initial config as
-   :doc:`/operate/deploy/boot-integration` describes.
+4. Build and sign the config as
+   :doc:`/operate/deploy/boot-integration` describes. For a new target,
+   use it as the initial config. For an existing target, stage it:
 
-5. After the first boot, check that ``shirudo keys`` on the target lists
+   .. code-block:: console
+
+      target# shirudo image stage <prefix>
+      target# shirudo image status
+
+   Staging verifies the image and vouches but does not enroll the new
+   signer, activate the config or extend the TPM. The next planned boot
+   selects and verifies it before enrolling keys. Cancel a staged
+   selection with ``shirudo image stage --cancel``.
+
+5. After the planned reboot, check that ``shirudo keys`` on the target lists
    the standby signer in the trusted set and the ``.bpf`` keyring.
+
+Once both signers are enrolled, switch signing to the standby key.
+For the first tree publication signed by it, verify the previous
+publication with the old certificate:
+
+.. code-block:: console
+
+   operator$ shirudo bpm tree append <package> oci://<registry>/<tree> \
+       --keys-dir <standby-keys-dir> --previous-cert <primary-keys-dir>/cert.der
+
+The new publication is signed by the standby key. Later appends use that
+key for both checks and can omit ``--previous-cert``. Targets accept
+either enrolled signer during the overlap. Replace upatches signed by the
+old key before activating a config that revokes it.
 
 On a target, ``shirudo keys add`` and ``shirudo bpm key add`` refuse to
 change the trusted set, and ``shirudo keys revoke`` always refuses. The
@@ -369,37 +396,72 @@ certificates only. :doc:`/operate/run/attest` shows how to predict the
 register, and ``--event=revoke:<label>=<cert-sha256>`` adds a revocation
 made after boot.
 
+Rotate a config signing key
+----------------------------
+
+Use an overlap period so the selected config remains verifiable while
+signing changes from C to D.
+
+1. Create D on the operator and build a runtime with both certificates:
+
+   .. code-block:: console
+
+      operator$ shirudo genkey --keys-dir <config-D>
+      operator$ shirudo-gen-runtime --binary <target-binary> \
+          --bootstrap-conf runtime.conf --cert <bpf-cert> \
+          --config-cert <config-C>/cert.der \
+          --config-cert <config-D>/cert.der \
+          --keys-dir <config-C> --output runtime-CD
+
+   The repeated option puts both config certificates on the runtime
+   image and lists them in its bootstrap settings. Init enrolls both
+   before sealing ``.dm-verity``.
+
+2. Deploy the runtime and a UKI naming its root hash as
+   :doc:`upgrade` describes, then reboot when appropriate. The selected
+   C-signed config still verifies.
+
+3. Build a config with D and activate it:
+
+   .. code-block:: console
+
+      operator$ shirudo-gen-image --source <config-root> --output config-D \
+          --keys-dir <config-D> --kind config
+      target# shirudo image update <path>/config-D
+
+   Build a fresh image with a new root hash, not just a new signature over
+   an old cached image. The cache keeps the signature already stored for
+   a root. Verify ``shirudo image status`` and ``shirudo keys`` before
+   retiring C.
+
+4. Build and deploy another runtime and UKI with only D's certificate.
+   After the planned reboot the selected D-signed config verifies, and
+   C is no longer in the config keyring.
+
+No target command enrolls a config certificate or removes one live.
+Signatures by either enrolled key work during the overlap; two
+signatures on one image are not required.
+
 Limits
 ------
 
-These limits follow from the code as it is. :doc:`/security/threat-model`
-discusses the residual risks.
-
-- A signer that the first config did not enroll cannot be added to an
-  initialized target. ``image update`` refuses the config with
-  ``image: BPF signer was not enrolled at boot; reboot with the new
-  trusted key set required``, and a reboot does not select it either. No
-  supported procedure resets the activation record. Enroll standby
-  signers at first provisioning.
-- A config signed by a new config verification key cannot be activated
-  on an initialized target. Live activation verifies it under the
-  current ``.dm-verity`` keyring, and a new runtime image fails at boot
-  as the table above shows.
-- Tree publications verify only against the runtime primary
-  certificate. Revoking the primary in the config does not stop the
-  target from accepting tree publications that the primary signed, and a
-  vouched signer cannot sign them. Moving tree publishing to another key
-  takes a new runtime image.
-- A vouch carries no time. A vouch made by a key that was later revoked
-  still admits the certificate it vouches for. The config signer decides
-  which certificates are under ``keys/trusted``, so after a compromise,
-  revoke the certificates that only the compromised key vouched for as
-  well.
+- A live config activation cannot enroll a BPF key. Stage the config
+  and reboot instead.
+- A config certificate changes only with the authenticated runtime image
+  and a reboot. Removing the old key before changing the selected
+  config makes init refuse that config.
+- Revoking a BPF signer purges upatches it signed. Plan their replacement
+  before retiring the signer.
+- Vouches are historical authorizations. Revoking A does not
+  automatically revoke B merely because A vouched for it. After a
+  compromise, the config signer must explicitly revoke any certificate
+  whose authorization is no longer trusted.
 - A certificate's validity dates do not end its trust. shirudo verifies
   vouches and index and tree signatures without checking them.
-- Any key the kernel trusts for dm-verity signs a valid config. A config
-  can change repositories, the tree subscription, export destinations and
-  revocations.
+- Older signed configs can still be selected. Local rollback prevention
+  is not provided; a verifier must check the approved config root and
+  boot measurements. See :doc:`/security/threat-model`.
+
 
 Next steps
 ----------

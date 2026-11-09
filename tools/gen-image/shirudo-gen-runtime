@@ -13,11 +13,11 @@ usage: shirudo-gen-runtime --binary <shirudo-target> --bootstrap-conf <file>
        --cert <initial-BPF-cert.der> --config-cert <config-cert.der>
        --output <prefix> --keys-dir <operator-key-directory>
        [--size <MiB>] [--builder <shirudo-build>] [--unit-output <file>]
-       [--extra-binary <trusted-ELF>]
+       [--extra-binary <trusted-ELF>] [--config-cert <additional-cert.der>]
 
 Package the trusted executable without its symbols, bootstrap settings and
 public certificates. Static targets run directly. Dynamic executables bring
-their loader and libraries.
+their loader and libraries. Repeat --config-cert to allow overlapping keys.
 Use trusted inputs: ldd invokes dynamic loaders on the operator.
 EOF
 }
@@ -29,7 +29,7 @@ parse_args()
 		--binary) binary=${2:?}; shift 2 ;;
 		--bootstrap-conf) conf=${2:?}; shift 2 ;;
 		--cert) cert=${2:?}; shift 2 ;;
-		--config-cert) config_cert=${2:?}; shift 2 ;;
+		--config-cert) config_certs+=("${2:?}"); shift 2 ;;
 		--output) output=${2:?}; shift 2 ;;
 		--keys-dir) keys_dir=${2:?}; shift 2 ;;
 		--size) size=${2:?}; shift 2 ;;
@@ -50,11 +50,20 @@ elf_interpreter()
 
 check_inputs()
 {
-	local file
+	local file i j
 
-	for file in "$binary" "$conf" "$cert" "$config_cert"; do
+	for file in "$binary" "$conf" "$cert"; do
 		[ -n "$file" ] && [ -f "$file" ] ||
-			die 'binary, bootstrap config and both public certificates are required'
+			die 'binary, bootstrap config and BPF public certificate are required'
+	done
+	[ "${#config_certs[@]}" -gt 0 ] || die 'a config public certificate is required'
+	[ "${#config_certs[@]}" -le 16 ] || die 'at most 16 config certificates are allowed'
+	for ((i = 0; i < ${#config_certs[@]}; i++)); do
+		file=${config_certs[i]}
+		[ -f "$file" ] || die "config certificate not found: $file"
+		for ((j = 0; j < i; j++)); do
+			! cmp -s "$file" "${config_certs[j]}" || die 'duplicate config certificate'
+		done
 	done
 	check_image_options "$output" "$keys_dir" "$size"
 	require_command readelf 'install binutils (readelf)'
@@ -68,15 +77,32 @@ check_inputs()
 	fi
 }
 
+stage_config_certificates()
+{
+	local runtime_conf="$work/root/etc/shirudo/shirudo.conf"
+	local name i
+
+	awk '!/^[[:space:]]*config[.]verification_key[[:space:]]*=/' \
+		"$conf" >"$runtime_conf"
+	for ((i = 0; i < ${#config_certs[@]}; i++)); do
+		name=config-cert.der
+		if [ "$i" -gt 0 ]; then
+			name="config-cert-$((i + 1)).der"
+		fi
+		install -m 0644 "${config_certs[i]}" "$work/root/etc/shirudo/$name"
+		printf 'config.verification_key=/run/shirudo/runtime/etc/shirudo/%s\n' \
+			"$name" >>"$runtime_conf"
+	done
+}
+
 stage_files()
 {
 	mkdir -p "$work/root/usr/bin" "$work/root/etc/shirudo" "$work/root/keys"
 	# llvm-strip, unlike binutils strip, handles a target of another architecture.
 	llvm-strip -o "$work/root/usr/bin/shirudo" "$binary"
 	chmod 0755 "$work/root/usr/bin/shirudo"
-	install -m 0644 "$conf" "$work/root/etc/shirudo/shirudo.conf"
 	install -m 0644 "$cert" "$work/root/keys/cert.der"
-	install -m 0644 "$config_cert" "$work/root/etc/shirudo/config-cert.der"
+	stage_config_certificates
 	: >"$work/ldd"
 	: >"$work/interpreters"
 	if [ -n "$interpreter" ]; then
@@ -175,7 +201,7 @@ main()
 binary=
 conf=
 cert=
-config_cert=
+config_certs=()
 output=
 keys_dir=
 # The stripped static target with its certificates, plus about 1 MiB.

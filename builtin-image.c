@@ -17,6 +17,8 @@ static void image_help(void)
 		"usage: shirudo image build [image builder options]\n"
 		"       shirudo image verify <prefix> --cert <certificate>\n"
 		"       shirudo image update <prefix-or-https-prefix>\n"
+		"       shirudo image stage <prefix-or-https-prefix>\n"
+		"       shirudo image stage --cancel\n"
 		"       shirudo image status [--json]\n");
 }
 
@@ -25,7 +27,7 @@ int cmd_image(int argc, const char **argv)
 	int ret;
 
 	if (argc == 2 && !strcmp(argv[1], "--list-cmds")) {
-		puts("build verify update status");
+		puts("build verify update stage status");
 		return 0;
 	}
 	if (argc < 2 || !strcmp(argv[1], "--help") || !strcmp(argv[1], "-h")) {
@@ -39,6 +41,9 @@ int cmd_image(int argc, const char **argv)
 				     argc - 1, argv + 1);
 	if (!strcmp(argv[1], "update") && argc == 3) {
 		ret = image_update(argv[2]);
+	} else if (!strcmp(argv[1], "stage") && argc == 3) {
+		ret = !strcmp(argv[2], "--cancel") ? image_stage_cancel() :
+						    image_stage(argv[2]);
 	} else if (!strcmp(argv[1], "status") &&
 		   (argc == 2 || (argc == 3 && !strcmp(argv[2], "--json")))) {
 		ret = image_status(argc == 3);

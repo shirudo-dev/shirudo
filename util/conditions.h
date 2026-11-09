@@ -37,7 +37,7 @@ struct conditions_input {
 	int		dmv_serial_matches;	/* 0/1 if dmvm_seen */
 	int		dmvp_seen, dmvm_seen;
 	int		dmv_unfrozen;
-	int		dmv_key_missing;	/* init's config key is gone */
+	int		dmv_key_missing;	/* a config key init froze is gone */
 	int		tpm_reachable;
 	int		chain_seen;
 	int		chain_matches;		/* 0/1 if cm_seen */

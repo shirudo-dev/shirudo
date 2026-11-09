@@ -211,6 +211,11 @@ package as the next operations of the signed tree at
    * - ``--key``, ``--cert``
      - from the keys directory
      - Signing key and certificate.
+   * - ``--previous-cert``
+     - the signing certificate
+     - Certificate that verifies the existing publication. Use the old
+       certificate when the next publication will be signed by a new key.
+       It does not change the certificate used to sign the new publication.
    * - ``--tree-id``
      - the existing tree's, else the package name
      - Tree ID. It must match the existing tree.

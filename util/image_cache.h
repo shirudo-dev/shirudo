@@ -5,9 +5,17 @@
 #define SHIRUDO_IMAGE_CACHE_H
 
 struct config_update_target;
+struct config_image_open;
 
-/* The caller holds the update lock and owns the sealed cache directory. */
+typedef int (*image_cache_verify_fn)(const struct config_image_open *image,
+				     void *ctx);
+
+/*
+ * The caller holds the update lock and owns the sealed cache directory.
+ * verify authenticates the root before a kernel mapping is created.
+ */
 int image_cache_fetch(const char *source,
-		      struct config_update_target *target);
+		      struct config_update_target *target,
+		      image_cache_verify_fn verify, void *ctx);
 
 #endif /* SHIRUDO_IMAGE_CACHE_H */

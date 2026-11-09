@@ -183,6 +183,32 @@ void libc_free(void *p)
 {
 }
 
+void *xcalloc(size_t nmemb, size_t size)
+{
+	static struct trusted_set trusted;
+
+	__CPROVER_assert(nmemb == 1 && size == sizeof(trusted),
+			 "only the active signing set is allocated");
+	return fail_here() ? NULL : &trusted;
+}
+
+int image_config_root_fd(void)
+{
+	return 3;
+}
+
+int keys_load_image_root(const char *primary, int root_fd,
+			 bool with_trusted, struct trusted_set *trusted)
+{
+	trusted->n = 1;
+	return fail_here() ? -EIO : 0;
+}
+
+int keys_check_image_set(const struct trusted_set *trusted)
+{
+	return fail_here() ? -EKEYREJECTED : 0;
+}
+
 void xfree(void *p, size_t size)
 {
 }
@@ -224,6 +250,7 @@ const char *get_cert_path(void)
 int bpm_tree_fetch_publication(struct bpm_oci_client *c,
 			       const char *repository, const char *reference,
 			       const char *cert_path,
+			       const struct trusted_set *trusted,
 			       struct tree_publication *pub,
 			       char *manifest_digest, size_t digest_sz)
 {

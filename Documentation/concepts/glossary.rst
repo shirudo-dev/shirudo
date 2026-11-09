@@ -318,7 +318,7 @@ it.
    runtime image
       The dm-verity image, mounted read-only at ``/run/shirudo/runtime``,
       that carries the ``shirudo`` executable, the initial BPF certificate
-      ``keys/cert.der``, the config verification certificate and the
+      ``keys/cert.der``, the config verification certificates and the
       bootstrap settings. The UKI's initrd names its root hash, so the
       measured boot covers it. Every executable on it gains runtime
       authority when it runs. See :doc:`/internals/config-images`.

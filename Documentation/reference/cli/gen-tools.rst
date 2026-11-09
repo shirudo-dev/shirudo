@@ -98,6 +98,7 @@ shirudo-gen-runtime
                        --output <prefix> --keys-dir <dir>
                        [--size <mib>] [--builder <helper>]
                        [--unit-output <file>] [--extra-binary <file>]...
+                       [--config-cert <additional-certificate>]...
 
 Builds the runtime image, the image whose root hash the bootstrap
 settings pin. It holds:
@@ -106,8 +107,9 @@ settings pin. It holds:
   symbols and debug sections, as ``llvm-strip`` writes it
 - ``etc/shirudo/shirudo.conf``: ``--bootstrap-conf``
 - ``keys/cert.der``: ``--cert``, the initial BPF signing certificate
-- ``etc/shirudo/config-cert.der``: ``--config-cert``, the certificate
-  that verifies config images
+- ``etc/shirudo/config-cert.der``: the first ``--config-cert``;
+  additional certificates are ``config-cert-2.der``, ``config-cert-3.der``
+  and on. Any of them may sign a config image
 - for a dynamically linked binary, its ELF interpreter and libraries
   under their own paths, found with ``ldd``
 - each ``--extra-binary`` under ``usr/bin/`` with its libraries
@@ -140,7 +142,10 @@ trusted binaries. Requires ``readelf``, ``ldd`` and ``llvm-strip``.
      - The initial BPF signing certificate.
    * - ``--config-cert``
      - required
-     - The config image verification certificate.
+     - The config image verification certificate. Repeatable, at most 16.
+       With several certificates, the generator replaces the bootstrap's
+       ``config.verification_key`` entries with their installed paths.
+       With one certificate it preserves the bootstrap file.
    * - ``--output``
      - required
      - Output prefix.

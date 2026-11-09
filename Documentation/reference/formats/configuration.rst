@@ -86,9 +86,11 @@ Bootstrap keys
      - Absolute path under ``/run/shirudo/runtime/``
      - Allowed
      - Required
-     - DER certificate enrolled in the ``.dm-verity`` keyring to verify
-       config signatures. ``shirudo-gen-runtime`` installs it as
-       ``/run/shirudo/runtime/etc/shirudo/config-cert.der``.
+     - Repeatable, at most 16 DER certificates. Init enrolls them in
+       ``.dm-verity``; the target also checks signatures against this
+       exact set before mapping a config. ``shirudo-gen-runtime``
+       installs the first as ``etc/shirudo/config-cert.der`` and further
+       certificates as ``config-cert-2.der`` and on.
    * - ``config.pcr``
      - Decimal integer, 0 to 15, not 9 or 11
      - Allowed
@@ -106,6 +108,10 @@ Bootstrap rules:
 - A ``config.*`` or ``runtime.*`` key not in the table is refused with
   ``EINVAL``. A repeated ``runtime.image`` or ``runtime.root_hash`` is
   refused with ``EINVAL``.
+- A repeated ``config.verification_key`` adds another allowed certificate.
+  A repeated path is refused with ``EEXIST`` and more than 16 entries
+  with ``E2BIG``. Runtime loading also rejects duplicate public keys and
+  certificates other than ML-DSA-87.
 - A ``config.verification_key`` outside ``/run/shirudo/runtime/`` is
   refused with ``EPERM``.
 - A path is valid when it is absolute and contains no ``//``, ``/./`` or
@@ -258,7 +264,8 @@ All three files and the host file share one syntax:
 - One ``key = value`` per line. Blanks around the key and the value are
   removed.
 - A line whose first non-blank character is ``#`` is a comment.
-- A later line sets a key again.
+- A later line sets a key again, except the repeatable bootstrap
+  ``config.verification_key``, which adds another certificate.
 - A line without ``=`` is ignored, except in a bootstrap file and in the
   config image.
 
@@ -369,7 +376,9 @@ Runtime image
      - The initial BPF signing certificate (``--cert``), always in the
        trusted set.
    * - ``etc/shirudo/config-cert.der``
-     - The config verification certificate (``--config-cert``).
+     - The first config verification certificate (``--config-cert``).
+   * - ``etc/shirudo/config-cert-2.der`` and on
+     - Additional config verification certificates (repeat ``--config-cert``).
    * - The ELF interpreter and libraries
      - Copied at their own paths for a dynamic binary.
 

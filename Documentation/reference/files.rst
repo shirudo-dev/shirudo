@@ -189,12 +189,18 @@ the label as foreign. In the initrd, ``init`` binds
      - ``init``, ``image update``
      - ``0600``
      - Config activation record and its event history.
+   * - ``config-update/next-boot``
+     - ``image stage``, ``init``
+     - ``0600``
+     - Candidate config for the next TPM boot and its parent activation
+       sequence and boot counts. Removed on cancellation, successful
+       boot initialization or a live update to a different root.
    * - ``images/<root-hash>.img``, ``.verity``, ``.roothash``, ``.p7s``
-     - ``image update``
+     - ``image update``, ``image stage``
      - ``0600``
      - Fetched config images, named by their dm-verity root hash.
    * - ``images/incoming-XXXXXX/``
-     - ``image update``
+     - ``image update``, ``image stage``
      - none
      - Staging directory of a fetch.
 
@@ -263,8 +269,10 @@ to ``/run/shirudo/runtime/``.
    * - ``etc/shirudo/shirudo.conf``
      - Runtime settings.
    * - ``etc/shirudo/config-cert.der``
-     - Certificate that verifies config image signatures, named by
-       ``config.verification_key``.
+     - First config verification certificate. Additional
+       ``--config-cert`` inputs become ``config-cert-2.der`` and on.
+       The bootstrap's repeated ``config.verification_key`` entries name
+       all allowed certificates.
    * - ``keys/cert.der``
      - The initial BPF signing certificate.
    * - Library paths

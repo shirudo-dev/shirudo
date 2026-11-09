@@ -41,6 +41,8 @@ _shirudo()
 				--key --cert --salt --builder" -- "$cur") )
 		elif [[ $cur == -* && $sub == verify ]]; then
 			COMPREPLY=( $(compgen -W "--cert" -- "$cur") )
+		elif [[ $cur == -* && $sub == stage ]]; then
+			COMPREPLY=( $(compgen -W "--cancel" -- "$cur") )
 		elif [[ $cur == -* && $sub == status ]]; then
 			COMPREPLY=( $(compgen -W "--json" -- "$cur") )
 		else
@@ -155,8 +157,10 @@ _shirudo()
 			COMPREPLY=( $(compgen -W "sync append" -- "$cur") )
 		elif [[ $sub == tree && ${COMP_WORDS[3]} == sync && $cur == -* ]]; then
 			COMPREPLY=( $(compgen -W "--dry-run --report" -- "$cur") )
+		elif [[ $sub == tree && ${COMP_WORDS[3]} == append && $prev == --previous-cert ]]; then
+			COMPREPLY=( $(compgen -f -- "$cur") )
 		elif [[ $sub == tree && ${COMP_WORDS[3]} == append && $cur == -* ]]; then
-			COMPREPLY=( $(compgen -W "--keys-dir --key --cert --tree-id \
+			COMPREPLY=( $(compgen -W "--keys-dir --key --cert --previous-cert --tree-id \
 				--reference --op" -- "$cur") )
 		elif [[ $sub == tree && ${COMP_WORDS[3]} == append ]]; then
 			COMPREPLY=( $(compgen -f -X '!*.bee' -- "$cur") \

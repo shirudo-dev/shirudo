@@ -22,6 +22,8 @@ int image_boot_complete(void);
 int image_enter(const char *command, int argc, const char **argv);
 void image_leave(void);
 int image_update(const char *prefix);
+int image_stage(const char *prefix);
+int image_stage_cancel(void);
 int image_status(bool json);
 
 /*

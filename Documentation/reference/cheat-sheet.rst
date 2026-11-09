@@ -348,6 +348,20 @@ Activate a new config image on a target with :doc:`image update
 
    target# shirudo image update https://config.example/shirudo/config
 
+Select a config containing new vouched BPF signers for the next planned
+reboot with :doc:`image stage <cli/image>`. It leaves the active config,
+keyrings and measurements unchanged:
+
+.. code-block:: console
+
+   target# shirudo image stage https://config.example/shirudo/with-new-signer
+
+Cancel that selection before reboot:
+
+.. code-block:: console
+
+   target# shirudo image stage --cancel
+
 Show the config activation with :doc:`image status <cli/image>`. It exits
 with 1 while the activation is pending:
 

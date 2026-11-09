@@ -204,7 +204,8 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
      - Every state, pending record, tree eventlog replay and record of the
        pending operation, publications of 0 to 2 operations that
        ``tree_parse()`` lets through, every selector answer and every
-       failure below sync; strings of one byte
+       failure below sync, including loading and checking the active signing
+       set; strings of one byte
      - The writes of the Lean model ``Shirudo.TreeSync``, in its order,
        none after a failure, all of them when nothing fails
    * - ``bpm-upatch-member``
@@ -469,9 +470,9 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
      - ``bootstrap_parse()`` with ``read_text_line()``
      - One settings line of 0 to 8 bytes, every earlier state, failed
        reads and allocations
-     - A certificate under the runtime directory; a PCR only one the
-       config accepts; nothing changes the runtime outside the initial
-       settings
+     - A bounded set of certificates under the runtime directory; a PCR
+       only one the config accepts; nothing changes the runtime outside
+       the initial settings
    * - ``image-path``
      - ``image_path_valid()``
      - Up to 8 bytes

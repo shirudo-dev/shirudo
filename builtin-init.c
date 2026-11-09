@@ -489,7 +489,7 @@ static void collect_asymmetric(key_serial_t serial, const char *type,
 	k->serials[k->n++] = (__s32)serial;
 }
 
-/* Boot keys left the sealed keyring holding the config certificate alone. */
+/* Boot validation checked the complete config verification key set. */
 static int dm_verity_anchor(struct identity *id)
 {
 	struct anchor_keys keys = {};
@@ -509,13 +509,15 @@ static int dm_verity_anchor(struct identity *id)
 		       strerror(-err));
 		return err;
 	}
-	if (keys.n != 1) {
-		pr_err("dm-verity keyring %d holds %zu keys, not the config "
-		       "certificate alone", (int)ring, keys.n);
+	if (!keys.n || keys.overflow) {
+		pr_err("dm-verity keyring %d has an invalid key count %zu",
+		       (int)ring, keys.n);
 		return -EKEYREJECTED;
 	}
 	id->dm_verity_ring = (__s32)ring;
-	id->dm_verity_key = keys.serials[0];
+	id->n_dm_verity_keys = keys.n;
+	memcpy(id->dm_verity_keys, keys.serials,
+	       keys.n * sizeof(keys.serials[0]));
 	return 0;
 }
 

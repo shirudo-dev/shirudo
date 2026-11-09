@@ -902,13 +902,15 @@ testing/helper/test-image-config: testing/helper/test-image-config.c \
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(LIBCRYPTO_LIBS) $(LIBSSL_LIBS)
 
-testing/helper/test-image-cli: testing/helper/test-image-cli.c builtin-bpm.c \
+testing/helper/test-image-cli: testing/helper/test-image-cli.c \
+		testing/helper/image-cli.h builtin-bpm.c \
 		$(filter-out $(call obj,builtin-bpm.o),$(BUILTIN_OBJS)) \
 		$(UTIL_OBJS) $(VERSION_OBJ) $(LIBBPF_A)
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) $(RPATH_LDFLAGS) -o $@ \
-		$(filter-out builtin-bpm.c,$^) \
+		$(filter-out builtin-bpm.c testing/helper/image-cli.h,$^) \
 		-Wl,--wrap=bpm_tree_fetch_publication \
+		-Wl,--wrap=keys_load_image_root -Wl,--wrap=keys_check_image_set \
 		$(STATIC_LIBS) $(DYNAMIC_LIBS)
 
 testing/helper/test-image-cleanup: testing/helper/test-image-cleanup.c \
@@ -1003,7 +1005,8 @@ FUZZ_CONFIG := util/config.c util/image_config.c
 FUZZ_SEAL := util/seal.c $(FUZZ_CONFIG)
 FUZZ_OCI := util/bpm_oci.c util/io.c $(FUZZ_SEAL) util/crypto_openssl.c \
             util/tls_openssl.c
-FUZZ_PACKAGE := util/bpm_package.c util/bpm_tree.c util/upatch.c $(FUZZ_OCI)
+FUZZ_PACKAGE := util/bpm_package.c util/bpm_tree.c util/upatch.c \
+                util/keys.c $(FUZZ_OCI)
 
 FUZZ_TARGETS := $(patsubst %.c,%,$(wildcard testing/fuzz/fuzz-*.c))
 

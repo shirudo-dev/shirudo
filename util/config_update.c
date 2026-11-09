@@ -244,8 +244,8 @@ void config_update_close(struct config_update *update)
 	update->lock_fd = -1;
 }
 
-int config_update_read(struct config_update *update,
-		       struct config_update_record *out)
+static int selection_read(struct config_update *update, const char *name,
+			  struct config_update_record *out)
 {
 	char wire[RECORD_MAX];
 	struct stat st;
@@ -255,7 +255,7 @@ int config_update_read(struct config_update *update,
 
 	if (!update || update->dir_fd < 0 || !out)
 		return -EINVAL;
-	fd = openat(update->dir_fd, "state",
+	fd = openat(update->dir_fd, name,
 		    O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
 	if (fd < 0)
 		return -errno;
@@ -282,9 +282,16 @@ int config_update_read(struct config_update *update,
 	return ret;
 }
 
-static int state_save(struct config_update *update,
-		      const struct config_update_record *record,
-		      bool inject)
+int config_update_read(struct config_update *update,
+		       struct config_update_record *out)
+{
+	return selection_read(update, "state", out);
+}
+
+static int selection_save(struct config_update *update,
+			  const struct config_update_record *record,
+			  const char *name, const char *temporary,
+			  bool inject)
 {
 	char wire[RECORD_MAX];
 	size_t length;
@@ -293,9 +300,9 @@ static int state_save(struct config_update *update,
 	ret = record_encode(record, true, wire, sizeof(wire), &length);
 	if (ret)
 		return ret;
-	if (unlinkat(update->dir_fd, ".state.tmp", 0) && errno != ENOENT)
+	if (unlinkat(update->dir_fd, temporary, 0) && errno != ENOENT)
 		return -errno;
-	fd = openat(update->dir_fd, ".state.tmp",
+	fd = openat(update->dir_fd, temporary,
 		    O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
 	if (fd < 0)
 		return -errno;
@@ -309,15 +316,22 @@ static int state_save(struct config_update *update,
 	if (close(fd) && !ret)
 		ret = -errno;
 	if (!ret &&
-	    renameat(update->dir_fd, ".state.tmp", update->dir_fd, "state"))
+	    renameat(update->dir_fd, temporary, update->dir_fd, name))
 		ret = -errno;
 	if (!ret && inject)
 		ret = checkpoint(update, CONFIG_CHECK_STATE_RENAME);
 	if (!ret && fsync(update->dir_fd))
 		ret = -errno;
 	if (ret)
-		unlinkat(update->dir_fd, ".state.tmp", 0);
+		unlinkat(update->dir_fd, temporary, 0);
 	return ret;
+}
+
+static int state_save(struct config_update *update,
+		      const struct config_update_record *record,
+		      bool inject)
+{
+	return selection_save(update, record, "state", ".state.tmp", inject);
 }
 
 static bool same_boot(const struct config_update_record *a,
@@ -325,6 +339,13 @@ static bool same_boot(const struct config_update_record *a,
 {
 	return a->reset_count == b->reset_count &&
 	       a->restart_count == b->restart_count;
+}
+
+static bool same_target(const struct config_update_target *a,
+			const struct config_update_target *b)
+{
+	return !strcmp(a->prefix, b->prefix) &&
+	       !memcmp(a->root_hash, b->root_hash, 32);
 }
 
 static bool same_event(const struct config_update_record *a,
@@ -627,6 +648,79 @@ static int begin_event(struct config_update *update,
 	return complete(update);
 }
 
+int config_update_stage_read(struct config_update *update,
+			     struct config_update_record *out)
+{
+	return selection_read(update, "next-boot", out);
+}
+
+int config_update_clear_staged(struct config_update *update)
+{
+	if (!update || update->dir_fd < 0 || update->lock_fd < 0)
+		return -EINVAL;
+	if (unlinkat(update->dir_fd, "next-boot", 0))
+		return errno == ENOENT ? 0 : -errno;
+	return fsync(update->dir_fd) ? -errno : 0;
+}
+
+int config_update_stage(struct config_update *update,
+			const struct config_update_target *target)
+{
+	struct config_update_record record;
+	int ret;
+
+	if (!update || update->lock_fd < 0 || target_valid(target))
+		return -EINVAL;
+	ret = config_update_check(update, &record);
+	if (ret)
+		return ret;
+	record.target = *target;
+	return selection_save(update, &record, "next-boot", ".next-boot.tmp",
+			      false);
+}
+
+int config_update_staged(struct config_update *update,
+			 const struct config_update_record *previous,
+			 __u32 reset, __u32 restart,
+			 struct config_update_target *target)
+{
+	struct config_update_record staged;
+	int ret;
+
+	if (!previous || !target)
+		return -EINVAL;
+	ret = config_update_stage_read(update, &staged);
+	if (ret)
+		return ret == -ENOENT ? 0 : ret;
+	if (staged.pending)
+		return -EBADMSG;
+	if (staged.reset_count == reset && staged.restart_count == restart)
+		return 0;
+	if (same_target(&staged.target, &previous->target))
+		return 0;
+	if (staged.sequence != previous->sequence ||
+	    !same_boot(&staged, previous)) {
+		pr_warn("image: ignoring staged config because the active selection changed");
+		return 0;
+	}
+	*target = staged.target;
+	return 1;
+}
+
+static int complete_staged(struct config_update *update)
+{
+	struct config_update_record staged, current;
+	int ret;
+
+	ret = config_update_stage_read(update, &staged);
+	if (ret)
+		return ret == -ENOENT ? 0 : ret;
+	ret = config_update_read(update, &current);
+	if (ret || same_boot(&current, &staged))
+		return ret;
+	return config_update_clear_staged(update);
+}
+
 int config_update_begin(struct config_update *update,
 			const struct config_update_target *t,
 			__u32 pcr)
@@ -644,8 +738,15 @@ int config_update_begin(struct config_update *update,
 		return -EPERM;
 	if (!memcmp(t->root_hash, previous.target.root_hash, 32))
 		return 0;
-	return begin_event(update, t, &previous, pcr,
-			   CONFIG_EVENT_UPDATE);
+	ret = begin_event(update, t, &previous, pcr, CONFIG_EVENT_UPDATE);
+	if (!ret) {
+		int err = config_update_clear_staged(update);
+
+		if (err)
+			pr_warn("image: cannot remove obsolete staged config: %s",
+				strerror(-err));
+	}
+	return ret;
 }
 
 int config_update_boot(struct config_update *update,
@@ -653,6 +754,7 @@ int config_update_boot(struct config_update *update,
 		       __u32 pcr)
 {
 	struct config_update_record previous = {}, last;
+	struct config_update_target staged;
 	__u32 reset, restart;
 	int ret;
 
@@ -675,10 +777,14 @@ int config_update_boot(struct config_update *update,
 			return -EBUSY;
 		return config_update_check(update, NULL);
 	}
-	if (previous.sequence &&
-	    (strcmp(t->prefix, previous.target.prefix) ||
-	     memcmp(t->root_hash, previous.target.root_hash, 32)))
-		return -EUCLEAN;
+	if (previous.sequence && !same_target(t, &previous.target)) {
+		ret = config_update_staged(update, &previous, reset, restart,
+					   &staged);
+		if (ret < 0)
+			return ret;
+		if (!ret || !same_target(t, &staged))
+			return -EUCLEAN;
+	}
 	ret = events_scan(update, &last, NULL, NULL, previous.pending,
 			  NULL, NULL);
 	if (ret)
@@ -699,9 +805,11 @@ int config_update_complete_boot(struct config_update *update)
 
 	if (!update || update->dir_fd < 0)
 		return -EINVAL;
-	if (!update->boot_pending)
-		return config_update_check(update, NULL);
-	update->boot_pending = false;
-	ret = complete(update);
-	return ret;
+	if (!update->boot_pending) {
+		ret = config_update_check(update, NULL);
+	} else {
+		update->boot_pending = false;
+		ret = complete(update);
+	}
+	return ret ? ret : complete_staged(update);
 }

@@ -153,7 +153,10 @@ Build the runtime image
    boot: from then on the activation record selects the config.
    ``config.verification_key`` must be a path inside the runtime image,
    and ``shirudo-gen-runtime`` puts the config certificate at the path
-   shown. ``config.pcr`` is the TPM PCR that records config activations:
+   shown. For config-key overlap, repeat ``--config-cert`` when generating
+   the runtime; it installs numbered certificates and writes all their
+   paths into this bootstrap. See :doc:`/operate/maintain/keys`.
+   ``config.pcr`` is the TPM PCR that records config activations:
    0 to 15, except 9 and 11. Choose a PCR that nothing extends after the
    initrd has run, because a later extension makes every command but
    ``status`` refuse until the next reboot. :doc:`/operate/plan/hardening`

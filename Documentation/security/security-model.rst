@@ -65,9 +65,8 @@ What shirudo provides
    * - Delivered content is authentic
      - Indexes, tree publications and configs are signed; the kernel
        verifies loaders and config roots.
-     - A registry can withhold and replay; any key the kernel trusts for
-       dm-verity signs a config.
-     - :ref:`T7 <tm-t7>`, :ref:`T11 <tm-t11>`, R8, U2
+     - A registry can withhold and replay signed content.
+     - :ref:`T7 <tm-t7>`, :ref:`T11 <tm-t11>`, R8
 
 Main adversary
 --------------

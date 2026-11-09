@@ -86,7 +86,7 @@ static void keyring_condition(const struct conditions_input *in,
 			   in->dmv_unfrozen, in->dmv_unfrozen == 1 ? "" : "s");
 	else if (in->dmv_key_missing)
 		set_detail(c, "ALERT",
-			   "the config key init froze is gone from the dm-verity keyring");
+			   "a config key init froze is gone from the dm-verity keyring");
 	else if (in->ksp_seen && in->dmvp_seen)
 		set_detail(c, "OK",
 			   "bpf serial %lld, dm-verity serial %lld, pins match",

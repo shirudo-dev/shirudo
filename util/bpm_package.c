@@ -33,6 +33,7 @@
 #include "hex.h"
 #include "io.h"
 #include "json.h"
+#include "keys.h"
 #include "log.h"
 #include "malloc.h"
 #include "seal.h"
@@ -895,6 +896,7 @@ int bpm_tree_fetch_publication(struct bpm_oci_client *c,
 			       const char *repository,
 			       const char *reference,
 			       const char *cert_path,
+			       const struct trusted_set *trusted,
 			       struct tree_publication *pub,
 			       char *manifest_digest, size_t digest_sz)
 {
@@ -934,10 +936,11 @@ int bpm_tree_fetch_publication(struct bpm_oci_client *c,
 				 BPM_TREE_SIG_MEDIA, &payload, &sig);
 	if (ret)
 		goto out;
-	if (bpm_verify_cms(payload.data, payload.len, sig.data, sig.len, cert_path)) {
-		ret = -EKEYREJECTED;
+	ret = trusted ? keys_verify_signature(trusted, payload.data, payload.len,
+					      sig.data, sig.len, NULL) :
+	      bpm_verify_cms(payload.data, payload.len, sig.data, sig.len, cert_path);
+	if (ret)
 		goto out;
-	}
 	ret = tree_parse((const char *)payload.data, payload.len, pub);
 out:
 	xfree(layers, BPM_MAX_ENTRIES * sizeof(*layers));

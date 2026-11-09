@@ -202,18 +202,14 @@ without the protection.
      - No. shirudo checks neither Secure Boot nor where the initrd came
        from. ``init`` warns when PCR 11 holds no phase measurement.
    * - A7
-     - Only keys trusted to sign shirudo configs can sign a dm-verity
-       root. The kernel tries ``.builtin_trusted_keys`` (or the
-       secondary keyring with
-       ``CONFIG_DM_VERITY_VERIFY_ROOTHASH_SIG_SECONDARY_KEYRING``), then
-       the platform keyring with
-       ``CONFIG_DM_VERITY_VERIFY_ROOTHASH_SIG_PLATFORM_KEYRING``, and
-       only then ``.dm-verity``. Both options are off and no built-in
-       certificate belongs to a holder not trusted for configs.
+     - Config signing keys are selected by the authenticated runtime
+       bootstrap's repeated ``config.verification_key`` entries.
      - A config chooses repository certificates, vouched signers,
        revocations and export endpoints.
-     - No, see U2. The test ``t5102`` shows a built-in certificate
-       signing an accepted config root.
+     - Yes. Before mapping a config, the target verifies its root
+       signature against that exact certificate set. The kernel's
+       dm-verity signature check is required as well. A built-in,
+       secondary or platform key alone cannot authorize a config.
    * - A8
      - The TPM is reachable only through the kernel driver: no
        ``i2c-dev`` or ``spidev`` driver that root could bind to the
@@ -485,8 +481,8 @@ ADV-F, holder of a compromised or revoked signing key
    programs that write them: the maps are frozen against ``bpf()``
    writes, not against programs. An upatch does what its author wrote,
    disabling enforcement included. Keys it vouched for stay admitted
-   where a config lists them, and if it is the runtime image's primary
-   key it signs tree publications that revocation does not reach (U13).
+   where a config lists them (U13). Tree publications require a
+   non-revoked member of the active config's BPF signer set.
    A key that signs configs (A7) chooses repositories, vouched signers
    and revocations.
 
@@ -1013,7 +1009,8 @@ repository must match the digests in that index, and the loader in it
 is a signed upatch the kernel verifies at load (T1).
 
 ``shirudo bpm tree sync`` fetches a signed tree publication and verifies
-it against the runtime image's primary certificate. A publication
+it against the active config's non-revoked BPF signer set. Every
+member must also be present in the sealed ``.bpf`` keyring. A publication
 carries a digest for each operation, is the one the target recorded or
 has a higher generation, and names its parent, which the target
 compares when the generation is exactly one higher. A delete applies
@@ -1028,8 +1025,7 @@ negotiated.
 
 A registry can still withhold or replay signed content (R8). The
 environment of the bpm units selects parts of the transport (U3), index
-and tree signatures accept algorithms other than ML-DSA (U4), and
-revocation does not reach tree publications (U13).
+and tree signatures accept algorithms other than ML-DSA (U4).
 
 .. rst-class:: facts
 
@@ -1047,7 +1043,7 @@ revocation does not reach tree publications (U13).
    ``Shirudo.JsonString``, ``Shirudo.TreeSync``, ``bpm-tree-follows``,
    ``bpm-tree-sync-model``, ``bpm-tree-reader``, ``json-string``,
    ``json-limits``
-:Residual: R8, R9, U3, U4, U13, U15
+:Residual: R8, R9, U3, U4, U15
 
 T8 Quantum-capable adversaries against the trust anchor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1198,7 +1194,7 @@ bootstrap key or TPM setting, and cannot enroll a key while the target
 runs: a live activation that would trust a key the ``.bpf`` keyring does
 not hold refuses before it changes anything.
 
-Which keys can sign a config is A7, and U2 is the gap there.
+The configured certificate set determines which keys can sign a config (A7).
 
 .. rst-class:: facts
 
@@ -1216,7 +1212,7 @@ Which keys can sign a config is A7, and U2 is the gap there.
    ``t6113``, ``t6127``, ``t6130``, ``t6131``, ``t6132``
 :Proofs: ``config-image``, ``image-bootstrap``, ``image-path``,
    ``dm-names``
-:Residual: R5, R14, U2
+:Residual: R5, R14
 
 T12 Interrupted image activation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1474,7 +1470,7 @@ R13 Revocation reaches a target only through a config
    unlinked, the revocation is unmeasured and the purge does not run.
    At boot the revoked key is not enrolled, and the init event's
    certificate list shows it. A target that has not activated the
-   config still trusts the key. Vouches and tree publications are U13.
+   config still trusts the key. Historical vouches are U13.
 
 R14 Configs roll back
    shirudo accepts any validly signed config. A live activation cannot
@@ -1588,18 +1584,6 @@ U1 Verification passes without a pinned key or an expected state
       and ``--expect-config-root`` with ``--expect-config-pcr``. See
       :doc:`/operate/run/attest`.
 
-U2 Any key the kernel trusts for dm-verity signs a config
-   :Affects: Config images (A7).
-   :Consequence: A distribution's built-in key, and with the Kconfig
-      options of A7 a MOK or UEFI db key, signs a config the target
-      accepts, with its repositories, vouched signers, revocations and
-      export endpoints. shirudo cannot tell which key verified a root.
-   :Status: Confirmed in code and in the kernel; ``t5102`` exercises a
-      built-in certificate.
-   :Meanwhile: Build both options off, build in no certificate whose
-      holder is not trusted to sign configs, and verify with
-      ``--expect-config-root``.
-
 U3 The environment reaches authorized processes
    :Affects: The bpm and export units and any runtime command root
       starts.
@@ -1701,16 +1685,16 @@ U11 The boot continues when init fails
       prefers a halted boot can add an ``OnFailure=`` drop-in to
       ``shirudo-initrd.service``; this is not tested.
 
-U13 Revocation does not reach everything
-   :Affects: Tree publications and vouched keys (R13).
-   :Consequence: Tree publications verify against the runtime image's
-      primary certificate without a revocation check. Vouches carry no
-      time, and a revoked key's vouch for another key still admits it
-      when a config lists that key.
-   :Status: Confirmed in code.
-   :Meanwhile: Ship a new runtime image when the primary key is
-      compromised, and drop from the config every key the revoked key
-      vouched for.
+U13 A revoked signer's historical vouches remain valid
+   :Affects: Vouched keys (R13).
+   :Consequence: Vouches carry no time. A revoked key's vouch for another
+      key still admits it when a config lists that key. This supports
+      planned rotation but does not distinguish a legitimate earlier
+      vouch from one made with a compromised signing key.
+   :Status: Confirmed in code. Rotation preserves this existing rule.
+   :Meanwhile: When a signer is compromised, also remove or revoke every
+      dependent key whose authority should no longer be trusted. A
+      planned overlap is not sufficient compromise recovery by itself.
 
 U14 The operator runs commands from a registry package
    :Affects: ``shirudo bpm config update --base-package oci://...``
@@ -1870,8 +1854,7 @@ The verifier:
   ``--expect-bind-pcr=11=<value>`` (U9, R7, R12)
 - Gives an expected state: ``--cert`` with ``--upatch`` or ``--expect``
   and ``--tree-root``, or ``--expect-chain`` (U1)
-- Gives ``--expect-config-root`` with ``--expect-config-pcr`` (U2,
-  R14)
+- Gives ``--expect-config-root`` with ``--expect-config-pcr`` (R14)
 - Gives ``--strict-anchor`` where nothing else measures into PCR 9
   after ``init`` (R11), and ``--expect-pcr`` for the firmware, kernel and
   initrd values its policy accepts
