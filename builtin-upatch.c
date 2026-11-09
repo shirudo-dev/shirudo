@@ -1347,18 +1347,47 @@ static int pin_xdp_prog(int prog_fd, const char *dir, __u32 index)
 	return ret;
 }
 
+/*
+ * 0 with the link pinned at pin, XDP_ATTACH_UNSUPPORTED when the driver
+ * has no native XDP, or a negative errno. Unpinned, a closed link detaches,
+ * so a failure here leaves the device as it was.
+ */
+#define XDP_ATTACH_UNSUPPORTED	1
+
+static int xdp_attach_one(int prog_fd, const struct prog_spec *spec,
+			  const struct xdp_device *dev, const char *pin)
+{
+	LIBBPF_OPTS(bpf_link_create_opts, opts, .flags = XDP_FLAGS_DRV_MODE);
+	int fd, ret;
+
+	ret = xdp_device_verify(dev);
+	if (ret)
+		return ret;
+	fd = bpf_link_create(prog_fd, (int)dev->ifindex, BPF_XDP, &opts);
+	if (fd == -EOPNOTSUPP)
+		return XDP_ATTACH_UNSUPPORTED;
+	if (fd < 0)
+		return fd;
+	ret = link_matches_spec(fd, spec, dev->ifindex);
+	if (!ret)
+		ret = xdp_device_verify(dev);
+	if (!ret)
+		ret = obj_pin(fd, pin);
+	close(fd);
+	return ret;
+}
+
 static int attach_xdp_devices(int prog_fd, const struct prog_spec *spec,
 			      const struct xdp_device *devices, size_t count,
 			      const char *dir, __u32 *pinned)
 {
-	LIBBPF_OPTS(bpf_link_create_opts, opts, .flags = XDP_FLAGS_DRV_MODE);
 	__u32 attached = 0;
 	size_t i;
 
 	for (i = 0; i < count; i++) {
 		const struct xdp_device *dev = &devices[i];
 		char pin[PATH_MAX + 32];
-		int fd, ret;
+		int ret;
 
 		if (!xdp_device_selected(devices, count, i, spec->device_classes))
 			continue;
@@ -1366,28 +1395,17 @@ static int attach_xdp_devices(int prog_fd, const struct prog_spec *spec,
 			return -EOVERFLOW;
 		if (strsprintf(pin, sizeof(pin), "%s/link_%u", dir, *pinned) < 0)
 			return -ENAMETOOLONG;
-		ret = xdp_device_verify(dev);
-		if (ret)
-			return ret;
-		fd = bpf_link_create(prog_fd, (int)dev->ifindex, BPF_XDP, &opts);
-		if (fd == -EOPNOTSUPP) {
+		ret = xdp_attach_one(prog_fd, spec, dev, pin);
+		if (ret == XDP_ATTACH_UNSUPPORTED) {
 			pr_warn("XDP: skipping %s (ifindex %u, class %u): native XDP unsupported",
 				dev->name, dev->ifindex, xdp_device_class(dev));
 			continue;
 		}
-		if (fd < 0) {
+		if (ret < 0) {
 			pr_err("XDP: attach %s (ifindex %u): %s", dev->name,
-			       dev->ifindex, strerror(-fd));
-			return fd;
-		}
-		ret = link_matches_spec(fd, spec, dev->ifindex);
-		if (!ret)
-			ret = xdp_device_verify(dev);
-		if (!ret)
-			ret = obj_pin(fd, pin);
-		close(fd);
-		if (ret)
+			       dev->ifindex, strerror(-ret));
 			return ret;
+		}
 		(*pinned)++;
 		attached++;
 		pr_info("XDP: attached %s (ifindex %u, class %u) at %s",
