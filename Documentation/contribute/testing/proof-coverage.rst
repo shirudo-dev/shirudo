@@ -291,7 +291,8 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
        allocation allowed to fail
      - A refusal leaves nothing allocated and ``*out`` NULL; an accepted
        program has a known role and kind, a terminated target and map,
-       and uprobe fields only on a uprobe
+       uprobe fields only on a uprobe, and device classes, set and
+       within the known mask, only on XDP
    * - ``upatch-prog-uprobes``
      - The uprobe target records of ``prog_specs_parse()``
      - One program and one record in 226 bytes, path and build ID up to

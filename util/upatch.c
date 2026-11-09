@@ -690,7 +690,7 @@ int prog_specs_parse(const void *metadata, __u32 metadata_len,
 		case UPATCH_ATTACH_XDP:
 			spec->device_classes = le32_to_cpu(prog.xdp.device_classes);
 			if (!spec->device_classes ||
-			    (spec->device_classes & ~UPATCH_XDP_ALL) ||
+			    (spec->device_classes & ~(__u32)UPATCH_XDP_ALL) ||
 			    prog.xdp.reserved ||
 			    memcmp(prog.target, empty.target, sizeof(prog.target)) ||
 			    memcmp(prog.map, empty.map, sizeof(prog.map)))

@@ -6,7 +6,8 @@
  * length proofs.list names, with as many programs as it has room for:
  * prog_specs_parse() reads nothing outside it, gives every program a known
  * role and kind with terminated names, every uprobe an absolute path and
- * rising offsets, and frees all it took on refusal, as prog_specs_free() does.
+ * rising offsets, every XDP program known device classes, and frees all it
+ * took on refusal, as prog_specs_free() does.
  */
 
 #include "proof.h"
@@ -50,8 +51,11 @@ static void uprobe_valid(const struct prog_spec *s)
 static void attach_valid(const struct prog_spec *s)
 {
 	__CPROVER_assert(!s->map[0], "no map");
-	__CPROVER_assert(s->kind <= UPATCH_ATTACH_UPROBE_MULTI,
-			 "a known attach kind");
+	__CPROVER_assert(s->kind <= UPATCH_ATTACH_XDP, "a known attach kind");
+	if (s->kind == UPATCH_ATTACH_XDP)
+		__CPROVER_assert(s->device_classes &&
+				 !(s->device_classes & ~(__u32)UPATCH_XDP_ALL),
+				 "known device classes");
 	if (!needs_target(s->kind)) {
 		__CPROVER_assert(!s->target[0] && !s->offset,
 				 "no target or offset");
@@ -73,6 +77,9 @@ static void spec_valid(const struct prog_spec *s)
 	if (s->kind != UPATCH_ATTACH_UPROBE_MULTI)
 		__CPROVER_assert(!s->uprobe_path && !s->uprobe_offsets,
 				 "uprobe targets for uprobes alone");
+	if (s->kind != UPATCH_ATTACH_XDP)
+		__CPROVER_assert(!s->device_classes,
+				 "device classes for XDP alone");
 	switch (s->role) {
 	case UPATCH_PROG_ROLE_ATTACH:
 		attach_valid(s);
