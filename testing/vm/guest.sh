@@ -259,6 +259,23 @@ configure_image_identity()
 	mv -f /etc/os-release.tmp /etc/os-release
 }
 
+# Target tests run from this script in test mode and from an SSH session
+# otherwise, which inherits nothing from it.
+write_target_test_env()
+{
+	{
+		printf 'export SHIRUDO_BIN=%q\n' "$SHIRUDO_BIN"
+		printf 'export SHIRUDO_TEST_KEY_FIXTURES=%q\n' "$BUNDLE/verity"
+		printf 'export SHIRUDO_TEST_RESULTS=%q\n' /mnt/shirudo-out/verity
+		printf 'export SHIRUDO_TEST_FIXTURES_DIR=%q\n' "$BUNDLE/fixtures"
+		printf 'export SHIRUDO_TEST_FAILURES_FILE=%q\n' \
+			/mnt/shirudo-out/failed-tests
+		printf 'export SHIRUDO_TEST_SUITE_FAILURES_FILE=%q\n' \
+			/mnt/shirudo-out/failed-suites
+		printf 'export TEST_FILTER=%q\n' "${TEST_FILTER:-}"
+	} >/etc/shirudo-test-vm.env
+}
+
 configure_oci_ca
 configure_bpm_oci_repository
 configure_map_export
@@ -464,6 +481,7 @@ if [[ -n "${TEST_VM_BPM_TREE_INPUT:-}" ]]; then
 fi
 
 report_boot_memory
+write_target_test_env
 
 if [[ "$VM_MODE" == node ]]; then
 	log "node prepared; node mode runs no tests and starts no timers"
@@ -488,17 +506,17 @@ if [[ "$VM_MODE" == interactive ]]; then
 	exit 0
 fi
 
-log "running target tests: $TEST_VM_SUITE"
 : >/mnt/shirudo-out/failed-tests
 : >/mnt/shirudo-out/failed-suites
+if [[ "$VM_MODE" == serve ]]; then
+	log "guest prepared; the host runs the target tests over SSH"
+	exit 0
+fi
+
+log "running target tests: $TEST_VM_SUITE"
 (
 	cd testing
-	SHIRUDO_BIN="$SHIRUDO_BIN" \
-		SHIRUDO_TEST_KEY_FIXTURES="$BUNDLE/verity" \
-		SHIRUDO_TEST_RESULTS=/mnt/shirudo-out/verity \
-		SHIRUDO_TEST_FIXTURES_DIR="$BUNDLE/fixtures" \
-		SHIRUDO_TEST_FAILURES_FILE=/mnt/shirudo-out/failed-tests \
-		SHIRUDO_TEST_SUITE_FAILURES_FILE=/mnt/shirudo-out/failed-suites \
-		./run-target-tests.sh "$TEST_VM_SUITE"
+	. /etc/shirudo-test-vm.env
+	./run-target-tests.sh "$TEST_VM_SUITE"
 )
 log "integration suite passed"

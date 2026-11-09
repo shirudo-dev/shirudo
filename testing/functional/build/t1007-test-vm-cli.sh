@@ -511,12 +511,30 @@ test_expect_success 'test harness records a failed test title' '
 test_expect_success 'make -C testing vm and test-vm share named mode support' '
 	grep -q "^[[:space:]]*vm:" ../testing/Makefile &&
 	grep -q "VM_MODE=interactive" ../testing/Makefile &&
-	grep -Fq "VM_MODE=\$(or \$(4),test)" ../testing/Makefile &&
+	grep -Fq "VM_MODE=\$(or \$(4),\$(if \$(filter \$(1),\$(VM_SERVE_SUITES)),serve,test))" \
+		../testing/Makefile &&
 	grep -Fq "VMS_DIR=\"\${VM_ROOT}/vms\"" vm/run.sh &&
 	grep -Fq "mktemp -d \"\${VMS_DIR}/\${VM_MODE}\${VM_SUITE:+-\$VM_SUITE}-XXXXXX\"" \
 		vm/run.sh &&
 	grep -q "VM_TENANT" vm/run.sh &&
 	grep -q "while :; do sleep 3600; done" vm/run.sh
+'
+
+test_expect_success 'serve mode runs the end-to-end target tests over SSH' '
+	grep -q "^VM_SERVE_SUITES := end2end\$" ../testing/Makefile &&
+	! VM_MODE=other "$RUNNER" >"$WORK/mode.out" 2>&1 &&
+	grep -q "VM_MODE must be .interactive., .serve., .test. or .node." \
+		"$WORK/mode.out" &&
+	! VM_MODE=serve TEST_VM_SUITE= "$RUNNER" >"$WORK/serve-suite.out" 2>&1 &&
+	grep -q "serve mode requires TEST_VM_SUITE" "$WORK/serve-suite.out" &&
+	! TEST_VM_SUITE=register VM_MODE=serve TEST_VM_INITRD=0 \
+		"$RUNNER" >"$WORK/serve-register.out" 2>&1 &&
+	grep -q "register suite requires test mode" "$WORK/serve-register.out" &&
+	grep -q "} >/etc/shirudo-test-vm.env" vm/guest.sh &&
+	grep -Fq ". /etc/shirudo-test-vm.env && exec ./run-target-tests.sh \$VM_SUITE" \
+		vm/run.sh &&
+	grep -Fq "while [ ! -e /mnt/shirudo-out/host-done ]" vm/run.sh &&
+	grep -Fq ": >\"\$RUN_DIR/result/host-done\"" vm/run.sh
 '
 test_expect_success 'make -C testing vm boots a release kernel at or above the floor' '
 	grep -q "VM_KERNEL_MIN := 7.4" ../testing/Makefile &&

@@ -66,7 +66,10 @@ parser of input from outside the host gets a target in `testing/fuzz/`.
 - A family's target tests print only `[test-vm] result: PASS` or
   `FAIL`. Their TAP output is in
   `build/test-vm/vms/<name>/result/guest.log`, the exit status in
-  `result/status`.
+  `result/status`. The end-to-end VM's tests run over SSH from the
+  host, which appends their output to the same `guest.log`; there
+  `result/status` is only the guest's preparation, and `the SSH session
+  that ran the target tests failed` is the channel failing, not a test.
 - A fuzz failure leaves its input in `testing/fuzz/crash-<target>-*`.
   Run the target binary on that file to reproduce it. An `abort()` in
   the harness is a property that failed, which can be the harness's own.
@@ -154,7 +157,9 @@ make -C testing vm-clean VM_NAME=<name>
 
 Adding `VM_SSH_COMMAND='<command>'` to `vm-ssh` runs one command in the
 guest and returns. In the guest, `shirudo-runtime` is the runtime the
-initrd verified; `shirudo-runtime status` shows an initialized target.
+initrd verified; `shirudo-runtime status` shows an initialized target,
+and `. /etc/shirudo-test-vm.env` sets the environment a family run
+gives the target tests.
 The checkout is mounted read-only at `/workspace/shirudo`. Without
 `VM_NAME`, `vm-clean` removes all of `build/test-vm/`, the bundles and
 the cached runtime image included, so always name the VM.

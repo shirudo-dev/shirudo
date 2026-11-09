@@ -329,6 +329,11 @@ Ubuntu cloud image and a software TPM, and runs ``init`` from a dracut
 initrd with the dm-verity runtime image and a signed config image. The
 family runs, the end-to-end run and the interactive VM all boot it.
 
+A family's VM runs its target tests itself and powers off. The
+end-to-end VM prepares itself the same way and waits while the host runs
+its target tests over SSH, then powers off. The interactive VM stays up
+until you stop it.
+
 Build the test kernel
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -477,9 +482,11 @@ Boot an interactive VM
    * - ``TEST_VM_QEMU=<path>``
      - Another emulator, such as RHEL's ``/usr/libexec/qemu-kvm``.
    * - ``TEST_VM_TIMEOUT=<seconds>``
-     - How long a test-mode VM may run, 3600 by default. CI sets 900.
+     - How long a VM that runs tests may run, 3600 by default. CI sets
+       900.
    * - ``TEST_VM_VERBOSE=1``
-     - Streams the console of a test-mode VM to the terminal.
+     - Streams the console of a VM that runs tests to the terminal, and
+       what the end-to-end tests print over SSH.
 
 Inside the guest:
 
@@ -502,6 +509,8 @@ Inside the guest:
    * - ``/mnt/shirudo-out``
      - The result share, ``build/test-vm/vms/<name>/result/`` on the
        host.
+   * - ``/etc/shirudo-test-vm.env``
+     - The environment the target tests run with.
 
 .. _testing-by-hand:
 
@@ -518,9 +527,7 @@ Run a target test by hand
 
    .. code-block:: console
 
-      target# export SHIRUDO_BIN=/usr/local/bin/shirudo-runtime
-      target# export SHIRUDO_TEST_FIXTURES_DIR=/mnt/shirudo-bundle/fixtures
-      target# export SHIRUDO_TEST_KEY_FIXTURES=/mnt/shirudo-bundle/verity
+      target# . /etc/shirudo-test-vm.env
 
 3. Run one test, or all target tests of a family. The ``image`` tests
    need the result directories that ``run-target-tests.sh`` sets, so
@@ -622,7 +629,9 @@ CA. It builds ``kernel-obs`` into a package with ``bpm build``, pushes
 it with ``bpm push`` and appends it to a signed upatch tree with
 ``bpm tree append``. The target
 activates a signed config that points at the tree and the collector,
-and its units pull, verify, load and export. The host then verifies the
+and its units pull, verify, load and export. The VM's tests, ``t91??``,
+run over SSH from the host, which writes what they print to
+``result/guest.log`` as a family's VM does. The host then verifies the
 target's TPM evidence with ``attest verify`` and checks that the
 collector holds the package's records. The earlier ``kernel-obs`` tests
 export each map snapshot as local JSON and OTLP from one read; the host

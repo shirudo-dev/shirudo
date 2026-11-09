@@ -245,7 +245,8 @@ vm-ssh:
 		TEST_VM_WORK_DIR="$(TEST_VM_WORK_DIR)" $(ROOT)/testing/vm/run.sh --ssh
 
 define run-target-vm
-VM_MODE=$(or $(4),test) TEST_VM_SUITE="$(1)" VM_VERBOSE="$(TEST_VM_VERBOSE)" VM_NAME="$(2)" VM_TENANT="$(VM_TENANT)" \
+VM_MODE=$(or $(4),$(if $(filter $(1),$(VM_SERVE_SUITES)),serve,test)) \
+		TEST_VM_SUITE="$(1)" VM_VERBOSE="$(TEST_VM_VERBOSE)" VM_NAME="$(2)" VM_TENANT="$(VM_TENANT)" \
 		TEST_VM_INITRD="$(3)" \
 		TEST_VM_KERNEL="$(abspath $(VM_KERNEL_IMAGE))" \
 		TEST_VM_KERNEL_ARTIFACT_DIR="$(abspath $(VM_KERNEL_ARTIFACT_DIR))" \
@@ -278,6 +279,9 @@ family-list = $(shell cd $(ROOT)/testing/functional && \
 	awk -F/ '{ print substr($$2, 2, 1), $$1 }' | sort -u | cut -d' ' -f2)
 FAMILIES := $(call family-list,[0-9])
 VM_SUITES := $(call family-list,1) end2end
+# The host runs the end-to-end VM's target tests over SSH, where it can act
+# between them; the families' VMs run theirs themselves.
+VM_SERVE_SUITES := end2end
 vm-tests = $(if $(filter 0,$(VM)),:,$(MAKE) $(addprefix vm-test-,$(1)))
 .PHONY: $(addprefix unit/,$(UNIT_SUITES)) $(addprefix functional/,$(FAMILIES)) \
 	$(addprefix vm-test-,register $(VM_SUITES)) vm-node-end2end

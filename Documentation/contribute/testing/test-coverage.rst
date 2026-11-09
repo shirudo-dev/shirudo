@@ -96,8 +96,8 @@ signed config image.
        ``--dry-run`` plan
    * - ``t1007-test-vm-cli``
      - Test VM scripts: kernel selection, host dependencies, arm64
-       boot settings, the bundle stamp, node mode only for a core or
-       edge node of the end-to-end tier
+       boot settings, the bundle stamp, serve mode, node mode only for a
+       core or edge node of the end-to-end tier
    * - ``t1008-kernel-ami-config``
      - The slim kernel configuration for NitroTPM CRB, EC2, EFI and SSM
    * - ``t1009-upatch-isa``

@@ -4,17 +4,19 @@
 #
 # Boot an Ubuntu guest with a selected Linux kernel and an swtpm vTPM.
 # In test mode it runs the target tests of the family TEST_VM_SUITE names,
-# or the TPM register tests for "register"; in interactive mode it prepares
-# the guest and leaves QEMU and swtpm running. Node mode boots another
-# node of the end2end suite, with the role TEST_VM_NODE_ROLE names, core
-# by default or edge: prepared like the suite's VM, with no tests and no
-# timers, and left running until TEST_VM_TIMEOUT or a --stop.
+# or the TPM register tests for "register"; in serve mode the guest only
+# prepares itself and the host runs the family's target tests in it over
+# SSH; in interactive mode it prepares the guest and leaves QEMU and swtpm
+# running. Node mode boots another node of the end2end suite, with the role
+# TEST_VM_NODE_ROLE names, core by default or edge: prepared like the
+# suite's VM, with no tests and no timers, and left running until
+# TEST_VM_TIMEOUT or a --stop.
 #
-# VM_MODE=test|interactive|node selects the mode. VM_NAME optionally selects a
-# stable state directory; if omitted, a unique name is allocated atomically.
-# VM_TENANT is used as the map-export tenant when OTEL export is enabled.
-# VM_VERBOSE=1 streams test-mode QEMU output to the terminal as well as the
-# console log.
+# VM_MODE=test|serve|interactive|node selects the mode. VM_NAME optionally
+# selects a stable state directory; if omitted, a unique name is allocated
+# atomically. VM_TENANT is used as the map-export tenant when OTEL export is
+# enabled. VM_VERBOSE=1 streams the QEMU output of a VM that runs tests to
+# the terminal as well as the console log.
 
 set -euo pipefail
 
@@ -120,6 +122,7 @@ QEMU_UNIT_FILE=""
 QEMU_STATUS=1
 PROGRESS_LINES=0
 GUEST_STATUS=""
+SERVE_STATUS=0
 GUEST_MEMORY_REPORT=""
 HOST_MEMORY_REPORT=""
 FAILURE_LOG_DIR=""
@@ -172,19 +175,19 @@ validate_mode()
 			die "dm-verity requires TEST_VM_INITRD=1 and TEST_VM_SKIP_SEAL=0"
 	fi
 	case "$VM_MODE" in
-	interactive|test) ;;
+	interactive|serve|test) ;;
 	node)
 		[[ "$VM_SUITE" == end2end ]] ||
 			die "node mode boots a node of the end2end suite only"
 		[[ "$NODE_ROLE" == core || "$NODE_ROLE" == edge ]] ||
 			die "TEST_VM_NODE_ROLE must be 'core' or 'edge'"
 		;;
-	*) die "VM_MODE must be 'interactive', 'test' or 'node'" ;;
+	*) die "VM_MODE must be 'interactive', 'serve', 'test' or 'node'" ;;
 	esac
 	case "$VM_SUITE" in
 	'')
 		[[ "$VM_MODE" == interactive ]] ||
-			die "test mode requires TEST_VM_SUITE: register or a test family"
+			die "$VM_MODE mode requires TEST_VM_SUITE: register or a test family"
 		;;
 	register)
 		[[ "$VM_MODE" == test && "$VM_INITRD" == 0 && "$SKIP_SEAL" == 0 ]] ||
@@ -669,14 +672,75 @@ ssh_options()
 		-o GlobalKnownHostsFile=/dev/null
 		-o UserKnownHostsFile="${SSH_DIR}/known_hosts"
 		-o IdentityFile="${SSH_DIR}/id_ed25519"
+		-o ServerAliveInterval=15
+		-o ServerAliveCountMax=8
 		-p "$SSH_PORT"
 	)
 }
 
+wait_for_ssh()
+{
+	local _
+
+	for _ in {1..60}; do
+		ssh "${SSH_ARGS[@]}" -o BatchMode=yes root@127.0.0.1 true \
+			>/dev/null 2>&1 && return 0
+		sleep 1
+	done
+	return 1
+}
+
+# The family's target tests, run in the prepared guest from an SSH session
+# with the environment the guest wrote for them. What they print goes to
+# the guest log, where test mode puts it.
+run_target_tests_over_ssh()
+{
+	local guest_log="$RUN_DIR/result/guest.log" pid status
+
+	ssh_options
+	wait_for_ssh || {
+		log "error: SSH did not become ready for VM '$VM_NAME'"
+		return 255
+	}
+	log "running target tests over SSH: $VM_SUITE"
+	: >>"$guest_log"
+	GUEST_LOG_BYTES="$(wc -c <"$guest_log")"
+	ssh "${SSH_ARGS[@]}" -o BatchMode=yes root@127.0.0.1 \
+		"cd /workspace/shirudo/testing && . /etc/shirudo-test-vm.env && exec ./run-target-tests.sh $VM_SUITE" \
+		</dev/null >>"$guest_log" 2>&1 &
+	pid=$!
+	while kill -0 "$pid" 2>/dev/null; do
+		show_progress
+		sleep 0.2
+	done
+	wait "$pid"
+	status=$?
+	show_progress
+	return "$status"
+}
+
+# A serve-mode guest that prepared itself waits for the host-done marker in
+# its result share, then powers itself off as a test-mode guest does.
+serve_target_tests()
+{
+	local guest_status="" _
+
+	if [[ -s "$RUN_DIR/result/status" ]]; then
+		guest_status="$(<"$RUN_DIR/result/status")"
+	fi
+	[[ "$guest_status" == 0 ]] || return 0
+	run_target_tests_over_ssh
+	SERVE_STATUS=$?
+	: >"$RUN_DIR/result/host-done"
+	for _ in {1..1200}; do
+		kill -0 "$QEMU_PID" 2>/dev/null || return 0
+		sleep 0.1
+	done
+	die "VM '$VM_NAME' did not power off after its target tests (status $SERVE_STATUS)"
+}
+
 run_ssh()
 {
-	local ready=0
-
 	if [[ -z "$VM_NAME_REQUEST" ]]; then
 		select_latest_run_dir
 		VM_NAME_REQUEST="$VM_NAME"
@@ -690,15 +754,7 @@ run_ssh()
 	[[ "$SSH_PORT" =~ ^[0-9]+$ ]] ||
 		die "VM '$VM_NAME' has an invalid SSH port"
 	ssh_options
-	for _ in {1..60}; do
-		if ssh "${SSH_ARGS[@]}" -o BatchMode=yes \
-			root@127.0.0.1 true >/dev/null 2>&1; then
-			ready=1
-			break
-		fi
-		sleep 1
-	done
-	[[ "$ready" -eq 1 ]] ||
+	wait_for_ssh ||
 		die "SSH did not become ready for VM '$VM_NAME'"
 	if [[ -n "$VM_SSH_COMMAND" ]]; then
 		exec ssh "${SSH_ARGS[@]}" root@127.0.0.1 "$VM_SSH_COMMAND"
@@ -831,7 +887,7 @@ print_test_summary()
 	local result_share_warning=0
 	declare -A recorded_suites=()
 
-	[[ "$VM_MODE" == test ]] || return 0
+	[[ "$VM_MODE" == test || "$VM_MODE" == serve ]] || return 0
 	[[ -n "$RUN_DIR" && -d "$RUN_DIR" ]] || return 0
 
 	guest_log="$RUN_DIR/result/guest.log"
@@ -923,7 +979,8 @@ print_quiet_progress()
 	local guest_log="$RUN_DIR/result/guest.log"
 	local line_count
 
-	[[ "$VM_MODE" == test && "$VM_VERBOSE" != 1 ]] || return 0
+	[[ ( "$VM_MODE" == test || "$VM_MODE" == serve ) &&
+	   "$VM_VERBOSE" != 1 ]] || return 0
 	[[ -f "$guest_log" ]] || return 0
 	line_count="$(wc -l <"$guest_log")"
 	[[ "$line_count" =~ ^[0-9]+$ ]] || return 0
@@ -938,19 +995,46 @@ print_quiet_progress()
 }
 
 CONSOLE_BYTES=0
+GUEST_LOG_BYTES=0
 
 stream_verbose_console()
 {
 	local console_log="$RUN_DIR/console.log"
 	local byte_count
 
-	[[ "$VM_MODE" == test && "$VM_VERBOSE" == 1 ]] || return 0
+	[[ ( "$VM_MODE" == test || "$VM_MODE" == serve ) &&
+	   "$VM_VERBOSE" == 1 ]] || return 0
 	[[ -f "$console_log" ]] || return 0
 	byte_count="$(wc -c <"$console_log")"
 	[[ "$byte_count" =~ ^[0-9]+$ ]] || return 0
 	(( byte_count > CONSOLE_BYTES )) || return 0
 	tail -c "+$((CONSOLE_BYTES + 1))" "$console_log"
 	CONSOLE_BYTES="$byte_count"
+}
+
+# A serve-mode guest's tests print over SSH, not to its console.
+stream_verbose_tests()
+{
+	local guest_log="$RUN_DIR/result/guest.log"
+	local byte_count
+
+	[[ "$VM_MODE" == serve && "$VM_VERBOSE" == 1 ]] || return 0
+	[[ -f "$guest_log" ]] || return 0
+	byte_count="$(wc -c <"$guest_log")"
+	[[ "$byte_count" =~ ^[0-9]+$ ]] || return 0
+	(( byte_count > GUEST_LOG_BYTES )) || return 0
+	tail -c "+$((GUEST_LOG_BYTES + 1))" "$guest_log"
+	GUEST_LOG_BYTES="$byte_count"
+}
+
+show_progress()
+{
+	if [[ "$VM_VERBOSE" == 1 ]]; then
+		stream_verbose_console
+		stream_verbose_tests
+	else
+		print_quiet_progress
+	fi
 }
 
 cleanup()
@@ -967,7 +1051,8 @@ cleanup()
 	if [[ "$FINAL_STATUS" -ne 0 ]]; then
 		save_failure_logs
 	fi
-	if [[ "$VM_MODE" == test && -n "$RUN_DIR" && -d "$RUN_DIR" ]]; then
+	if [[ ( "$VM_MODE" == test || "$VM_MODE" == serve ) &&
+	      -n "$RUN_DIR" && -d "$RUN_DIR" ]]; then
 		print_test_summary
 		if [[ "$FINAL_STATUS" -eq 0 ]]; then
 			# A passed run keeps its logs, not the disks it booted.
@@ -1543,8 +1628,12 @@ cat >>"$USER_DATA" <<'EOF'
       fi
       printf '%s\n' "$rc" >/mnt/shirudo-out/status
       sync
-      if [ "${VM_MODE:-test}" != test ] && [ "$rc" -eq 0 ]; then
+      if { [ "${VM_MODE:-test}" = interactive ] ||
+           [ "${VM_MODE:-test}" = node ]; } && [ "$rc" -eq 0 ]; then
         while :; do sleep 3600; done
+      fi
+      if [ "${VM_MODE:-test}" = serve ] && [ "$rc" -eq 0 ]; then
+        while [ ! -e /mnt/shirudo-out/host-done ]; do sleep 1; done
       fi
       poweroff
       sleep 10
@@ -1793,24 +1882,17 @@ else
 	QEMU_PID=$!
 	wait_for_ssh_listener
 	while :; do
-		if [[ "$VM_VERBOSE" == 1 ]]; then
-			stream_verbose_console
-		else
-			print_quiet_progress
-		fi
+		show_progress
 		[[ -s "$RUN_DIR/result/status" ]] && break
 		kill -0 "$QEMU_PID" 2>/dev/null || break
 		sleep 0.2
 	done
 	capture_host_memory_report
+	[[ "$VM_MODE" != serve ]] || serve_target_tests
 	wait "$QEMU_PID"
 	QEMU_STATUS=$?
 	for _ in {1..5}; do
-		if [[ "$VM_VERBOSE" == 1 ]]; then
-			stream_verbose_console
-		else
-			print_quiet_progress
-		fi
+		show_progress
 		sleep 0.1
 	done
 	set -e
@@ -1822,6 +1904,11 @@ else
 		die "QEMU exited with status $QEMU_STATUS"
 	QEMU_PID=""
 	read_guest_status
+	case "$SERVE_STATUS" in
+	0) ;;
+	255) die "the SSH session that ran the target tests failed" ;;
+	*) die "target tests failed over SSH with status $SERVE_STATUS" ;;
+	esac
 
 	FINAL_STATUS=0
 fi
