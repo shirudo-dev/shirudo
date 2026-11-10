@@ -22,6 +22,7 @@
 #include <shirudo/string.h>
 #include <shirudo/upatch.h>
 
+#include "log.h"
 #include "malloc.h"
 #include "xdp.h"
 
@@ -603,6 +604,13 @@ static int device_compare(const void *a, const void *b)
 	       (left->ifindex < right->ifindex);
 }
 
+static bool lookup_failed(int err)
+{
+	return err == -ENOMEM || err == -ENOBUFS || err == -EMFILE ||
+	       err == -ENFILE || err == -ETIMEDOUT || err == -EPERM ||
+	       err == -EACCES || err == -EBADMSG;
+}
+
 static int devices_read_once(struct device_list *list)
 {
 	struct nl_request req = {
@@ -624,17 +632,35 @@ static int devices_read_once(struct device_list *list)
 		if (i && list->devices[i - 1].ifindex == dev->ifindex)
 			return -EAGAIN;
 		/*
-		 * A rename or removal racing the dump says nothing about
-		 * the other devices; without its facts this one can't be
-		 * classified, so it sits out this discovery.
+		 * A rename or removal racing the dump, or a driver or devlink
+		 * answer about this device alone, says nothing about the
+		 * others; without its facts this one can't be classified, so
+		 * it sits out this discovery. Only a failure is shown to the
+		 * operator. A lookup that could not be made at all would leave
+		 * every device out, so it fails the discovery.
 		 */
 		ret = device_details(dev);
-		if (ret == -EXDEV || ret == -ENODEV)
-			dev->unresolved = true;
-		else if (ret)
+		if (ret && lookup_failed(ret))
 			return ret;
+		if (ret) {
+			dev->unresolved = true;
+			if (ret != -EXDEV && ret != -ENODEV)
+				dev->unclassified_err = ret;
+		}
 	}
 	return 0;
+}
+
+void xdp_devices_warn_unclassified(const struct xdp_device *devs,
+				   size_t count)
+{
+	size_t i;
+
+	for (i = 0; i < count; i++)
+		if (devs[i].unclassified_err)
+			pr_warn("XDP: cannot classify %s (ifindex %u), it sits out: %s",
+				devs[i].name, devs[i].ifindex,
+				strerror(-devs[i].unclassified_err));
 }
 
 int xdp_devices_read(struct xdp_device **out, size_t *count)

@@ -379,6 +379,7 @@ struct uncovered_walk {
 	size_t			count;
 	bool			devices_read;
 	int			found;
+	char			why[128];
 };
 
 static int note_uncovered(int prog_fd, const struct prog_spec *spec,
@@ -399,6 +400,56 @@ static int note_uncovered(int prog_fd, const struct prog_spec *spec,
 	w->found++;
 	return w->cb(w->name, dev->name,
 		     xdp_uncovered_reason(attached, err, features), w->ctx);
+}
+
+static bool runs_program_of(const char *name, const struct prog_spec *specs,
+			    __u32 nr_progs, __u32 attached)
+{
+	__u32 i, id;
+	int fd;
+
+	for (i = 0; attached && i < nr_progs; i++) {
+		if (specs[i].kind != UPATCH_ATTACH_XDP)
+			continue;
+		fd = upatch_xdp_prog_open(name, i, &id);
+		if (fd < 0)
+			continue;
+		close(fd);
+		if (id == attached)
+			return true;
+	}
+	return false;
+}
+
+/*
+ * Whether name selects it is not known, so unless it runs name's program
+ * it may run without it.
+ */
+static int note_unclassified(struct uncovered_walk *w, const char *name,
+			     const struct prog_spec *specs, __u32 nr_progs)
+{
+	size_t i;
+	int ret;
+
+	for (i = 0; i < w->count; i++) {
+		const struct xdp_device *dev = &w->devices[i];
+		__u32 attached = 0;
+
+		if (!dev->unclassified_err)
+			continue;
+		if (!bpf_xdp_query_id((int)dev->ifindex, XDP_FLAGS_DRV_MODE,
+				      &attached) &&
+		    runs_program_of(name, specs, nr_progs, attached))
+			continue;
+		if (strsprintf(w->why, sizeof(w->why), "not classified: %s",
+			       strerror(-dev->unclassified_err)) < 0)
+			return -E2BIG;
+		w->found++;
+		ret = w->cb(name, dev->name, w->why, w->ctx);
+		if (ret)
+			return ret;
+	}
+	return 0;
 }
 
 /* An archive that changed is upatch_xdp_archives_changed()'s to report. */
@@ -427,6 +478,9 @@ static int xdp_uncovered(const struct measured_set *s, const char *name,
 		ret = upatch_xdp_each_uncovered(name, specs, u.hdr.nr_progs,
 						w->devices, w->count,
 						note_uncovered, w, &query_err);
+		if (!ret)
+			ret = note_unclassified(w, name, specs,
+						u.hdr.nr_progs);
 	}
 	prog_specs_free(specs, u.hdr.nr_progs);
 	upatch_close(&u);

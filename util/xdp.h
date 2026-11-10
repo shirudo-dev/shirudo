@@ -38,6 +38,8 @@ struct xdp_device {
 	char name[XDP_IFNAME_MAX];
 	__u32 ifindex;
 	__u32 peer_ifindex;
+	/* Why the driver or devlink facts could not be read, or 0. */
+	int unclassified_err;
 	__u32 flags;
 	__u32 port_index;
 	__u16 port_flavour;
@@ -64,7 +66,13 @@ int xdp_device_parse(const void *data, size_t len, struct xdp_device *out);
 __u32 xdp_device_class(const struct xdp_device *dev);
 bool xdp_device_selected(const struct xdp_device *devs, size_t count,
 			 size_t index, __u32 mask);
+/*
+ * A device whose facts cannot be read sits out, unresolved, rather than
+ * failing the read: it need not be one any upatch selects.
+ */
 int xdp_devices_read(struct xdp_device **out, size_t *count);
+void xdp_devices_warn_unclassified(const struct xdp_device *devs,
+				   size_t count);
 int xdp_device_verify(const struct xdp_device *expected);
 int xdp_features_parse(const void *data, size_t len, __u64 *features);
 int xdp_device_features(__u32 ifindex, __u64 *features);

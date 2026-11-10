@@ -258,7 +258,10 @@ verdict is derived from them.
        their XDP upatch: <upatch> on <device> (<why>)`` lists each
        device that does not, whatever the reason, with what the device
        reports: ``no native XDP``, ``no multi-buffer XDP``, ``another
-       XDP program attached`` or ``not attached``. A device added in the
+       XDP program attached`` or ``not attached``. ``not classified:
+       <error>`` is a device whose driver or devlink port could not be
+       read, so no upatch selects it; it is listed under every XDP
+       upatch it does not run, since any of them might select it. A device added in the
        last seconds shows ``not attached`` until ``upatch reconcile``
        attaches it, and one udev does not announce, such as a veth peer
        moving namespace, for up to a minute. One that stays listed is unfiltered. Its driver

@@ -1563,7 +1563,12 @@ R21 upatches can be neutralized by changing their targets
    order stay unloaded that boot. Neither a setting that survives a
    reboot, in the NIC's firmware or the hypervisor, nor a second upatch
    that selects the device can therefore take it out of an upatch
-   unseen, at the price of a host that boots without those upatches. A veth end moved to another namespace
+   unseen, at the price of a host that boots without those upatches. A
+   device whose driver name or devlink port cannot be read is the
+   exception: no class can be given to it, and any device's failing
+   lookup would otherwise stop ``init``, so it sits out with a warning
+   and ``status`` lists it as ``not classified`` under every XDP
+   upatch. A veth end moved to another namespace
    keeps its link, so a pair can hold two attachments, one of them running
    in that namespace. Reconcile adds no register event: TPM evidence covers
    the signed class mask and loaded artifact, not the device inventory or

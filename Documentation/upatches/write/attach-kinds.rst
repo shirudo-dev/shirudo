@@ -312,7 +312,14 @@ Pairs entirely outside the initial namespace are excluded. Discovery
 tolerates interfaces changing under it: a snapshot the kernel reports
 as interrupted is retried, and an interface renamed or removed during
 the snapshot, or a veth whose peer is not in it, is left out rather than
-failing the load. A kernel that does not answer a netlink request within
+failing the load. So is a device whose driver name or devlink port
+cannot be read, with a warning naming it: it need not be one the upatch
+selects, so it does not fail the load or the boot restore, and
+``status`` lists it under ``XdpCovered`` as ``not classified`` until a
+later read succeeds, unless it runs the upatch. A lookup that cannot be
+made at all, out of memory or descriptors, timed out, refused with
+``EPERM`` or ``EACCES``, still fails the load: it would leave every
+device out. A kernel that does not answer a netlink request within
 5 seconds fails the load with ``ETIMEDOUT``, and is not asked again.
 
 Links use ``XDP_FLAGS_DRV_MODE``. A device without native XDP, which

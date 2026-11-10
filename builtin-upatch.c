@@ -1497,6 +1497,7 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 			ret = xdp_devices_read(&devices, &nr_devices);
 		if (ret)
 			goto out;
+		xdp_devices_warn_unclassified(devices, nr_devices);
 	}
 	ret = mkdir_if_absent(dir, 0700, &made_dir);
 	if (ret) {
@@ -4599,6 +4600,7 @@ static int cmd_upatch_reconcile(int argc, const char **argv)
 				 "cannot read the interfaces");
 			goto done;
 		}
+		xdp_devices_warn_unclassified(devices, nr_devices);
 	}
 	for (n = 0; n < nr_work; n++)
 		if (reconcile_upatch(&work[n], devices, nr_devices, &rep))
