@@ -45,6 +45,9 @@ int upatch_each_link(const char *name,
 		     int (*cb)(__u32 index, const char *pin, void *ctx),
 		     void *ctx);
 
+/* Numbered link index in the pin directory dir: 0 or -ENAMETOOLONG. */
+int upatch_link_pin(char *out, size_t cap, const char *dir, __u32 index);
+
 /* The pin that keeps XDP program index of name loaded: 0 or -ENAMETOOLONG. */
 int upatch_xdp_prog_pin(char *out, size_t cap, const char *name, __u32 index);
 

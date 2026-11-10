@@ -39,7 +39,7 @@ void upatch_pins_note(struct upatch_pins *pins, const char *entry)
 
 	if (!strcmp(entry, "link")) {
 		pins->has_link = true;
-	} else if (pin_index(entry, "link_", &index)) {
+	} else if (pin_index(entry, LINK_PIN_PREFIX, &index)) {
 		if (!pins->nr_links || index < pins->first_link)
 			pins->first_link = index;
 		if (!pins->nr_links || index > pins->last_link)
@@ -116,7 +116,7 @@ int upatch_each_link(const char *name,
 	while (!ret && (e = readdir(d))) {
 		__u32 index;
 
-		if (!pin_index(e->d_name, "link_", &index))
+		if (!pin_index(e->d_name, LINK_PIN_PREFIX, &index))
 			continue;
 		if (strsprintf(pin, sizeof(pin), "%s/%s", dir, e->d_name) < 0)
 			ret = -ENAMETOOLONG;
@@ -125,6 +125,12 @@ int upatch_each_link(const char *name,
 	}
 	closedir(d);
 	return ret;
+}
+
+int upatch_link_pin(char *out, size_t cap, const char *dir, __u32 index)
+{
+	return strsprintf(out, cap, "%s/" LINK_PIN_PREFIX "%u", dir, index) < 0 ?
+	       -ENAMETOOLONG : 0;
 }
 
 int upatch_xdp_prog_pin(char *out, size_t cap, const char *name, __u32 index)

@@ -1313,22 +1313,24 @@ static void count_attach_progs(const struct prog_spec *specs,
 	*out = n;
 }
 
+/* entry in dir: 0 or -ENAMETOOLONG, as upatch_link_pin() returns. */
+static int path_in(char *out, size_t sz, const char *dir, const char *entry)
+{
+	return strsprintf(out, sz, "%s/%s", dir, entry) < 0 ? -ENAMETOOLONG : 0;
+}
+
 static int prog_pin_path(char *pin, size_t sz, const char *dir,
 			 const char *serializers_dir,
 			 const struct prog_spec *spec,
 			 __u32 attach_count, __u32 attach_idx)
 {
-	int n;
-
 	if (spec->role == UPATCH_PROG_ROLE_SERIALIZER)
-		n = strsprintf(pin, sz, "%s/%s", serializers_dir, spec->map);
-	else if (spec->role == UPATCH_PROG_ROLE_TEST_RUN)
-		n = strsprintf(pin, sz, "%s/test", dir);
-	else if (attach_count == 1)
-		n = strsprintf(pin, sz, "%s/link", dir);
-	else
-		n = strsprintf(pin, sz, "%s/link_%u", dir, attach_idx);
-	return n < 0 ? -ENAMETOOLONG : 0;
+		return path_in(pin, sz, serializers_dir, spec->map);
+	if (spec->role == UPATCH_PROG_ROLE_TEST_RUN)
+		return path_in(pin, sz, dir, "test");
+	if (attach_count == 1)
+		return path_in(pin, sz, dir, "link");
+	return upatch_link_pin(pin, sz, dir, attach_idx);
 }
 
 /*
@@ -1410,7 +1412,7 @@ static int attach_xdp_devices(int prog_fd, const struct prog_spec *spec,
 			continue;
 		if (*pinned == UINT32_MAX)
 			return -EOVERFLOW;
-		if (strsprintf(pin, sizeof(pin), "%s/link_%u", dir, *pinned) < 0)
+		if (upatch_link_pin(pin, sizeof(pin), dir, *pinned))
 			return -ENAMETOOLONG;
 		ret = xdp_attach_one(prog_fd, spec, dev, pin);
 		if (ret == XDP_ERR_NO_NATIVE) {
@@ -1564,11 +1566,10 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 				ret = -EOVERFLOW;
 				goto out;
 			}
-			if (strsprintf(pin, sizeof(pin), "%s/link_%u", dir,
-				       pinned_links) < 0) {
-				ret = -ENAMETOOLONG;
+			ret = upatch_link_pin(pin, sizeof(pin), dir,
+					      pinned_links);
+			if (ret)
 				goto out;
-			}
 		}
 
 		link_fd = prog_attach_for_spec(inner_fd, spec);
@@ -1630,8 +1631,8 @@ out:
 	if (ret) {
 		while (pinned_links) {
 			pinned_links--;
-			if (strsprintf(pin, sizeof(pin), "%s/link_%u", dir,
-				       pinned_links) >= 0)
+			if (!upatch_link_pin(pin, sizeof(pin), dir,
+					     pinned_links))
 				unlink(pin);
 		}
 		attach_seen = 0;
@@ -4400,7 +4401,7 @@ static int reconcile_attach(int prog_fd, const char *name,
 
 	if (*next == UINT32_MAX ||
 	    upatch_pin_path(dir, sizeof(dir), name, NULL) ||
-	    strsprintf(pin, sizeof(pin), "%s/link_%u", dir, *next) < 0) {
+	    upatch_link_pin(pin, sizeof(pin), dir, *next)) {
 		rep_fail(rep, "link_create", "unknown", ENAMETOOLONG,
 			 "no pin name left for the link");
 		return 1;

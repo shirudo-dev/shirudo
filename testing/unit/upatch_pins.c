@@ -113,6 +113,20 @@ static void xdp_program_pins_have_one_name(void)
 		  -ENAMETOOLONG);
 }
 
+static void link_pins_read_back_as_links(void)
+{
+	struct upatch_pins pins = {};
+	char pin[64], small[8];
+
+	ASSERT_EQ(upatch_link_pin(pin, sizeof(pin), "/d", 4294967295U), 0);
+	EXPECT_STREQ(pin, "/d/link_4294967295");
+	upatch_pins_note(&pins, pin + strlen("/d/"));
+	EXPECT_UEQ(pins.nr_links, 1);
+	EXPECT_UEQ(pins.last_link, 4294967295U);
+	EXPECT_EQ(upatch_link_pin(small, sizeof(small), "/d", 10),
+		  -ENAMETOOLONG);
+}
+
 static int count_pinned(const char *name, void *ctx)
 {
 	(*(int *)ctx)++;
@@ -136,6 +150,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(complete_means_every_link),
 	UNIT_CASE(absent_upatch_has_no_pins),
 	UNIT_CASE(xdp_program_pins_have_one_name),
+	UNIT_CASE(link_pins_read_back_as_links),
 	UNIT_CASE(no_pin_directory_is_no_upatch),
 	{}
 };
