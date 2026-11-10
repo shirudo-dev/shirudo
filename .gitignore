@@ -21,6 +21,9 @@
 
 # Local bpf-next kernel and userspace dependency artifacts
 /artifacts
+/infra/aws/packer/packer-manifest.json
+/infra/aws/packer/.shirudo-image-assets.tar.gz
+/infra/aws/packer/.shirudo-image-assets.lock/
 
 # Generated headers
 /vmlinux.h
