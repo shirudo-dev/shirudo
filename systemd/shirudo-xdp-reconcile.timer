@@ -6,7 +6,7 @@ Description=shirudo: periodically attach XDP upatches to new network devices
 
 [Timer]
 OnBootSec=5s
-OnUnitInactiveSec=5s
+OnUnitInactiveSec=60s
 AccuracySec=1s
 Unit=shirudo-xdp-reconcile.service
 

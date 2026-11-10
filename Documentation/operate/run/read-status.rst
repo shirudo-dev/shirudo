@@ -260,7 +260,8 @@ verdict is derived from them.
        reports: ``no native XDP``, ``no multi-buffer XDP``, ``another
        XDP program attached`` or ``not attached``. A device added in the
        last seconds shows ``not attached`` until ``upatch reconcile``
-       attaches it. One that stays listed is unfiltered. Its driver
+       attaches it, and one udev does not announce, such as a veth peer
+       moving namespace, for up to a minute. One that stays listed is unfiltered. Its driver
        refused the program, or a setting such as LRO turned its XDP off,
        or the reconcile units are stopped. ``WARN`` ``XDP coverage not
        checked: <error>`` means the check could not run.
@@ -669,6 +670,18 @@ away, such as an LRO setting, a smaller queue count or another XDP
 program, and the next ``upatch reconcile`` attaches it. Where the
 device cannot run XDP at all, sign the upatch with a class mask that
 leaves the device out.
+
+A device that stays listed also costs the target work on every
+reconcile pass. The pass takes the register lock, checks the archive
+again, retries the attach and logs a warning, every 60 seconds and on
+each udev event for the device, for as long as the device stays as it
+is. shirudo does not stop retrying on its own, because a pass has no
+memory of the last one. Treat a lasting ``XdpCovered`` warning as an
+alert. End it by undoing what makes the device refuse, or, if the device
+is meant to stay that way, by unloading the upatch (``upatch unload``
+with its unload directive, ``bpm uninstall``, or retracting it from the
+upatch tree) and loading one signed with a class mask that leaves the
+device out.
 
 The reason ``no TPM answered`` means the TPM stopped answering while
 ``status`` ran. On a production target every command first checks that

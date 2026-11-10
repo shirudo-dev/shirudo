@@ -406,8 +406,10 @@ The keepalive body is the ``shirudo status --json`` document.
        enforcement.
    * - ``XdpCovered`` with ``status`` ``WARN`` in several keepalives
      - A device an XDP upatch selects runs without it: its driver
-       refuses the program or its XDP was turned off. See
-       :doc:`/operate/run/read-status`.
+       refuses the program or its XDP was turned off. Each reconcile
+       pass retries it at a cost to the target until the device changes
+       or the upatch is unloaded. Alert on it, and end it as
+       :doc:`/operate/run/read-status` describes.
    * - ``shirudo.tamper_attempts`` rises
      - Something on the target tried an operation the guards refused.
        The counters start at zero each boot. See

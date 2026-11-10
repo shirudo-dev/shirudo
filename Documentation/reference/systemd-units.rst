@@ -221,8 +221,10 @@ The rule ``90-shirudo-xdp-reconcile.rules`` in
 network device other than ``lo`` appears. It is not ``RUN+=``, because a
 child of ``systemd-udevd`` inherits its seccomp filter and would get no
 task mark. A veth peer moving namespace gives the initial namespace no
-such event, so the timer is what catches it. The unit and the rule are not
-in the initrd. See :doc:`/reference/cli/upatch-reconcile`.
+such event, so the timer is what catches it, within a minute. The timer
+runs a pass 60 seconds after the previous one ends rather than more
+often because a device that keeps refusing costs a full retry on every
+pass. The unit and the rule are not in the initrd. See :doc:`/reference/cli/upatch-reconcile`.
 
 shirudo-map-export.service
 --------------------------
@@ -320,7 +322,7 @@ Timers
    * - ``shirudo-keepalive.timer``
      - ``OnBootSec=5s``, ``OnUnitInactiveSec=5s``, ``AccuracySec=1s``
    * - ``shirudo-xdp-reconcile.timer``
-     - ``OnBootSec=5s``, ``OnUnitInactiveSec=5s``, ``AccuracySec=1s``
+     - ``OnBootSec=5s``, ``OnUnitInactiveSec=60s``, ``AccuracySec=1s``
    * - ``shirudo-map-export.timer``
      - ``OnBootSec=5s``, ``OnUnitInactiveSec=5s``, ``AccuracySec=1s``
    * - ``shirudo-bpm-repo-update.timer``

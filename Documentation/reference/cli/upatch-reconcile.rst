@@ -45,7 +45,12 @@ device what it runs:
      - Leaves it. A program already on a device is never replaced.
 
 It also removes the pin of a link whose device is gone. A pass that has
-nothing to do does not take the register lock.
+nothing to do does not take the register lock. A selected device that
+keeps refusing is not nothing to do: every pass takes the lock, checks
+the archive again, retries it and logs a warning, on each udev event
+for the device and every 60 seconds from the timer. ``status`` reports
+such a device under ``XdpCovered``, and it is for the operator to end,
+as :doc:`/operate/run/read-status` describes.
 
 ``reconcile`` adds no event to the register: the measured state is the
 upatch, not the devices it reaches.

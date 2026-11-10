@@ -1550,7 +1550,7 @@ R21 upatches can be neutralized by changing their targets
    XDP coverage is reconciled, not continuous. A device added after load
    runs without the upatch until ``upatch reconcile`` next runs, and is
    unfiltered until then: normally seconds after its udev event, and up to
-   one pass plus five seconds when udev gives no signal, as for a veth
+   one pass plus 60 seconds when udev gives no signal, as for a veth
    peer moving namespace. A device stays uncovered while its XDP slot is
    occupied, it has no native XDP, its driver refuses the program, or
    root stops the timer and the udev rule. ``status`` lists every such
