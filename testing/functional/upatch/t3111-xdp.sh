@@ -165,7 +165,9 @@ test_xdp_success 'a later occupied device rolls back earlier successful links' '
 	load "$CONFLICT" &&
 	ip link add xdpa index 30000 type veth peer name xdpc index 30001 &&
 	ip link set xdpa up && ip link set xdpc up &&
-	! load "$NAME" &&
+	category=$("$SHIRUDO_BIN" upatch load "$FIXTURES/$NAME.upatch" \
+		--no-precheck --report=- 2>/dev/null | report_field category) &&
+	[ "$category" = xdp_device_occupied ] &&
 	[ ! -e "$B/$NAME" ] &&
 	[ "$("$H" query xdpa)" = 0 ] &&
 	[ "$("$H" query xdph0)" -gt 0 ] &&

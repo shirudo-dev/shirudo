@@ -258,10 +258,10 @@ one upatch must select disjoint classes: ``shirudo build`` refuses
 upatch that selects a class another upatch of the tree selects on the
 same nodes. Two upatches loaded another way can still select the same
 device. While such a device is there, the second one's ``upatch load``
-fails. When the device appears after both loaded, reconcile attaches the
-first, ``status`` lists the device for the second under ``XdpCovered``
-as ``another XDP program attached``, and the next boot restore fails on
-it.
+fails with ``xdp_device_occupied``. When the device appears after both
+loaded, reconcile attaches the first, ``status`` lists the device for
+the second under ``XdpCovered`` as ``another XDP program attached``, and
+the next boot restore fails on it.
 
 .. list-table::
    :header-rows: 1

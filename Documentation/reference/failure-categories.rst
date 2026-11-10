@@ -165,6 +165,16 @@ Categories
      - Change the setting that rules XDP out, which ``bnxt`` names in the
        kernel log, or narrow the signed device-class mask. See
        :doc:`/upatches/write/attach-kinds`.
+   * - ``xdp_device_occupied``
+     - ``link_create``
+     - ``EBUSY``
+     - A selected device already runs another XDP program, in any mode:
+       another upatch's, or one shirudo did not attach, generic and
+       offloaded programs included. The kernel holds one XDP program per
+       device. The load was undone.
+     - Unload the upatch that holds the device, detach the other
+       program, or narrow the signed device-class mask. See
+       :doc:`/upatches/write/attach-kinds`.
    * - ``binary_mismatch``
      - ``target_verify``, ``link_create``
      - ``ESTALE``

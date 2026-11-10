@@ -2300,6 +2300,8 @@ static int __upatch_apply(const char *path, bool verify_only,
 			cat = "xdp_multibuf_unsupported";
 		else if (ret == XDP_ERR_DRIVER_SETTINGS)
 			cat = "xdp_driver_refused";
+		else if (ret == XDP_ERR_OCCUPIED)
+			cat = "xdp_device_occupied";
 		else if (ret == XDP_ERR_LINK_SCOPE || ret == -EXDEV)
 			cat = "attach_scope_mismatch";
 		else if (ret > 0)

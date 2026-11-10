@@ -23,7 +23,7 @@
  *   signature_rejected, verifier_rejected, parser_rejected,
  *   payload_mismatch, already_loaded, already_unloaded, detach_failed,
  *   tpm_error, not_initialized, xdp_multibuf_unsupported,
- *   xdp_driver_refused, unknown.
+ *   xdp_driver_refused, xdp_device_occupied, unknown.
  */
 struct op_report {
 	bool		ok;

@@ -199,7 +199,8 @@ Exit status and failure categories
 ``signature_rejected``, ``signature_unsupported``, ``lsm_denied``,
 ``verifier_rejected``, ``attach_target_missing``, ``binary_mismatch``,
 ``attach_scope_mismatch``, ``xdp_multibuf_unsupported``,
-``xdp_driver_refused``, ``tpm_error`` and ``unknown``.
+``xdp_driver_refused``, ``xdp_device_occupied``, ``tpm_error`` and
+``unknown``.
 :doc:`/reference/failure-categories` gives the cause and the action for
 each. Handle ``tampered`` as an incident
 (:doc:`/operate/troubleshoot/incident-tampered`).
