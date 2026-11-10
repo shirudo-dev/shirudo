@@ -71,28 +71,31 @@ bool upatch_pin_measured(const struct measured_set *s, const char *name,
 			 __u8 payload[UPATCH_PAYLOAD_HASH_LEN]);
 
 /*
- * The XDP upatches the set holds whose archive is not what was loaded. cb
- * runs for each and a non-zero return ends the walk with that value. The
- * number found. The first check that could not run leaves its -errno in
- * *check_err, unless that already holds one.
+ * The checks status makes of the upatches the set holds, in one walk that
+ * reads and hashes each XDP archive once. Each callback that is not NULL
+ * runs for a hit, and a non-zero return ends the walk.
+ * changed: an XDP upatch whose archive is not what was loaded.
+ * lost: an upatch missing a link, or whose archive is gone or unusable.
+ * uncovered: a device an XDP upatch selects that does not run it, and why.
  */
-int upatch_xdp_archives_changed(const struct measured_set *s,
-				int (*cb)(const char *name, void *ctx),
-				void *ctx, int *check_err);
+struct upatch_checks {
+	int			(*changed)(const char *name, void *ctx);
+	void			*changed_ctx;
+	int			(*lost)(const char *name, void *ctx);
+	void			*lost_ctx;
+	int			(*uncovered)(const char *name, const char *dev,
+					     const char *why, void *ctx);
+	void			*uncovered_ctx;
+	int			nr_changed;
+	int			nr_lost;
+	int			nr_uncovered;
+	/* The first changed or lost check that could not run. */
+	int			check_err;
+	/* The first coverage check that could not run. */
+	int			coverage_err;
+};
 
-/* As upatch_xdp_archives_changed(), for a lost link or an unusable archive. */
-int upatch_links_lost(const struct measured_set *s,
-		      int (*cb)(const char *name, void *ctx), void *ctx,
-		      int *check_err);
-
-/*
- * The devices an XDP upatch the set holds selects and that do not run it.
- * cb runs for each with the upatch, the device and why. The number found,
- * with *check_err as above.
- */
-int upatch_xdp_uncovered(const struct measured_set *s,
-			 int (*cb)(const char *name, const char *dev,
-				   const char *why, void *ctx),
-			 void *ctx, int *check_err);
+/* The counts hold what was found even when a callback ends the walk. */
+void upatch_checks_run(const struct measured_set *s, struct upatch_checks *c);
 
 #endif /* SHIRUDO_UTIL_UPATCH_VERIFY_H */

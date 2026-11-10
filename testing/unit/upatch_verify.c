@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "paths.h"
 #include "unit.h"
 #include "upatch.h"
 #include "upatch_verify.h"
@@ -152,6 +153,23 @@ static void an_unpinned_xdp_program_does_not_open(void)
 	EXPECT_EQ(id, 0);
 }
 
+static int never(const char *name, void *ctx)
+{
+	return 1;
+}
+
+static void nothing_pinned_checks_clean(void)
+{
+	struct upatch_checks c = { .changed = never, .lost = never };
+
+	if (access(BPFFS_UPATCHES_DIR, F_OK) == 0)
+		unit_skip("upatches are pinned on this host");
+	upatch_checks_run(NULL, &c);
+	EXPECT_EQ(c.nr_changed + c.nr_lost + c.nr_uncovered, 0);
+	EXPECT_EQ(c.check_err, 0);
+	EXPECT_EQ(c.coverage_err, 0);
+}
+
 static const struct unit_case cases[] = {
 	UNIT_CASE(the_loaded_bytes_verify),
 	UNIT_CASE(another_payload_is_stale),
@@ -161,6 +179,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(links_of_a_missing_archive_are_stale),
 	UNIT_CASE(specs_of_a_missing_archive_are_stale),
 	UNIT_CASE(an_unpinned_xdp_program_does_not_open),
+	UNIT_CASE(nothing_pinned_checks_clean),
 	{}
 };
 

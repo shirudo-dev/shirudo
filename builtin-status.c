@@ -870,6 +870,14 @@ int cmd_status(int argc, const char **argv)
 	char xdp_tampered_names[UNMEASURED_NAMES] = "";
 	char links_lost_names[UNMEASURED_NAMES] = "";
 	char xdp_uncovered_names[UNMEASURED_NAMES] = "";
+	struct upatch_checks checks = {
+		.changed = note_unmeasured,
+		.changed_ctx = xdp_tampered_names,
+		.lost = note_unmeasured,
+		.lost_ctx = links_lost_names,
+		.uncovered = note_uncovered,
+		.uncovered_ctx = xdp_uncovered_names,
+	};
 	struct measured_set *mset = NULL;
 	int xdp_tampered = 0;
 	int xdp_coverage_rc = 0;
@@ -987,14 +995,12 @@ int cmd_status(int argc, const char **argv)
 			unmeasured = archived < 0 ? archived :
 				     unmeasured + archived;
 		}
-		xdp_tampered = upatch_xdp_archives_changed(mset, note_unmeasured,
-							   xdp_tampered_names,
-							   &checks_rc);
-		links_lost = upatch_links_lost(mset, note_unmeasured,
-					       links_lost_names, &checks_rc);
-		xdp_uncovered = upatch_xdp_uncovered(mset, note_uncovered,
-						     xdp_uncovered_names,
-						     &xdp_coverage_rc);
+		upatch_checks_run(mset, &checks);
+		xdp_tampered = checks.nr_changed;
+		links_lost = checks.nr_lost;
+		xdp_uncovered = checks.nr_uncovered;
+		checks_rc = checks.check_err;
+		xdp_coverage_rc = checks.coverage_err;
 		measured_set_free(mset);
 	}
 	eventlog_unlock(lock);
@@ -1067,8 +1073,7 @@ int cmd_status(int argc, const char **argv)
 	cin.checks_rc = checks_rc;
 	cin.xdp_uncovered = max(xdp_uncovered, 0);
 	cin.xdp_uncovered_detail = xdp_uncovered_names;
-	cin.xdp_coverage_rc = xdp_uncovered < 0 ? xdp_uncovered :
-			      xdp_coverage_rc;
+	cin.xdp_coverage_rc = xdp_coverage_rc;
 	keyring_cond_input(&cin, &bpf, &dmv);
 
 	if (json) {

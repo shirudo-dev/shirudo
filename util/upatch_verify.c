@@ -124,14 +124,32 @@ static int xdp_upatch_complete(const char *name, const struct prog_spec *specs,
 	return found == nr_attach - nr_xdp;
 }
 
+static int links_complete_specs(const char *name,
+				const struct prog_spec *specs, __u32 nr_progs)
+{
+	struct upatch_pins pins;
+	__u32 i, nr_attach = 0;
+	bool has_xdp = false;
+	int ret;
+
+	for (i = 0; i < nr_progs; i++) {
+		if (specs[i].role == UPATCH_PROG_ROLE_ATTACH)
+			nr_attach++;
+		if (specs[i].kind == UPATCH_ATTACH_XDP)
+			has_xdp = true;
+	}
+	if (has_xdp)
+		return xdp_upatch_complete(name, specs, nr_progs, nr_attach);
+	ret = upatch_pins_read(name, &pins);
+	return ret ? ret : upatch_pins_complete(&pins, nr_attach);
+}
+
 int upatch_links_complete(const char *name, const char *path)
 {
-	__u32 len, i, nr_attach = 0;
 	struct prog_spec *specs = NULL;
-	struct upatch_pins pins;
-	bool has_xdp = false;
 	const void *attach;
 	struct upatch u;
+	__u32 len;
 	int ret;
 
 	ret = upatch_open(path, &u);
@@ -144,44 +162,40 @@ int upatch_links_complete(const char *name, const char *path)
 		ret = stale_unless_resources(ret);
 		goto out;
 	}
-	for (i = 0; i < u.hdr.nr_progs; i++) {
-		if (specs[i].role == UPATCH_PROG_ROLE_ATTACH)
-			nr_attach++;
-		if (specs[i].kind == UPATCH_ATTACH_XDP)
-			has_xdp = true;
-	}
-	if (has_xdp) {
-		ret = xdp_upatch_complete(name, specs, u.hdr.nr_progs, nr_attach);
-	} else {
-		ret = upatch_pins_read(name, &pins);
-		if (!ret)
-			ret = upatch_pins_complete(&pins, nr_attach);
-	}
+	ret = links_complete_specs(name, specs, u.hdr.nr_progs);
 	prog_specs_free(specs, u.hdr.nr_progs);
 out:
 	upatch_close(&u);
 	return ret;
 }
 
-int upatch_archive_specs(const char *name,
-			 const __u8 payload[UPATCH_PAYLOAD_HASH_LEN],
-			 struct upatch *u, struct prog_spec **specs)
+/* -ESTALE for metadata that does not parse, -ENOMEM; u stays open. */
+static int upatch_verified_specs(const struct upatch *u,
+				 struct prog_spec **specs)
 {
 	const void *attach;
 	__u32 len;
 	int ret;
 
-	ret = upatch_archive_verify(name, payload, u);
-	if (ret)
-		return ret;
 	attach = upatch_signed_attach(u, &len);
 	ret = attach ? prog_specs_parse(attach, len, u->hdr.nr_maps,
 					u->hdr.nr_progs, specs) : -ESTALE;
-	if (ret) {
+	return !ret || ret == -ENOMEM ? ret : -ESTALE;
+}
+
+int upatch_archive_specs(const char *name,
+			 const __u8 payload[UPATCH_PAYLOAD_HASH_LEN],
+			 struct upatch *u, struct prog_spec **specs)
+{
+	int ret;
+
+	ret = upatch_archive_verify(name, payload, u);
+	if (ret)
+		return ret;
+	ret = upatch_verified_specs(u, specs);
+	if (ret)
 		upatch_close(u);
-		return ret == -ENOMEM ? ret : -ESTALE;
-	}
-	return 0;
+	return ret;
 }
 
 int upatch_xdp_prog_open(const char *name, __u32 index, __u32 *id)
@@ -262,121 +276,60 @@ bool upatch_pin_measured(const struct measured_set *s, const char *name,
 	return measured_holds(s, name, hex);
 }
 
-/* These return 1 for a hit, 0 for none, or -errno when they could not tell. */
-static int xdp_archive_changed(const struct measured_set *s, const char *name,
-			       void *ctx)
-{
-	__u8 payload[UPATCH_PAYLOAD_HASH_LEN];
-	struct upatch_pins pins;
-	struct upatch u;
-	int ret;
-
-	if (upatch_pins_read(name, &pins) || !pins.nr_xdp_progs ||
-	    !upatch_pin_measured(s, name, payload))
-		return 0;
-	ret = upatch_archive_verify(name, payload, &u);
-	if (!ret)
-		upatch_close(&u);
-	return ret == -ESTALE ? 1 : ret;
-}
-
-static int links_lost(const struct measured_set *s, const char *name,
-		      void *ctx)
-{
-	__u8 payload[UPATCH_PAYLOAD_HASH_LEN];
-	char path[PATH_MAX];
-	int ret;
-
-	if (!upatch_pin_measured(s, name, payload))
-		return 0;
-	if (strsprintf(path, sizeof(path), "%s/%s.upatch", UPATCHES_DIR,
-		       name) < 0)
-		return -ENAMETOOLONG;
-	ret = upatch_links_complete(name, path);
-	if (ret == 1)
-		return 0;
-	return !ret || ret == -ESTALE ? 1 : ret;
-}
-
-struct pinned_walk {
+struct checks_walk {
 	const struct measured_set	*s;
-	int				(*check)(const struct measured_set *s,
-						 const char *name, void *ctx);
-	int				(*cb)(const char *name, void *ctx);
-	void				*ctx;
-	int				*check_err;
-	int				found;
-	int				stopped;
+	struct upatch_checks		*c;
+	struct xdp_device		*devices;
+	size_t				count;
+	bool				devices_tried;
+	bool				devices_ok;
+	const char			*name;
+	char				why[128];
 };
 
-static int walk_one(const char *name, void *ctx)
+static void note_err(int *slot, int err)
 {
-	struct pinned_walk *w = ctx;
-	int result;
+	if (err < 0 && !*slot)
+		*slot = err;
+}
 
-	result = w->check(w->s, name, w->ctx);
-	if (result < 0 && !*w->check_err)
-		*w->check_err = result;
-	if (result <= 0)
+static int note_changed(struct checks_walk *w, const char *name)
+{
+	w->c->nr_changed++;
+	return w->c->changed ? w->c->changed(name, w->c->changed_ctx) : 0;
+}
+
+/* complete is 1, 0 or -errno, as upatch_links_complete() returns. */
+static int note_links(struct checks_walk *w, const char *name, int complete)
+{
+	if (complete == 1)
 		return 0;
-	w->found++;
-	if (w->cb)
-		w->stopped = w->cb(name, w->ctx);
-	return w->stopped;
+	if (complete < 0 && complete != -ESTALE) {
+		note_err(&w->c->check_err, complete);
+		return 0;
+	}
+	w->c->nr_lost++;
+	return w->c->lost ? w->c->lost(name, w->c->lost_ctx) : 0;
 }
 
-/* check gets ctx as well, and cb may be NULL. */
-static int walk_pinned(const struct measured_set *s,
-		       int (*check)(const struct measured_set *s, const char *name,
-				    void *ctx),
-		       int (*cb)(const char *name, void *ctx), void *ctx,
-		       int *check_err)
+/* Read from the archive as it is, for an upatch the hash does not vouch for. */
+static int note_links_unverified(struct checks_walk *w, const char *name)
 {
-	struct pinned_walk w = {
-		.s = s, .check = check, .cb = cb, .ctx = ctx,
-		.check_err = check_err,
-	};
-	int ret;
+	char path[PATH_MAX];
 
-	ret = upatch_each_pinned(walk_one, &w);
-	if (w.stopped)
-		return w.stopped;
-	if (ret && !*check_err)
-		*check_err = ret;
-	return w.found;
+	if (strsprintf(path, sizeof(path), "%s/%s.upatch", UPATCHES_DIR,
+		       name) < 0) {
+		note_err(&w->c->check_err, -ENAMETOOLONG);
+		return 0;
+	}
+	return note_links(w, name, upatch_links_complete(name, path));
 }
-
-int upatch_xdp_archives_changed(const struct measured_set *s,
-				int (*cb)(const char *name, void *ctx),
-				void *ctx, int *check_err)
-{
-	return walk_pinned(s, xdp_archive_changed, cb, ctx, check_err);
-}
-
-int upatch_links_lost(const struct measured_set *s,
-		      int (*cb)(const char *name, void *ctx), void *ctx,
-		      int *check_err)
-{
-	return walk_pinned(s, links_lost, cb, ctx, check_err);
-}
-
-struct uncovered_walk {
-	int			(*cb)(const char *name, const char *dev,
-				      const char *why, void *ctx);
-	void			*ctx;
-	const char		*name;
-	struct xdp_device	*devices;
-	size_t			count;
-	bool			devices_read;
-	int			found;
-	char			why[128];
-};
 
 static int note_uncovered(int prog_fd, const struct prog_spec *spec,
 			  const struct xdp_device *dev, __u32 attached,
 			  void *ctx)
 {
-	struct uncovered_walk *w = ctx;
+	struct checks_walk *w = ctx;
 	__u64 features = 0;
 	int err = 0;
 
@@ -387,9 +340,10 @@ static int note_uncovered(int prog_fd, const struct prog_spec *spec,
 			return 0;
 		err = xdp_device_features(dev->ifindex, &features);
 	}
-	w->found++;
-	return w->cb(w->name, dev->name,
-		     xdp_uncovered_reason(attached, err, features), w->ctx);
+	w->c->nr_uncovered++;
+	return w->c->uncovered(w->name, dev->name,
+			       xdp_uncovered_reason(attached, err, features),
+			       w->c->uncovered_ctx);
 }
 
 static bool runs_program_of(const char *name, const struct prog_spec *specs,
@@ -415,7 +369,7 @@ static bool runs_program_of(const char *name, const struct prog_spec *specs,
  * Whether name selects it is not known, so unless it runs name's program
  * it may run without it.
  */
-static int note_unclassified(struct uncovered_walk *w, const char *name,
+static int note_unclassified(struct checks_walk *w, const char *name,
 			     const struct prog_spec *specs, __u32 nr_progs)
 {
 	size_t i;
@@ -430,65 +384,112 @@ static int note_unclassified(struct uncovered_walk *w, const char *name,
 		if (strsprintf(w->why, sizeof(w->why), "not classified: %s",
 			       strerror(-dev->unclassified_err)) < 0)
 			return -E2BIG;
-		w->found++;
-		ret = w->cb(name, dev->name, w->why, w->ctx);
+		w->c->nr_uncovered++;
+		ret = w->c->uncovered(name, dev->name, w->why,
+				      w->c->uncovered_ctx);
 		if (ret)
 			return ret;
 	}
 	return 0;
 }
 
-/* An archive that changed is upatch_xdp_archives_changed()'s to report. */
-static int xdp_uncovered(const struct measured_set *s, const char *name,
-			 void *ctx)
+static int check_coverage(struct checks_walk *w, const char *name,
+			  const struct prog_spec *specs, __u32 nr_progs)
+{
+	int ret;
+
+	if (!w->c->uncovered)
+		return 0;
+	/*
+	 * Under the lock, as the pins are: a load that attaches between the
+	 * two reads would otherwise show its device as not attached.
+	 */
+	if (!w->devices_tried) {
+		w->devices_tried = true;
+		ret = xdp_devices_read(&w->devices, &w->count);
+		note_err(&w->c->coverage_err, ret);
+		w->devices_ok = !ret;
+	}
+	if (!w->devices_ok)
+		return 0;
+	w->name = name;
+	ret = upatch_xdp_each_uncovered(name, specs, nr_progs, w->devices,
+					w->count, note_uncovered, w);
+	if (!ret)
+		ret = note_unclassified(w, name, specs, nr_progs);
+	if (ret < 0) {
+		note_err(&w->c->coverage_err, ret);
+		return 0;
+	}
+	return ret;
+}
+
+/*
+ * One verified read of an XDP upatch's archive serves the three checks:
+ * its hash, the links its metadata implies and the devices it selects.
+ */
+static int check_one(const char *name, void *ctx)
 {
 	__u8 payload[UPATCH_PAYLOAD_HASH_LEN];
-	struct uncovered_walk *w = ctx;
+	struct checks_walk *w = ctx;
 	struct prog_spec *specs = NULL;
 	struct upatch_pins pins;
 	struct upatch u;
 	int ret;
 
-	if (upatch_pins_read(name, &pins) || !pins.nr_xdp_progs ||
-	    !upatch_pin_measured(s, name, payload))
+	if (!upatch_pin_measured(w->s, name, payload))
 		return 0;
-	ret = upatch_archive_specs(name, payload, &u, &specs);
-	if (ret)
-		return ret == -ESTALE ? 0 : ret;
-	if (!w->devices_read) {
-		ret = xdp_devices_read(&w->devices, &w->count);
-		w->devices_read = !ret;
+	if (upatch_pins_read(name, &pins) || !pins.nr_xdp_progs)
+		return note_links_unverified(w, name);
+	ret = upatch_archive_verify(name, payload, &u);
+	if (ret == -ESTALE) {
+		ret = note_changed(w, name);
+		return ret ? ret : note_links_unverified(w, name);
 	}
-	if (!ret) {
-		w->name = name;
-		ret = upatch_xdp_each_uncovered(name, specs, u.hdr.nr_progs,
-						w->devices, w->count,
-						note_uncovered, w);
-		if (!ret)
-			ret = note_unclassified(w, name, specs,
-						u.hdr.nr_progs);
+	if (ret) {
+		note_err(&w->c->check_err, ret);
+		note_err(&w->c->coverage_err, ret);
+		return note_links_unverified(w, name);
 	}
+	/* The bytes are what was loaded; metadata it cannot parse is a lost link. */
+	ret = upatch_verified_specs(&u, &specs);
+	if (ret) {
+		upatch_close(&u);
+		if (ret != -ESTALE) {
+			note_err(&w->c->check_err, ret);
+			note_err(&w->c->coverage_err, ret);
+			return 0;
+		}
+		return note_links(w, name, ret);
+	}
+	ret = note_links(w, name, links_complete_specs(name, specs,
+						       u.hdr.nr_progs));
+	if (!ret)
+		ret = check_coverage(w, name, specs, u.hdr.nr_progs);
 	prog_specs_free(specs, u.hdr.nr_progs);
 	upatch_close(&u);
 	return ret;
 }
 
-int upatch_xdp_uncovered(const struct measured_set *s,
-			 int (*cb)(const char *name, const char *dev,
-				   const char *why, void *ctx),
-			 void *ctx, int *check_err)
+void upatch_checks_run(const struct measured_set *s, struct upatch_checks *c)
 {
-	struct uncovered_walk w = { .cb = cb, .ctx = ctx };
+	struct checks_walk w = { .s = s, .c = c };
 	int ret;
 
-	/* Elsewhere the devices and their indexes are another namespace's. */
-	ret = netns_initial();
-	if (ret) {
-		if (!*check_err)
-			*check_err = ret;
-		return 0;
+	/*
+	 * Elsewhere the devices are another namespace's, whether or not an
+	 * XDP upatch is found to check them against.
+	 */
+	if (c->uncovered) {
+		ret = netns_initial();
+		note_err(&c->coverage_err, ret);
+		w.devices_tried = ret != 0;
 	}
-	ret = walk_pinned(s, xdp_uncovered, NULL, &w, check_err);
+	ret = upatch_each_pinned(check_one, &w);
+	/* Nothing walked is nothing checked, coverage included. */
+	if (ret < 0) {
+		note_err(&c->check_err, ret);
+		note_err(&c->coverage_err, ret);
+	}
 	xfree(w.devices, size_mul(w.count, sizeof(*w.devices)));
-	return ret < 0 ? ret : w.found;
 }
