@@ -199,7 +199,7 @@ signed config image.
    * - ``t3111-xdp``
      - Native XDP class selection, veth pair deduplication with both
        endpoint index orderings, cross-namespace pairs, a bridge without
-       native XDP skipped, rollback, signed unload and descriptor
+       native XDP skipped and listed under ``XdpCovered``, rollback, signed unload and descriptor
        and alternate-attachment lockdown; a repeated init adopts the
        archived XDP without another event. A veth with a peer MTU of 9000
        and the ``virtio_net`` guest adapter at MTU 9000 attach, which only a
@@ -214,6 +214,10 @@ signed config image.
        the ``upatch_verify`` unit cases. An unload racing a pass is not
        reported as tampering, and a veth with too few rx queues, which
        its driver refuses, is warned about without stopping the pass.
+       ``status`` lists a selected device under ``XdpCovered`` until a
+       pass attaches it, and the refused veth for good. The reasons and
+       the verdict are covered by the ``xdp`` and ``conditions`` unit
+       cases.
 
 ``tpm`` (4)
 ~~~~~~~~~~~

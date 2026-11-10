@@ -70,9 +70,11 @@ test_xdp_success 'a device added after load is attached, once' '
 	load "$NAME" &&
 	add_pair xdpc 30010 xdpd 30011 &&
 	[ "$("$H" query xdpc)" = 0 ] &&
+	"$SHIRUDO_BIN" status | grep -q "XdpCovered *WARN .*$NAME on xdpc (not attached)" &&
 	reconcile &&
 	[ "$("$H" query xdpc)" -gt 0 ] &&
 	[ "$("$H" query xdpd)" = 0 ] &&
+	! "$SHIRUDO_BIN" status | grep -q "XdpCovered *WARN" &&
 	[ -e "$B/$NAME/link_1" ] && [ ! -e "$B/$NAME/link_2" ] &&
 	before=$(wc -l </var/lib/shirudo/eventlog) &&
 	pins=$(ls "$B/$NAME" | wc -l) &&
@@ -128,7 +130,7 @@ test_xdp_success 'a veth end moved away keeps its link and the host end attaches
 	[ "$("$H" query xdpb)" -gt 0 ]
 '
 
-test_xdp_success 'a driver refusing one device warns and spares the others' '
+test_xdp_success 'a driver refusing one device warns, spares the others and shows in status' '
 	add_pair xdpa 30000 xdpb 30001 &&
 	load "$NAME" &&
 	ip link add xdpc index 30010 numrxqueues 1 type veth \
@@ -138,7 +140,8 @@ test_xdp_success 'a driver refusing one device warns and spares the others' '
 	out=$(reconcile 2>&1) &&
 	[ "$("$H" query xdpc)" = 0 ] &&
 	[ "$("$H" query xdpe)" -gt 0 ] &&
-	printf "%s\n" "$out" | grep -q "attach xdpc"
+	printf "%s\n" "$out" | grep -q "attach xdpc" &&
+	"$SHIRUDO_BIN" status | grep -q "XdpCovered *WARN .*$NAME on xdpc (no native XDP)"
 '
 
 test_xdp_success 'an unload racing a pass is not tampering' '

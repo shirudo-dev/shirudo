@@ -48,6 +48,7 @@ Print the report
         UpatchesMeasured   OK      every pinned or archived upatch is in this boot's records
         TpmMeasured        OK      NV index 0x01818E00 readable
         ConfigActive       OK      config 6d5ed552f448.. is active
+        XdpCovered         OK      every device an XDP upatch selects runs it
 
       Tamper attempts (this boot):
         LoadNotLoader            15  program load that is not a signed loader
@@ -100,6 +101,7 @@ line; a section unfolds on its own when its condition is not ``OK``.
      UpatchesMeasured   OK      every pinned or archived upatch is in this boot's records
      TpmMeasured        OK      NV index 0x01818E00 readable
      ConfigActive       OK      config 6d5ed552f448.. is active
+     XdpCovered         OK      every device an XDP upatch selects runs it
 
    Tamper attempts (this boot):
      LoadNotLoader            15  program load that is not a signed loader
@@ -250,6 +252,18 @@ verdict is derived from them.
    * - ``TpmMeasured``
      - The NV index is defined, written and readable. ``WARN`` ``NV
        index 0x01818E00 not bound this boot`` or ``no TPM answered``.
+   * - ``XdpCovered``
+     - Every device the signed class mask of a loaded XDP upatch selects
+       runs that upatch. ``WARN`` ``<n> selected devices run without
+       their XDP upatch: <upatch> on <device> (<why>)`` lists each
+       device that does not, whatever the reason, with what the device
+       reports: ``no native XDP``, ``no multi-buffer XDP``, ``another
+       XDP program attached`` or ``not attached``. A device added in the
+       last seconds shows ``not attached`` until ``upatch reconcile``
+       attaches it. One that stays listed is unfiltered. Its driver
+       refused the program, or a setting such as LRO turned its XDP off,
+       or the reconcile units are stopped. ``WARN`` ``XDP coverage not
+       checked: <error>`` means the check could not run.
    * - ``ConfigActive``
      - The config PCR, the activation records and the mounted config
        image agree. ``WARN`` ``the activation of config <root>.. is
@@ -435,8 +449,9 @@ precedence: ``tampered``, ``lsm-off``, ``init-pending``,
      - Nothing. Verify with the TPM regularly, see
        :doc:`/operate/run/attest`.
    * - ``degraded``
-     - Enforcement is up, but this report has no register to check.
-     - Read the ``Chain`` line. See :ref:`status-degraded`.
+     - Enforcement is up, but this report has no register to check, or
+       a device an XDP upatch selects runs without it.
+     - Read the reason. See :ref:`status-degraded`.
    * - ``reboot-pending``
      - A config activation is pending until the next reboot. Every
        command except ``status`` and ``image status`` refuses until
@@ -645,6 +660,15 @@ boot`` therefore means the register was bound and then disappeared. Undefining
 the index takes TPM owner authorization, which root has on a TPM whose
 owner authorization is empty. Collect the evidence as for ``tampered``,
 see :doc:`/operate/troubleshoot/incident-tampered`, then reboot.
+
+The reason ``a device an XDP upatch selects does not run it`` comes with
+an ``XdpCovered`` warning that names each device and why. A device
+listed in one report and gone from the next was new and has been
+attached since. One that stays has no filter. Restore what took its XDP
+away, such as an LRO setting, a smaller queue count or another XDP
+program, and the next ``upatch reconcile`` attaches it. Where the
+device cannot run XDP at all, sign the upatch with a class mask that
+leaves the device out.
 
 The reason ``no TPM answered`` means the TPM stopped answering while
 ``status`` ran. On a production target every command first checks that

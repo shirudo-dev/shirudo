@@ -60,4 +60,11 @@ int xdp_device_features(__u32 ifindex, __u64 *features);
 bool xdp_multibuf_refused(__u64 features);
 const char *xdp_attach_strerror(int err);
 
+/*
+ * Why a device a program selects does not run it: attached as above,
+ * features as read, unless features_err says they could not be.
+ */
+const char *xdp_uncovered_reason(__u32 attached, int features_err,
+				 __u64 features);
+
 #endif /* SHIRUDO_XDP_H */

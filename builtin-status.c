@@ -61,6 +61,7 @@
 #include "util/upatch_table.h"
 #include "util/upatch_verify.h"
 #include "util/version.h"
+#include "util/xdp.h"
 
 #define UNMEASURED_NAMES	256
 
@@ -81,6 +82,17 @@ static int note_unmeasured_archive(const char *name, const char *path,
 				   void *ctx)
 {
 	return note_unmeasured(name, ctx);
+}
+
+static int note_uncovered(const char *name, const char *dev, const char *why,
+			  void *ctx)
+{
+	char entry[UPATCH_NAME_MAX + XDP_IFNAME_MAX + 64];
+
+	if (strsprintf(entry, sizeof(entry), "%s on %s (%s)", name, dev,
+		       why) < 0)
+		strscpy(entry, "?", sizeof(entry));
+	return note_unmeasured(entry, ctx);
 }
 
 static int notdot(const struct dirent *e)
@@ -857,8 +869,11 @@ int cmd_status(int argc, const char **argv)
 	char unmeasured_names[UNMEASURED_NAMES] = "";
 	char xdp_tampered_names[UNMEASURED_NAMES] = "";
 	char links_lost_names[UNMEASURED_NAMES] = "";
+	char xdp_uncovered_names[UNMEASURED_NAMES] = "";
 	struct measured_set *mset = NULL;
 	int xdp_tampered = 0;
+	int xdp_coverage_rc = 0;
+	int xdp_uncovered = 0;
 	int links_lost = 0;
 	int checks_rc = 0;
 	char config_root_hex[65] = "";
@@ -977,6 +992,9 @@ int cmd_status(int argc, const char **argv)
 							   &checks_rc);
 		links_lost = upatch_links_lost(mset, note_unmeasured,
 					       links_lost_names, &checks_rc);
+		xdp_uncovered = upatch_xdp_uncovered(mset, note_uncovered,
+						     xdp_uncovered_names,
+						     &xdp_coverage_rc);
 		measured_set_free(mset);
 	}
 	eventlog_unlock(lock);
@@ -1047,6 +1065,10 @@ int cmd_status(int argc, const char **argv)
 	cin.links_lost = max(links_lost, 0);
 	cin.links_lost_detail = links_lost_names;
 	cin.checks_rc = checks_rc;
+	cin.xdp_uncovered = max(xdp_uncovered, 0);
+	cin.xdp_uncovered_detail = xdp_uncovered_names;
+	cin.xdp_coverage_rc = xdp_uncovered < 0 ? xdp_uncovered :
+			      xdp_coverage_rc;
 	keyring_cond_input(&cin, &bpf, &dmv);
 
 	if (json) {

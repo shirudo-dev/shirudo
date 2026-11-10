@@ -4240,23 +4240,9 @@ static int pin_is_measured(const char *name, __u8 *payload, bool *held)
 
 static int reconcile_read(struct xdp_work *w)
 {
-	const void *attach;
-	__u32 len;
-	int ret;
-
 	if (get_pin_payload(w->name, w->payload))
 		return -ENODATA;
-	ret = upatch_archive_verify(w->name, w->payload, &w->u);
-	if (ret)
-		return ret;
-	attach = upatch_signed_attach(&w->u, &len);
-	ret = attach ? prog_specs_parse(attach, len, w->u.hdr.nr_maps,
-					w->u.hdr.nr_progs, &w->specs) : -ESTALE;
-	if (ret) {
-		upatch_close(&w->u);
-		return ret == -ENOMEM ? ret : -ESTALE;
-	}
-	return 0;
+	return upatch_archive_specs(w->name, w->payload, &w->u, &w->specs);
 }
 
 static int reconcile_fail_verify(const char *name, int err,
@@ -4361,31 +4347,6 @@ static int reconcile_collect(struct xdp_work **out, size_t *count,
 	return 0;
 }
 
-static int xdp_prog_open(const char *name, __u32 index, __u32 *id)
-{
-	struct bpf_prog_info info = {};
-	__u32 len = sizeof(info);
-	char pin[PATH_MAX];
-	char entry[32];
-	int fd, ret;
-
-	if (strsprintf(entry, sizeof(entry), XDP_PROG_PIN_PREFIX "%u", index) < 0 ||
-	    upatch_pin_path(pin, sizeof(pin), name, entry, NULL))
-		return -ENAMETOOLONG;
-	fd = bpf_obj_get(pin);
-	if (fd < 0)
-		return -errno;
-	ret = bpf_prog_get_info_by_fd(fd, &info, &len);
-	if (!ret && info.type != BPF_PROG_TYPE_XDP)
-		ret = -ESTALE;
-	if (ret) {
-		close(fd);
-		return ret;
-	}
-	*id = info.id;
-	return fd;
-}
-
 struct link_scan {
 	__u32	next;
 	bool	dead;
@@ -4456,10 +4417,10 @@ static int reconcile_attach(int prog_fd, const char *name,
 	return 0;
 }
 
-static int reconcile_prog_failed(const char *name, __u32 index, int err,
+static int reconcile_prog_failed(const char *name, int err,
 				 struct op_report *rep)
 {
-	pr_err("upatch reconcile: program %u of %s: %s", index, name,
+	pr_err("upatch reconcile: an XDP program of %s: %s", name,
 	       strerror(-err));
 	if (err == -EACCES || err == -EPERM)
 		rep_fail(rep, "pre_flight", "lsm_denied", err,
@@ -4470,6 +4431,27 @@ static int reconcile_prog_failed(const char *name, __u32 index, int err,
 	return 1;
 }
 
+struct reconcile_pass {
+	const char		*name;
+	__u32			*next;
+	bool			*needed;
+	struct op_report	*rep;
+};
+
+static int reconcile_device(int prog_fd, const struct prog_spec *spec,
+			    const struct xdp_device *dev, __u32 attached,
+			    void *ctx)
+{
+	struct reconcile_pass *p = ctx;
+
+	if (attached)
+		return 0;
+	*p->needed = true;
+	if (!p->next)
+		return 0;
+	return reconcile_attach(prog_fd, p->name, spec, dev, p->next, p->rep);
+}
+
 /*
  * With next NULL only says whether a device needs attaching, or that the
  * pins need a look under the register lock.
@@ -4478,46 +4460,20 @@ static int reconcile_walk(const struct xdp_work *w,
 			  const struct xdp_device *devices, size_t count,
 			  __u32 *next, bool *needed, struct op_report *rep)
 {
-	__u32 i;
+	struct reconcile_pass pass = {
+		.name = w->name, .next = next, .needed = needed, .rep = rep,
+	};
+	int ret;
 
-	for (i = 0; i < w->u.hdr.nr_progs; i++) {
-		const struct prog_spec *spec = &w->specs[i];
-		__u32 prog_id = 0;
-		size_t j;
-		int fd;
-
-		if (spec->kind != UPATCH_ATTACH_XDP)
-			continue;
-		fd = xdp_prog_open(w->name, i, &prog_id);
-		if (fd < 0) {
-			if (!next) {
-				*needed = true;
-				return 0;
-			}
-			return reconcile_prog_failed(w->name, i, fd, rep);
-		}
-		for (j = 0; j < count; j++) {
-			bool selected = xdp_device_selected(devices, count, j,
-							    spec->device_classes);
-			__u32 attached = 0;
-
-			if (selected &&
-			    bpf_xdp_query_id((int)devices[j].ifindex,
-					     XDP_FLAGS_DRV_MODE, &attached))
-				continue;
-			if (xdp_reconcile_action(selected, attached, prog_id) !=
-			    XDP_RECONCILE_ATTACH)
-				continue;
-			*needed = true;
-			if (next && reconcile_attach(fd, w->name, spec,
-						     &devices[j], next, rep)) {
-				close(fd);
-				return 1;
-			}
-		}
-		close(fd);
+	ret = upatch_xdp_each_uncovered(w->name, w->specs, w->u.hdr.nr_progs,
+					devices, count, reconcile_device, &pass);
+	if (ret >= 0)
+		return ret;
+	if (!next) {
+		*needed = true;
+		return 0;
 	}
-	return 0;
+	return reconcile_prog_failed(w->name, ret, rep);
 }
 
 static int reconcile_apply(const struct xdp_work *w,

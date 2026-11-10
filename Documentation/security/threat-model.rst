@@ -1553,8 +1553,10 @@ R21 upatches can be neutralized by changing their targets
    one pass plus five seconds when udev gives no signal, as for a veth
    peer moving namespace. A device stays uncovered while its XDP slot is
    occupied, it has no native XDP, its driver refuses the program, or
-   root stops the timer and the udev rule, and ``status`` does not list
-   such devices.
+   root stops the timer and the udev rule. ``status`` lists every such
+   device under ``XdpCovered`` with the reason the device reports and
+   gives the verdict ``degraded``, which the keepalive carries; root
+   can stop the keepalive as well, which its collector sees as silence.
    At boot restore a device whose driver refuses fails ``init``: the
    register stays unbound, so attestation fails, and that upatch and every
    archive after it in name order stay unloaded that boot. A setting that
@@ -1570,8 +1572,8 @@ R21 upatches can be neutralized by changing their targets
 
    Every XDP program is loaded with multi-buffer support and a selected
    device must report it. At boot restore one that does not fails
-   ``init``. After boot it stays uncovered, with a warning.
-   The check is made at attach only: a device that later
+   ``init``. After boot it stays uncovered, with a warning, and ``status``
+   lists it. The check is made at attach only: a device that later
    stops reporting it keeps its link, as a bond that later enslaves such a
    device does, and what happens to a frame too large for one buffer is
    then the driver's choice. It may drop the frame or never run the

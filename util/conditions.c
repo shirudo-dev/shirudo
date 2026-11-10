@@ -217,6 +217,22 @@ size_t conditions(const struct conditions_input *in,
 		}
 		n++;
 	}
+	if (n < cap) {
+		c[n].type = "XdpCovered";
+		if (in->xdp_uncovered)
+			set_detail(&c[n], "WARN",
+				   "%d selected devices run without their XDP upatch: %s",
+				   in->xdp_uncovered,
+				   in->xdp_uncovered_detail ?
+				   in->xdp_uncovered_detail : "?");
+		else if (in->xdp_coverage_rc)
+			set_detail(&c[n], "WARN", "XDP coverage not checked: %s",
+				   strerror(-in->xdp_coverage_rc));
+		else
+			set_detail(&c[n], "OK",
+				   "every device an XDP upatch selects runs it");
+		n++;
+	}
 	return n;
 }
 
@@ -247,7 +263,7 @@ const char *status_verdict(const struct conditions_input *in)
 		return "init-pending";
 	if (in->config_seen && in->config_state == -EINPROGRESS)
 		return "reboot-pending";
-	if (!in->chain_seen)
+	if (!in->chain_seen || in->xdp_uncovered)
 		return "degraded";
 	return "ok";
 }
@@ -301,7 +317,12 @@ void status_reason(const struct conditions_input *in,
 		strscpy(buf, "a config activation is pending until the next reboot",
 			cap);
 	} else if (strcmp(v, "degraded") == 0) {
-		strscpy(buf, in->tpm_reachable ?
-			"no register bound this boot" : "no TPM answered", cap);
+		if (in->chain_seen)
+			strscpy(buf, "a device an XDP upatch selects does not run it",
+				cap);
+		else
+			strscpy(buf, in->tpm_reachable ?
+				"no register bound this boot" : "no TPM answered",
+				cap);
 	}
 }

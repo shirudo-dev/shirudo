@@ -91,6 +91,7 @@ test_xdp_success 'a device without native XDP is skipped beside supported ones' 
 	ip link add xdpbr type bridge && ip link set xdpbr up &&
 	load "$NAME" &&
 	[ "$("$H" query xdph0)" -gt 0 ] && [ "$("$H" query xdpbr)" = 0 ] &&
+	"$SHIRUDO_BIN" status | grep -q "XdpCovered *WARN .*$NAME on xdpbr (no native XDP)" &&
 	unload "$NAME"
 '
 

@@ -310,7 +310,7 @@ or a driver refusing the program. Boot restore fails the same way, and
 during the restore, or that an upatch restored before this one holds, is
 skipped. That includes a device reconcile only warned about before the
 reboot. A setting root makes after boot is the reconcile pass's to meet,
-which leaves the device unattached and warns. Existing XDP
+which leaves the device unattached, warns, and lets ``status`` list it. Existing XDP
 programs are never replaced. Device classification and peer identity
 are rechecked around attachment, and the returned link's ifindex is
 checked before pinning.
@@ -321,7 +321,8 @@ XDP must report multi-buffer support, ``NETDEV_XDP_ACT_RX_SG``. One that
 does not fails ``upatch load`` with ``xdp_multibuf_unsupported``, and the
 load is undone, so a single such device under the signed mask stops it:
 narrow the mask. Boot restore fails on such a device too. Reconcile leaves
-it unattached and logs a warning. In a tree, a failed ``add`` stops ``bpm tree sync`` at
+it unattached, logs a warning, and ``status`` lists it under
+``XdpCovered``. In a tree, a failed ``add`` stops ``bpm tree sync`` at
 that operation, so scope it with a node label.
 
 These drivers report multi-buffer XDP in Linux bpf-next at 53435562a725:

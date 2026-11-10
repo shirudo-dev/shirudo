@@ -43,6 +43,7 @@ Before you begin
        UpatchesMeasured   OK      every pinned or archived upatch is in this boot's records
        TpmMeasured        OK      NV index 0x01818E00 readable
        ConfigActive       OK      config 6d5ed552f448.. is active
+       XdpCovered         OK      every device an XDP upatch selects runs it
      ...
 
   A verdict other than ``ok`` is followed by its reason in parentheses,

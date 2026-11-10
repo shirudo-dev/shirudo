@@ -54,6 +54,9 @@ struct conditions_input {
 	int		links_lost;	/* loaded upatches missing a link */
 	const char	*links_lost_detail;	/* their names, when any */
 	int		checks_rc;	/* -errno of a link or archive check that could not run */
+	int		xdp_uncovered;	/* selected devices an XDP upatch does not run on */
+	const char	*xdp_uncovered_detail;	/* upatch, device and why, when any */
+	int		xdp_coverage_rc;	/* -errno when that could not be checked */
 };
 
 struct condition {
@@ -65,9 +68,9 @@ struct condition {
 /*
  * Maximum number of conditions returned today (LsmAttached,
  * KeyringSealed, ChainIntact, UpatchesMeasured, TpmMeasured,
- * ConfigActive); callers can size their stack array off this.
+ * ConfigActive, XdpCovered); callers can size their stack array off this.
  */
-#define CONDITIONS_MAX	6
+#define CONDITIONS_MAX	7
 
 size_t conditions(const struct conditions_input *in,
 		  struct condition *out, size_t cap);

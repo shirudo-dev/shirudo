@@ -132,6 +132,26 @@ static void links_of_a_missing_archive_are_stale(void)
 		  -ESTALE);
 }
 
+static void specs_of_a_missing_archive_are_stale(void)
+{
+	__u8 payload[UPATCH_PAYLOAD_HASH_LEN] = {};
+	struct prog_spec *specs = NULL;
+	struct upatch u;
+
+	EXPECT_EQ(upatch_archive_specs("shirudo-unit-no-such-upatch", payload,
+				       &u, &specs), -ESTALE);
+	EXPECT_TRUE(!specs);
+}
+
+static void an_unpinned_xdp_program_does_not_open(void)
+{
+	__u32 id = 0;
+
+	EXPECT_TRUE(upatch_xdp_prog_open("shirudo-unit-no-such-upatch", 0,
+					 &id) < 0);
+	EXPECT_EQ(id, 0);
+}
+
 static const struct unit_case cases[] = {
 	UNIT_CASE(the_loaded_bytes_verify),
 	UNIT_CASE(another_payload_is_stale),
@@ -139,6 +159,8 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(a_truncated_file_is_stale),
 	UNIT_CASE(a_missing_archive_is_stale),
 	UNIT_CASE(links_of_a_missing_archive_are_stale),
+	UNIT_CASE(specs_of_a_missing_archive_are_stale),
+	UNIT_CASE(an_unpinned_xdp_program_does_not_open),
 	{}
 };
 

@@ -35,9 +35,10 @@ report. The roles come from what is present:
   ``init`` froze
 - operator: ``/var/lib/shirudo/keys/signing_key.pem``
 
-The report shows six conditions, each ``OK``, ``WARN`` or ``ALERT``:
+The report shows seven conditions, each ``OK``, ``WARN`` or ``ALERT``:
 ``LsmAttached``, ``KeyringSealed``, ``ChainIntact``,
-``UpatchesMeasured``, ``TpmMeasured`` and ``ConfigActive``. The verdict is the first of these that applies:
+``UpatchesMeasured``, ``TpmMeasured``, ``ConfigActive`` and
+``XdpCovered``. The verdict is the first of these that applies:
 
 .. list-table::
    :header-rows: 1
@@ -59,7 +60,8 @@ The report shows six conditions, each ``OK``, ``WARN`` or ``ALERT``:
    * - ``reboot-pending``
      - A config activation is pending until the next reboot.
    * - ``degraded``
-     - No TPM answered, or no register is bound this boot.
+     - No TPM answered, no register is bound this boot, or a device an
+       XDP upatch selects does not run it.
    * - ``ok``
      - None of the above.
 
@@ -181,6 +183,7 @@ Show the state of a target:
      UpatchesMeasured   OK      every pinned or archived upatch is in this boot's records
      TpmMeasured        OK      NV index 0x01818E00 readable
      ConfigActive       OK      config 6d5ed552f448.. is active
+     XdpCovered         OK      every device an XDP upatch selects runs it
 
    Tamper attempts (this boot):
      LoadNotLoader            15  program load that is not a signed loader
@@ -216,6 +219,7 @@ system as well:
      UpatchesMeasured   OK      every pinned or archived upatch is in this boot's records
      TpmMeasured        OK      NV index 0x01818E00 readable
      ConfigActive       OK      config 6d5ed552f448.. is active
+     XdpCovered         OK      every device an XDP upatch selects runs it
 
    Tamper attempts (this boot):
      LoadNotLoader            15  program load that is not a signed loader

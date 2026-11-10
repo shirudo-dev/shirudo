@@ -192,6 +192,18 @@ static size_t add_attr(__u8 *buf, size_t len, __u16 type,
 	return len + NLA_ALIGN(attr.nla_len);
 }
 
+static void uncovered_devices_say_why(void)
+{
+	__u64 basic = NETDEV_XDP_ACT_BASIC, sg = NETDEV_XDP_ACT_RX_SG;
+
+	EXPECT_STREQ(xdp_uncovered_reason(9, 0, basic | sg),
+		     "another XDP program attached");
+	EXPECT_STREQ(xdp_uncovered_reason(0, -EOPNOTSUPP, 0), "not attached");
+	EXPECT_STREQ(xdp_uncovered_reason(0, 0, 0), "no native XDP");
+	EXPECT_STREQ(xdp_uncovered_reason(0, 0, basic), "no multi-buffer XDP");
+	EXPECT_STREQ(xdp_uncovered_reason(0, 0, basic | sg), "not attached");
+}
+
 static void link_messages_are_checked(void)
 {
 	struct ifinfomsg info = { .ifi_index = 12 };
@@ -273,6 +285,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(restore_fails_on_a_driver_refusal),
 	UNIT_CASE(load_stops_on_an_occupied_device),
 	UNIT_CASE(multibuf_is_required_of_native_xdp_alone),
+	UNIT_CASE(uncovered_devices_say_why),
 	UNIT_CASE(device_features_are_checked),
 	UNIT_CASE(link_messages_are_checked),
 	UNIT_CASE(kernel_discovery_revalidates_devices),

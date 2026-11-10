@@ -453,6 +453,7 @@ Boot and verify
         UpatchesMeasured   OK      every pinned or archived upatch is in this boot's records
         TpmMeasured        OK      NV index 0x01818E00 readable
         ConfigActive       OK      config 6d5ed552f448.. is active
+        XdpCovered         OK      every device an XDP upatch selects runs it
 
       Tamper attempts (this boot):
         LoadNotLoader            15  program load that is not a signed loader

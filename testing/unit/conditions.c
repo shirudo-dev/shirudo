@@ -7,15 +7,21 @@
 #include "conditions.h"
 #include "unit.h"
 
-static const struct condition *upatches_measured(const struct conditions_input *in,
-						 struct condition *c)
+static const struct condition *condition_of(const struct conditions_input *in,
+					    struct condition *c, const char *type)
 {
 	size_t n = conditions(in, c, CONDITIONS_MAX), i;
 
 	for (i = 0; i < n; i++)
-		if (!strcmp(c[i].type, "UpatchesMeasured"))
+		if (!strcmp(c[i].type, type))
 			return &c[i];
 	return NULL;
+}
+
+static const struct condition *upatches_measured(const struct conditions_input *in,
+						 struct condition *c)
+{
+	return condition_of(in, c, "UpatchesMeasured");
 }
 
 static void changed_xdp_archive_is_tampered(void)
@@ -107,12 +113,77 @@ static void no_change_leaves_the_condition_alone(void)
 	EXPECT_TRUE(strcmp(status_verdict(&in), "tampered"));
 }
 
+static void an_uncovered_device_degrades(void)
+{
+	struct conditions_input in = {
+		.reachable = true,
+		.parsed = true,
+		.lsm_attached = 1,
+		.keyring_present = 1,
+		.chain_seen = 1,
+		.xdp_uncovered = 1,
+		.xdp_uncovered_detail = "fw on eth1 (no multi-buffer XDP)",
+	};
+	struct condition c[CONDITIONS_MAX];
+	const struct condition *row;
+	char reason[128];
+
+	row = condition_of(&in, c, "XdpCovered");
+	ASSERT_TRUE(row);
+	EXPECT_STREQ(row->status, "WARN");
+	EXPECT_TRUE(strstr(row->detail, "fw on eth1 (no multi-buffer XDP)"));
+	EXPECT_STREQ(status_verdict(&in), "degraded");
+	status_reason(&in, reason, sizeof(reason));
+	EXPECT_TRUE(strstr(reason, "XDP upatch selects"));
+}
+
+static void unchecked_coverage_warns_without_degrading(void)
+{
+	struct conditions_input in = {
+		.reachable = true,
+		.parsed = true,
+		.lsm_attached = 1,
+		.keyring_present = 1,
+		.chain_seen = 1,
+		.xdp_coverage_rc = -EACCES,
+	};
+	struct condition c[CONDITIONS_MAX];
+	const struct condition *row;
+
+	row = condition_of(&in, c, "XdpCovered");
+	ASSERT_TRUE(row);
+	EXPECT_STREQ(row->status, "WARN");
+	EXPECT_TRUE(strstr(row->detail, "not checked"));
+	EXPECT_STREQ(status_verdict(&in), "ok");
+}
+
+static void covered_devices_are_ok(void)
+{
+	struct conditions_input in = {
+		.reachable = true,
+		.parsed = true,
+		.lsm_attached = 1,
+		.keyring_present = 1,
+		.chain_seen = 1,
+	};
+	struct condition c[CONDITIONS_MAX];
+	const struct condition *row;
+
+	row = condition_of(&in, c, "XdpCovered");
+	ASSERT_TRUE(row);
+	EXPECT_STREQ(row->status, "OK");
+	EXPECT_STREQ(status_verdict(&in), "ok");
+}
+
 static const struct unit_case cases[] = {
 	UNIT_CASE(changed_xdp_archive_is_tampered),
 	UNIT_CASE(a_changed_archive_outranks_a_pin_warning),
 	UNIT_CASE(a_lost_link_is_tampered),
 	UNIT_CASE(a_check_that_could_not_run_warns),
 	UNIT_CASE(no_change_leaves_the_condition_alone),
+	UNIT_CASE(an_uncovered_device_degrades),
+	UNIT_CASE(unchecked_coverage_warns_without_degrading),
+	UNIT_CASE(covered_devices_are_ok),
 	{}
 };
 

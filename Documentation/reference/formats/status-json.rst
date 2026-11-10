@@ -168,7 +168,8 @@ Verdicts
      - A config activation is pending until the next reboot.
    * - ``degraded``
      - No register is bound this boot: no TPM answered, or the NV index
-       is not written.
+       is not written. Or a device an XDP upatch selects does not run
+       it.
    * - ``ok``
      - None of the above.
 
@@ -178,7 +179,8 @@ Reasons
 ``reason`` is ``null`` for ``ok`` and otherwise one of these strings.
 For ``tampered`` it names the first cause that applies, in the order
 listed. For ``degraded`` it is ``no TPM answered`` when no TPM
-answered, else ``no register bound this boot``.
+answered, ``no register bound this boot`` when no register is bound,
+else ``a device an XDP upatch selects does not run it``.
 
 .. list-table::
    :header-rows: 1
@@ -214,11 +216,13 @@ answered, else ``no register bound this boot``.
      - ``no register bound this boot``
    * -
      - ``no TPM answered``
+   * -
+     - ``a device an XDP upatch selects does not run it``
 
 Conditions
 ----------
 
-``conditions`` always holds these six types, in this order. ``status``
+``conditions`` always holds these seven types, in this order. ``status``
 is ``OK``, ``WARN`` or ``ALERT``. ``<serial>``, ``<n>`` and ``<root>``
 stand for a keyring serial, a number of links and the first 12 hex
 digits of the config root hash. ``KeyringSealed`` reports the first of
@@ -330,6 +334,16 @@ its details that applies, in the order listed.
      - ``ALERT``
      - ``the config PCR, activation records and mounted config
        disagree``
+   * - ``XdpCovered``
+     - ``OK``
+     - ``every device an XDP upatch selects runs it``
+   * -
+     - ``WARN``
+     - ``<n> selected devices run without their XDP upatch: <upatch>
+       on <device> (<why>), ...``
+   * -
+     - ``WARN``
+     - ``XDP coverage not checked: <error>``
 
 Keyrings
 --------
@@ -778,6 +792,11 @@ indented here:
          "type": "ConfigActive",
          "status": "OK",
          "detail": "config 6d5ed552f448.. is active"
+       },
+       {
+         "type": "XdpCovered",
+         "status": "OK",
+         "detail": "every device an XDP upatch selects runs it"
        }
      ],
      "lsm_attached": true,

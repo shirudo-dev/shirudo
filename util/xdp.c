@@ -537,6 +537,20 @@ const char *xdp_attach_strerror(int err)
 	return strerror(-err);
 }
 
+const char *xdp_uncovered_reason(__u32 attached, int features_err,
+				 __u64 features)
+{
+	if (attached)
+		return "another XDP program attached";
+	if (features_err)
+		return "not attached";
+	if (!(features & NETDEV_XDP_ACT_BASIC))
+		return "no native XDP";
+	if (xdp_multibuf_refused(features))
+		return "no multi-buffer XDP";
+	return "not attached";
+}
+
 static int device_compare(const void *a, const void *b)
 {
 	const struct xdp_device *left = a, *right = b;
