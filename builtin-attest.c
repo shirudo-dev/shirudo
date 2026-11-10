@@ -786,6 +786,7 @@ out:
 	xfree(evidence, evidence ? evidence_len + 1 : 0);
 	xfree(report, report ? ATTEST_REPORT_MAX : 0);
 	xfree(m.set, m.set ? ATTEST_MEMBERS_MAX * sizeof(*m.set) : 0);
+	memzero_explicit(&x, sizeof(x));
 	return ret;
 }
 
