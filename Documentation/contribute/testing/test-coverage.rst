@@ -549,12 +549,14 @@ signed config image.
 Unit suites and fuzz targets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The unit suites in :src:`testing/unit/` cover twenty of the modules in
+The unit suites in :src:`testing/unit/` cover 25 of the modules in
 :src:`util/`: ``attest``, ``bpm_oci``, ``bpm_package``, ``bpm_state``,
-``bpm_tree``, ``bpm_tree_state``, ``chain``, ``eventlog``, ``format``,
-``hex``, ``io``, ``json``, ``kernel_abi``, ``kernel_build_id``,
-``kernel_release``, ``measured``, ``paths``, ``string``, ``upatch`` and
-``upatch_decode``, and ``overflow`` the arithmetic of
+``bpm_tree``, ``bpm_tree_state``, ``chain``, ``conditions``,
+``eventlog``, ``format``, ``hex``, ``io``, ``json``, ``kernel_abi``,
+``kernel_build_id``, ``kernel_release``, ``measured``, ``paths``,
+``string``, ``upatch``, ``upatch_decode``, ``upatch_pins``,
+``upatch_resolve``, ``upatch_verify`` and ``xdp``, and ``overflow`` the
+arithmetic of
 :src:`include/shirudo/overflow.h`. The other modules
 are reached through the test helpers, the fuzz targets and the binaries
 the functional tests run.
@@ -938,7 +940,7 @@ Parsers and units
 
 - The dm-verity superblock check in :src:`util/config_image.c` has no
   fuzz target. ``t5001`` covers truncation and unsupported fields.
-- 54 of the 62 modules in :src:`util/` have no unit suite of their own.
+- 42 of the 67 modules in :src:`util/` have no unit suite of their own.
 
 Related
 -------

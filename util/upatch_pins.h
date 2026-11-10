@@ -9,6 +9,7 @@
 #define SHIRUDO_UTIL_UPATCH_PINS_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #include <shirudo/types.h>
 
@@ -43,5 +44,15 @@ bool upatch_loaded_pins(const char *name);
 int upatch_each_link(const char *name,
 		     int (*cb)(__u32 index, const char *pin, void *ctx),
 		     void *ctx);
+
+/* The pin that keeps XDP program index of name loaded: 0 or -ENAMETOOLONG. */
+int upatch_xdp_prog_pin(char *out, size_t cap, const char *name, __u32 index);
+
+/*
+ * Calls cb with the name of each upatch that has a pin directory and stops
+ * at the first nonzero return, which it returns. No directory at all is 0,
+ * any other failure to read it -errno.
+ */
+int upatch_each_pinned(int (*cb)(const char *name, void *ctx), void *ctx);
 
 #endif /* SHIRUDO_UTIL_UPATCH_PINS_H */

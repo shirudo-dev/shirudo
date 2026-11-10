@@ -90,9 +90,9 @@ int upatch_first_prog_id(const char *name, __u32 *out)
 {
 	struct bpf_link_info linfo = {};
 	struct bpf_prog_info info = {};
-	char entry[32], pin[PATH_MAX];
 	__u32 len = sizeof(linfo);
 	struct upatch_pins pins;
+	char pin[PATH_MAX];
 	int fd, ret;
 
 	*out = 0;
@@ -112,9 +112,7 @@ int upatch_first_prog_id(const char *name, __u32 *out)
 		return ret;
 	if (!pins.nr_xdp_progs)
 		return -ENOENT;
-	if (strsprintf(entry, sizeof(entry), XDP_PROG_PIN_PREFIX "%u",
-		       pins.first_xdp_prog) < 0 ||
-	    upatch_pin_path(pin, sizeof(pin), name, entry, NULL))
+	if (upatch_xdp_prog_pin(pin, sizeof(pin), name, pins.first_xdp_prog))
 		return -ENAMETOOLONG;
 	fd = bpf_obj_get(pin);
 	if (fd < 0)
@@ -134,12 +132,17 @@ struct xdp_links {
 	__u32	live;
 };
 
-static int note_xdp_link(__u32 index, const char *pin, void *ctx)
+struct link_info_walk {
+	int	(*cb)(__u32 index, const char *pin,
+		      const struct bpf_link_info *info, void *ctx);
+	void	*ctx;
+};
+
+static int read_link_info(__u32 index, const char *pin, void *ctx)
 {
+	struct link_info_walk *w = ctx;
 	struct bpf_link_info info = {};
 	__u32 len = sizeof(info);
-	struct xdp_links *l = ctx;
-	char name[IF_NAMESIZE];
 	int fd, ret;
 
 	fd = bpf_obj_get(pin);
@@ -147,18 +150,37 @@ static int note_xdp_link(__u32 index, const char *pin, void *ctx)
 		return -errno;
 	ret = bpf_link_get_info_by_fd(fd, &info, &len);
 	close(fd);
-	if (ret)
-		return ret;
+	return ret ? ret : w->cb(index, pin, &info, w->ctx);
+}
+
+int upatch_each_link_info(const char *name,
+			  int (*cb)(__u32 index, const char *pin,
+				    const struct bpf_link_info *info, void *ctx),
+			  void *ctx)
+{
+	struct link_info_walk w = { .cb = cb, .ctx = ctx };
+
+	return upatch_each_link(name, read_link_info, &w);
+}
+
+static int note_xdp_link(__u32 index, const char *pin,
+			 const struct bpf_link_info *info, void *ctx)
+{
+	struct xdp_links *l = ctx;
+	char name[IF_NAMESIZE];
+
 	/* The kernel clears the ifindex when the device goes away. */
-	if (info.type != BPF_LINK_TYPE_XDP || !info.xdp.ifindex)
+	if (info->type != BPF_LINK_TYPE_XDP || !info->xdp.ifindex)
 		return 0;
 	if (!l->live || index < l->lowest) {
 		l->lowest = index;
-		if (if_indextoname(info.xdp.ifindex, name))
-			strscpy(l->device, name, sizeof(l->device));
-		else if (strsprintf(l->device, sizeof(l->device), "ifindex:%u",
-				    info.xdp.ifindex) < 0)
+		if (if_indextoname(info->xdp.ifindex, name)) {
+			if (strscpy(l->device, name, sizeof(l->device)) < 0)
+				return -E2BIG;
+		} else if (strsprintf(l->device, sizeof(l->device), "ifindex:%u",
+				      info->xdp.ifindex) < 0) {
 			return -E2BIG;
+		}
 	}
 	l->live++;
 	return 0;
@@ -169,7 +191,7 @@ static int xdp_location(const char *name, char *out, size_t cap)
 	struct xdp_links links = {};
 	int ret, n;
 
-	ret = upatch_each_link(name, note_xdp_link, &links);
+	ret = upatch_each_link_info(name, note_xdp_link, &links);
 	if (ret)
 		return ret;
 	if (!links.live)
@@ -290,7 +312,6 @@ void upatch_loaded_at(const char *name, char *out, size_t cap)
 {
 	struct upatch_pins pins;
 	char dir[PATH_MAX];
-	char entry[32];
 	struct stat st;
 
 	out[0] = '\0';
@@ -298,9 +319,7 @@ void upatch_loaded_at(const char *name, char *out, size_t cap)
 		return;
 	/* Later XDP links change the directory's ctime; a program pin stays. */
 	if (!upatch_pins_read(name, &pins) && pins.nr_xdp_progs &&
-	    (strsprintf(entry, sizeof(entry), XDP_PROG_PIN_PREFIX "%u",
-			pins.first_xdp_prog) < 0 ||
-	     upatch_pin_path(dir, sizeof(dir), name, entry, NULL)))
+	    upatch_xdp_prog_pin(dir, sizeof(dir), name, pins.first_xdp_prog))
 		return;
 	if (stat(dir, &st) != 0)
 		return;

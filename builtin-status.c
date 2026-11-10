@@ -91,7 +91,7 @@ static int note_uncovered(const char *name, const char *dev, const char *why,
 
 	if (strsprintf(entry, sizeof(entry), "%s on %s (%s)", name, dev,
 		       why) < 0)
-		strscpy(entry, "?", sizeof(entry));
+		return note_unmeasured(name, ctx);
 	return note_unmeasured(entry, ctx);
 }
 

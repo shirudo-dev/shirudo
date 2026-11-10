@@ -2,7 +2,11 @@
 /* Copyright (c) 2026 Authors of shirudo */
 
 #include <errno.h>
+#include <limits.h>
+#include <string.h>
+#include <unistd.h>
 
+#include "paths.h"
 #include "unit.h"
 #include "upatch_pins.h"
 
@@ -96,12 +100,43 @@ static void absent_upatch_has_no_pins(void)
 	EXPECT_FALSE(upatch_loaded_pins("shirudo-unit-no-such-upatch"));
 }
 
+static void xdp_program_pins_have_one_name(void)
+{
+	char pin[PATH_MAX], small[8];
+	size_t len;
+
+	ASSERT_EQ(upatch_xdp_prog_pin(pin, sizeof(pin), "fw", 3), 0);
+	len = strlen(pin);
+	ASSERT_TRUE(len > strlen("/xdp_prog_3"));
+	EXPECT_STREQ(pin + len - strlen("/xdp_prog_3"), "/xdp_prog_3");
+	EXPECT_EQ(upatch_xdp_prog_pin(small, sizeof(small), "fw", 3),
+		  -ENAMETOOLONG);
+}
+
+static int count_pinned(const char *name, void *ctx)
+{
+	(*(int *)ctx)++;
+	return 0;
+}
+
+static void no_pin_directory_is_no_upatch(void)
+{
+	int seen = 0;
+
+	if (access(BPFFS_UPATCHES_DIR, F_OK) == 0)
+		unit_skip("this host has a shirudo pin directory");
+	EXPECT_EQ(upatch_each_pinned(count_pinned, &seen), 0);
+	EXPECT_EQ(seen, 0);
+}
+
 static const struct unit_case cases[] = {
 	UNIT_CASE(names_are_parsed_strictly),
 	UNIT_CASE(lowest_index_is_kept_in_any_order),
 	UNIT_CASE(loaded_needs_the_first_link_or_a_program),
 	UNIT_CASE(complete_means_every_link),
 	UNIT_CASE(absent_upatch_has_no_pins),
+	UNIT_CASE(xdp_program_pins_have_one_name),
+	UNIT_CASE(no_pin_directory_is_no_upatch),
 	{}
 };
 

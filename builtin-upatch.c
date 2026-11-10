@@ -1331,14 +1331,13 @@ static int prog_pin_path(char *pin, size_t sz, const char *dir,
  * Links exist only per device, so with none attached the pin is what keeps
  * the program loaded, and its index is what ties it to its signed classes.
  */
-static int pin_xdp_prog(int prog_fd, const char *dir, __u32 index)
+static int pin_xdp_prog(int prog_fd, const char *name, __u32 index)
 {
-	char pin[PATH_MAX + 32];
+	char pin[PATH_MAX];
 	struct stat st;
 	int ret;
 
-	if (strsprintf(pin, sizeof(pin), "%s/" XDP_PROG_PIN_PREFIX "%u", dir,
-		       index) < 0)
+	if (upatch_xdp_prog_pin(pin, sizeof(pin), name, index))
 		return -ENAMETOOLONG;
 	if (stat(pin, &st) == 0 && unlink(pin))
 		return -errno;
@@ -1562,7 +1561,7 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 		}
 		attach_seen++;
 		if (spec->kind == UPATCH_ATTACH_XDP) {
-			ret = pin_xdp_prog(inner_fd, dir, i);
+			ret = pin_xdp_prog(inner_fd, name, i);
 			if (ret)
 				goto out;
 			made[i] = true;
@@ -1650,8 +1649,7 @@ out:
 		attach_seen = 0;
 		for (i = 0; i < nr_progs; i++) {
 			if (made[i] && specs[i].kind == UPATCH_ATTACH_XDP &&
-			    strsprintf(pin, sizeof(pin),
-				       "%s/" XDP_PROG_PIN_PREFIX "%u", dir, i) >= 0)
+			    !upatch_xdp_prog_pin(pin, sizeof(pin), name, i))
 				unlink(pin);
 			if (made[i] &&
 			    !(has_xdp && specs[i].role == UPATCH_PROG_ROLE_ATTACH) &&
@@ -4227,7 +4225,6 @@ static void xdp_work_free(struct xdp_work *work, size_t count)
 /* Whether this boot's records hold the upatch with the payload pinned now. */
 static int pin_is_measured(const char *name, __u8 *payload, bool *held)
 {
-	char hex[2 * UPATCH_PAYLOAD_HASH_LEN + 1];
 	struct measured_set *set;
 	int ret;
 
@@ -4235,10 +4232,7 @@ static int pin_is_measured(const char *name, __u8 *payload, bool *held)
 	ret = measured_set_boot(&set);
 	if (ret)
 		return ret;
-	if (!get_pin_payload(name, payload)) {
-		hex_encode(payload, UPATCH_PAYLOAD_HASH_LEN, hex);
-		*held = measured_holds(set, name, hex);
-	}
+	*held = upatch_pin_measured(set, name, payload);
 	measured_set_free(set);
 	return 0;
 }
@@ -4299,56 +4293,61 @@ static int reconcile_open(struct xdp_work *w, bool *skip,
 	return ret ? reconcile_fail_verify(w->name, ret, rep) : 0;
 }
 
+struct xdp_collect {
+	struct xdp_work		*work;
+	size_t			nr;
+	struct op_report	*rep;
+};
+
+static int collect_one(const char *name, void *ctx)
+{
+	struct xdp_collect *c = ctx;
+	struct upatch_pins pins;
+	struct xdp_work *grown, *w;
+	bool skip;
+	int ret;
+
+	if (upatch_pins_read(name, &pins) || !pins.nr_xdp_progs)
+		return 0;
+	grown = xreallocarray(c->work, c->nr, c->nr + 1, sizeof(*c->work));
+	if (!grown) {
+		rep_fail(c->rep, "pre_flight", "unknown", ENOMEM, "out of memory");
+		return 1;
+	}
+	c->work = grown;
+	w = &c->work[c->nr];
+	memset(w, 0, sizeof(*w));
+	if (strscpy(w->name, name, sizeof(w->name)) < 0) {
+		rep_fail(c->rep, "pre_flight", "unknown", ENAMETOOLONG,
+			 "upatch name too long");
+		return 1;
+	}
+	ret = reconcile_open(w, &skip, c->rep);
+	if (!ret && !skip)
+		c->nr++;
+	return ret;
+}
+
 static int reconcile_collect(struct xdp_work **out, size_t *count,
 			     struct op_report *rep)
 {
-	struct xdp_work *work = NULL;
-	size_t nr = 0;
-	struct dirent *e;
-	int ret = 0;
-	DIR *d;
+	struct xdp_collect c = { .rep = rep };
+	int ret;
 
 	*out = NULL;
 	*count = 0;
-	d = opendir(BPFFS_UPATCHES_DIR);
-	if (!d) {
-		if (errno == ENOENT)
-			return 0;
-		rep_fail(rep, "pre_flight", "unknown", errno,
+	ret = upatch_each_pinned(collect_one, &c);
+	if (ret < 0) {
+		rep_fail(rep, "pre_flight", "unknown", -ret,
 			 "cannot read the pin directory");
-		return 1;
+		ret = 1;
 	}
-	while (!ret && (e = readdir(d))) {
-		char name[UPATCH_NAME_MAX + 1];
-		struct upatch_pins pins;
-		struct xdp_work *grown;
-		bool skip;
-
-		if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..") ||
-		    upatch_name_from_bpffs(name, sizeof(name), e->d_name) ||
-		    upatch_pins_read(name, &pins) || !pins.nr_xdp_progs)
-			continue;
-		grown = xreallocarray(work, nr, nr + 1, sizeof(*work));
-		if (!grown) {
-			rep_fail(rep, "pre_flight", "unknown", ENOMEM,
-				 "out of memory");
-			ret = 1;
-			break;
-		}
-		work = grown;
-		memset(&work[nr], 0, sizeof(work[nr]));
-		strscpy(work[nr].name, name, sizeof(work[nr].name));
-		ret = reconcile_open(&work[nr], &skip, rep);
-		if (!ret && !skip)
-			nr++;
-	}
-	closedir(d);
 	if (ret) {
-		xdp_work_free(work, nr);
+		xdp_work_free(c.work, c.nr);
 		return ret;
 	}
-	*out = work;
-	*count = nr;
+	*out = c.work;
+	*count = c.nr;
 	return 0;
 }
 
@@ -4359,21 +4358,12 @@ struct link_scan {
 };
 
 /* The kernel clears a link's ifindex for good when its device goes away. */
-static int scan_link(__u32 index, const char *pin, void *ctx)
+static int scan_link(__u32 index, const char *pin,
+		     const struct bpf_link_info *info, void *ctx)
 {
-	struct bpf_link_info info = {};
 	struct link_scan *scan = ctx;
-	__u32 len = sizeof(info);
-	int fd, ret;
 
-	fd = bpf_obj_get(pin);
-	if (fd < 0)
-		return -errno;
-	ret = bpf_link_get_info_by_fd(fd, &info, &len);
-	close(fd);
-	if (ret)
-		return ret;
-	if (info.type == BPF_LINK_TYPE_XDP && !info.xdp.ifindex) {
+	if (info->type == BPF_LINK_TYPE_XDP && !info->xdp.ifindex) {
 		scan->dead = true;
 		if (scan->collect) {
 			if (unlink(pin))
@@ -4512,7 +4502,7 @@ static int reconcile_apply(const struct xdp_work *w,
 		goto out;
 	}
 	upatch_close(&again);
-	ret = upatch_each_link(w->name, scan_link, &scan);
+	ret = upatch_each_link_info(w->name, scan_link, &scan);
 	if (ret) {
 		rep_fail(rep, "link_create", ret == -EACCES || ret == -EPERM ?
 			 "lsm_denied" : "unknown", ret, "cannot read the links");
@@ -4554,7 +4544,7 @@ static int reconcile_upatch(const struct xdp_work *w,
 	 * upgrade, so a failure here only sends the upatch on to
 	 * reconcile_apply(), which can tell.
 	 */
-	if (upatch_each_link(w->name, scan_link, &scan))
+	if (upatch_each_link_info(w->name, scan_link, &scan))
 		needed = true;
 	else if (reconcile_walk(w, devices, count, NULL, &needed, rep))
 		return 1;

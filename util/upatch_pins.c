@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include <shirudo/string.h>
+#include <shirudo/upatch.h>
 
 #include "paths.h"
 #include "upatch_pins.h"
@@ -121,6 +122,37 @@ int upatch_each_link(const char *name,
 			ret = -ENAMETOOLONG;
 		else
 			ret = cb(index, pin, ctx);
+	}
+	closedir(d);
+	return ret;
+}
+
+int upatch_xdp_prog_pin(char *out, size_t cap, const char *name, __u32 index)
+{
+	char entry[32];
+
+	if (strsprintf(entry, sizeof(entry), XDP_PROG_PIN_PREFIX "%u", index) < 0 ||
+	    upatch_pin_path(out, cap, name, entry, NULL))
+		return -ENAMETOOLONG;
+	return 0;
+}
+
+int upatch_each_pinned(int (*cb)(const char *name, void *ctx), void *ctx)
+{
+	struct dirent *e;
+	int ret = 0;
+	DIR *d;
+
+	d = opendir(BPFFS_UPATCHES_DIR);
+	if (!d)
+		return errno == ENOENT ? 0 : -errno;
+	while (!ret && (e = readdir(d))) {
+		char name[UPATCH_NAME_MAX + 1];
+
+		if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..") ||
+		    upatch_name_from_bpffs(name, sizeof(name), e->d_name))
+			continue;
+		ret = cb(name, ctx);
 	}
 	closedir(d);
 	return ret;

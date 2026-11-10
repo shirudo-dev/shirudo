@@ -5,7 +5,6 @@
  * Whether the archive of a loaded upatch is still what was loaded.
  */
 
-#include <dirent.h>
 #include <errno.h>
 #include <limits.h>
 #include <string.h>
@@ -31,6 +30,7 @@
 #include "seal.h"
 #include "upatch.h"
 #include "upatch_pins.h"
+#include "upatch_resolve.h"
 #include "upatch_verify.h"
 #include "xdp.h"
 
@@ -85,21 +85,12 @@ int upatch_archive_verify(const char *name,
 	return 0;
 }
 
-static int count_non_xdp_link(__u32 index, const char *pin, void *ctx)
+static int count_non_xdp_link(__u32 index, const char *pin,
+			      const struct bpf_link_info *info, void *ctx)
 {
-	struct bpf_link_info info = {};
-	__u32 len = sizeof(info);
 	__u32 *found = ctx;
-	int fd, ret;
 
-	fd = bpf_obj_get(pin);
-	if (fd < 0)
-		return -errno;
-	ret = bpf_link_get_info_by_fd(fd, &info, &len);
-	close(fd);
-	if (ret)
-		return ret;
-	if (info.type != BPF_LINK_TYPE_XDP)
+	if (info->type != BPF_LINK_TYPE_XDP)
 		(*found)++;
 	return 0;
 }
@@ -115,7 +106,6 @@ static int xdp_upatch_complete(const char *name, const struct prog_spec *specs,
 {
 	__u32 i, nr_xdp = 0, found = 0;
 	char pin[PATH_MAX];
-	char entry[32];
 	struct stat st;
 	int ret;
 
@@ -123,15 +113,14 @@ static int xdp_upatch_complete(const char *name, const struct prog_spec *specs,
 		if (specs[i].kind != UPATCH_ATTACH_XDP)
 			continue;
 		nr_xdp++;
-		if (strsprintf(entry, sizeof(entry), XDP_PROG_PIN_PREFIX "%u", i) < 0 ||
-		    upatch_pin_path(pin, sizeof(pin), name, entry, NULL))
+		if (upatch_xdp_prog_pin(pin, sizeof(pin), name, i))
 			return -ENAMETOOLONG;
 		if (stat(pin, &st))
 			return errno == ENOENT ? 0 : -errno;
 	}
 	if (nr_attach == nr_xdp)
 		return 1;
-	ret = upatch_each_link(name, count_non_xdp_link, &found);
+	ret = upatch_each_link_info(name, count_non_xdp_link, &found);
 	if (ret)
 		return ret;
 	return found == nr_attach - nr_xdp;
@@ -202,11 +191,9 @@ int upatch_xdp_prog_open(const char *name, __u32 index, __u32 *id)
 	struct bpf_prog_info info = {};
 	__u32 len = sizeof(info);
 	char pin[PATH_MAX];
-	char entry[32];
 	int fd, ret;
 
-	if (strsprintf(entry, sizeof(entry), XDP_PROG_PIN_PREFIX "%u", index) < 0 ||
-	    upatch_pin_path(pin, sizeof(pin), name, entry, NULL))
+	if (upatch_xdp_prog_pin(pin, sizeof(pin), name, index))
 		return -ENAMETOOLONG;
 	fd = bpf_obj_get(pin);
 	if (fd < 0)
@@ -265,8 +252,7 @@ int upatch_xdp_each_uncovered(const char *name, const struct prog_spec *specs,
 	return 0;
 }
 
-/* Whether the set holds name with the payload its pin directory records. */
-static bool pin_measured(const struct measured_set *s, const char *name,
+bool upatch_pin_measured(const struct measured_set *s, const char *name,
 			 __u8 payload[UPATCH_PAYLOAD_HASH_LEN])
 {
 	char hex[2 * UPATCH_PAYLOAD_HASH_LEN + 1];
@@ -290,7 +276,7 @@ static int xdp_archive_changed(const struct measured_set *s, const char *name,
 	int ret;
 
 	if (upatch_pins_read(name, &pins) || !pins.nr_xdp_progs ||
-	    !pin_measured(s, name, payload))
+	    !upatch_pin_measured(s, name, payload))
 		return 0;
 	ret = upatch_archive_verify(name, payload, &u);
 	if (!ret)
@@ -305,7 +291,7 @@ static int links_lost(const struct measured_set *s, const char *name,
 	char path[PATH_MAX];
 	int ret;
 
-	if (!pin_measured(s, name, payload))
+	if (!upatch_pin_measured(s, name, payload))
 		return 0;
 	if (strsprintf(path, sizeof(path), "%s/%s.upatch", UPATCHES_DIR,
 		       name) < 0)
@@ -316,6 +302,33 @@ static int links_lost(const struct measured_set *s, const char *name,
 	return !ret || ret == -ESTALE ? 1 : ret;
 }
 
+struct pinned_walk {
+	const struct measured_set	*s;
+	int				(*check)(const struct measured_set *s,
+						 const char *name, void *ctx);
+	int				(*cb)(const char *name, void *ctx);
+	void				*ctx;
+	int				*check_err;
+	int				found;
+	int				stopped;
+};
+
+static int walk_one(const char *name, void *ctx)
+{
+	struct pinned_walk *w = ctx;
+	int result;
+
+	result = w->check(w->s, name, w->ctx);
+	if (result < 0 && !*w->check_err)
+		*w->check_err = result;
+	if (result <= 0)
+		return 0;
+	w->found++;
+	if (w->cb)
+		w->stopped = w->cb(name, w->ctx);
+	return w->stopped;
+}
+
 /* check gets ctx as well, and cb may be NULL. */
 static int walk_pinned(const struct measured_set *s,
 		       int (*check)(const struct measured_set *s, const char *name,
@@ -323,35 +336,18 @@ static int walk_pinned(const struct measured_set *s,
 		       int (*cb)(const char *name, void *ctx), void *ctx,
 		       int *check_err)
 {
-	struct dirent *e;
-	int found = 0;
-	int ret = 0;
-	DIR *d;
+	struct pinned_walk w = {
+		.s = s, .check = check, .cb = cb, .ctx = ctx,
+		.check_err = check_err,
+	};
+	int ret;
 
-	d = opendir(BPFFS_UPATCHES_DIR);
-	if (!d) {
-		if (errno != ENOENT && !*check_err)
-			*check_err = -errno;
-		return 0;
-	}
-	while (!ret && (e = readdir(d))) {
-		char name[UPATCH_NAME_MAX + 1];
-		int result;
-
-		if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..") ||
-		    upatch_name_from_bpffs(name, sizeof(name), e->d_name))
-			continue;
-		result = check(s, name, ctx);
-		if (result < 0 && !*check_err)
-			*check_err = result;
-		if (result <= 0)
-			continue;
-		found++;
-		if (cb)
-			ret = cb(name, ctx);
-	}
-	closedir(d);
-	return ret ? ret : found;
+	ret = upatch_each_pinned(walk_one, &w);
+	if (w.stopped)
+		return w.stopped;
+	if (ret && !*check_err)
+		*check_err = ret;
+	return w.found;
 }
 
 int upatch_xdp_archives_changed(const struct measured_set *s,
@@ -406,7 +402,7 @@ static int xdp_uncovered(const struct measured_set *s, const char *name,
 	int ret;
 
 	if (upatch_pins_read(name, &pins) || !pins.nr_xdp_progs ||
-	    !pin_measured(s, name, payload))
+	    !upatch_pin_measured(s, name, payload))
 		return 0;
 	ret = upatch_archive_specs(name, payload, &u, &specs);
 	if (ret)

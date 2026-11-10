@@ -8,6 +8,7 @@
 #ifndef SHIRUDO_UTIL_UPATCH_VERIFY_H
 #define SHIRUDO_UTIL_UPATCH_VERIFY_H
 
+#include <stdbool.h>
 #include <stddef.h>
 
 #include <shirudo/types.h>
@@ -61,6 +62,13 @@ int upatch_xdp_each_uncovered(const char *name, const struct prog_spec *specs,
 			      void *ctx);
 
 struct measured_set;
+
+/*
+ * Whether the set holds name with the payload its pin directory records,
+ * which is left in payload when the directory records one.
+ */
+bool upatch_pin_measured(const struct measured_set *s, const char *name,
+			 __u8 payload[UPATCH_PAYLOAD_HASH_LEN]);
 
 /*
  * The XDP upatches the set holds whose archive is not what was loaded. cb
