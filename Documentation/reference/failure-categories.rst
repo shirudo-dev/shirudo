@@ -245,13 +245,16 @@ Categories
      - Check ``shirudo status``. A register ahead of the eventlog shows as
        ``tampered``; handle that as an incident.
    * - ``unknown``
-     - ``parse``, ``target_verify``, ``signed_loader_load``,
-       ``payload_load``, ``link_create``, ``persist``
+     - ``pre_flight``, ``parse``, ``target_verify``,
+       ``signed_loader_load``, ``payload_load``, ``link_create``,
+       ``persist``
      - errno of the call
      - Any other failure: out of memory, a failed hash of the loader, an
        unclassified attach error, a payload that cannot be recorded on the
        pin directory or a failed archive copy (the load is undone for
-       both).
+       both). From ``upatch reconcile``, an XDP program pin that cannot
+       be opened for a reason that says nothing about the pin, such as
+       ``EMFILE`` or ``ENOMEM``.
      - Read ``message`` and the journal. For ``persist``, check the space
        on the file system that holds ``/var/lib/shirudo``.
 

@@ -4399,9 +4399,13 @@ static int reconcile_prog_failed(const char *name, int err,
 	if (err == -EACCES || err == -EPERM)
 		rep_fail(rep, "pre_flight", "lsm_denied", err,
 			 "the guards refused the XDP program pin");
-	else
+	/* Only these say what the pin is; EMFILE or ENOMEM say nothing. */
+	else if (err == -ENOENT || err == -ESTALE)
 		rep_fail(rep, "pre_flight", "tampered", err,
 			 "an XDP program pin is missing or not XDP");
+	else
+		rep_fail(rep, "pre_flight", "unknown", err,
+			 "cannot open an XDP program pin");
 	return 1;
 }
 
