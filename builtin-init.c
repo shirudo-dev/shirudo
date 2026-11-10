@@ -1038,7 +1038,7 @@ static int boot_restore_locked(bool recorded,
 			ret = -EPERM;
 			goto next;
 		}
-		if (upatch_apply(path) != 0) {
+		if (upatch_restore(path) != 0) {
 			pr_err("boot-restore: failed to apply %s",
 			       names[i]->d_name);
 			ret = -EINVAL;

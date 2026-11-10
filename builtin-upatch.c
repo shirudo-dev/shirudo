@@ -1917,7 +1917,7 @@ static void apply_policy_labels(const struct upatch *u)
 }
 
 /* Shared by `upatch load` and boot restore: one signature-verified path. */
-static int __upatch_apply(const char *path, bool verify_only,
+static int __upatch_apply(const char *path, bool verify_only, bool restoring,
 			  struct op_report *rep)
 {
 	struct upatch u;
@@ -2305,7 +2305,7 @@ static int __upatch_apply(const char *path, bool verify_only,
 	 * exits.
 	 */
 	ret = attach_and_pin_progs(cx, prog_desc_off, u.hdr.nr_progs,
-				   upatch_name, prog_specs, !rep);
+				   upatch_name, prog_specs, restoring);
 	if (ret) {
 		int e = -ret;
 		const char *cat;
@@ -2364,9 +2364,9 @@ out:
 	return ret;
 }
 
-int upatch_apply(const char *path)
+int upatch_restore(const char *path)
 {
-	return __upatch_apply(path, false, NULL);
+	return __upatch_apply(path, false, true, NULL);
 }
 
 /*
@@ -3050,7 +3050,7 @@ static int upatch_load(const struct load_args *args)
 		goto done;
 	}
 
-	if (__upatch_apply(file, false, &rep) != 0)
+	if (__upatch_apply(file, false, false, &rep) != 0)
 		goto done;
 	if (!have_id) {		/* loaded but couldn't read identity */
 		ret = 0;
@@ -3239,7 +3239,7 @@ static int cmd_upatch_unload(int argc, const char **argv)
 	if (undo_unmeasured(&rep, "unload"))
 		goto done;
 	/* A bad signature fails here, before anything is removed. */
-	if (__upatch_apply(file, true, &rep) != 0) {
+	if (__upatch_apply(file, true, false, &rep) != 0) {
 		pr_err("upatch unload: signature verification failed; refusing");
 		goto done;
 	}

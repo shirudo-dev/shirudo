@@ -172,9 +172,10 @@ void prog_specs_free(struct prog_spec *specs, __u32 nr_progs);
 
 /*
  * The target's upatch lifecycle, which builtin-upatch.c implements for
- * init, bpm and keys: load, install, unload.
+ * init, bpm and keys: boot restore, install, unload. A restore leaves a
+ * device that an upatch restored before it holds, where a load fails.
  */
-int upatch_apply(const char *path);
+int upatch_restore(const char *path);
 int upatch_install(const char *path);
 int upatch_remove(const char *path);
 
