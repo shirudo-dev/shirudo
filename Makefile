@@ -102,6 +102,11 @@ help:
 shirudo-build:
 	+$(Q)$(MAKE) -C tools/shirudo-build
 
+# The helper's sub-make builds files the binary's builds too, such as
+# vendor/linux/vmlinux.h, and would write one while the other's clang reads
+# it. Given with all, as packaging does, the helper waits for all.
+shirudo-build: | $(filter all,$(MAKECMDGOALS))
+
 # shirudo-quote-check is a static PIE. Where the distribution ships no
 # libcrypto.a, as Fedora does not, it links a static OpenSSL built once
 # into QUOTE_CHECK_OPENSSL_PREFIX instead.
