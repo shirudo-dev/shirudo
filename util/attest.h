@@ -88,16 +88,16 @@ struct attest_expect {
 	__u32		pcr_expect_mask;
 	__u8		pcrs[24][32];
 	bool		have_credential;
-	__u8		credential[TPM_CREDENTIAL_LEN];
+	__u8		credential[TPM_CREDENTIAL_LEN] __sensitive;
 	bool		have_ek_name;
 	__u8		ek_name[TPM_NAME_LEN];
 	bool		require_initrd;	/* the binding must be the initrd's */
-	__u32	bind_expect_mask; /* PCR values at binding time */
+	__u32		bind_expect_mask;	/* PCR values at binding time */
 	__u8		bind_values[24][32];
 	bool		have_config_root;
 	__u8		config_root[32];
 	bool		have_config_pcr;
-	__u32	config_pcr;
+	__u32		config_pcr;
 };
 
 /*

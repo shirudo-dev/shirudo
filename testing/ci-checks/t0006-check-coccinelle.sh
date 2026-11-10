@@ -6,7 +6,7 @@
 # check with file, line, rule and message, one that does not passes it,
 # a rule that can rewrite does with -D patch, a rule reads the headers
 # its #spatch line asks for, on a throwaway repository, each rule taken
-# from CERT C, each BPF hazard rule and scrub_missing report a sample of
+# from CERT C, each BPF hazard rule and each scrub rule report a sample of
 # what they refuse, and the tree itself.
 
 cd "$(dirname "$0")/.."
@@ -415,15 +415,79 @@ int digest_public(const char *hex)
 EOF
 }
 
-test_expect_success 'scrub_missing reports its samples and spares the scrubbed form' '
+# The same for a struct a header marks: the two returns after its use,
+# the compound literal and the scrub of one field alone are reported, the
+# return before its use, the scrubbed form and the __cleanup() one not.
+write_sensitive_samples() {
+	mkdir -p "$1/include" &&
+	printf 'struct client {\n\tchar name[32];\n\tchar __sensitive password[64];\n};\n' \
+		>"$1/include/client.h" &&
+	cat >"$1/sensitive.c" <<'EOF'
+int client_left(const char *url)
+{
+	struct client c = {};
+
+	if (early())
+		return -EINVAL;
+	if (client_parse(url, &c))
+		return -EINVAL;
+	return use(&c);
+}
+
+int client_scrubbed(const char *url)
+{
+	struct client c = {};
+	int ret = -EINVAL;
+
+	if (early())
+		goto out;
+	ret = client_parse(url, &c);
+	if (!ret)
+		ret = use(&c);
+out:
+	memzero_explicit(&c, sizeof(c));
+	return ret;
+}
+
+int client_cleanup(const char *url)
+{
+	struct client c __cleanup(client_clear) = {};
+
+	if (client_parse(url, &c))
+		return -EINVAL;
+	return use(&c);
+}
+
+int client_literal(const char *url)
+{
+	return client_parse(url, &(struct client){});
+}
+
+int client_field(const char *url)
+{
+	struct client c = {};
+
+	c.name[0] = url[0];
+	memzero_explicit(c.password, sizeof(c.password));
+	return 0;
+}
+EOF
+}
+
+test_expect_success 'each scrub rule reports its samples and spares the scrubbed forms' '
 	R4=$W/scrub &&
 	mkdir -p "$R4/testing/coccinelle" &&
 	git init -q "$R4" &&
 	cp "$ROOT/testing/coccinelle/scrub_missing.cocci" \
+		"$ROOT/testing/coccinelle/sensitive_scrub.cocci" \
 		"$R4/testing/coccinelle/" &&
 	write_scrub_samples "$R4/samples.c" &&
+	write_sensitive_samples "$R4" &&
 	! (cd "$R4" && git add -A && sh "$S") >"$W/out" 2>"$W/err" &&
-	[ "$(grep -c "^scrub_missing: samples.c:" "$W/err")" = 4 ]
+	grep -q "2 of 2 rules matched" "$W/err" &&
+	[ "$(grep -c "^scrub_missing: samples.c:" "$W/err")" = 4 ] &&
+	[ "$(grep -c "^sensitive_scrub: sensitive.c:" "$W/err")" = 4 ] &&
+	[ "$(grep -c "^[a-z_]*: " "$W/err")" = 8 ]
 '
 
 test_expect_success 'the tree passes' '

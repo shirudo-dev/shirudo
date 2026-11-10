@@ -73,8 +73,8 @@ struct bpm_oci_client {
 	char base_url[BPM_MAX_ENDPOINT];
 	char registry[BPM_MAX_ENDPOINT];
 	char username[BPM_OCI_USERNAME_SIZE];
-	char password[BPM_OCI_PASSWORD_SIZE];
-	char token[BPM_OCI_TOKEN_SIZE];
+	char password[BPM_OCI_PASSWORD_SIZE] __sensitive;
+	char token[BPM_OCI_TOKEN_SIZE] __sensitive;
 	char ca_file[PATH_MAX];
 	struct tls_ca tls_ca;
 };

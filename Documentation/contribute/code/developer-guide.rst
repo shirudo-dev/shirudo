@@ -566,6 +566,13 @@ can rewrite what it finds does so with ``-D patch``:
        ECDH shared value, or by ``hex_bytes()``, ``hex_decode()`` or
        ``getrandom()`` when named for a secret, that a path out leaves
        without ``memzero_explicit()``.
+   * - ``sensitive_scrub``
+     - A local of a struct with a member marked ``__sensitive`` that a
+       path out leaves, once the function has used it, without
+       ``memzero_explicit()`` of the whole struct or a ``__cleanup()``
+       function, and the address of a compound literal of such a struct.
+       The structs come from the headers under :src:`include/`,
+       :src:`util/` and :src:`tools/` and at the top of the tree.
    * - ``secret_cmp``
      - ``memcmp()`` of a secret or what derives from one rather than
        ``memneq_explicit()``.

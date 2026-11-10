@@ -17,6 +17,12 @@
 /* A function with a large frame that inlining would add to its caller's. */
 #define noinline_for_stack	noinline
 /*
+ * A struct member that holds a secret. It expands to nothing; it puts the
+ * struct under testing/coccinelle/sensitive_scrub.cocci, which wants every
+ * local of it scrubbed on each path out.
+ */
+#define __sensitive
+/*
  * clang's -Wimplicit-fallthrough takes the attribute and never a comment.
  * Token for token as in bpf/lib/misc.h.
  */

@@ -30,7 +30,7 @@ struct config {
 	 * Owner-hierarchy auth used to define the NV index on TPMs whose
 	 * owner auth is set. Empty (len 0) = empty-password session.
 	 */
-	char		tpm_owner_auth[OWNER_AUTH_MAX];
+	char		tpm_owner_auth[OWNER_AUTH_MAX] __sensitive;
 	size_t		tpm_owner_auth_len;
 	/*
 	 * The TCTI of util/tpm.c, empty for /dev/tpmrm0; the environment

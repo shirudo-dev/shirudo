@@ -160,7 +160,9 @@ code, signing and the package builder, stays out of the core binary.
   helper with a big buffer is `noinline_for_stack`.
 - Scrub a key, a seed, a credential or a buffer that held one with
   `memzero_explicit()` on every path out, error paths included, and
-  compare it with `memneq_explicit()`.
+  compare it with `memneq_explicit()`. Mark a struct member that holds
+  one `__sensitive`: a check then wants every local of that struct
+  scrubbed the same way, member filled by a parser and all.
 - All JSON goes through `util/json.c`; text from outside is written
   with its lossy writers. All logging goes through `pr_*()` to syslog;
   shirudo writes no log file of its own.
