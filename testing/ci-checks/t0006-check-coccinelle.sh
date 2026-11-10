@@ -6,8 +6,8 @@
 # check with file, line, rule and message, one that does not passes it,
 # a rule that can rewrite does with -D patch, a rule reads the headers
 # its #spatch line asks for, on a throwaway repository, each rule taken
-# from CERT C and each BPF hazard rule reports a sample of what it
-# refuses, and the tree itself.
+# from CERT C, each BPF hazard rule and scrub_missing report a sample of
+# what they refuse, and the tree itself.
 
 cd "$(dirname "$0")/.."
 . ./test-lib.sh
@@ -366,6 +366,64 @@ test_expect_success 'each BPF rule reports its sample and spares the safe form' 
 	done &&
 	grep -q "6 of 6 rules matched" "$W/err" &&
 	[ "$(grep -c "^bpf_[a-z_]*: samples.bpf.c:" "$W/err")" = 10 ]
+'
+
+# A secret left on the stack, and beside it the scrubbed form and a local
+# that holds nothing secret, which no rule reports: one report for each
+# return of the two that leave the secret.
+write_scrub_samples() {
+	cat >"$1" <<'EOF'
+int kdf_left(const __u8 *seed)
+{
+	__u8 key[16];
+
+	if (tpm_kdfa(seed, 32, "STORAGE", NULL, 0, NULL, 0, key, sizeof(key)))
+		return -EIO;
+	return use(key);
+}
+
+int kdf_scrubbed(const __u8 *seed)
+{
+	__u8 key[16];
+	int ret = -EIO;
+
+	if (tpm_kdfa(seed, 32, "STORAGE", NULL, 0, NULL, 0, key, sizeof(key)))
+		goto out;
+	ret = use(key);
+out:
+	memzero_explicit(key, sizeof(key));
+	return ret;
+}
+
+int credential_left(const char *hex)
+{
+	__u8 cred[16];
+
+	if (hex_decode(hex, cred, sizeof(cred)))
+		return -EINVAL;
+	return use(cred);
+}
+
+int digest_public(const char *hex)
+{
+	__u8 digest[32];
+
+	if (hex_decode(hex, digest, sizeof(digest)))
+		return -EINVAL;
+	return use(digest);
+}
+EOF
+}
+
+test_expect_success 'scrub_missing reports its samples and spares the scrubbed form' '
+	R4=$W/scrub &&
+	mkdir -p "$R4/testing/coccinelle" &&
+	git init -q "$R4" &&
+	cp "$ROOT/testing/coccinelle/scrub_missing.cocci" \
+		"$R4/testing/coccinelle/" &&
+	write_scrub_samples "$R4/samples.c" &&
+	! (cd "$R4" && git add -A && sh "$S") >"$W/out" 2>"$W/err" &&
+	[ "$(grep -c "^scrub_missing: samples.c:" "$W/err")" = 4 ]
 '
 
 test_expect_success 'the tree passes' '

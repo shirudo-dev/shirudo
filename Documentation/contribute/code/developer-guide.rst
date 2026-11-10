@@ -561,6 +561,11 @@ can rewrite what it finds does so with ``-D patch``:
      - A ``memset()`` of a local that nothing reads afterwards, which
        the compiler may drop, rather than ``memzero_explicit()``.
        Rewrites.
+   * - ``scrub_missing``
+     - A local filled with an activated credential, a KDF output or an
+       ECDH shared value, or by ``hex_bytes()``, ``hex_decode()`` or
+       ``getrandom()`` when named for a secret, that a path out leaves
+       without ``memzero_explicit()``.
    * - ``secret_cmp``
      - ``memcmp()`` of a secret or what derives from one rather than
        ``memneq_explicit()``.
