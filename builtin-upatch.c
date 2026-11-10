@@ -1372,8 +1372,11 @@ static int xdp_attach_one(int prog_fd, const struct prog_spec *spec,
 	if (xdp_multibuf_refused(features))
 		return XDP_ERR_NO_MULTIBUF;
 	fd = bpf_link_create(prog_fd, (int)dev->ifindex, BPF_XDP, &opts);
-	if (fd == -EOPNOTSUPP)
+	if (xdp_attach_unsupported(fd, features))
 		return XDP_ATTACH_UNSUPPORTED;
+	/* Not a kernel without the link type: EOPNOTSUPP would read as one. */
+	if (fd == -EOPNOTSUPP)
+		return XDP_ERR_DRIVER_SETTINGS;
 	if (fd < 0)
 		return fd;
 	ret = link_matches_spec(fd, spec, dev->ifindex);
@@ -2313,6 +2316,8 @@ static int __upatch_apply(const char *path, bool verify_only,
 			cat = "binary_mismatch";
 		else if (e == EMEDIUMTYPE)
 			cat = "xdp_multibuf_unsupported";
+		else if (e == ENOPROTOOPT)
+			cat = "xdp_driver_refused";
 		else if (e == EXDEV)
 			cat = "attach_scope_mismatch";
 		else if (e == EOPNOTSUPP)

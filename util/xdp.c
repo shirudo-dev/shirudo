@@ -530,10 +530,17 @@ bool xdp_multibuf_refused(__u64 features)
 	       !(features & NETDEV_XDP_ACT_RX_SG);
 }
 
+bool xdp_attach_unsupported(int err, __u64 features)
+{
+	return err == -EOPNOTSUPP && !(features & NETDEV_XDP_ACT_BASIC);
+}
+
 const char *xdp_attach_strerror(int err)
 {
 	if (err == XDP_ERR_NO_MULTIBUF)
 		return "the device does not report multi-buffer XDP support";
+	if (err == XDP_ERR_DRIVER_SETTINGS)
+		return "the driver refuses XDP in its current settings";
 	return strerror(-err);
 }
 

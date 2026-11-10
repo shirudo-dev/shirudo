@@ -15,6 +15,9 @@
 /* Every XDP program is loaded with frags, so the device must report them. */
 #define XDP_ERR_NO_MULTIBUF	(-EMEDIUMTYPE)
 
+/* A driver with native XDP that rules it out in its current settings. */
+#define XDP_ERR_DRIVER_SETTINGS	(-ENOPROTOOPT)
+
 struct xdp_device {
 	char devlink_device[128];
 	char devlink_bus[128];
@@ -58,6 +61,13 @@ int xdp_device_features(__u32 ifindex, __u64 *features);
 
 /* Native XDP without multi-buffer; a device with neither fails on its own. */
 bool xdp_multibuf_refused(__u64 features);
+
+/*
+ * Whether a failed link create says the device has no native XDP. A driver
+ * that has it refuses with the same EOPNOTSUPP in some settings, such as
+ * virtio_net under host GRO_HW or bnxt with header-data split.
+ */
+bool xdp_attach_unsupported(int err, __u64 features);
 const char *xdp_attach_strerror(int err);
 
 /*

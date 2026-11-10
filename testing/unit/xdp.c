@@ -125,6 +125,7 @@ static void restore_fails_on_a_driver_refusal(void)
 	static const int skipped[] = { -EBUSY, -EEXIST, -EXDEV, -ENODEV };
 	static const int refused[] = {
 		-EINVAL, -ENOSPC, -ERANGE, XDP_ERR_NO_MULTIBUF,
+		XDP_ERR_DRIVER_SETTINGS,
 	};
 	/* No device has this index, so the kernel answers ENODEV. */
 	struct xdp_device *devices = NULL, gone = { .ifindex = 0x7ffffff0 };
@@ -177,6 +178,18 @@ static void multibuf_is_required_of_native_xdp_alone(void)
 	EXPECT_STREQ(xdp_attach_strerror(XDP_ERR_NO_MULTIBUF),
 		     "the device does not report multi-buffer XDP support");
 	EXPECT_STREQ(xdp_attach_strerror(-EINVAL), strerror(EINVAL));
+}
+
+static void only_a_device_without_xdp_lacks_it(void)
+{
+	const __u64 basic = NETDEV_XDP_ACT_BASIC;
+
+	EXPECT_TRUE(xdp_attach_unsupported(-EOPNOTSUPP, 0));
+	EXPECT_FALSE(xdp_attach_unsupported(-EOPNOTSUPP, basic));
+	EXPECT_FALSE(xdp_attach_unsupported(-EINVAL, 0));
+	EXPECT_FALSE(xdp_attach_unsupported(0, 0));
+	EXPECT_STREQ(xdp_attach_strerror(XDP_ERR_DRIVER_SETTINGS),
+		     "the driver refuses XDP in its current settings");
 }
 
 static size_t add_attr(__u8 *buf, size_t len, __u16 type,
@@ -286,6 +299,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(load_stops_on_an_occupied_device),
 	UNIT_CASE(multibuf_is_required_of_native_xdp_alone),
 	UNIT_CASE(uncovered_devices_say_why),
+	UNIT_CASE(only_a_device_without_xdp_lacks_it),
 	UNIT_CASE(device_features_are_checked),
 	UNIT_CASE(link_messages_are_checked),
 	UNIT_CASE(kernel_discovery_revalidates_devices),

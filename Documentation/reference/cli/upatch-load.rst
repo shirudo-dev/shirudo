@@ -89,7 +89,8 @@ package.
 For XDP, the signed device-class mask selects interfaces present in the
 initial network namespace at load time, with one endpoint per veth pair.
 Each program can produce several ``link_<n>`` pins. Native XDP is
-required: unsupported devices are logged and skipped. An upatch with no
+required: a device without it is logged and skipped. A device that has
+native XDP but refuses it in its current settings is an error. An upatch with no
 attachable device yet still loads, and
 :doc:`/reference/cli/upatch-reconcile` attaches it when one appears. A
 device that is occupied or does not report multi-buffer XDP, and any other
@@ -197,8 +198,8 @@ Exit status and failure categories
 ``eventlog_full``, ``already_loaded``, ``parser_rejected``,
 ``signature_rejected``, ``signature_unsupported``, ``lsm_denied``,
 ``verifier_rejected``, ``attach_target_missing``, ``binary_mismatch``,
-``attach_scope_mismatch``, ``xdp_multibuf_unsupported``, ``tpm_error`` and
-``unknown``.
+``attach_scope_mismatch``, ``xdp_multibuf_unsupported``,
+``xdp_driver_refused``, ``tpm_error`` and ``unknown``.
 :doc:`/reference/failure-categories` gives the cause and the action for
 each. Handle ``tampered`` as an incident
 (:doc:`/operate/troubleshoot/incident-tampered`).

@@ -150,6 +150,17 @@ Categories
      - Narrow the signed device-class mask, or configure or change the
        device so that it reports multi-buffer XDP. See
        :doc:`/upatches/write/attach-kinds`.
+   * - ``xdp_driver_refused``
+     - ``link_create``
+     - ``ENOPROTOOPT``
+     - A selected device reports native XDP, but its driver refused the
+       program with ``EOPNOTSUPP``, which it does when its current
+       settings rule XDP out: ``virtio_net`` while the host does GRO_HW
+       or checksum offload, ``bnxt`` with header-data split or with rx
+       and tx channels not combined. The load was undone.
+     - Change the setting that rules XDP out, which ``bnxt`` names in the
+       kernel log, or narrow the signed device-class mask. See
+       :doc:`/upatches/write/attach-kinds`.
    * - ``binary_mismatch``
      - ``target_verify``, ``link_create``
      - ``ESTALE``

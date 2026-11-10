@@ -299,8 +299,13 @@ as interrupted is retried, and an interface renamed or removed during
 the snapshot, or a veth whose peer is not in it, is left out rather than
 failing the load.
 
-Links use ``XDP_FLAGS_DRV_MODE``. Devices that refuse native XDP with
-``EOPNOTSUPP``, such as a bridge, are logged and skipped. A device that
+Links use ``XDP_FLAGS_DRV_MODE``. A device without native XDP, which
+refuses with ``EOPNOTSUPP`` and reports no XDP features, such as a
+bridge, is logged and skipped. A device that reports native XDP and refuses
+with ``EOPNOTSUPP`` is refusing in its current settings, as
+``virtio_net`` does while the host does GRO_HW or checksum offload and
+``bnxt`` with header-data split, and fails like any other driver
+refusal, with the load category ``xdp_driver_refused``. A device that
 changes or goes away during attachment is skipped too. An XDP program
 with no device to attach to still loads: a pin of its own, ``xdp_prog_<i>``,
 keeps it, and ``status`` shows it as ``xdp (waiting for a device)``. Other

@@ -519,7 +519,8 @@ Causes
    category. For an XDP upatch, a line ``XDP: attach <device>`` before
    it names a device whose driver refused the program: a NIC added since
    the load, or a setting that survived the reboot, in the NIC's firmware
-   or the hypervisor, such as LRO or a device without multi-buffer XDP.
+   or the hypervisor, such as LRO, header-data split or a device without
+   multi-buffer XDP.
 
 Action
    A reboot restores the same archive and fails the same way. For an XDP
