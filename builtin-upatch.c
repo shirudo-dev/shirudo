@@ -1348,12 +1348,10 @@ static int pin_xdp_prog(int prog_fd, const char *name, __u32 index)
 }
 
 /*
- * 0 with the link pinned at pin, XDP_ATTACH_UNSUPPORTED when the driver
- * has no native XDP, or a negative errno. Unpinned, a closed link detaches,
- * so a failure here leaves the device as it was.
+ * 0 with the link pinned at pin, an enum xdp_attach_err or a negative errno.
+ * Unpinned, a closed link detaches, so a failure here leaves the device as
+ * it was.
  */
-#define XDP_ATTACH_UNSUPPORTED	1
-
 static int xdp_attach_one(int prog_fd, const struct prog_spec *spec,
 			  const struct xdp_device *dev, const char *pin)
 {
@@ -1372,7 +1370,7 @@ static int xdp_attach_one(int prog_fd, const struct prog_spec *spec,
 		return XDP_ERR_NO_MULTIBUF;
 	fd = bpf_link_create(prog_fd, (int)dev->ifindex, BPF_XDP, &opts);
 	if (xdp_attach_unsupported(fd, features))
-		return XDP_ATTACH_UNSUPPORTED;
+		return XDP_ERR_NO_NATIVE;
 	/* Not a kernel without the link type: EOPNOTSUPP would read as one. */
 	if (fd == -EOPNOTSUPP)
 		return XDP_ERR_DRIVER_SETTINGS;
@@ -1411,7 +1409,7 @@ static int attach_xdp_devices(int prog_fd, const struct prog_spec *spec,
 		if (strsprintf(pin, sizeof(pin), "%s/link_%u", dir, *pinned) < 0)
 			return -ENAMETOOLONG;
 		ret = xdp_attach_one(prog_fd, spec, dev, pin);
-		if (ret == XDP_ATTACH_UNSUPPORTED) {
+		if (ret == XDP_ERR_NO_NATIVE) {
 			pr_warn("XDP: skipping %s (ifindex %u, class %u): native XDP unsupported",
 				dev->name, dev->ifindex, xdp_device_class(dev));
 			continue;
@@ -1421,7 +1419,7 @@ static int attach_xdp_devices(int prog_fd, const struct prog_spec *spec,
 				dev->ifindex, xdp_attach_strerror(ret));
 			continue;
 		}
-		if (ret < 0) {
+		if (ret) {
 			pr_err("XDP: attach %s (ifindex %u): %s", dev->name,
 			       dev->ifindex, xdp_attach_strerror(ret));
 			return ret;
@@ -2310,19 +2308,21 @@ static int __upatch_apply(const char *path, bool verify_only,
 	ret = attach_and_pin_progs(cx, prog_desc_off, u.hdr.nr_progs,
 				   upatch_name, prog_specs);
 	if (ret) {
-		int e = -ret;
+		int e = -xdp_attach_errno(ret);
 		const char *cat;
 
-		if (e == ENOENT || e == ENOTDIR)
+		if (ret == XDP_ERR_NO_MULTIBUF)
+			cat = "xdp_multibuf_unsupported";
+		else if (ret == XDP_ERR_DRIVER_SETTINGS)
+			cat = "xdp_driver_refused";
+		else if (ret == XDP_ERR_LINK_SCOPE || ret == -EXDEV)
+			cat = "attach_scope_mismatch";
+		else if (ret > 0)
+			cat = "unknown";
+		else if (e == ENOENT || e == ENOTDIR)
 			cat = "attach_target_missing";
 		else if (e == ESTALE)
 			cat = "binary_mismatch";
-		else if (e == EMEDIUMTYPE)
-			cat = "xdp_multibuf_unsupported";
-		else if (e == ENOPROTOOPT)
-			cat = "xdp_driver_refused";
-		else if (e == EXDEV || e == EREMOTE)
-			cat = "attach_scope_mismatch";
 		else if (e == EOPNOTSUPP)
 			cat = "kernel_abi_unsupported";
 		else if (e == EACCES || e == EPERM)
@@ -4409,10 +4409,10 @@ static int reconcile_attach(int prog_fd, const char *name,
 			 "the guards refused the XDP link");
 		return 1;
 	} else if (ret == XDP_ERR_LINK_SCOPE) {
-		rep_fail(rep, "link_create", "attach_scope_mismatch", ret,
-			 xdp_attach_strerror(ret));
+		rep_fail(rep, "link_create", "attach_scope_mismatch",
+			 xdp_attach_errno(ret), xdp_attach_strerror(ret));
 		return 1;
-	} else if (ret < 0 && ret != XDP_ERR_OCCUPIED &&
+	} else if (ret != XDP_ERR_NO_NATIVE && ret != XDP_ERR_OCCUPIED &&
 		   !xdp_attach_skippable(ret, dev)) {
 		pr_warn("XDP: upatch %s: attach %s (ifindex %u): %s", name,
 			dev->name, dev->ifindex, xdp_attach_strerror(ret));

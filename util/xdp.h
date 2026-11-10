@@ -12,20 +12,22 @@
 
 #define XDP_IFNAME_MAX 16
 
-/* Every XDP program is loaded with frags, so the device must report them. */
-#define XDP_ERR_NO_MULTIBUF	(-EMEDIUMTYPE)
-
-/* A driver with native XDP that rules it out in its current settings. */
-#define XDP_ERR_DRIVER_SETTINGS	(-ENOPROTOOPT)
-
 /*
- * The device runs another XDP program: the kernel's EBUSY or EEXIST from
- * the link create alone, not a pin that happens to exist.
+ * What shirudo makes of a failed XDP attach. Positive, so that no errno a
+ * lookup or the kernel returns along the way can be read as one of them.
  */
-#define XDP_ERR_OCCUPIED	(-EBUSY)
-
-/* The kernel made the link for another device or namespace. */
-#define XDP_ERR_LINK_SCOPE	(-EREMOTE)
+enum xdp_attach_err {
+	/* The driver has no native XDP: the device is passed over. */
+	XDP_ERR_NO_NATIVE = 1,
+	/* Every XDP program is loaded with frags, so the device must report them. */
+	XDP_ERR_NO_MULTIBUF,
+	/* A driver with native XDP that rules it out in its current settings. */
+	XDP_ERR_DRIVER_SETTINGS,
+	/* The device runs another XDP program: the link create says so. */
+	XDP_ERR_OCCUPIED,
+	/* The kernel made the link for another device or namespace. */
+	XDP_ERR_LINK_SCOPE,
+};
 
 struct xdp_device {
 	char devlink_device[128];
@@ -76,7 +78,12 @@ bool xdp_multibuf_refused(__u64 features);
  * virtio_net under host GRO_HW or bnxt with header-data split.
  */
 bool xdp_attach_unsupported(int err, __u64 features);
+
+/* err is an enum xdp_attach_err or a negative errno. */
 const char *xdp_attach_strerror(int err);
+
+/* The negative errno a report carries for err. */
+int xdp_attach_errno(int err);
 
 /*
  * Why a device a program selects does not run it: attached as above,

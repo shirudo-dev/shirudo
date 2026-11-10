@@ -124,9 +124,9 @@ static void attach_fails_on_a_refusal_of_a_device_still_there(void)
 {
 	static const int skipped[] = { -EXDEV, -ENODEV };
 	static const int refused[] = {
-		-EINVAL, -ENOSPC, -ERANGE, XDP_ERR_NO_MULTIBUF,
-		XDP_ERR_DRIVER_SETTINGS, XDP_ERR_LINK_SCOPE, -EEXIST,
-		XDP_ERR_OCCUPIED,
+		-EINVAL, -ENOSPC, -ERANGE, -EEXIST, -EBUSY, -EMEDIUMTYPE,
+		-ENOPROTOOPT, -EREMOTE, XDP_ERR_NO_MULTIBUF,
+		XDP_ERR_DRIVER_SETTINGS, XDP_ERR_LINK_SCOPE, XDP_ERR_OCCUPIED,
 	};
 	/* No device has this index, so the kernel answers ENODEV. */
 	struct xdp_device *devices = NULL, gone = { .ifindex = 0x7ffffff0 };
@@ -143,7 +143,6 @@ static void attach_fails_on_a_refusal_of_a_device_still_there(void)
 	EXPECT_FALSE(xdp_attach_skippable(-EACCES, &gone));
 	EXPECT_FALSE(xdp_attach_skippable(-EPERM, &gone));
 	EXPECT_FALSE(xdp_attach_skippable(0, &gone));
-	EXPECT_FALSE(xdp_attach_skippable(1, &gone));
 
 	ret = xdp_devices_read(&devices, &count);
 	if (ret == -EPERM || ret == -EACCES || ret == -EAFNOSUPPORT)
@@ -163,6 +162,7 @@ static void attach_stops_on_an_occupied_device(void)
 	EXPECT_FALSE(xdp_attach_skippable(XDP_ERR_OCCUPIED, &dev));
 	EXPECT_FALSE(xdp_attach_skippable(XDP_ERR_OCCUPIED, &gone));
 	EXPECT_FALSE(xdp_attach_skippable(-EEXIST, &dev));
+	EXPECT_FALSE(xdp_attach_skippable(-EBUSY, &dev));
 	EXPECT_TRUE(xdp_attach_skippable(-EXDEV, &dev));
 	EXPECT_TRUE(xdp_attach_skippable(-ENODEV, &dev));
 	EXPECT_FALSE(xdp_attach_skippable(0, &dev));
@@ -195,6 +195,19 @@ static void only_a_device_without_xdp_lacks_it(void)
 		     "the driver refuses XDP in its current settings");
 	EXPECT_STREQ(xdp_attach_strerror(XDP_ERR_LINK_SCOPE),
 		     "the link is not on the device and namespace it was made for");
+}
+
+static void attach_errors_never_alias_an_errno(void)
+{
+	EXPECT_EQ(xdp_attach_errno(XDP_ERR_NO_MULTIBUF), -EMEDIUMTYPE);
+	EXPECT_EQ(xdp_attach_errno(XDP_ERR_DRIVER_SETTINGS), -ENOPROTOOPT);
+	EXPECT_EQ(xdp_attach_errno(XDP_ERR_OCCUPIED), -EBUSY);
+	EXPECT_EQ(xdp_attach_errno(XDP_ERR_LINK_SCOPE), -EREMOTE);
+	EXPECT_EQ(xdp_attach_errno(-EBUSY), -EBUSY);
+	EXPECT_TRUE(XDP_ERR_NO_NATIVE > 0);
+	EXPECT_STREQ(xdp_attach_strerror(XDP_ERR_OCCUPIED),
+		     "the device runs another XDP program");
+	EXPECT_STREQ(xdp_attach_strerror(-EBUSY), strerror(EBUSY));
 }
 
 static size_t add_attr(__u8 *buf, size_t len, __u16 type,
@@ -305,6 +318,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(multibuf_is_required_of_native_xdp_alone),
 	UNIT_CASE(uncovered_devices_say_why),
 	UNIT_CASE(only_a_device_without_xdp_lacks_it),
+	UNIT_CASE(attach_errors_never_alias_an_errno),
 	UNIT_CASE(device_features_are_checked),
 	UNIT_CASE(link_messages_are_checked),
 	UNIT_CASE(kernel_discovery_revalidates_devices),

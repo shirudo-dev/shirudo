@@ -538,13 +538,38 @@ bool xdp_attach_unsupported(int err, __u64 features)
 
 const char *xdp_attach_strerror(int err)
 {
-	if (err == XDP_ERR_NO_MULTIBUF)
+	switch (err) {
+	case XDP_ERR_NO_NATIVE:
+		return "the driver has no native XDP";
+	case XDP_ERR_NO_MULTIBUF:
 		return "the device does not report multi-buffer XDP support";
-	if (err == XDP_ERR_DRIVER_SETTINGS)
+	case XDP_ERR_DRIVER_SETTINGS:
 		return "the driver refuses XDP in its current settings";
-	if (err == XDP_ERR_LINK_SCOPE)
+	case XDP_ERR_OCCUPIED:
+		return "the device runs another XDP program";
+	case XDP_ERR_LINK_SCOPE:
 		return "the link is not on the device and namespace it was made for";
-	return strerror(-err);
+	default:
+		return strerror(-err);
+	}
+}
+
+int xdp_attach_errno(int err)
+{
+	switch (err) {
+	case XDP_ERR_NO_NATIVE:
+		return -EOPNOTSUPP;
+	case XDP_ERR_NO_MULTIBUF:
+		return -EMEDIUMTYPE;
+	case XDP_ERR_DRIVER_SETTINGS:
+		return -ENOPROTOOPT;
+	case XDP_ERR_OCCUPIED:
+		return -EBUSY;
+	case XDP_ERR_LINK_SCOPE:
+		return -EREMOTE;
+	default:
+		return err;
+	}
 }
 
 const char *xdp_uncovered_reason(__u32 attached, int features_err,
@@ -637,7 +662,7 @@ int xdp_devices_read(struct xdp_device **out, size_t *count)
  */
 bool xdp_attach_skippable(int err, const struct xdp_device *dev)
 {
-	if (err >= 0 || err == -EACCES || err == -EPERM ||
+	if (!err || err == -EACCES || err == -EPERM ||
 	    err == XDP_ERR_LINK_SCOPE || err == XDP_ERR_OCCUPIED)
 		return false;
 	if (err == -EXDEV || err == -ENODEV)
