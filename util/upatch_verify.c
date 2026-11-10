@@ -8,7 +8,6 @@
 #include <errno.h>
 #include <limits.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/xattr.h>
 #include <unistd.h>
@@ -16,7 +15,6 @@
 #include <bpf/bpf.h>
 #include <bpf/libbpf.h>
 #include <linux/bpf.h>
-#include <linux/if_link.h>
 
 #include <shirudo/misc.h>
 #include <shirudo/overflow.h>
@@ -215,11 +213,10 @@ int upatch_xdp_each_uncovered(const char *name, const struct prog_spec *specs,
 			      int (*cb)(int prog_fd, const struct prog_spec *spec,
 					const struct xdp_device *dev,
 					__u32 attached, void *ctx),
-			      void *ctx, int *query_err)
+			      void *ctx)
 {
 	__u32 i;
 
-	*query_err = 0;
 	for (i = 0; i < nr_progs; i++) {
 		__u32 prog_id = 0;
 		size_t j;
@@ -231,19 +228,12 @@ int upatch_xdp_each_uncovered(const char *name, const struct prog_spec *specs,
 		if (fd < 0)
 			return fd;
 		for (j = 0; j < count; j++) {
-			__u32 attached = 0;
+			__u32 attached = xdp_device_attached(&devices[j]);
 			int ret;
 
 			if (!xdp_device_selected(devices, count, j,
 						 specs[i].device_classes))
 				continue;
-			ret = bpf_xdp_query_id((int)devices[j].ifindex,
-					       XDP_FLAGS_DRV_MODE, &attached);
-			if (ret) {
-				if (!*query_err)
-					*query_err = ret;
-				continue;
-			}
 			if (xdp_reconcile_action(true, attached, prog_id) ==
 			    XDP_RECONCILE_COVERED)
 				continue;
@@ -392,7 +382,7 @@ static int note_uncovered(int prog_fd, const struct prog_spec *spec,
 
 	if (!attached) {
 		err = xdp_device_verify(dev);
-		/* bpf_xdp_query() finds nothing, not an error, for a gone device. */
+		/* The read finds nothing, not an error, for a device gone since. */
 		if (err == -ENODEV || err == -EXDEV)
 			return 0;
 		err = xdp_device_features(dev->ifindex, &features);
@@ -433,13 +423,9 @@ static int note_unclassified(struct uncovered_walk *w, const char *name,
 
 	for (i = 0; i < w->count; i++) {
 		const struct xdp_device *dev = &w->devices[i];
-		__u32 attached = 0;
 
-		if (!dev->unclassified_err)
-			continue;
-		if (!bpf_xdp_query_id((int)dev->ifindex, XDP_FLAGS_DRV_MODE,
-				      &attached) &&
-		    runs_program_of(name, specs, nr_progs, attached))
+		if (!dev->unclassified_err ||
+		    runs_program_of(name, specs, nr_progs, dev->xdp_drv_id))
 			continue;
 		if (strsprintf(w->why, sizeof(w->why), "not classified: %s",
 			       strerror(-dev->unclassified_err)) < 0)
@@ -461,7 +447,7 @@ static int xdp_uncovered(const struct measured_set *s, const char *name,
 	struct prog_spec *specs = NULL;
 	struct upatch_pins pins;
 	struct upatch u;
-	int ret, query_err = 0;
+	int ret;
 
 	if (upatch_pins_read(name, &pins) || !pins.nr_xdp_progs ||
 	    !upatch_pin_measured(s, name, payload))
@@ -477,15 +463,14 @@ static int xdp_uncovered(const struct measured_set *s, const char *name,
 		w->name = name;
 		ret = upatch_xdp_each_uncovered(name, specs, u.hdr.nr_progs,
 						w->devices, w->count,
-						note_uncovered, w, &query_err);
+						note_uncovered, w);
 		if (!ret)
 			ret = note_unclassified(w, name, specs,
 						u.hdr.nr_progs);
 	}
 	prog_specs_free(specs, u.hdr.nr_progs);
 	upatch_close(&u);
-	/* A device that could not be asked may run nothing: say so. */
-	return ret < 0 ? ret : query_err;
+	return ret;
 }
 
 int upatch_xdp_uncovered(const struct measured_set *s,

@@ -49,10 +49,9 @@ int upatch_xdp_prog_open(const char *name, __u32 index, __u32 *id);
 
 /*
  * Calls cb for each device an XDP program of name selects and that does not
- * run it, with what the device runs instead, 0 for nothing. A non-zero
- * return of cb ends the walk with that value, and a program pin that cannot
- * be opened ends it with its -errno. A device that cannot be asked what it
- * runs is passed over and the first such -errno left in *query_err.
+ * run it, with what the device runs instead as devices were read, 0 for
+ * nothing. A non-zero return of cb ends the walk with that value, and a
+ * program pin that cannot be opened ends it with its -errno.
  */
 int upatch_xdp_each_uncovered(const char *name, const struct prog_spec *specs,
 			      __u32 nr_progs, const struct xdp_device *devices,
@@ -60,7 +59,7 @@ int upatch_xdp_each_uncovered(const char *name, const struct prog_spec *specs,
 			      int (*cb)(int prog_fd, const struct prog_spec *spec,
 					const struct xdp_device *dev,
 					__u32 attached, void *ctx),
-			      void *ctx, int *query_err);
+			      void *ctx);
 
 struct measured_set;
 

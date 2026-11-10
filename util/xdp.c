@@ -216,9 +216,28 @@ out:
 	return ret;
 }
 
+static int xdp_ids_parse(const struct nlattr *xdp, struct xdp_device *out)
+{
+	const __u8 *attrs = (const __u8 *)xdp + NLA_HDRLEN;
+	size_t len = xdp->nla_len - NLA_HDRLEN;
+	__u32 skb = 0, hw = 0;
+	int ret;
+
+	ret = attr_number(attrs, len, IFLA_XDP_DRV_PROG_ID, &out->xdp_drv_id,
+			  sizeof(out->xdp_drv_id), NULL);
+	if (!ret)
+		ret = attr_number(attrs, len, IFLA_XDP_SKB_PROG_ID, &skb,
+				  sizeof(skb), NULL);
+	if (!ret)
+		ret = attr_number(attrs, len, IFLA_XDP_HW_PROG_ID, &hw,
+				  sizeof(hw), NULL);
+	out->xdp_other_id = skb ? skb : hw;
+	return ret;
+}
+
 int xdp_device_parse(const void *data, size_t len, struct xdp_device *out)
 {
-	const struct nlattr *linkinfo, *port;
+	const struct nlattr *linkinfo, *port, *xdp;
 	bool port_present = false;
 	struct ifinfomsg info;
 	__s32 peer_netns = 0;
@@ -261,6 +280,11 @@ int xdp_device_parse(const void *data, size_t len, struct xdp_device *out)
 		if (ret)
 			return ret;
 	}
+	ret = attr_find(attrs, len, IFLA_XDP, &xdp);
+	if (!ret && xdp)
+		ret = xdp_ids_parse(xdp, out);
+	if (ret)
+		return ret;
 	ret = attr_find(attrs, len, IFLA_DEVLINK_PORT, &port);
 	if (ret || !port || port->nla_len == NLA_HDRLEN)
 		return ret;
@@ -318,6 +342,11 @@ __u32 xdp_device_class(const struct xdp_device *dev)
 	if (dev->kind[0])
 		return UPATCH_XDP_VIRTUAL;
 	return UPATCH_XDP_UNKNOWN;
+}
+
+__u32 xdp_device_attached(const struct xdp_device *dev)
+{
+	return dev->xdp_drv_id ? dev->xdp_drv_id : dev->xdp_other_id;
 }
 
 static const struct xdp_device *veth_peer(const struct xdp_device *devs,

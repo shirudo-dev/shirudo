@@ -267,8 +267,9 @@ verdict is derived from them.
        moving namespace, for up to a minute. One that stays listed is unfiltered. Its driver
        refused the program, or a setting such as LRO turned its XDP off,
        or the reconcile units are stopped. ``WARN`` ``XDP coverage not
-       checked: <error>`` means the check could not run, or could not ask
-       a device what it runs; such a device may be unfiltered. ``XDP
+       checked: <error>`` means the check could not run; a device may
+       then be unfiltered. ``another XDP program attached`` counts a
+       generic or offloaded program too, which shirudo never attaches. ``XDP
        coverage not checked: not in the initial network namespace`` is a
        ``status`` run in a container or another namespace, whose devices
        are not the host's: run it in the host's namespace.

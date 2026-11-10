@@ -38,6 +38,9 @@ struct xdp_device {
 	char name[XDP_IFNAME_MAX];
 	__u32 ifindex;
 	__u32 peer_ifindex;
+	/* The driver-mode XDP program it runs, and a generic or offloaded one. */
+	__u32 xdp_drv_id;
+	__u32 xdp_other_id;
 	/* Why the driver or devlink facts could not be read, or 0. */
 	int unclassified_err;
 	__u32 flags;
@@ -64,6 +67,12 @@ bool xdp_attach_skippable(int err, const struct xdp_device *dev);
 
 int xdp_device_parse(const void *data, size_t len, struct xdp_device *out);
 __u32 xdp_device_class(const struct xdp_device *dev);
+
+/*
+ * The program the device runs, 0 for none. shirudo attaches in driver
+ * mode only, so a generic or offloaded program is another's.
+ */
+__u32 xdp_device_attached(const struct xdp_device *dev);
 bool xdp_device_selected(const struct xdp_device *devs, size_t count,
 			 size_t index, __u32 mask);
 /*

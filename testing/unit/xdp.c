@@ -280,6 +280,7 @@ static void link_messages_are_checked(void)
 	EXPECT_UEQ(dev.ifindex, 12);
 	EXPECT_UEQ(dev.peer_ifindex, 13);
 	EXPECT_TRUE(dev.peer_other_netns);
+	EXPECT_UEQ(xdp_device_attached(&dev), 0);
 	for (n = 0; n < sizeof(info) + NLA_HDRLEN + sizeof("veth0"); n++)
 		EXPECT_EQ(xdp_device_parse(buf, n, &dev), -EINVAL);
 	EXPECT_EQ(xdp_device_parse(buf, len - 1, &dev), -EINVAL);
@@ -288,6 +289,39 @@ static void link_messages_are_checked(void)
 	memset(buf, 0, sizeof(buf));
 	memcpy(buf, &info, sizeof(info));
 	len = add_attr(buf, sizeof(info), IFLA_IFNAME, "no-nul", 6);
+	EXPECT_EQ(xdp_device_parse(buf, len, &dev), -EINVAL);
+}
+
+static void every_xdp_mode_is_read_from_the_dump(void)
+{
+	struct ifinfomsg info = { .ifi_index = 3 };
+	__u32 drv = 21, skb = 22, hw = 23;
+	__u8 buf[256] = {}, nested[64];
+	struct xdp_device dev;
+	size_t len, n, base;
+
+	memcpy(buf, &info, sizeof(info));
+	base = add_attr(buf, sizeof(info), IFLA_IFNAME, "eth0", sizeof("eth0"));
+	memset(nested, 0, sizeof(nested));
+	n = add_attr(nested, 0, IFLA_XDP_SKB_PROG_ID, &skb, sizeof(skb));
+	len = add_attr(buf, base, IFLA_XDP | NLA_F_NESTED, nested, n);
+	ASSERT_EQ(xdp_device_parse(buf, len, &dev), 0);
+	EXPECT_UEQ(dev.xdp_drv_id, 0);
+	EXPECT_UEQ(xdp_device_attached(&dev), skb);
+	EXPECT_EQ(xdp_reconcile_action(true, xdp_device_attached(&dev), 7),
+		  XDP_RECONCILE_OCCUPIED);
+
+	memset(nested, 0, sizeof(nested));
+	n = add_attr(nested, 0, IFLA_XDP_HW_PROG_ID, &hw, sizeof(hw));
+	n = add_attr(nested, n, IFLA_XDP_DRV_PROG_ID, &drv, sizeof(drv));
+	len = add_attr(buf, base, IFLA_XDP | NLA_F_NESTED, nested, n);
+	ASSERT_EQ(xdp_device_parse(buf, len, &dev), 0);
+	EXPECT_UEQ(xdp_device_attached(&dev), drv);
+	EXPECT_UEQ(dev.xdp_other_id, hw);
+
+	memset(nested, 0, sizeof(nested));
+	n = add_attr(nested, 0, IFLA_XDP_DRV_PROG_ID, &drv, sizeof(__u16));
+	len = add_attr(buf, base, IFLA_XDP | NLA_F_NESTED, nested, n);
 	EXPECT_EQ(xdp_device_parse(buf, len, &dev), -EINVAL);
 }
 
@@ -356,6 +390,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(only_a_device_without_xdp_lacks_it),
 	UNIT_CASE(a_driver_refusal_is_told_from_other_errors),
 	UNIT_CASE(attach_errors_never_alias_an_errno),
+	UNIT_CASE(every_xdp_mode_is_read_from_the_dump),
 	UNIT_CASE(device_features_are_checked),
 	UNIT_CASE(link_messages_are_checked),
 	UNIT_CASE(the_network_namespace_is_known),

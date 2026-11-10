@@ -322,7 +322,13 @@ made at all, out of memory or descriptors, timed out, refused with
 device out. A kernel that does not answer a netlink request within
 5 seconds fails the load with ``ETIMEDOUT``, and is not asked again.
 
-Links use ``XDP_FLAGS_DRV_MODE``. A device without native XDP, which
+Links use ``XDP_FLAGS_DRV_MODE``: shirudo runs XDP in the driver only.
+Generic XDP, which runs in the stack after the socket buffer is built,
+is not supported, as it filters too late to be of use, so a driver
+without native XDP is not covered. A device that runs a generic or
+offloaded program, which shirudo never attaches, holds its XDP slot: it
+is occupied like one running another driver-mode program, and ``status``
+says ``another XDP program attached``. A device without native XDP, which
 refuses with ``EOPNOTSUPP`` and reports no XDP features, such as a
 bridge, is logged and skipped. Any other refusal is the driver ruling XDP
 out in its current settings, and fails with the load category
