@@ -475,10 +475,46 @@ test_expect_success 'test-vm imports the host-built payload' '
 	grep -q "TEST_VM_BUNDLE_STAMP" ../testing/Makefile &&
 	grep -q "TEST_VM_BUNDLE_INPUTS" ../testing/Makefile &&
 	grep -q "bundle_is_current" vm/build-bundle.sh &&
+	grep -Fq "touch -d \"@\$STAMP_TIME\" \"\$STAMP_FILE\"" vm/build-bundle.sh &&
+	make -s -C .. -f testing/Makefile \
+		--eval "bundle-inputs: ; @echo \$(TEST_VM_BUNDLE_INPUTS)" \
+		bundle-inputs >"$WORK/bundle-inputs.out" &&
+	grep -q "/util/upatch\.c" "$WORK/bundle-inputs.out" &&
+	! grep -q "/util/version_id\.c" "$WORK/bundle-inputs.out" &&
 	grep -q "flock 9" ../testing/Makefile &&
 	grep -q "bundle_dir.lock" ../testing/Makefile &&
 	! grep -Fq "rm -rf \"\$\$bundle_dir.lock\"" ../testing/Makefile &&
 	grep -Fq "\$\$bundle_dir" ../testing/Makefile
+'
+
+test_expect_success 'the bundle builds in the build container unless BUILD_CONTAINER=0' '
+	image=$(../testing/container/run.sh --image) &&
+	expr "$image" : "shirudo-build:[0-9a-f]\{16\}$" >/dev/null &&
+	! CONTAINER=/bin/false ../testing/container/run.sh -v relative -- true \
+		>"$WORK/container-v.out" 2>&1 &&
+	grep -q -- "-v takes an absolute directory" "$WORK/container-v.out" &&
+	! CONTAINER=/bin/false ../testing/container/run.sh \
+		>"$WORK/container-none.out" 2>&1 &&
+	grep -q "no command to run" "$WORK/container-none.out" &&
+	make -n -C .. -f testing/Makefile test-vm-bundle \
+		TEST_VM_WORK_DIR="$WORK/container-bundle" \
+		>"$WORK/container-make.out" 2>&1 &&
+	grep -q "BUILD_CONTAINER=\"1\"" "$WORK/container-make.out" &&
+	grep -q "testing/container/Containerfile" "$WORK/container-make.out" &&
+	! grep -q "/config\.mk" "$WORK/container-make.out" &&
+	make -n -C .. -f testing/Makefile test-vm-bundle BUILD_CONTAINER=0 \
+		TEST_VM_WORK_DIR="$WORK/host-bundle" >"$WORK/host-make.out" 2>&1 &&
+	grep -q "BUILD_CONTAINER=\"0\"" "$WORK/host-make.out" &&
+	grep -q "/config\.mk" "$WORK/host-make.out" &&
+	grep -q "build-bundle-payload.sh\" --from-copy" vm/build-bundle.sh &&
+	grep -q "list-source.sh" vm/build-bundle.sh vm/run.sh &&
+	! grep -q "ls-files" vm/build-bundle-payload.sh vm/guest.sh &&
+	if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+		vm/list-source.sh "$WORK/source-files" &&
+		tr "\\0" "\\n" <"$WORK/source-files" >"$WORK/source-list" &&
+		grep -qx "testing/vm/list-source.sh" "$WORK/source-list" &&
+		! grep -q "^build/" "$WORK/source-list"
+	fi
 '
 
 	test_expect_success 'test-vm summary records failed test names' '

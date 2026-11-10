@@ -8,6 +8,10 @@ updates:
     directory: "/Documentation"
     schedule:
       interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/testing/container"
+    schedule:
+      interval: "weekly"
   - package-ecosystem: "pip"
     directory: "/Documentation"
     schedule:

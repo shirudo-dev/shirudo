@@ -87,12 +87,16 @@ parser of input from outside the host gets a target in `testing/fuzz/`.
   artifact directory, needs gigabytes of disk and takes long, and a
   checkout or rebase that touches the script triggers it. Compare the
   times before starting and tell the user when a rebuild is due.
-- The bundle is built in the checkout from the working tree, so
-  uncommitted changes are tested. Edit nothing and run no other build in
-  that checkout until it is built.
-- The bundle compiles its BPF fixtures with the clang `shirudo-build`
-  was built for, `SHIRUDO_CLANG_PATH`, `/usr/bin/clang` unless set. It
-  must be clang 23; an older one stops at a release store with
+- The bundle builds in the build container (`testing/container/`) from
+  a copy of the files git sees in the checkout, tracked and untracked but
+  not ignored, so uncommitted changes are tested; edit nothing until the
+  copy is made. The first build makes the image, with network access,
+  and the static target dependencies, which takes minutes; say so.
+- With `BUILD_CONTAINER=0` the bundle builds in the checkout itself: edit
+  nothing and run no other build there until it is built. It then
+  compiles its BPF fixtures with the clang `shirudo-build` was built
+  for, `SHIRUDO_CLANG_PATH`, `/usr/bin/clang` unless set. It must be
+  clang 23; an older one stops at a release store with
   `Cannot select: ... AtomicStore`. Make does not rebuild the helper
   when only that variable changes: remove
   `tools/shirudo-build/compile.o` first.
@@ -109,11 +113,13 @@ Alacritty, gives everything it starts its `snap.<name>` AppArmor label
 signals only from unconfined processes and from `swtpm`: Ctrl-C, the
 runner's cleanup and `vm-stop` then leave `swtpm` running. Run the goal
 as a transient user service, which runs unconfined. It starts with the
-environment and limits of the user manager, not the shell's: pass on the
-`PATH` and `LD_LIBRARY_PATH` a host with an older OpenSSL or clang than
-the tree needs, and check that `systemctl --user show -p
-DefaultLimitMEMLOCK` reads `infinity`, the unlimited `ulimit -l` a VM
-goal needs.
+environment and limits of the user manager, not the shell's. The
+families build the host tier on the host, and so does the bundle with
+`BUILD_CONTAINER=0`; pass on the `PATH` and `LD_LIBRARY_PATH` a host
+with an older OpenSSL or clang than the tree needs for that. `end2end`
+builds nothing on the host and needs neither. Check that `systemctl
+--user show -p DefaultLimitMEMLOCK` reads `infinity`, the unlimited
+`ulimit -l` a VM goal needs.
 
 ```sh
 systemd-run --user --pipe --same-dir --wait --collect \

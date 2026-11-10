@@ -29,8 +29,10 @@ Before you begin
   missing skips. The runner of the ``CI suite`` workflow has them all.
 - For the tests that boot a VM: a readable and writable ``/dev/kvm``,
   a locked-memory limit (``ulimit -l``) of ``unlimited``, which the
-  shirudo binaries the runner calls require, an x86-64 or arm64 host and what ``make target`` needs,
-  since the bundle a VM boots holds the static target binary. On Ubuntu,
+  shirudo binaries the runner calls require, an x86-64 or arm64 host,
+  and podman or Docker, in which the bundle a VM boots builds; with
+  ``BUILD_CONTAINER=0`` it builds on the host instead, which then needs
+  what ``make target`` needs. On Ubuntu,
   ``.github/scripts/tests.sh setup`` installs ``cloud-image-utils``,
   ``dracut-core``, ``file``, ``isc-dhcp-client``, ``libguestfs-tools``,
   ``qemu-system-x86``, ``qemu-utils``, ``swtpm``, ``swtpm-tools`` and
@@ -417,6 +419,28 @@ signs with. Build it alone with:
 
    $ make -C testing bundle
 
+The host prepares the VM images and keeps the stamp. The rest, the build
+and everything it signs, :src:`testing/vm/build-bundle-payload.sh` does
+in the build container: Ubuntu 26.04, the release the VMs run, with its
+OpenSSL 3.5, the static archives its ``libcrypto.a`` names, which
+:src:`.github/scripts/install-static-libcrypto-deps.sh` installs as it
+does in CI, and clang 23, so that it needs nothing of the host's
+toolchain and what it puts into a guest links against the guest's
+libraries. The image builds from :src:`testing/container/Containerfile` on
+first use, with network access, and is tagged ``shirudo-build:<hash>``
+by its inputs; :src:`testing/container/run.sh` builds it and runs a
+command in it. The container builds from a copy of the files git sees in
+the checkout, tracked and untracked but not ignored, so uncommitted
+changes are in the bundle and the host's own build is left alone. It
+keeps the static target dependencies it builds under
+``build/test-vm/cache/target-deps/``, one directory per image and
+:src:`Makefile.target-deps`.
+
+``BUILD_CONTAINER=0`` builds the bundle in the checkout with the host's
+toolchain, the way the host tier always builds: OpenSSL 3.5 and clang 23,
+found through ``PATH`` and ``LD_LIBRARY_PATH`` as
+:doc:`/contribute/code/developer-guide` shows. ``CONTAINER`` names another
+engine than the first of ``podman`` and ``docker`` on ``PATH``.
 The bundle script runs Make builds with one job per available CPU reported
 by ``nproc``. The eighty status-many fixture pairs build in parallel batches, with one
 worker per available CPU reported by ``nproc``. Each worker builds a load

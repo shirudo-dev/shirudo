@@ -2,10 +2,12 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 #
-# testing/vm/build-bundle-payload.sh <bundle> <fixture-work> -- build and
-# sign what the test VM bundle carries into a guest: the target binary and
-# the test helpers, the upatch fixtures with keys made for them, and the
-# runtime and config images. build-bundle.sh runs it in the checkout.
+# testing/vm/build-bundle-payload.sh [--from-copy <files>] <bundle> <fixture-work>
+# -- build and sign what the test VM bundle carries into a guest: the target
+# binary and the test helpers, the upatch fixtures with keys made for them,
+# and the runtime and config images. build-bundle.sh runs it in the build
+# container with --from-copy, which builds from a copy of the files that
+# list-source.sh listed, or with BUILD_CONTAINER=0 in the checkout itself.
 
 set -euo pipefail
 
@@ -33,8 +35,18 @@ require_command()
 		die "missing build command: $command_name (install with: $(test_vm_install_cmd "$(test_vm_pkg "$deb_package" "$rpm_package")"))"
 }
 
+if [[ "${1:-}" == --from-copy ]]; then
+	[[ $# -ge 2 && -s "$2" ]] || die "--from-copy takes the list of files to copy"
+	files="$2"
+	shift 2
+	require_command rsync rsync
+	src="$(mktemp -d "${TMPDIR:-/tmp}/shirudo-bundle-src.XXXXXX")"
+	rsync -a --from0 --files-from="$files" --ignore-missing-args \
+		"$REPO_ROOT"/ "$src"/
+	exec "$src/testing/vm/build-bundle-payload.sh" "$@"
+fi
 [[ $# -eq 2 && -d "$1" && -d "$2" ]] ||
-	die "usage: $0 <bundle> <fixture-work>"
+	die "usage: $0 [--from-copy <files>] <bundle> <fixture-work>"
 TMP_DIR="$1"
 FIXTURE_WORK="$2"
 

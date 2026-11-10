@@ -5,7 +5,7 @@
 # Build the host-side payload imported by testing/vm/run.sh. The bundle is
 # shared by all VMs, while TPM state and the test workspace remain per-VM.
 # The host prepares the VM images; build-bundle-payload.sh builds and signs
-# the rest.
+# the rest, in the build container unless BUILD_CONTAINER=0.
 
 set -euo pipefail
 
@@ -32,6 +32,7 @@ OPERATOR_KEYS_DIR="${HOST_PRIVATE_DIR}/operator-keys"
 RUNTIME_PREP_VERSION=4
 TEST_VM_MODE=${TEST_VM_MODE:-verity}
 RUNTIME_DISK_SIZE="${TEST_VM_RUNTIME_DISK_SIZE:-8G}"
+BUILD_CONTAINER="${BUILD_CONTAINER:-1}"
 
 log()
 {
@@ -299,6 +300,36 @@ bundle_is_current()
 	return 0
 }
 
+# The container builds from a copy of the checkout, so that it shares no
+# objects with the host's build, and keeps the static target dependencies it
+# builds for its image and Makefile.target-deps. A file it reads from the
+# host goes into the fixture work first, where the container sees it.
+build_payload_in_container()
+{
+	local container="$REPO_ROOT/testing/container/run.sh" deps name
+	local -a pass=(-e TARGET_DEPS_DIR -e TEST_VM_ARCH)
+
+	deps="$WORK_DIR/cache/target-deps/$({
+		"$container" --image
+		cat "$REPO_ROOT/Makefile.target-deps"
+	} | sha256sum | cut -c1-16)"
+	mkdir -p "$deps"
+	install -d -m 0700 "$FIXTURE_WORK/inputs"
+	"$REPO_ROOT/testing/vm/list-source.sh" "$FIXTURE_WORK/inputs/source-files"
+	for name in BPF_VMLINUX_BTF TEST_VM_PACKAGE_CERT \
+		TEST_VM_BUILTIN_SIGNING_KEY TEST_VM_BUILTIN_SIGNING_CERT; do
+		[[ -n "${!name:-}" ]] || continue
+		install -m 0600 "${!name}" "$FIXTURE_WORK/inputs/$name"
+		export "$name=$FIXTURE_WORK/inputs/$name"
+		pass+=(-e "$name")
+	done
+	log "building the payload in $("$container" --image)"
+	TARGET_DEPS_DIR="$deps" "$container" -v "$TMP_DIR" -v "$FIXTURE_WORK" \
+		-v "$deps" "${pass[@]}" -- \
+		"$REPO_ROOT/testing/vm/build-bundle-payload.sh" --from-copy \
+		"$FIXTURE_WORK/inputs/source-files" "$TMP_DIR" "$FIXTURE_WORK"
+}
+
 command -v flock >/dev/null 2>&1 ||
 	die "flock is required; install it with: $(test_vm_install_cmd util-linux)"
 
@@ -308,6 +339,9 @@ validate_package_cert
 mkdir -p "$(dirname "$BUNDLE_DIR")"
 exec 9>"$LOCK_FILE"
 flock 9
+# The stamp takes the time before the build reads its inputs, so that one
+# changed while it runs is newer and the next VM goal builds again.
+STAMP_TIME="$(date +%s.%N)"
 validate_host_private_dir
 
 resolve_rootfs
@@ -331,7 +365,11 @@ cleanup()
 	rm -rf -- "$TMP_DIR" "$FIXTURE_WORK"
 }
 trap cleanup EXIT
-"$REPO_ROOT/testing/vm/build-bundle-payload.sh" "$TMP_DIR" "$FIXTURE_WORK"
+if [[ "$BUILD_CONTAINER" == 0 ]]; then
+	"$REPO_ROOT/testing/vm/build-bundle-payload.sh" "$TMP_DIR" "$FIXTURE_WORK"
+else
+	build_payload_in_container
+fi
 printf '%s\n' "$TEST_VM_MODE" >"$TMP_DIR/test-mode"
 
 printf 'shirudo-test-vm-bundle-v1\n' >"$TMP_DIR/format"
@@ -348,6 +386,6 @@ chmod 0600 "$OPERATOR_KEYS_DIR/keys/signing_key.pem"
 
 rm -rf -- "$BUNDLE_DIR"
 mv -- "$TMP_DIR" "$BUNDLE_DIR"
-touch "$STAMP_FILE"
+touch -d "@$STAMP_TIME" "$STAMP_FILE"
 trap - EXIT
 log "ready: $BUNDLE_DIR"
