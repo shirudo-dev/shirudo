@@ -55,7 +55,6 @@ Boot the test VM
       target# shirudo-runtime status
       Host:                  upatch-dev
       Roles:                 target
-      Mode:                  production
       Status:                ok
       ...
 

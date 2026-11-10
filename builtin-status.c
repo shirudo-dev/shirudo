@@ -819,7 +819,7 @@ int cmd_status(int argc, const char **argv)
 	char reason[160];
 	bool lsm_attached, keyring_present, is_operator, cert_present, is_target;
 	key_serial_t keyring_serial, keyring_pinned;
-	const char *keyring_mode, *mode;
+	const char *keyring_mode;
 	struct sysinfo sysi = {};
 	struct trusted_set certs = {};
 	int certs_enrolled = -1;
@@ -940,7 +940,6 @@ int cmd_status(int argc, const char **argv)
 	dmv.serial = dmv.pinned >= 1 ? keyring_dm_verity_serial() :
 		     -ENOKEY;
 	keyring_view_dm_verity(&dmv, &ident);
-	mode = lsm_attached ? "production" : "inactive";
 	is_operator = access(SIGNING_KEY_PATH, F_OK) == 0;
 	cert_present = access(get_cert_path(), F_OK) == 0;
 	is_target = cert_present || lsm_attached || keyring_present;
@@ -1091,7 +1090,6 @@ int cmd_status(int argc, const char **argv)
 			json_arr_close(&e);
 		}
 		json_kv_bool(&e, "lsm_attached", lsm_attached);
-		json_kv_string(&e, "mode", mode);
 		json_kv_string(&e, "keyring_mode", keyring_mode);
 		json_kv_bool(&e, "keyring_present", keyring_present);
 		if (keyring_present)
@@ -1318,7 +1316,6 @@ int cmd_status(int argc, const char **argv)
 		printf("%-22s %s\n", "Host:", hostname);
 		printf("%-22s %s\n", "Roles:",
 		       roles_str(is_target, is_operator));
-		printf("%-22s %s\n", "Mode:", mode);
 		if (reason[0])
 			printf("%-22s %s  (%s)\n", "Status:", verdict,
 			       reason);

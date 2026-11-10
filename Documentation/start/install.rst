@@ -240,8 +240,8 @@ enforces once it boots through the shirudo initrd with everything that
   not write drop-ins for them.
 
 :doc:`/operate/deploy/boot-integration` sets these up. After the reboot,
-``shirudo status`` on the target shows ``Status: ok`` and ``Mode:
-production``, and ``shirudo status --show-full`` shows ``Bound in:
+``shirudo status`` on the target shows ``Status: ok`` with every
+condition ``OK``, and ``shirudo status --show-full`` shows ``Bound in:
 initrd``.
 
 Next steps

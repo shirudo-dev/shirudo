@@ -35,10 +35,6 @@ report. The roles come from what is present:
   ``init`` froze
 - operator: ``/var/lib/shirudo/keys/signing_key.pem``
 
-``Mode`` is ``production`` when the LSM link is pinned and ``inactive``
-otherwise. It says nothing about the keyring. The ``KeyringSealed``
-condition does.
-
 The report shows six conditions, each ``OK``, ``WARN`` or ``ALERT``:
 ``LsmAttached``, ``KeyringSealed``, ``ChainIntact``,
 ``UpatchesMeasured``, ``TpmMeasured`` and ``ConfigActive``. The verdict is the first of these that applies:
@@ -174,7 +170,6 @@ Show the state of a target:
    target# shirudo status
    Host:                  docs
    Roles:                 target
-   Mode:                  production
    Status:                ok
    Version ID:            d0d7aa800303439023907d1979d917d46a21bec21f816689c138728a28e84af9
 
@@ -210,7 +205,6 @@ system as well:
    target# shirudo status --show-full
    Host:                  docs
    Roles:                 target
-   Mode:                  production
    Status:                ok
    Version ID:            d0d7aa800303439023907d1979d917d46a21bec21f816689c138728a28e84af9
 

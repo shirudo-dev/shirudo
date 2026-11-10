@@ -150,7 +150,6 @@ Check enforcement
       target# shirudo status
       Host:                  quickstart
       Roles:                 target
-      Mode:                  production
       Status:                ok
       Version ID:            414d0c75238fcc31b1d60ce78b4943a8b450f49556a5cb255d62392061b87ccf
 
@@ -182,7 +181,7 @@ Check enforcement
      from ``shirudo status --json``: the command exits with 0 whatever
      the verdict is, unless ``--check`` makes it exit with 1 on
      ``tampered``.
-   - ``Mode: production``: the LSM link is pinned.
+   - The ``LsmAttached`` condition is ``OK``: the LSM link is pinned.
    - The tamper attempts: calls the policy refused since boot. Other
      software on the guest has already made some.
    - The last line names the sections the report folds while their

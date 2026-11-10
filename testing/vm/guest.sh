@@ -395,7 +395,7 @@ if [[ "$VM_INITRD" == 1 ]]; then
 	"$SHIRUDO_BIN" status --json | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
-assert d["mode"] == "production", d["mode"]
+assert d["lsm_attached"] is True, d["lsm_attached"]
 assert d["tpm"]["bound_in"] == "initrd", d["tpm"]
 '
 	test ! -e /run/shirudo/eventlog.pending

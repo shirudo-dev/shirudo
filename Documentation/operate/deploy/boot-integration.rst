@@ -431,7 +431,6 @@ Boot and verify
       target# shirudo status
       Host:                  docs
       Roles:                 target
-      Mode:                  production
       Status:                ok
       Version ID:            d0d7aa800303439023907d1979d917d46a21bec21f816689c138728a28e84af9
 
@@ -459,9 +458,10 @@ Boot and verify
 
       Folded: keyrings, TPM measurement, assets (--show-full)
 
-   Check for ``Mode: production``, ``Status: ok`` and six ``OK``
-   conditions. ``ConfigActive`` names the first 12 hex digits of the
-   active config root. ``shirudo status --show-full`` prints the folded
+   Check for ``Status: ok`` and six ``OK`` conditions. The
+   ``LsmAttached`` condition confirms the LSM link is pinned.
+   ``ConfigActive`` names the first 12 hex digits of the active config
+   root. ``shirudo status --show-full`` prints the folded
    TPM measurement section, whose ``Bound in:`` line must read
    ``initrd``. :doc:`/operate/run/read-status` explains every section.
 

@@ -37,7 +37,6 @@ Print the report
       target# shirudo status
       Host:                  docs
       Roles:                 target
-      Mode:                  production
       Status:                ok
       Version ID:            d0d7aa800303439023907d1979d917d46a21bec21f816689c138728a28e84af9
 
@@ -90,7 +89,6 @@ line; a section unfolds on its own when its condition is not ``OK``.
    target# shirudo status --show-full
    Host:                  docs
    Roles:                 target
-   Mode:                  production
    Status:                ok
    Version ID:            d0d7aa800303439023907d1979d917d46a21bec21f816689c138728a28e84af9
 
@@ -189,11 +187,6 @@ Header
     ``target`` alone. A private signing key on a target breaks the
     operator and target split: remove it and treat the key as exposed,
     see :doc:`/operate/maintain/keys`.
-
-``Mode``
-    ``production`` when the ``lsm/bpf`` link is pinned in the private
-    bpffs, ``inactive`` otherwise. ``Mode`` does not look at the keyring
-    or the register. Read the conditions for those.
 
 ``Status``
     The verdict, followed by the reason in parentheses when it is not
@@ -744,8 +737,6 @@ The fields that matter for monitoring:
      - It is not ``ok``.
    * - ``conditions[].status``
      - Any condition is ``ALERT``.
-   * - ``mode``
-     - It is not ``production``.
    * - ``tamper_attempts.total``
      - It rises beyond your baseline. It is ``null`` before ``init``.
    * - ``config.activation_pending``

@@ -67,10 +67,6 @@ determined, as noted.
    * - ``lsm_attached``
      - boolean
      - ``true`` when the pin ``/run/shirudo/bpffs/lsm_link`` opens.
-   * - ``mode``
-     - string
-     - ``production`` when ``lsm_attached`` is ``true``, else
-       ``inactive``.
    * - ``keyring_mode``
      - string
      - ``bpf`` when the ``.bpf`` keyring is present, else ``none``.
@@ -785,7 +781,6 @@ indented here:
        }
      ],
      "lsm_attached": true,
-     "mode": "production",
      "keyring_mode": "bpf",
      "keyring_present": true,
      "keyring_serial": 272801410,

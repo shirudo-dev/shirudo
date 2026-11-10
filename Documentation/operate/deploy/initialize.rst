@@ -66,7 +66,6 @@ Check that init worked
       target# shirudo status
       Host:                  docs
       Roles:                 target
-      Mode:                  production
       Status:                ok
       Version ID:            d0d7aa800303439023907d1979d917d46a21bec21f816689c138728a28e84af9
 
@@ -142,8 +141,6 @@ Check that init worked
         - Value after a good boot
       * - ``status``
         - ``"ok"``
-      * - ``mode``
-        - ``"production"``
       * - ``keyring_mode``
         - ``"bpf"``
       * - ``tpm.bound_in``

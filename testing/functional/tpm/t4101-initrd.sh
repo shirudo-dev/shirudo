@@ -33,8 +33,9 @@ PHASE_BEFORE=$(status_field tpm.phase_before)
 PHASE_MEASURED=1
 [ "$PHASE_BEFORE" != "$(printf '%064d' 0)" ] || PHASE_MEASURED=0
 
-test_expect_success 'status reports the production configuration' '
-	[ "$(status_field mode)" = production ] &&
+test_expect_success 'status reports an attached LSM and a BPF keyring' '
+	[ -z "$(status_field mode)" ] &&
+	[ "$(status_field lsm_attached)" = True ] &&
 	[ "$(status_field keyring_mode)" = bpf ]
 '
 

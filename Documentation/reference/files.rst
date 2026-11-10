@@ -318,7 +318,7 @@ by ``BPF_OBJ_GET`` (``ObjGet``). Directories stay listable.
      - Content
    * - ``lsm_link``
      - Link of ``lsm/bpf``, the ``bpf()`` admission hook. Its presence
-       makes ``status`` report ``Mode: production``.
+       makes the ``LsmAttached`` condition report ``OK``.
    * - ``bpf2_bpf_map_link``, ``bpf2_bpf_prog_load_link``,
        ``bpf2_inode_unlink_link``, ``bpf2_inode_setxattr_link``,
        ``bpf2_inode_removexattr_link``, ``bpf2_key_permission_link``,
