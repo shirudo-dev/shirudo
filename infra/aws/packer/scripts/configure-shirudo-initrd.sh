@@ -74,6 +74,33 @@ sudo install -D -o root -g root -m 0644 \
   "$assets_dir/runtime-service.conf" \
   /etc/systemd/system/shirudo.service.d/verity.conf
 
+for service in shirudo-keepalive shirudo-map-export \
+  shirudo-bpm-repo-update shirudo-bpm-tree-sync; do
+  sudo install -d -o root -g root -m 0755 \
+    "/etc/systemd/system/${service}.service.d"
+done
+sudo tee /etc/systemd/system/shirudo-keepalive.service.d/runtime.conf >/dev/null <<'EOF'
+[Service]
+ExecStart=
+ExecStart=/run/shirudo/runtime/usr/bin/shirudo status --otel --include-system
+EOF
+sudo tee /etc/systemd/system/shirudo-map-export.service.d/runtime.conf >/dev/null <<'EOF'
+[Service]
+ExecStart=
+ExecStart=/run/shirudo/runtime/usr/bin/shirudo upatch map --all
+EOF
+sudo tee /etc/systemd/system/shirudo-bpm-repo-update.service.d/runtime.conf >/dev/null <<'EOF'
+[Service]
+ExecStart=
+ExecStart=-/run/shirudo/runtime/usr/bin/shirudo bpm repo update
+ExecStart=/run/shirudo/runtime/usr/bin/shirudo bpm upgrade
+EOF
+sudo tee /etc/systemd/system/shirudo-bpm-tree-sync.service.d/runtime.conf >/dev/null <<'EOF'
+[Service]
+ExecStart=
+ExecStart=/run/shirudo/runtime/usr/bin/shirudo bpm tree sync
+EOF
+
 tcti_device="$(ldconfig -p | awk '$1 == "libtss2-tcti-device.so.0" { print $NF; exit }')"
 if [[ -z "$tcti_device" || ! -r "$tcti_device" ]]; then
   echo "libtss2-tcti-device.so.0 is required to initialize the TPM in the initrd" >&2
@@ -84,13 +111,24 @@ sudo shirudo-gen-initrd --kver "$kernel_release" \
   --binary "$assets_dir/shirudo-target" \
   --binary-path /usr/bin/shirudo \
   --bootstrap-conf "$assets_dir/initrd-bootstrap.conf" \
-  -- --install "$tcti_device"
+  -- --no-hostonly --install "$tcti_device"
 initrd="/boot/initrd.img-${kernel_release}"
 sudo shirudo-gen-initrd --check "$initrd"
 initrd_listing="$(sudo lsinitrd "$initrd")"
 if ! grep -q -- 'libtss2-tcti-device\.so\.0' <<<"$initrd_listing"; then
   echo "libtss2-tcti-device.so.0 is missing from $initrd" >&2
   exit 1
+fi
+if grep -Eq '(^|[[:space:]])etc/hostname([[:space:]]|$)' <<<"$initrd_listing"; then
+  echo "Builder hostname must not be embedded in $initrd" >&2
+  exit 1
+fi
+if grep -Eq '(^|[[:space:]])etc/machine-id([[:space:]]|$)' <<<"$initrd_listing"; then
+  initrd_machine_id="$(sudo lsinitrd -f etc/machine-id "$initrd")"
+  if [[ -n "$initrd_machine_id" && "$initrd_machine_id" != uninitialized ]]; then
+    echo "Builder machine ID must not be embedded in $initrd" >&2
+    exit 1
+  fi
 fi
 
 esp="$(findmnt -n -o TARGET /boot/efi || true)"
