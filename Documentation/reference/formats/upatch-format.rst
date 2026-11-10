@@ -435,7 +435,8 @@ XDP retains the 160-byte entry and UPGM version 1; readers that do not
 know kind 8 refuse it. Its ``target`` and ``map`` are empty. Device-class
 bits mean network-facing (1), virtual (2), VM (8) and unknown (16); 27
 selects all classes. Bit 4 is not a class, and a reader refuses a mask
-that sets it or any bit above 16.
+that sets it or any bit above 16, and a table whose XDP entries share a
+class.
 
 When any entry has kind 7, one ``UPUT`` block follows the program entries
 and ends the section. Without a kind 7 entry the section ends after the

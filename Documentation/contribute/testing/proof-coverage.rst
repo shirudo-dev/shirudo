@@ -752,6 +752,8 @@ Within the ``.upatch`` reader, the proofs cover its parts but not their
 composition: ``upatch_parse()`` and ``upatch_open_memory()`` join the
 header, the signed sections, the decoders and the policy labels the
 proofs cover one by one, and a proof of the whole file runs out of
-memory. A program table of two or more programs, ``find_rodata_data()``
+memory. A program table of two or more programs, and with it the rule
+that two XDP programs select disjoint device classes, which the
+``upatch`` unit cases check, ``find_rodata_data()``
 on loaders of other shapes, ``btf_dump_cost()``, the ``.rodata`` printers
 and the libbpf calls behind ``btf_rodata_btf()`` have no proof.

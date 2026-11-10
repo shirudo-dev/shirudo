@@ -603,7 +603,7 @@ __u32 prog_specs_xdp_classes(const struct prog_spec *specs, __u32 nr_progs)
 int prog_specs_parse(const void *metadata, __u32 metadata_len,
 		     __u32 nr_maps, __u32 nr_progs, struct prog_spec **out)
 {
-	__u32 magic, version, count, i, nr_uprobes = 0;
+	__u32 magic, version, count, i, nr_uprobes = 0, xdp_classes = 0;
 	const struct upatch_prog_entry empty = {};
 	struct upatch_prog_metadata md;
 	struct prog_spec *specs = NULL;
@@ -699,12 +699,15 @@ int prog_specs_parse(const void *metadata, __u32 metadata_len,
 			break;
 		case UPATCH_ATTACH_XDP:
 			spec->device_classes = le32_to_cpu(prog.xdp.device_classes);
+			/* A device runs one native XDP program at a time. */
 			if (!spec->device_classes ||
 			    (spec->device_classes & ~(__u32)UPATCH_XDP_ALL) ||
+			    (spec->device_classes & xdp_classes) ||
 			    prog.xdp.reserved ||
 			    memcmp(prog.target, empty.target, sizeof(prog.target)) ||
 			    memcmp(prog.map, empty.map, sizeof(prog.map)))
 				goto out;
+			xdp_classes |= spec->device_classes;
 			spec->kind = kind;
 			continue;
 		default:
