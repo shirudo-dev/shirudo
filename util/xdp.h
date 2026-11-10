@@ -67,6 +67,12 @@ __u32 xdp_device_class(const struct xdp_device *dev);
 bool xdp_device_selected(const struct xdp_device *devs, size_t count,
 			 size_t index, __u32 mask);
 /*
+ * 0 in the initial network namespace, -EXDEV in another. Devices, and the
+ * hook of a netfilter link, are the caller's namespace's.
+ */
+int netns_initial(void);
+
+/*
  * A device whose facts cannot be read sits out, unresolved, rather than
  * failing the read: it need not be one any upatch selects.
  */

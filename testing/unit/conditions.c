@@ -155,6 +155,11 @@ static void unchecked_coverage_warns_without_degrading(void)
 	EXPECT_STREQ(row->status, "WARN");
 	EXPECT_TRUE(strstr(row->detail, "not checked"));
 	EXPECT_STREQ(status_verdict(&in), "ok");
+	in.xdp_coverage_rc = -EXDEV;
+	row = condition_of(&in, c, "XdpCovered");
+	ASSERT_TRUE(row);
+	EXPECT_STREQ(row->detail, "XDP coverage not checked: "
+		     "not in the initial network namespace");
 }
 
 static void covered_devices_are_ok(void)

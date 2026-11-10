@@ -231,6 +231,9 @@ size_t conditions(const struct conditions_input *in,
 				   in->xdp_uncovered,
 				   in->xdp_uncovered_detail ?
 				   in->xdp_uncovered_detail : "?");
+		else if (in->xdp_coverage_rc == -EXDEV)
+			set_detail(&c[n], "WARN", "XDP coverage not checked: %s",
+				   "not in the initial network namespace");
 		else if (in->xdp_coverage_rc)
 			set_detail(&c[n], "WARN", "XDP coverage not checked: %s",
 				   strerror(-in->xdp_coverage_rc));

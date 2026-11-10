@@ -310,6 +310,18 @@ static void device_features_are_checked(void)
 	EXPECT_EQ(xdp_features_parse(buf, len, &out), -EINVAL);
 }
 
+static void the_network_namespace_is_known(void)
+{
+	int ret;
+
+	/* CI runs riscv64 under QEMU user emulation, which lacks the option. */
+#ifdef __riscv
+	unit_skip("SO_NETNS_COOKIE unavailable under emulation");
+#endif
+	ret = netns_initial();
+	EXPECT_TRUE(ret == 0 || ret == -EXDEV);
+}
+
 static void kernel_discovery_revalidates_devices(void)
 {
 	struct xdp_device *devices = NULL;
@@ -346,6 +358,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(attach_errors_never_alias_an_errno),
 	UNIT_CASE(device_features_are_checked),
 	UNIT_CASE(link_messages_are_checked),
+	UNIT_CASE(the_network_namespace_is_known),
 	UNIT_CASE(kernel_discovery_revalidates_devices),
 	{}
 };

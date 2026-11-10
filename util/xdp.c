@@ -596,6 +596,30 @@ const char *xdp_uncovered_reason(__u32 attached, int features_err,
 	return "not attached";
 }
 
+/* The initial network namespace's cookie, NET_NS_INIT_ID in linux/nsfs.h. */
+#define NET_NS_INIT_COOKIE	7ULL
+
+#ifndef SO_NETNS_COOKIE
+#define SO_NETNS_COOKIE		71
+#endif
+
+int netns_initial(void)
+{
+	socklen_t len = sizeof(__u64);
+	__u64 cookie = 0;
+	int fd, ret;
+
+	fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+	if (fd < 0)
+		return -errno;
+	ret = getsockopt(fd, SOL_SOCKET, SO_NETNS_COOKIE, &cookie, &len) ?
+	     -errno : 0;
+	close(fd);
+	if (ret)
+		return ret;
+	return cookie == NET_NS_INIT_COOKIE ? 0 : -EXDEV;
+}
+
 static int device_compare(const void *a, const void *b)
 {
 	const struct xdp_device *left = a, *right = b;

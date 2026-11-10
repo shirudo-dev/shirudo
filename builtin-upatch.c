@@ -1176,31 +1176,8 @@ static int prog_attach_for_spec(int prog_fd,
 	}
 }
 
-/* The initial network namespace's cookie, NET_NS_INIT_ID in linux/nsfs.h. */
-#define NET_NS_INIT_COOKIE	7ULL
 /* The root of the unified cgroup hierarchy. */
 #define ROOT_CGROUP_ID		1ULL
-#ifndef SO_NETNS_COOKIE
-#define SO_NETNS_COOKIE			71
-#endif
-
-/* A netfilter link hooks the caller's network namespace. */
-static int netns_initial(void)
-{
-	socklen_t len = sizeof(__u64);
-	__u64 cookie = 0;
-	int fd, ret;
-
-	fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
-	if (fd < 0)
-		return -errno;
-	ret = getsockopt(fd, SOL_SOCKET, SO_NETNS_COOKIE, &cookie, &len) ?
-	     -errno : 0;
-	close(fd);
-	if (ret)
-		return ret;
-	return cookie == NET_NS_INIT_COOKIE ? 0 : -EXDEV;
-}
 
 /*
  * The site a kprobe, uprobe, cgroup or netfilter program attaches at is

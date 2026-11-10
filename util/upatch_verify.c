@@ -496,6 +496,13 @@ int upatch_xdp_uncovered(const struct measured_set *s,
 	struct uncovered_walk w = { .cb = cb, .ctx = ctx };
 	int ret;
 
+	/* Elsewhere the devices and their indexes are another namespace's. */
+	ret = netns_initial();
+	if (ret) {
+		if (!*check_err)
+			*check_err = ret;
+		return 0;
+	}
 	ret = walk_pinned(s, xdp_uncovered, NULL, &w, check_err);
 	xfree(w.devices, size_mul(w.count, sizeof(*w.devices)));
 	return ret < 0 ? ret : w.found;
