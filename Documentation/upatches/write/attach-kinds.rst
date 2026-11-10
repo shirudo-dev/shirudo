@@ -252,6 +252,13 @@ mask is mandatory, nonzero and contains only the bits below. Bare
 ``xdp``, ``xdp.frags``, devmap and cpumap sections are refused;
 ``xdp/<decimal-mask>`` already means multi-buffer.
 
+A device runs one native XDP program at a time, so the XDP programs of
+one upatch must select disjoint classes: ``shirudo build`` refuses
+``SEC("xdp/3")`` beside ``SEC("xdp/2")``. Two upatches can still select
+the same device. The second one's ``upatch load`` then fails, at boot
+restore it is restored without that device, and ``status`` lists the
+device under ``XdpCovered`` as ``another XDP program attached``.
+
 .. list-table::
    :header-rows: 1
    :widths: 12 22 66

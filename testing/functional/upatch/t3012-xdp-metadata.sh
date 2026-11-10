@@ -30,6 +30,22 @@ build_xdp() {
 		--key "$WORK/k.pem" --cert "$WORK/c.der") >"$WORK/log" 2>&1
 }
 
+build_pair() {
+	cat >"$WORK/pair.bpf.c" <<-EOF
+	// SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
+	#include "vmlinux.h"
+	#include <bpf/bpf_helpers.h>
+	char _license[] SEC("license") = "Dual BSD/GPL";
+	SEC("$1")
+	int first(struct xdp_md *ctx) { return XDP_PASS; }
+	SEC("$2")
+	int second(struct xdp_md *ctx) { return XDP_PASS; }
+	EOF
+	(cd .. && "$SHB" "$WORK/pair.bpf.c" -o "$WORK/pair.upatch" \
+		--name pair --emit-artifacts --vmlinux vendor/linux/vmlinux.h \
+		--key "$WORK/k.pem" --cert "$WORK/c.der") >"$WORK/log" 2>&1
+}
+
 check_masks() {
 	for mask in $(seq 1 31); do
 		if [ $((mask & 4)) -ne 0 ]; then
@@ -63,6 +79,15 @@ test_expect_success 'an object input retains the signed XDP selection' '
 
 test_expect_success 'missing, malformed and unsupported masks and variants fail' '
 	check_rejections
+'
+
+test_expect_success 'programs of one upatch with disjoint classes build' '
+	build_pair xdp/1 xdp/2
+'
+
+test_expect_success 'programs of one upatch sharing a class are refused' '
+	! build_pair xdp/3 xdp/2 &&
+	grep -q "selects a device class another XDP program" "$WORK/log"
 '
 
 test_done

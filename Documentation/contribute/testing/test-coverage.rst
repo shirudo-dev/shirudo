@@ -171,7 +171,9 @@ signed config image.
    * - ``t3011-string-bounds``
      - Names and the tree repository are refused rather than cut
    * - ``t3012-xdp-metadata``
-     - Signed XDP device-class masks, object inputs and invalid sections
+     - Signed XDP device-class masks, object inputs and invalid sections;
+       two XDP programs of one upatch build with disjoint classes and are
+       refused when they share one
    * - ``t3101-target-fixtures``
      - Prebuilt fixtures load and unload, foreign and own-keyring
        fixtures are refused, a map fixture exports

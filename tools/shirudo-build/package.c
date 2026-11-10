@@ -1159,7 +1159,7 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 	char (*seen_maps)[UPATCH_PROG_MAP_MAX] = NULL;
 	struct bpf_program *p;
 	size_t len, base_len, md_alloc_len;
-	__u32 i = 0, n_seen = 0, nr_uprobe_targets = 0;
+	__u32 i = 0, n_seen = 0, nr_uprobe_targets = 0, xdp_classes = 0;
 	bool has_serializer = false, has_test_run = false;
 	int err;
 
@@ -1333,6 +1333,14 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 				err = -EINVAL;
 				goto err_free;
 			}
+			/* A device takes one native XDP program at a time. */
+			if (mask & xdp_classes) {
+				pr_err("XDP section '%s' selects a device class another XDP program of this upatch selects; give each class to one program",
+				       sec);
+				err = -EINVAL;
+				goto err_free;
+			}
+			xdp_classes |= (__u32)mask;
 			md->progs[i].xdp.device_classes = cpu_to_le32((__u32)mask);
 			i++;
 			continue;
