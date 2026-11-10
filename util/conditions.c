@@ -39,17 +39,23 @@ static bool keyring_tampered(const struct conditions_input *in)
 	       in->bpf_unfrozen || in->dmv_unfrozen || in->dmv_key_missing;
 }
 
+/* A list of names can outgrow the detail; its start still says the most. */
 static void __printf(3, 4)
 set_detail(struct condition *c, const char *status,
 	   const char *fmt, ...)
 {
+	char full[1024];
 	va_list ap;
+	int ret;
 
 	c->status = status;
 	va_start(ap, fmt);
-	if (vstrsprintf(c->detail, sizeof(c->detail), fmt, ap) < 0)
-		strscpy(c->detail, "?", sizeof(c->detail));
+	ret = vstrsprintf(full, sizeof(full), fmt, ap);
 	va_end(ap);
+	if (ret < 0)
+		strscpy(c->detail, "?", sizeof(c->detail));
+	else if (strscpy(c->detail, full, sizeof(c->detail)) < 0)
+		memcpy(c->detail + sizeof(c->detail) - 4, "...", 4);
 }
 
 static void keyring_condition(const struct conditions_input *in,

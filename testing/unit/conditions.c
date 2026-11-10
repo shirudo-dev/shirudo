@@ -175,6 +175,33 @@ static void covered_devices_are_ok(void)
 	EXPECT_STREQ(status_verdict(&in), "ok");
 }
 
+static void a_long_list_is_cut_not_dropped(void)
+{
+	char names[256];
+	struct conditions_input in = {
+		.reachable = true,
+		.parsed = true,
+		.lsm_attached = 1,
+		.keyring_present = 1,
+		.chain_seen = 1,
+		.xdp_uncovered = 20,
+		.xdp_uncovered_detail = names,
+	};
+	struct condition c[CONDITIONS_MAX];
+	const struct condition *row;
+	size_t len;
+
+	memset(names, 'x', sizeof(names) - 1);
+	names[sizeof(names) - 1] = '\0';
+	memcpy(names, "fw on eth1", strlen("fw on eth1"));
+	row = condition_of(&in, c, "XdpCovered");
+	ASSERT_TRUE(row);
+	len = strlen(row->detail);
+	EXPECT_EQ(len, sizeof(row->detail) - 1);
+	EXPECT_TRUE(strstr(row->detail, "fw on eth1"));
+	EXPECT_STREQ(row->detail + len - 3, "...");
+}
+
 static const struct unit_case cases[] = {
 	UNIT_CASE(changed_xdp_archive_is_tampered),
 	UNIT_CASE(a_changed_archive_outranks_a_pin_warning),
@@ -184,6 +211,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(an_uncovered_device_degrades),
 	UNIT_CASE(unchecked_coverage_warns_without_degrading),
 	UNIT_CASE(covered_devices_are_ok),
+	UNIT_CASE(a_long_list_is_cut_not_dropped),
 	{}
 };
 

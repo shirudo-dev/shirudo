@@ -226,7 +226,9 @@ Conditions
 is ``OK``, ``WARN`` or ``ALERT``. ``<serial>``, ``<n>`` and ``<root>``
 stand for a keyring serial, a number of links and the first 12 hex
 digits of the config root hash. ``KeyringSealed`` reports the first of
-its details that applies, in the order listed.
+its details that applies, in the order listed. A detail is at most 191
+bytes: a longer one, such as a long list of names, is cut and ends with
+``...``.
 
 .. list-table::
    :header-rows: 1
