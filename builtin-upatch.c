@@ -4259,6 +4259,15 @@ static int reconcile_fail_verify(const char *name, int err,
 	return 1;
 }
 
+static int reconcile_records_failed(int err, struct op_report *rep)
+{
+	pr_err("upatch reconcile: cannot read this boot's records: %s",
+	       strerror(-err));
+	rep_fail(rep, "pre_flight", "tpm_error", err,
+		 "cannot read this boot's records");
+	return 1;
+}
+
 /*
  * A load in progress has pins before it has an archive, and one that died
  * leaves pins without a record, which status reports as such. Only the
@@ -4281,13 +4290,16 @@ static int reconcile_open(struct xdp_work *w, bool *skip,
 		return 1;
 	}
 	ret = pin_is_measured(w->name, w->payload, &held);
-	if (!ret && !held) {
+	if (ret) {
+		eventlog_unlock(lock);
+		return reconcile_records_failed(ret, rep);
+	}
+	if (!held) {
 		*skip = true;
 		eventlog_unlock(lock);
 		return 0;
 	}
-	if (!ret)
-		ret = reconcile_read(w);
+	ret = reconcile_read(w);
 	eventlog_unlock(lock);
 	return ret ? reconcile_fail_verify(w->name, ret, rep) : 0;
 }
@@ -4488,9 +4500,7 @@ static int reconcile_apply(const struct xdp_work *w,
 	}
 	ret = pin_is_measured(w->name, payload, &held);
 	if (ret) {
-		rep_fail(rep, "pre_flight", "tpm_error", ret,
-			 "cannot read this boot's records");
-		ret = 1;
+		ret = reconcile_records_failed(ret, rep);
 		goto out;
 	}
 	if (!held || memneq_explicit(payload, w->payload, sizeof(payload)))

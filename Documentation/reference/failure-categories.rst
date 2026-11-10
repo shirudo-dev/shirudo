@@ -245,7 +245,7 @@ Categories
      - The unload was measured, then removing the pins failed.
      - Repeat the unload. Each attempt records another unload event.
    * - ``tpm_error``
-     - ``tpm_extend``
+     - ``tpm_extend``; ``pre_flight`` from ``upatch reconcile``
      - errno of the call
      - The register lock could not be taken, or this boot's records could
        not be read or what they do not cover could not be undone, in which
