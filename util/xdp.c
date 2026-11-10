@@ -288,6 +288,9 @@ __u32 xdp_device_class(const struct xdp_device *dev)
 
 	if (dev->flags & IFF_LOOPBACK)
 		return 0;
+	/* netback is "vif" too: in dom0 it is the host end of a guest's link. */
+	if (!strcmp(dev->parent_bus, "xen-backend"))
+		return UPATCH_XDP_VIRTUAL;
 	for (i = 0; i < ARRAY_SIZE(vm_drivers); i++)
 		if (!strcmp(dev->driver, vm_drivers[i]))
 			return UPATCH_XDP_VM;

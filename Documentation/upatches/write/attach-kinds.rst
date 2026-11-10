@@ -275,7 +275,8 @@ it.
      - Hardware-backed NICs and physical devlink ports.
    * - 2
      - Virtual
-     - Software interfaces, host tap devices and devlink representors.
+     - Software interfaces, host tap devices, devlink representors and
+       Xen netback interfaces in dom0.
    * - 8
      - VM
      - Guest adapters using virtio-net, vmxnet3, Hyper-V netvsc or Xen
@@ -288,7 +289,10 @@ it.
 
 Bit 4 is not a class, and a mask with it is refused. Loopback has no
 native XDP, so it has no class and no mask selects it. Every other
-interface has exactly one class. shirudo checks the driver names ``virtio_net``, ``vmxnet3``, ``hv_netvsc``,
+interface has exactly one class. A device on the ``xen-backend`` bus,
+Xen's netback in dom0, is virtual: it is the host end of a guest's link,
+though its driver is named ``vif`` as netfront's is. shirudo then checks
+the driver names ``virtio_net``, ``vmxnet3``, ``hv_netvsc``,
 ``xen-netfront`` and ``vif`` for VM adapters, then ``netdevsim``, which
 is virtual whatever its devlink port says. Next it uses devlink port
 flavour: physical ports are network-facing; CPU, DSA, PCI PF, VF, SF

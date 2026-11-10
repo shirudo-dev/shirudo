@@ -49,6 +49,17 @@ static void netdevsim_is_virtual_whatever_its_port_says(void)
 	EXPECT_UEQ(xdp_device_class(&dev), UPATCH_XDP_VIRTUAL);
 }
 
+static void xen_netback_is_virtual_though_named_vif(void)
+{
+	struct xdp_device dev = {};
+
+	memcpy(dev.driver, "vif", sizeof("vif"));
+	memcpy(dev.parent_bus, "xen", sizeof("xen"));
+	EXPECT_UEQ(xdp_device_class(&dev), UPATCH_XDP_VM);
+	memcpy(dev.parent_bus, "xen-backend", sizeof("xen-backend"));
+	EXPECT_UEQ(xdp_device_class(&dev), UPATCH_XDP_VIRTUAL);
+}
+
 static void veth_peers_are_namespace_aware(void)
 {
 	struct xdp_device devs[4] = {};
@@ -321,6 +332,7 @@ static void kernel_discovery_revalidates_devices(void)
 static const struct unit_case cases[] = {
 	UNIT_CASE(classes_are_exclusive),
 	UNIT_CASE(netdevsim_is_virtual_whatever_its_port_says),
+	UNIT_CASE(xen_netback_is_virtual_though_named_vif),
 	UNIT_CASE(veth_peers_are_namespace_aware),
 	UNIT_CASE(veth_without_a_peer_is_not_selected),
 	UNIT_CASE(unresolved_devices_sit_out),
