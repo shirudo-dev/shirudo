@@ -157,7 +157,8 @@ static int nl_exchange(int protocol, struct nl_request *req,
 
 		n = recvmsg(fd, &msg, 0);
 		if (n < 0) {
-			ret = -errno;
+			/* EAGAIN is SO_RCVTIMEO, not a dump to start again. */
+			ret = errno == EAGAIN ? -ETIMEDOUT : -errno;
 			goto out;
 		}
 		if (!n || msg.msg_flags & (MSG_TRUNC | MSG_CTRUNC) ||

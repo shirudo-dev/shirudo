@@ -297,7 +297,8 @@ Pairs entirely outside the initial namespace are excluded. Discovery
 tolerates interfaces changing under it: a snapshot the kernel reports
 as interrupted is retried, and an interface renamed or removed during
 the snapshot, or a veth whose peer is not in it, is left out rather than
-failing the load.
+failing the load. A kernel that does not answer a netlink request within
+5 seconds fails the load with ``ETIMEDOUT``, and is not asked again.
 
 Links use ``XDP_FLAGS_DRV_MODE``. A device without native XDP, which
 refuses with ``EOPNOTSUPP`` and reports no XDP features, such as a
