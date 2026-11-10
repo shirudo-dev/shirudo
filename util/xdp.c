@@ -464,7 +464,14 @@ static int receive_family(const void *data, size_t len, void *ctx)
 			   CTRL_ATTR_FAMILY_ID, ctx, sizeof(__u16), NULL);
 }
 
-static int genl_family(const char *name, __u16 *id)
+static __u16 devlink_family;
+static __u16 netdev_family;
+
+/*
+ * A family keeps its id while it is registered, and devlink and netdev
+ * are built in, so one lookup serves every device and attach of a run.
+ */
+static int genl_family(const char *name, __u16 *cached, __u16 *id)
 {
 	struct nl_request req = {
 		.hdr.nlmsg_len = NLMSG_LENGTH(GENL_HDRLEN),
@@ -474,9 +481,17 @@ static int genl_family(const char *name, __u16 *id)
 	struct genlmsghdr genl = { .cmd = CTRL_CMD_GETFAMILY, .version = 1 };
 	int ret;
 
+	if (*cached) {
+		*id = *cached;
+		return 0;
+	}
 	memcpy(req.data, &genl, sizeof(genl));
 	ret = attr_put(&req, CTRL_ATTR_FAMILY_NAME, name, strlen(name) + 1);
-	return ret ? ret : nl_exchange(NETLINK_GENERIC, &req, receive_family, id);
+	if (!ret)
+		ret = nl_exchange(NETLINK_GENERIC, &req, receive_family, id);
+	if (!ret)
+		*cached = *id;
+	return ret;
 }
 
 static int receive_port(const void *data, size_t len, void *ctx)
@@ -532,7 +547,7 @@ static int device_details(struct xdp_device *dev)
 		};
 		__u16 family = 0;
 
-		ret = genl_family(DEVLINK_GENL_NAME, &family);
+		ret = genl_family(DEVLINK_GENL_NAME, &devlink_family, &family);
 		if (ret || !family)
 			return ret ? ret : -EINVAL;
 		req.hdr.nlmsg_type = family;
@@ -585,7 +600,7 @@ int xdp_device_features(__u32 ifindex, __u64 *features)
 	int ret;
 
 	/* -ENOENT would read as a missing attach target and be skipped. */
-	ret = genl_family(NETDEV_FAMILY_NAME, &family);
+	ret = genl_family(NETDEV_FAMILY_NAME, &netdev_family, &family);
 	if (ret == -ENOENT)
 		return -EOPNOTSUPP;
 	if (ret || !family)
