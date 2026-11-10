@@ -1376,6 +1376,8 @@ static int xdp_attach_one(int prog_fd, const struct prog_spec *spec,
 	/* Not a kernel without the link type: EOPNOTSUPP would read as one. */
 	if (fd == -EOPNOTSUPP)
 		return XDP_ERR_DRIVER_SETTINGS;
+	if (fd == -EBUSY || fd == -EEXIST)
+		return XDP_ERR_OCCUPIED;
 	if (fd < 0)
 		return fd;
 	ret = link_matches_spec(fd, spec, dev->ifindex);
@@ -4410,7 +4412,7 @@ static int reconcile_attach(int prog_fd, const char *name,
 		rep_fail(rep, "link_create", "attach_scope_mismatch", ret,
 			 xdp_attach_strerror(ret));
 		return 1;
-	} else if (ret < 0 && ret != -EBUSY && ret != -EEXIST &&
+	} else if (ret < 0 && ret != XDP_ERR_OCCUPIED &&
 		   !xdp_attach_skippable(ret, dev, false)) {
 		pr_warn("XDP: upatch %s: attach %s (ifindex %u): %s", name,
 			dev->name, dev->ifindex, xdp_attach_strerror(ret));

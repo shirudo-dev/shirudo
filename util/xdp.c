@@ -641,7 +641,7 @@ bool xdp_attach_skippable(int err, const struct xdp_device *dev,
 	if (err >= 0 || err == -EACCES || err == -EPERM ||
 	    err == XDP_ERR_LINK_SCOPE)
 		return false;
-	if (err == -EBUSY || err == -EEXIST)
+	if (err == XDP_ERR_OCCUPIED)
 		return restoring;
 	if (err == -EXDEV || err == -ENODEV)
 		return true;

@@ -18,6 +18,12 @@
 /* A driver with native XDP that rules it out in its current settings. */
 #define XDP_ERR_DRIVER_SETTINGS	(-ENOPROTOOPT)
 
+/*
+ * The device runs another XDP program: the kernel's EBUSY or EEXIST from
+ * the link create alone, not a pin that happens to exist.
+ */
+#define XDP_ERR_OCCUPIED	(-EBUSY)
+
 /* The kernel made the link for another device or namespace. */
 #define XDP_ERR_LINK_SCOPE	(-EREMOTE)
 

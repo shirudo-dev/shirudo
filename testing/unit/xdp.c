@@ -122,10 +122,10 @@ static void reconcile_never_touches_another_program(void)
 
 static void restore_fails_on_a_driver_refusal(void)
 {
-	static const int skipped[] = { -EBUSY, -EEXIST, -EXDEV, -ENODEV };
+	static const int skipped[] = { XDP_ERR_OCCUPIED, -EXDEV, -ENODEV };
 	static const int refused[] = {
 		-EINVAL, -ENOSPC, -ERANGE, XDP_ERR_NO_MULTIBUF,
-		XDP_ERR_DRIVER_SETTINGS, XDP_ERR_LINK_SCOPE,
+		XDP_ERR_DRIVER_SETTINGS, XDP_ERR_LINK_SCOPE, -EEXIST,
 	};
 	/* No device has this index, so the kernel answers ENODEV. */
 	struct xdp_device *devices = NULL, gone = { .ifindex = 0x7ffffff0 };
@@ -160,7 +160,7 @@ static void load_stops_on_an_occupied_device(void)
 {
 	struct xdp_device dev = {};
 
-	EXPECT_FALSE(xdp_attach_skippable(-EBUSY, &dev, false));
+	EXPECT_FALSE(xdp_attach_skippable(XDP_ERR_OCCUPIED, &dev, false));
 	EXPECT_FALSE(xdp_attach_skippable(-EEXIST, &dev, false));
 	EXPECT_TRUE(xdp_attach_skippable(-EXDEV, &dev, false));
 	EXPECT_TRUE(xdp_attach_skippable(-ENODEV, &dev, false));
