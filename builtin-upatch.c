@@ -4458,10 +4458,15 @@ static int reconcile_walk(const struct xdp_work *w,
 	struct reconcile_pass pass = {
 		.name = w->name, .next = next, .needed = needed, .rep = rep,
 	};
-	int ret;
+	int ret, query_err;
 
 	ret = upatch_xdp_each_uncovered(w->name, w->specs, w->u.hdr.nr_progs,
-					devices, count, reconcile_device, &pass);
+					devices, count, reconcile_device, &pass,
+					&query_err);
+	/* The device is tried again next pass; status reports the gap meanwhile. */
+	if (query_err && next)
+		pr_warn("XDP: upatch %s: cannot ask a device what it runs: %s",
+			w->name, strerror(-query_err));
 	if (ret >= 0)
 		return ret;
 	if (!next) {

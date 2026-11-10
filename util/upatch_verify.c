@@ -215,10 +215,11 @@ int upatch_xdp_each_uncovered(const char *name, const struct prog_spec *specs,
 			      int (*cb)(int prog_fd, const struct prog_spec *spec,
 					const struct xdp_device *dev,
 					__u32 attached, void *ctx),
-			      void *ctx)
+			      void *ctx, int *query_err)
 {
 	__u32 i;
 
+	*query_err = 0;
 	for (i = 0; i < nr_progs; i++) {
 		__u32 prog_id = 0;
 		size_t j;
@@ -233,12 +234,17 @@ int upatch_xdp_each_uncovered(const char *name, const struct prog_spec *specs,
 			__u32 attached = 0;
 			int ret;
 
-			/* A device that cannot be queried went away. */
 			if (!xdp_device_selected(devices, count, j,
-						 specs[i].device_classes) ||
-			    bpf_xdp_query_id((int)devices[j].ifindex,
-					     XDP_FLAGS_DRV_MODE, &attached) ||
-			    xdp_reconcile_action(true, attached, prog_id) ==
+						 specs[i].device_classes))
+				continue;
+			ret = bpf_xdp_query_id((int)devices[j].ifindex,
+					       XDP_FLAGS_DRV_MODE, &attached);
+			if (ret) {
+				if (!*query_err)
+					*query_err = ret;
+				continue;
+			}
+			if (xdp_reconcile_action(true, attached, prog_id) ==
 			    XDP_RECONCILE_COVERED)
 				continue;
 			ret = cb(fd, &specs[i], &devices[j], attached, ctx);
@@ -383,8 +389,13 @@ static int note_uncovered(int prog_fd, const struct prog_spec *spec,
 	__u64 features = 0;
 	int err = 0;
 
-	if (!attached)
+	if (!attached) {
+		err = xdp_device_verify(dev);
+		/* bpf_xdp_query() finds nothing, not an error, for a gone device. */
+		if (err == -ENODEV || err == -EXDEV)
+			return 0;
 		err = xdp_device_features(dev->ifindex, &features);
+	}
 	w->found++;
 	return w->cb(w->name, dev->name,
 		     xdp_uncovered_reason(attached, err, features), w->ctx);
@@ -399,7 +410,7 @@ static int xdp_uncovered(const struct measured_set *s, const char *name,
 	struct prog_spec *specs = NULL;
 	struct upatch_pins pins;
 	struct upatch u;
-	int ret;
+	int ret, query_err = 0;
 
 	if (upatch_pins_read(name, &pins) || !pins.nr_xdp_progs ||
 	    !upatch_pin_measured(s, name, payload))
@@ -415,11 +426,12 @@ static int xdp_uncovered(const struct measured_set *s, const char *name,
 		w->name = name;
 		ret = upatch_xdp_each_uncovered(name, specs, u.hdr.nr_progs,
 						w->devices, w->count,
-						note_uncovered, w);
+						note_uncovered, w, &query_err);
 	}
 	prog_specs_free(specs, u.hdr.nr_progs);
 	upatch_close(&u);
-	return min(ret, 0);
+	/* A device that could not be asked may run nothing: say so. */
+	return ret < 0 ? ret : query_err;
 }
 
 int upatch_xdp_uncovered(const struct measured_set *s,
