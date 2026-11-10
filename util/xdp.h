@@ -18,6 +18,9 @@
 /* A driver with native XDP that rules it out in its current settings. */
 #define XDP_ERR_DRIVER_SETTINGS	(-ENOPROTOOPT)
 
+/* The kernel made the link for another device or namespace. */
+#define XDP_ERR_LINK_SCOPE	(-EREMOTE)
+
 struct xdp_device {
 	char devlink_device[128];
 	char devlink_bus[128];

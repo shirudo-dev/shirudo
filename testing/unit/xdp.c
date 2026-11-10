@@ -125,7 +125,7 @@ static void restore_fails_on_a_driver_refusal(void)
 	static const int skipped[] = { -EBUSY, -EEXIST, -EXDEV, -ENODEV };
 	static const int refused[] = {
 		-EINVAL, -ENOSPC, -ERANGE, XDP_ERR_NO_MULTIBUF,
-		XDP_ERR_DRIVER_SETTINGS,
+		XDP_ERR_DRIVER_SETTINGS, XDP_ERR_LINK_SCOPE,
 	};
 	/* No device has this index, so the kernel answers ENODEV. */
 	struct xdp_device *devices = NULL, gone = { .ifindex = 0x7ffffff0 };
@@ -139,6 +139,8 @@ static void restore_fails_on_a_driver_refusal(void)
 	EXPECT_TRUE(xdp_attach_skippable(-EINVAL, &gone, true));
 	EXPECT_FALSE(xdp_attach_skippable(-EINVAL, &unaskable, true));
 	EXPECT_FALSE(xdp_attach_skippable(-EINVAL, &unaskable, false));
+	EXPECT_FALSE(xdp_attach_skippable(XDP_ERR_LINK_SCOPE, &gone, true));
+	EXPECT_FALSE(xdp_attach_skippable(XDP_ERR_LINK_SCOPE, &gone, false));
 	EXPECT_FALSE(xdp_attach_skippable(-EACCES, &gone, true));
 	EXPECT_FALSE(xdp_attach_skippable(-EPERM, &gone, true));
 	EXPECT_FALSE(xdp_attach_skippable(0, &gone, true));
@@ -190,6 +192,8 @@ static void only_a_device_without_xdp_lacks_it(void)
 	EXPECT_FALSE(xdp_attach_unsupported(0, 0));
 	EXPECT_STREQ(xdp_attach_strerror(XDP_ERR_DRIVER_SETTINGS),
 		     "the driver refuses XDP in its current settings");
+	EXPECT_STREQ(xdp_attach_strerror(XDP_ERR_LINK_SCOPE),
+		     "the link is not on the device and namespace it was made for");
 }
 
 static size_t add_attr(__u8 *buf, size_t len, __u16 type,

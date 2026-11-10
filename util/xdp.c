@@ -542,6 +542,8 @@ const char *xdp_attach_strerror(int err)
 		return "the device does not report multi-buffer XDP support";
 	if (err == XDP_ERR_DRIVER_SETTINGS)
 		return "the driver refuses XDP in its current settings";
+	if (err == XDP_ERR_LINK_SCOPE)
+		return "the link is not on the device and namespace it was made for";
 	return strerror(-err);
 }
 
@@ -636,7 +638,8 @@ int xdp_devices_read(struct xdp_device **out, size_t *count)
 bool xdp_attach_skippable(int err, const struct xdp_device *dev,
 			  bool restoring)
 {
-	if (err >= 0 || err == -EACCES || err == -EPERM)
+	if (err >= 0 || err == -EACCES || err == -EPERM ||
+	    err == XDP_ERR_LINK_SCOPE)
 		return false;
 	if (err == -EBUSY || err == -EEXIST)
 		return restoring;

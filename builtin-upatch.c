@@ -1379,6 +1379,9 @@ static int xdp_attach_one(int prog_fd, const struct prog_spec *spec,
 	if (fd < 0)
 		return fd;
 	ret = link_matches_spec(fd, spec, dev->ifindex);
+	/* Not to be read as xdp_device_verify()'s "the device changed". */
+	if (ret == -EXDEV)
+		ret = XDP_ERR_LINK_SCOPE;
 	if (!ret)
 		ret = xdp_device_verify(dev);
 	if (!ret)
@@ -2316,7 +2319,7 @@ static int __upatch_apply(const char *path, bool verify_only, bool restoring,
 			cat = "xdp_multibuf_unsupported";
 		else if (e == ENOPROTOOPT)
 			cat = "xdp_driver_refused";
-		else if (e == EXDEV)
+		else if (e == EXDEV || e == EREMOTE)
 			cat = "attach_scope_mismatch";
 		else if (e == EOPNOTSUPP)
 			cat = "kernel_abi_unsupported";
@@ -4402,6 +4405,10 @@ static int reconcile_attach(int prog_fd, const char *name,
 	} else if (ret == -EACCES || ret == -EPERM) {
 		rep_fail(rep, "link_create", "lsm_denied", ret,
 			 "the guards refused the XDP link");
+		return 1;
+	} else if (ret == XDP_ERR_LINK_SCOPE) {
+		rep_fail(rep, "link_create", "attach_scope_mismatch", ret,
+			 xdp_attach_strerror(ret));
 		return 1;
 	} else if (ret < 0 && ret != -EBUSY && ret != -EEXIST &&
 		   !xdp_attach_skippable(ret, dev, false)) {

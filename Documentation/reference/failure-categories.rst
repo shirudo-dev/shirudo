@@ -197,12 +197,14 @@ Categories
        :doc:`/upatches/test/debugging`.
    * - ``attach_scope_mismatch``
      - ``link_create``
-     - ``EXDEV``
+     - ``EXDEV``, ``EREMOTE`` for XDP
      - The link the kernel reports is not at the site the attach
        metadata names: a cgroup link not at the root cgroup, a netfilter
        link outside the initial network namespace or at another hook or
        priority, a kprobe at another function or offset.
-       For XDP, a load outside the initial network namespace.
+       For XDP, a load outside the initial network namespace, or a link
+       the kernel made for another device; that also fails boot restore,
+       and stops an ``upatch reconcile`` pass.
      - Run the load in the host's initial cgroup and network namespaces
        and with the host's sysfs.
    * - ``already_loaded``
