@@ -194,7 +194,7 @@ static void only_a_device_without_xdp_lacks_it(void)
 	EXPECT_STREQ(xdp_attach_strerror(XDP_ERR_DRIVER_SETTINGS),
 		     "the driver refuses XDP in its current settings");
 	EXPECT_STREQ(xdp_attach_strerror(XDP_ERR_LINK_SCOPE),
-		     "the link is not on the device and namespace it was made for");
+		     "the link is not on the device it was made for");
 }
 
 static void a_driver_refusal_is_told_from_other_errors(void)

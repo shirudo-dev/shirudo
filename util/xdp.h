@@ -25,7 +25,7 @@ enum xdp_attach_err {
 	XDP_ERR_DRIVER_SETTINGS,
 	/* The device runs another XDP program: the link create says so. */
 	XDP_ERR_OCCUPIED,
-	/* The kernel made the link for another device or namespace. */
+	/* The kernel made the link for another device. */
 	XDP_ERR_LINK_SCOPE,
 };
 

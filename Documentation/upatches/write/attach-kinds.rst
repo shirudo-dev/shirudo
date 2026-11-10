@@ -333,9 +333,11 @@ only warned about before the reboot. A setting root makes after boot is the reco
 which leaves the device unattached, warns, and lets ``status`` list it. Existing XDP
 programs are never replaced. Device classification and peer identity
 are rechecked around attachment, and the returned link's ifindex is
-checked before pinning. A link on another device or outside the initial
-namespace is ``attach_scope_mismatch`` and fails the load, the restore
-or the reconcile pass, never a skipped device.
+checked before pinning. A link the kernel reports on another device is
+``attach_scope_mismatch`` and fails the load, the restore or the
+reconcile pass, never a skipped device. The link reports no namespace:
+the load checks its own before it reads the devices, and a run outside
+the initial namespace fails as ``attach_scope_mismatch`` too.
 
 Every XDP program is loaded with ``BPF_F_XDP_HAS_FRAGS``, so it can run on
 a device whose MTU does not fit one buffer. A selected device with native

@@ -554,7 +554,7 @@ const char *xdp_attach_strerror(int err)
 	case XDP_ERR_OCCUPIED:
 		return "the device runs another XDP program";
 	case XDP_ERR_LINK_SCOPE:
-		return "the link is not on the device and namespace it was made for";
+		return "the link is not on the device it was made for";
 	default:
 		return strerror(-err);
 	}

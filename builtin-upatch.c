@@ -1236,7 +1236,8 @@ static int link_matches_spec(int link_fd,
 		if (info.type != BPF_LINK_TYPE_XDP || !ifindex ||
 		    info.xdp.ifindex != ifindex)
 			return -EXDEV;
-		return netns_initial();
+		/* The caller's namespace was checked before the devices were read. */
+		return 0;
 	case UPATCH_ATTACH_CGROUP_SKB_INGRESS:
 	case UPATCH_ATTACH_CGROUP_SKB_EGRESS:
 		return -EXDEV;
