@@ -1120,13 +1120,13 @@ Add a fixture or a helper
 - A target test loads BPF only from signed fixtures. Put the source in
   ``testing/fixtures/<name>.bpf.c`` and add a line
   ``build_fixture <name>.bpf.c <fixture> "$FIXTURE_WORK/trusted"`` to
-  :src:`testing/vm/build-bundle.sh`. The bundle signs it on the build host
-  and the guest finds it as
+  :src:`testing/vm/build-bundle-payload.sh`. The bundle build signs it
+  outside the guest, which finds it as
   ``$SHIRUDO_TEST_FIXTURES_DIR/<fixture>.upatch``.
 - A compiled helper goes in ``testing/helper/<name>.c`` with a build
   rule in :src:`Makefile.shirudo` and an entry in ``TEST_HELPERS``. A
   helper that a target test runs also goes in the list of helpers that
-  :src:`testing/vm/build-bundle.sh` copies into the bundle. A Python
+  :src:`testing/vm/build-bundle-payload.sh` copies into the bundle. A Python
   helper needs none of this.
 - The keepalive bodies in :src:`testing/fixtures/keepalive/` carry real
   quotes in ``quotes.tsv``: per row the body's file name, then the

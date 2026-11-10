@@ -155,7 +155,8 @@ TEST_VM_BUNDLE_INPUTS := $(sort \
 	$(ROOT)/testing/Makefile $(ROOT)/packaging/Makefile \
 	$(ROOT)/vendor/libbpf/Makefile $(ROOT)/vendor/libbpf/COMMIT \
 	$(ROOT)/Documentation/Makefile $(ROOT)/upatches/kernel-obs/Makefile \
-	$(ROOT)/testing/vm/build-bundle.sh $(ROOT)/testing/vm/guest.sh \
+	$(ROOT)/testing/vm/build-bundle.sh $(ROOT)/testing/vm/build-bundle-payload.sh \
+	$(ROOT)/testing/vm/guest.sh \
 	$(ROOT)/testing/vm/arch.sh \
 	$(ROOT)/testing/vm/prepare-runtime.sh $(ROOT)/testing/vm/runtime-packages \
 	$(TEST_VM_BUNDLE_SOURCES) $(TEST_VM_BUNDLE_ARTIFACTS) \

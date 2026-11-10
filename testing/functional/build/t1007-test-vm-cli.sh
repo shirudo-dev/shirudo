@@ -770,7 +770,7 @@ test_expect_success 'explicit VM_NAME overrides unnamed vm-ssh selection' '
 
 test_expect_success 'VM bundle installs target units and interactive mode activates timers' '
 	grep -q "DESTDIR=\"\$TMP_DIR/root\" install-target" \
-		vm/build-bundle.sh &&
+		vm/build-bundle-payload.sh &&
 	grep -q "systemd/\\*.timer" ../testing/Makefile &&
 	grep -q "shirudo-map-export.timer" vm/guest.sh &&
 	grep -q "shirudo-keepalive.timer" vm/guest.sh &&
