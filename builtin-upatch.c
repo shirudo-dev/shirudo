@@ -1288,6 +1288,17 @@ static int obj_pin(int fd, const char *path)
 	return ret >= 0 ? 0 : -errno;
 }
 
+/*
+ * A pin a load left when it died before its link is bound to maps nothing
+ * reaches any more: replace it.
+ */
+static int obj_repin(int fd, const char *path)
+{
+	if (unlink(path) && errno != ENOENT)
+		return -errno;
+	return obj_pin(fd, path);
+}
+
 static int mkdir_if_absent(const char *path, mode_t mode, bool *made)
 {
 	if (mkdir(path, mode) == 0) {
@@ -1335,14 +1346,11 @@ static int prog_pin_path(char *pin, size_t sz, const char *dir,
 static int pin_xdp_prog(int prog_fd, const char *name, __u32 index)
 {
 	char pin[PATH_MAX];
-	struct stat st;
 	int ret;
 
 	if (upatch_xdp_prog_pin(pin, sizeof(pin), name, index))
 		return -ENAMETOOLONG;
-	if (stat(pin, &st) == 0 && unlink(pin))
-		return -errno;
-	ret = obj_pin(prog_fd, pin);
+	ret = obj_repin(prog_fd, pin);
 	if (ret)
 		pr_err("pin XDP program %s: %s", pin, strerror(-ret));
 	return ret;
@@ -1515,8 +1523,6 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 		if (ret)
 			goto out;
 		if (spec->role == UPATCH_PROG_ROLE_SERIALIZER) {
-			struct stat st;
-
 			ret = mkdir_if_absent(serializers_dir, 0700,
 					      &made_serializers);
 			if (ret) {
@@ -1524,17 +1530,7 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 				       strerror(-ret));
 				goto out;
 			}
-			/*
-			 * A pin a load left when it died before its link is
-			 * bound to maps nothing reaches any more: replace it.
-			 */
-			if (stat(pin, &st) == 0 && unlink(pin)) {
-				ret = -errno;
-				pr_err("unlink stale serializer pin %s: %s", pin,
-				       strerror(-ret));
-				goto out;
-			}
-			ret = obj_pin(inner_fd, pin);
+			ret = obj_repin(inner_fd, pin);
 			if (ret) {
 				pr_err("pin serializer %s: %s", pin,
 				       strerror(-ret));
@@ -1546,16 +1542,8 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 			continue;
 		}
 		if (spec->role == UPATCH_PROG_ROLE_TEST_RUN) {
-			struct stat st;
-
 			test_fd = inner_fd;
-			if (stat(pin, &st) == 0 && unlink(pin)) {
-				ret = -errno;
-				pr_err("unlink stale test-run pin %s: %s", pin,
-				       strerror(-ret));
-				goto out;
-			}
-			ret = obj_pin(inner_fd, pin);
+			ret = obj_repin(inner_fd, pin);
 			if (ret) {
 				pr_err("pin test-run program %s: %s", pin,
 				       strerror(-ret));
@@ -4311,8 +4299,8 @@ struct xdp_collect {
 static int collect_one(const char *name, void *ctx)
 {
 	struct xdp_collect *c = ctx;
-	struct upatch_pins pins;
 	struct xdp_work *grown, *w;
+	struct upatch_pins pins;
 	bool skip;
 	int ret;
 
@@ -4493,10 +4481,10 @@ static int reconcile_apply(const struct xdp_work *w,
 			   const struct xdp_device *devices, size_t count,
 			   struct op_report *rep)
 {
-	__u8 payload[UPATCH_PAYLOAD_HASH_LEN];
 	struct link_scan scan = { .collect = true };
-	struct upatch again;
+	__u8 payload[UPATCH_PAYLOAD_HASH_LEN];
 	bool held, needed = false;
+	struct upatch again;
 	int lock, ret;
 
 	lock = eventlog_lock();

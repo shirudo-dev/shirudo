@@ -128,11 +128,11 @@ static int xdp_upatch_complete(const char *name, const struct prog_spec *specs,
 
 int upatch_links_complete(const char *name, const char *path)
 {
+	__u32 len, i, nr_attach = 0;
 	struct prog_spec *specs = NULL;
 	struct upatch_pins pins;
-	__u32 len, i, nr_attach = 0;
-	const void *attach;
 	bool has_xdp = false;
+	const void *attach;
 	struct upatch u;
 	int ret;
 
