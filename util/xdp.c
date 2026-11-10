@@ -395,26 +395,65 @@ enum xdp_reconcile xdp_reconcile_action(bool selected, __u32 attached,
 struct device_list {
 	struct xdp_device *devices;
 	size_t count;
+	size_t cap;
+	/* The first allocation, 16 when 0: a dump, not one device's answer. */
+	size_t first_cap;
 };
 
+static void device_list_free(struct device_list *list)
+{
+	xfree(list->devices, size_mul(list->cap, sizeof(*list->devices)));
+	*list = (struct device_list){};
+}
+
+/* Doubling keeps a dump of n devices to O(n) copies. */
 static int receive_device(const void *data, size_t len, void *ctx)
 {
 	struct device_list *list = ctx;
 	struct xdp_device dev, *grown;
-	size_t count;
+	size_t cap;
 	int ret;
 
 	ret = xdp_device_parse(data, len, &dev);
 	if (ret)
 		return ret;
-	if (check_add_overflow(list->count, 1, &count))
-		return -EOVERFLOW;
-	grown = xreallocarray(list->devices, list->count, count, sizeof(dev));
-	if (!grown)
-		return -ENOMEM;
-	list->devices = grown;
+	if (list->count == list->cap) {
+		cap = list->cap ? list->cap :
+		      list->first_cap ? list->first_cap : 16;
+		if (list->cap && check_mul_overflow(list->cap, 2, &cap))
+			return -EOVERFLOW;
+		grown = xreallocarray(list->devices, list->cap, cap,
+				      sizeof(dev));
+		if (!grown)
+			return -ENOMEM;
+		list->devices = grown;
+		list->cap = cap;
+	}
 	list->devices[list->count++] = dev;
 	return 0;
+}
+
+/*
+ * Callers free count elements, so the spare capacity goes. Without the
+ * memory to shrink it stays: freeing fewer bytes than were allocated
+ * only scrubs less of what is not secret, and a good read is kept.
+ */
+static void device_list_trim(struct device_list *list)
+{
+	struct xdp_device *trimmed;
+
+	if (list->count == list->cap)
+		return;
+	if (!list->count) {
+		device_list_free(list);
+		return;
+	}
+	trimmed = xreallocarray(list->devices, list->cap, list->count,
+				sizeof(*trimmed));
+	if (!trimmed)
+		return;
+	list->devices = trimmed;
+	list->cap = list->count;
 }
 
 static int receive_family(const void *data, size_t len, void *ctx)
@@ -727,11 +766,10 @@ int xdp_devices_read(struct xdp_device **out, size_t *count)
 	for (attempt = 0; attempt < DEVICES_READ_ATTEMPTS && ret == -EAGAIN;
 	     attempt++) {
 		ret = devices_read_once(&list);
-		if (ret) {
-			xfree(list.devices,
-			      size_mul(list.count, sizeof(*list.devices)));
-			list = (struct device_list){};
-		}
+		if (ret)
+			device_list_free(&list);
+		else
+			device_list_trim(&list);
 	}
 	if (ret)
 		return ret;
@@ -767,7 +805,7 @@ int xdp_device_verify(const struct xdp_device *expected)
 		.hdr.nlmsg_flags = NLM_F_REQUEST,
 	};
 	struct ifinfomsg info = { .ifi_index = (int)expected->ifindex };
-	struct device_list list = {};
+	struct device_list list = { .first_cap = 1 };
 	struct xdp_device *dev;
 	int ret;
 
@@ -790,6 +828,6 @@ int xdp_device_verify(const struct xdp_device *expected)
 	    xdp_device_class(dev) != xdp_device_class(expected))
 		ret = -EXDEV;
 out:
-	xfree(list.devices, size_mul(list.count, sizeof(*list.devices)));
+	device_list_free(&list);
 	return ret;
 }
