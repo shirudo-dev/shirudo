@@ -1267,6 +1267,7 @@ out:
 	config_evidence_clear(&config);
 	xfree(p->recs, RECORDS_MAX * sizeof(*p->recs));
 	xfree(p, sizeof(*p));
+	memzero_explicit(cred, sizeof(cred));
 	return ret;
 }
 
