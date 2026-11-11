@@ -125,6 +125,19 @@ static void name_fits_its_pin_directory(void)
 	EXPECT_FALSE(upatch_name_valid(name));
 }
 
+static void xdp_classes_come_from_xdp_programs_alone(void)
+{
+	struct prog_spec specs[] = {
+		{ .kind = UPATCH_ATTACH_XDP, .device_classes = 1 },
+		{ .kind = UPATCH_ATTACH_RAW_TRACEPOINT, .device_classes = 16 },
+		{ .kind = UPATCH_ATTACH_XDP, .device_classes = 8 },
+	};
+
+	EXPECT_UEQ(prog_specs_xdp_classes(specs, 3), 9);
+	EXPECT_UEQ(prog_specs_xdp_classes(specs + 1, 1), 0);
+	EXPECT_UEQ(prog_specs_xdp_classes(specs, 0), 0);
+}
+
 static void xdp_masks_are_signed_and_bounded(void)
 {
 	struct upatch_prog_entry prog = {};
@@ -180,6 +193,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(name_signed_is_the_header_name),
 	UNIT_CASE(member_is_a_name_and_a_payload),
 	UNIT_CASE(name_fits_its_pin_directory),
+	UNIT_CASE(xdp_classes_come_from_xdp_programs_alone),
 	UNIT_CASE(xdp_masks_are_signed_and_bounded),
 	{}
 };

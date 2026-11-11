@@ -369,6 +369,76 @@ PY
 	grep -q "no \[upatches.tree\] entries" "$WORK/plain.err"
 '
 
+# A package of one XDP upatch named $1 for the device classes $2, with $3
+# as the rest of its tree entry. A second name $4 adds an upatch for the
+# same classes.
+xdp_package() {
+	mkdir -p "$WORK/$1" &&
+	ln -s "$REPO/vendor" "$WORK/$1/vendor" &&
+	ln -s "$REPO/bpf" "$WORK/$1/bpf" &&
+	printf '[package]\nname = "%s"\n' "$1" >"$WORK/$1/Beefile" &&
+	for name in $1 ${4:-}; do
+		printf '// SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause\n#include "vmlinux.h"\n#include <bpf/bpf_helpers.h>\n\nchar _license[] SEC("license") = "Dual BSD/GPL";\n\nSEC("xdp/%s")\nint xdp_pass(struct xdp_md *ctx)\n{\n\treturn XDP_PASS;\n}\n' \
+			"$2" >"$WORK/$1/$name.bpf.c" &&
+		printf '\n[[upatches]]\nsource = "%s.bpf.c"\n\n[upatches.tree]\nid = "%s"\n%b' \
+			"$name" "$name" "$3" >>"$WORK/$1/Beefile" || return 1
+	done &&
+	( cd "$WORK" && "$S" bpm build "$1" --version 1.0.0 \
+		--keys-dir "$WORK/keys" ) >&2
+}
+site() {
+	printf '\\n[upatches.tree.selector.labels]\\nsite = [%s]\\n' "$1"
+}
+xdp_append() {
+	"$S" bpm tree append "$WORK/$1-1.0.0.bee" "oci://$REGISTRY/ns/xdp" \
+		--keys-dir "$WORK/keys" --tree-id xdp "${2:---op=add}" \
+		>/dev/null 2>"$WORK/$1.err"
+}
+xdp_refused() {
+	if xdp_append "$1"; then
+		return 1
+	fi
+	grep -q "$1 and $2 both select XDP device classes $3 " "$WORK/$1.err"
+}
+
+# A device runs one native XDP program, so the second of two upatches that
+# select a class fails its load wherever such a device is, and tree sync
+# stops there on every node the two reach.
+test_expect_success 'tree append refuses an XDP device class another upatch of the tree selects' '
+	xdp_package t7005xa 3 "$(site \"a\")" &&
+	xdp_package t7005xb 2 "$(site "\"a\", \"b\"")" &&
+	xdp_append t7005xa &&
+	cp "$REG/ns/xdp/manifests/stable" "$WORK/xdp1.manifest" &&
+	xdp_refused t7005xb "t7005xa (seq 1)" 2 &&
+	cmp -s "$WORK/xdp1.manifest" "$REG/ns/xdp/manifests/stable" &&
+	! ls "$REG/ns/xdp/manifests" | grep -q "upatch-t7005xb"
+'
+
+test_expect_success 'tree append takes the class once the upatch that held it is deleted' '
+	xdp_append t7005xa --op=delete &&
+	xdp_append t7005xb &&
+	xdp_package t7005xc 1 "$(site \"a\")" &&
+	xdp_append t7005xc
+'
+
+test_expect_success 'tree append takes a shared class on selectors that exclude each other, and another class' '
+	xdp_package t7005xd 2 "$(site \"c\")" &&
+	xdp_append t7005xd &&
+	xdp_package t7005xe 8 "" &&
+	xdp_append t7005xe &&
+	xdp_package t7005xf 2 "" &&
+	xdp_refused t7005xf "t7005xb (seq 3)" 2
+'
+
+test_expect_success 'tree append refuses two upatches of one package that select a class' '
+	xdp_package t7005xg 16 "" t7005xh &&
+	! "$S" bpm tree append "$WORK/t7005xg-1.0.0.bee" "oci://$REGISTRY/ns/xdp2" \
+		--keys-dir "$WORK/keys" >/dev/null 2>"$WORK/t7005xg.err" &&
+	grep -q "t7005xh and t7005xg (seq 1) both select XDP device classes 16 " \
+		"$WORK/t7005xg.err" &&
+	! test -e "$REG/ns/xdp2/manifests/stable"
+'
+
 test_expect_success 'the operator commands are reachable directly in shirudo-build' '
 	"$B" bpm --help | grep -q "tree append <package-file> <repository>" &&
 	"$B" bpm tree append --help 2>&1 | grep -q "\-\-op add|delete" &&

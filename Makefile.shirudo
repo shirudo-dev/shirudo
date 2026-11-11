@@ -242,6 +242,7 @@ UTIL_SRCS := \
     util/hex.c \
     util/string.c \
     util/bpm_tree.c \
+    util/bpm_tree_overlap.c \
     util/bpm_tree_state.c \
     util/bpm_oci.c \
     util/bpm_package.c \
@@ -493,7 +494,8 @@ tools/shirudo-build/shirudo-build: $(BUILD_OBJS) util/sign.o util/config_image.o
                                    util/crypto_openssl.o util/tls_openssl.o \
                                    util/bpm_oci.o util/bpm_package.o \
                                    util/upatch_rodata.o \
-                                   util/bpm_tree.o $(VERSION_OBJ) \
+                                   util/bpm_tree.o util/bpm_tree_overlap.o \
+                                   util/kernel_release.o $(VERSION_OBJ) \
                                    $(LIBBPF_A)
 	@printf '  LD      $@\n'
 	$(Q)$(LD) $(CFLAGS) $(HARDEN_LDFLAGS) $(LDFLAGS) $(RPATH_LDFLAGS) -o $@ $^ \

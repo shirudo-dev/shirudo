@@ -169,6 +169,8 @@ struct prog_spec {
 int prog_specs_parse(const void *metadata, __u32 metadata_len,
 		     __u32 nr_maps, __u32 nr_progs, struct prog_spec **out);
 void prog_specs_free(struct prog_spec *specs, __u32 nr_progs);
+/* Every device class an XDP program among the specs selects. */
+__u32 prog_specs_xdp_classes(const struct prog_spec *specs, __u32 nr_progs);
 
 /*
  * The target's upatch lifecycle, which builtin-upatch.c implements for

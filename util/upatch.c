@@ -590,6 +590,16 @@ void prog_specs_free(struct prog_spec *specs, __u32 nr_progs)
 	xfree(specs, (size_t)nr_progs * sizeof(*specs));
 }
 
+__u32 prog_specs_xdp_classes(const struct prog_spec *specs, __u32 nr_progs)
+{
+	__u32 i, classes = 0;
+
+	for (i = 0; i < nr_progs; i++)
+		if (specs[i].kind == UPATCH_ATTACH_XDP)
+			classes |= specs[i].device_classes;
+	return classes;
+}
+
 int prog_specs_parse(const void *metadata, __u32 metadata_len,
 		     __u32 nr_maps, __u32 nr_progs, struct prog_spec **out)
 {

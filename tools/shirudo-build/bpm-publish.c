@@ -25,6 +25,7 @@
 #include "bpm_oci.h"
 #include "bpm_package.h"
 #include "bpm_tree.h"
+#include "bpm_tree_overlap.h"
 #include "crypto.h"
 #include "hex.h"
 #include "io.h"
@@ -640,6 +641,111 @@ static int tree_push_artifact(struct bpm_oci_client *c, const char *repository,
 	return 0;
 }
 
+/* The classes of a load upatch, none for one without an XDP program. */
+static int upatch_xdp_classes(const void *body, size_t len, __u32 *classes)
+{
+	struct prog_spec *specs = NULL;
+	const void *attach;
+	__u32 attach_len;
+	struct upatch u;
+	int ret;
+
+	ret = upatch_open_memory(body, len, &u);
+	if (ret)
+		return ret;
+	attach = upatch_signed_attach(&u, &attach_len);
+	ret = attach ? prog_specs_parse(attach, attach_len, u.hdr.nr_maps,
+					u.hdr.nr_progs, &specs) : -EINVAL;
+	if (!ret) {
+		*classes = prog_specs_xdp_classes(specs, u.hdr.nr_progs);
+		prog_specs_free(specs, u.hdr.nr_progs);
+	}
+	upatch_close(&u);
+	return ret;
+}
+
+static int tree_fetch_xdp_classes(struct bpm_oci_client *c,
+				  const char *repository, const char *repo_ref,
+				  const struct tree_operation *op,
+				  __u32 *classes)
+{
+	struct bpm_oci_client elsewhere __cleanup(bpm_oci_client_clear) = {};
+	char other_repository[BPM_MAX_ENDPOINT], url[PATH_MAX], hex[65];
+	struct bpm_buffer blob = {};
+	__u8 digest[32];
+	int ret;
+
+	if (sha256_digest_decode(op->artifact.layer_digest, digest))
+		return -EINVAL;
+	if (strcmp(op->artifact.repository, repo_ref)) {
+		ret = bpm_oci_parse_tree_repo(op->artifact.repository,
+					      &elsewhere, other_repository,
+					      sizeof(other_repository));
+		if (ret)
+			return ret;
+		c = &elsewhere;
+		repository = other_repository;
+	}
+	ret = bpm_oci_url(c, repository, "blobs", op->artifact.layer_digest,
+			  url, sizeof(url));
+	if (!ret)
+		ret = bpm_oci_get_blob(c, url, BPM_UPATCH_MEDIA, &blob);
+	if (!ret && (bpm_sha256_hex(blob.data, blob.len, hex, sizeof(hex)) ||
+		     !bpm_digest_matches(op->artifact.layer_digest, hex)))
+		ret = -EKEYREJECTED;
+	if (!ret)
+		ret = upatch_xdp_classes(blob.data, blob.len, classes);
+	bpm_buffer_free(&blob);
+	return ret;
+}
+
+/* The classes of the publication's operations, read once each. */
+struct tree_xdp_classes {
+	__u32	classes[TREE_MAX_OPS];
+	bool	known[TREE_MAX_OPS];
+};
+
+/*
+ * A device runs one native XDP program. The second of two upatches that
+ * select a class fails its load on every node with such a device, and
+ * tree sync stops at the first operation that fails.
+ */
+static int tree_refuse_shared_xdp_class(struct bpm_oci_client *c,
+					const char *repository,
+					const char *repo_ref,
+					const struct tree_publication *pub,
+					struct tree_xdp_classes *seen,
+					const struct tree_operation *op,
+					__u32 classes)
+{
+	for (int i = 0; classes && i < pub->n_operations; i++) {
+		const struct tree_operation *other = &pub->operations[i];
+		int ret;
+
+		if (strcmp(other->op, "add") || !strcmp(other->id, op->id) ||
+		    !tree_add_live(pub, i) ||
+		    tree_selectors_disjoint(&other->selector, &op->selector))
+			continue;
+		if (!seen->known[i]) {
+			ret = tree_fetch_xdp_classes(c, repository, repo_ref,
+						     other, &seen->classes[i]);
+			if (ret) {
+				pr_err("bpm tree append: cannot read the artifact of %s (seq %lld) to compare its XDP device classes",
+				       other->id, (long long)other->seq);
+				return ret;
+			}
+			seen->known[i] = true;
+		}
+		if (!(seen->classes[i] & classes))
+			continue;
+		pr_err("bpm tree append: %s and %s (seq %lld) both select XDP device classes %u on nodes their selectors share; a device runs one XDP program, so give each class to one upatch or the two selectors that exclude each other",
+		       op->id, other->id, (long long)other->seq,
+		       seen->classes[i] & classes);
+		return -EBUSY;
+	}
+	return 0;
+}
+
 static int cmd_bpm_tree_append(int argc, char **argv)
 {
 	const char *package = NULL, *raw_repository = NULL, *keys_dir_arg = NULL;
@@ -650,6 +756,7 @@ static int cmd_bpm_tree_append(int argc, char **argv)
 	const char *reference = "stable", *operation = "add";
 	char key_path[PATH_MAX], cert_path[PATH_MAX];
 	char parent[BPM_MAX_DIGEST] = {}, digest[72];
+	struct tree_xdp_classes *seen = NULL;
 	struct tree_publication pub = {};
 	struct tree_operation *op = NULL;
 	size_t len, payload_len = 0, sig_len = 0;
@@ -801,7 +908,8 @@ static int cmd_bpm_tree_append(int argc, char **argv)
 			sizeof(pub.parent_manifest_digest), parent);
 
 	op = xmalloc(sizeof(*op));
-	if (!op) {
+	seen = xcalloc(1, sizeof(*seen));
+	if (!op || !seen) {
 		ret = -ENOMEM;
 		goto out;
 	}
@@ -809,6 +917,7 @@ static int cmd_bpm_tree_append(int argc, char **argv)
 		const struct bpm_build_upatch *u = &spec->upatches[i];
 		const char *member;
 		__u8 *body = NULL;
+		__u32 classes = 0;
 		size_t body_len;
 		__s64 seq;
 
@@ -839,8 +948,21 @@ static int cmd_bpm_tree_append(int argc, char **argv)
 			}
 		}
 		tree_selector_canonicalize(&op->selector);
-		ret = tree_push_artifact(&c, repository, repo_ref, body, body_len,
-					 u->tree.id, unload, &op->artifact);
+		if (!unload) {
+			ret = upatch_xdp_classes(body, body_len, &classes);
+			if (ret)
+				pr_err("bpm tree append: %s is not a valid upatch",
+				       u->tree.id);
+			else
+				ret = tree_refuse_shared_xdp_class(&c, repository,
+								   repo_ref, &pub,
+								   seen, op,
+								   classes);
+		}
+		if (!ret)
+			ret = tree_push_artifact(&c, repository, repo_ref, body,
+						 body_len, u->tree.id, unload,
+						 &op->artifact);
 		xfree(body, body_len + 1);
 		if (ret)
 			goto out;
@@ -849,6 +971,8 @@ static int cmd_bpm_tree_append(int argc, char **argv)
 			ret = tree_publication_append(&pub, op);
 		if (ret)
 			goto out;
+		seen->classes[pub.n_operations - 1] = classes;
+		seen->known[pub.n_operations - 1] = true;
 		pub.head_seq = op->seq;
 		appended++;
 	}
@@ -907,6 +1031,7 @@ out:
 	if (op)
 		tree_selector_free(&op->selector);
 	xfree(op, sizeof(*op));
+	xfree(seen, sizeof(*seen));
 	tree_publication_free(&pub);
 	bpm_build_spec_free(spec);
 	xfree(beefile, len + 1);

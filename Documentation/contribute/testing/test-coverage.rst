@@ -465,7 +465,8 @@ signed config image.
        scriptlets, as text
    * - ``t7005-bpm-publish``
      - ``bpm build``, ``bpm push`` with a signed index, ``bpm tree
-       append``, A-to-B tree signing-key rotation with explicit
+       append`` and its refusal of an XDP device class two upatches of
+       a tree select, A-to-B tree signing-key rotation with explicit
        predecessor verification
    * - ``t7006-policy-labels``
      - Beefile policy declarations are serialized into the signed
@@ -549,9 +550,10 @@ signed config image.
 Unit suites and fuzz targets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The unit suites in :src:`testing/unit/` cover 25 of the modules in
+The unit suites in :src:`testing/unit/` cover 26 of the modules in
 :src:`util/`: ``attest``, ``bpm_oci``, ``bpm_package``, ``bpm_state``,
-``bpm_tree``, ``bpm_tree_state``, ``chain``, ``conditions``,
+``bpm_tree``, ``bpm_tree_overlap``, ``bpm_tree_state``, ``chain``,
+``conditions``,
 ``eventlog``, ``format``, ``hex``, ``io``, ``json``, ``kernel_abi``,
 ``kernel_build_id``, ``kernel_release``, ``measured``, ``paths``,
 ``string``, ``upatch``, ``upatch_decode``, ``upatch_pins``,
@@ -696,8 +698,9 @@ Coverage by area
    * - upatch tree
      - ``t3011``, ``t5004``, ``t7005``, ``t7101``, ``t7102``,
        ``t7103``, ``t7104``, ``t7105``, ``t9105``. Fuzz: ``tree``,
-       ``tree-state``, ``kconfig``. Unit: ``bpm_tree``, ``bpm_tree_state``,
-       ``kernel_build_id``, ``kernel_release``
+       ``tree-state``, ``kconfig``. Unit: ``bpm_tree``,
+       ``bpm_tree_overlap``, ``bpm_tree_state``, ``kernel_build_id``,
+       ``kernel_release``
    * - Policy labels
      - upatch labels and Beefile serialization: ``t3109``, ``t7006``.
        Unauthorized policy-xattr changes: ``t6111``. Task and socket

@@ -140,6 +140,9 @@ shirudo bpm tree append <name>-<version>.bee oci://<registry>/<repository> [<app
 `BPM_OCI_SCHEME=http` is for a registry on the loopback only. `tree
 append` adds a load or delete operation to a signed upatch tree that
 targets sync; `Documentation/reference/cli/bpm.rst` lists its options.
+It refuses an `add` whose XDP programs select a device class another
+upatch of the tree selects on the same nodes: give each class to one
+upatch, or the two entries selectors that exclude each other.
 
 ## Load it on a target
 

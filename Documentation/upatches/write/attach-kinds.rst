@@ -254,8 +254,10 @@ mask is mandatory, nonzero and contains only the bits below. Bare
 
 A device runs one native XDP program at a time, so the XDP programs of
 one upatch must select disjoint classes: ``shirudo build`` refuses
-``SEC("xdp/3")`` beside ``SEC("xdp/2")``. Two upatches can still select
-the same device. The second one's ``upatch load`` then fails, at boot
+``SEC("xdp/3")`` beside ``SEC("xdp/2")``. ``bpm tree append`` refuses an
+upatch that selects a class another upatch of the tree selects on the
+same nodes. Two upatches loaded another way can still select the same
+device. The second one's ``upatch load`` then fails, at boot
 restore it is restored without that device, and ``status`` lists the
 device under ``XdpCovered`` as ``another XDP program attached``.
 

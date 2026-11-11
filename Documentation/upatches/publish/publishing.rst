@@ -140,6 +140,14 @@ Append it to the tree
    ``add`` of the new one after it, since a target cannot load a second
    upatch under a name that is already loaded.
 
+``tree append`` refuses an ``add`` whose XDP programs select a device
+class that another upatch of the tree selects on the same nodes, since a
+device runs one native XDP program and the second load would stop every
+such node's ``tree sync``. Give each class to one upatch, give the two
+entries selectors that exclude each other, such as different values of
+one label, or append the ``delete`` of the earlier upatch first.
+:doc:`/reference/cli/bpm` has the exact rule.
+
 What a target does with them
 ----------------------------
 

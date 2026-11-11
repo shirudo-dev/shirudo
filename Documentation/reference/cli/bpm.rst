@@ -226,6 +226,26 @@ package as the next operations of the signed tree at
      - ``add``
      - ``add`` or ``delete``.
 
+An ``add`` is refused when an XDP program of the upatch selects a device
+class that an XDP program of another upatch in the tree selects, and the
+selectors of the two operations do not exclude each other. A device runs
+one native XDP program, so the second upatch would fail its load on every
+node with such a device and ``tree sync`` would stop there. The message
+names both upatches, the sequence number of the earlier operation and the
+shared classes, and nothing is published.
+
+- Only an ``add`` that no later ``delete`` withdrew counts. A ``delete``
+  withdraws it when its selector reaches every node the ``add`` reaches:
+  it is empty, or it constrains nothing the ``add`` leaves open and
+  allows every value the ``add`` allows.
+- Two selectors exclude each other when both name architectures, kernel
+  build IDs or kernel release prefixes and have none in common, or when
+  both name the same label or kernel option and share no value for it.
+  Selectors that name different labels do not: one node can carry both.
+- The classes of the earlier upatches are read from their artifacts in
+  the registry, so the append fails when one of them cannot be fetched.
+  Two upatches of the package being appended are compared as well.
+
 key
 ---
 
