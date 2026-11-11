@@ -25,6 +25,13 @@
 #include <shirudo/types.h>
 
 /*
+ * glibc 2.43 makes these const-preserving _Generic macros under C23,
+ * which a definition of the function cannot be spelled through.
+ */
+#undef memchr
+#undef strstr
+
+/*
  * CBMC models neither strnlen(), memchr(), strcspn(), strstr() nor
  * vsnprintf(), and a function without a body returns anything.
  */
