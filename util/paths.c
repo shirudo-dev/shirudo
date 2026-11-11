@@ -90,6 +90,15 @@ too_long:
 	return -ENAMETOOLONG;
 }
 
+int path_join(char *out, size_t cap, const char *dir, const char *name)
+{
+	if (strsprintf(out, cap, "%s/%s", dir, name) >= 0)
+		return 0;
+	if (cap)
+		out[0] = '\0';
+	return -ENAMETOOLONG;
+}
+
 bool path_exists(const char *path)
 {
 	struct stat st;

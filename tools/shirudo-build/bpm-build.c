@@ -1110,11 +1110,6 @@ static int build_validate(struct bpm_build_spec *spec,
 	return ret;
 }
 
-static int build_join(char *out, size_t cap, const char *dir, const char *name)
-{
-	return strsprintf(out, cap, "%s/%s", dir, name) < 0 ? -ENAMETOOLONG : 0;
-}
-
 static int build_entry_name(char *out, size_t cap, const char *top,
 			    const char *entry)
 {
@@ -1556,7 +1551,8 @@ static int build_archive(const struct bpm_build_spec *spec, const char *version,
 		char readme[PATH_MAX];
 		struct stat st;
 
-		ret = build_join(readme, sizeof(readme), spec->scope, "README.md");
+		ret = path_join(readme, sizeof(readme), spec->scope,
+				"README.md");
 		if (!ret) {
 			if (!stat(readme, &st)) {
 				if (!build_within(spec->scope, readme))
@@ -1731,8 +1727,8 @@ static int __build_bpm_build(int argc, char **argv,
 	if (file_arg) {
 		if (strscpy(build_file, file_arg, sizeof(build_file)) < 0)
 			return -ENAMETOOLONG;
-	} else if (build_join(build_file, sizeof(build_file), context,
-			      "Beefile")) {
+	} else if (path_join(build_file, sizeof(build_file), context,
+			     "Beefile")) {
 		return -ENAMETOOLONG;
 	}
 	if (!realpath(build_file, resolved_file))
@@ -2109,8 +2105,8 @@ static int __build_bpm_config_update(int argc, char **argv,
 				ret = -EINVAL;
 				break;
 			}
-			if (build_join(output, sizeof(output), spec->scope,
-				       spec->files[i].source)) {
+			if (path_join(output, sizeof(output), spec->scope,
+				      spec->files[i].source)) {
 				ret = -ENAMETOOLONG;
 				break;
 			}
@@ -2121,8 +2117,8 @@ static int __build_bpm_config_update(int argc, char **argv,
 		if (!ret) {
 			char readme[PATH_MAX];
 
-			if (build_join(readme, sizeof(readme), spec->scope,
-				       "README.md")) {
+			if (path_join(readme, sizeof(readme), spec->scope,
+				      "README.md")) {
 				ret = -ENAMETOOLONG;
 			} else {
 				ret = build_copy_package_member(base_package,

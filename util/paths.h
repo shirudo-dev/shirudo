@@ -215,6 +215,9 @@ static inline int upatch_name_from_bpffs(char *out, size_t out_sz,
  */
 int upatch_pin_path(char *out, size_t cap, const char *name, ...) __sentinel;
 
+/* dir, a slash and name: 0, or -ENAMETOOLONG with out empty. */
+int path_join(char *out, size_t cap, const char *dir, const char *name);
+
 bool path_exists(const char *path);
 
 #endif /* SHIRUDO_PATHS_H */

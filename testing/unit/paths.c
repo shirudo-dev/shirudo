@@ -33,6 +33,16 @@ static void pin_path_too_long_is_empty(void)
 	EXPECT_STREQ(out, "");
 }
 
+static void join_is_dir_slash_name(void)
+{
+	char out[sizeof("dir/name")];
+
+	ASSERT_EQ(path_join(out, sizeof(out), "dir", "name"), 0);
+	EXPECT_STREQ(out, "dir/name");
+	EXPECT_EQ(path_join(out, sizeof(out), "dir", "names"), -ENAMETOOLONG);
+	EXPECT_STREQ(out, "");
+}
+
 static void bpffs_name_round_trips(void)
 {
 	char bpffs[64], back[32];
@@ -49,6 +59,7 @@ static void bpffs_name_round_trips(void)
 static const struct unit_case cases[] = {
 	UNIT_CASE(pin_path_is_the_bpffs_name_and_its_parts),
 	UNIT_CASE(pin_path_too_long_is_empty),
+	UNIT_CASE(join_is_dir_slash_name),
 	UNIT_CASE(bpffs_name_round_trips),
 	{}
 };

@@ -1313,23 +1313,17 @@ static void count_attach_progs(const struct prog_spec *specs,
 	*out = n;
 }
 
-/* entry in dir: 0 or -ENAMETOOLONG, as upatch_link_pin() returns. */
-static int path_in(char *out, size_t sz, const char *dir, const char *entry)
-{
-	return strsprintf(out, sz, "%s/%s", dir, entry) < 0 ? -ENAMETOOLONG : 0;
-}
-
 static int prog_pin_path(char *pin, size_t sz, const char *dir,
 			 const char *serializers_dir,
 			 const struct prog_spec *spec,
 			 __u32 attach_count, __u32 attach_idx)
 {
 	if (spec->role == UPATCH_PROG_ROLE_SERIALIZER)
-		return path_in(pin, sz, serializers_dir, spec->map);
+		return path_join(pin, sz, serializers_dir, spec->map);
 	if (spec->role == UPATCH_PROG_ROLE_TEST_RUN)
-		return path_in(pin, sz, dir, "test");
+		return path_join(pin, sz, dir, "test");
 	if (attach_count == 1)
-		return path_in(pin, sz, dir, "link");
+		return path_join(pin, sz, dir, "link");
 	return upatch_link_pin(pin, sz, dir, attach_idx);
 }
 
