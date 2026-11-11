@@ -1557,12 +1557,13 @@ R21 upatches can be neutralized by changing their targets
    device under ``XdpCovered`` with the reason the device reports and
    gives the verdict ``degraded``, which the keepalive carries; root
    can stop the keepalive as well, which its collector sees as silence.
-   At boot restore a device whose driver refuses fails ``init``: the
-   register stays unbound, so attestation fails, and that upatch and every
-   archive after it in name order stay unloaded that boot. A setting that
-   survives a reboot, in the NIC's firmware or the hypervisor, therefore
-   cannot take a device out of an upatch unseen, at the price of a host
-   that boots without those upatches. A veth end moved to another namespace
+   At boot restore a device whose driver refuses, or that an upatch
+   restored before holds, fails ``init``: the register stays unbound, so
+   attestation fails, and that upatch and every archive after it in name
+   order stay unloaded that boot. Neither a setting that survives a
+   reboot, in the NIC's firmware or the hypervisor, nor a second upatch
+   that selects the device can therefore take it out of an upatch
+   unseen, at the price of a host that boots without those upatches. A veth end moved to another namespace
    keeps its link, so a pair can hold two attachments, one of them running
    in that namespace. Reconcile adds no register event: TPM evidence covers
    the signed class mask and loaded artifact, not the device inventory or

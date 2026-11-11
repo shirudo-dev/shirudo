@@ -120,12 +120,13 @@ static void reconcile_never_touches_another_program(void)
 	EXPECT_EQ(xdp_reconcile_action(true, 9, 7), XDP_RECONCILE_OCCUPIED);
 }
 
-static void restore_fails_on_a_driver_refusal(void)
+static void attach_fails_on_a_refusal_of_a_device_still_there(void)
 {
-	static const int skipped[] = { XDP_ERR_OCCUPIED, -EXDEV, -ENODEV };
+	static const int skipped[] = { -EXDEV, -ENODEV };
 	static const int refused[] = {
 		-EINVAL, -ENOSPC, -ERANGE, XDP_ERR_NO_MULTIBUF,
 		XDP_ERR_DRIVER_SETTINGS, XDP_ERR_LINK_SCOPE, -EEXIST,
+		XDP_ERR_OCCUPIED,
 	};
 	/* No device has this index, so the kernel answers ENODEV. */
 	struct xdp_device *devices = NULL, gone = { .ifindex = 0x7ffffff0 };
@@ -135,16 +136,14 @@ static void restore_fails_on_a_driver_refusal(void)
 	int ret;
 
 	for (i = 0; i < ARRAY_SIZE(skipped); i++)
-		EXPECT_TRUE(xdp_attach_skippable(skipped[i], &gone, true));
-	EXPECT_TRUE(xdp_attach_skippable(-EINVAL, &gone, true));
-	EXPECT_FALSE(xdp_attach_skippable(-EINVAL, &unaskable, true));
-	EXPECT_FALSE(xdp_attach_skippable(-EINVAL, &unaskable, false));
-	EXPECT_FALSE(xdp_attach_skippable(XDP_ERR_LINK_SCOPE, &gone, true));
-	EXPECT_FALSE(xdp_attach_skippable(XDP_ERR_LINK_SCOPE, &gone, false));
-	EXPECT_FALSE(xdp_attach_skippable(-EACCES, &gone, true));
-	EXPECT_FALSE(xdp_attach_skippable(-EPERM, &gone, true));
-	EXPECT_FALSE(xdp_attach_skippable(0, &gone, true));
-	EXPECT_FALSE(xdp_attach_skippable(1, &gone, true));
+		EXPECT_TRUE(xdp_attach_skippable(skipped[i], &gone));
+	EXPECT_TRUE(xdp_attach_skippable(-EINVAL, &gone));
+	EXPECT_FALSE(xdp_attach_skippable(-EINVAL, &unaskable));
+	EXPECT_FALSE(xdp_attach_skippable(XDP_ERR_LINK_SCOPE, &gone));
+	EXPECT_FALSE(xdp_attach_skippable(-EACCES, &gone));
+	EXPECT_FALSE(xdp_attach_skippable(-EPERM, &gone));
+	EXPECT_FALSE(xdp_attach_skippable(0, &gone));
+	EXPECT_FALSE(xdp_attach_skippable(1, &gone));
 
 	ret = xdp_devices_read(&devices, &count);
 	if (ret == -EPERM || ret == -EACCES || ret == -EAFNOSUPPORT)
@@ -152,19 +151,21 @@ static void restore_fails_on_a_driver_refusal(void)
 	ASSERT_EQ(ret, 0);
 	ASSERT_TRUE(count > 0);
 	for (i = 0; i < ARRAY_SIZE(refused); i++)
-		EXPECT_FALSE(xdp_attach_skippable(refused[i], &devices[0], true));
+		EXPECT_FALSE(xdp_attach_skippable(refused[i], &devices[0]));
 	xfree(devices, count * sizeof(*devices));
 }
 
-static void load_stops_on_an_occupied_device(void)
+/* Gone or not, a device that answers busy runs another program. */
+static void attach_stops_on_an_occupied_device(void)
 {
-	struct xdp_device dev = {};
+	struct xdp_device dev = {}, gone = { .ifindex = 0x7ffffff0 };
 
-	EXPECT_FALSE(xdp_attach_skippable(XDP_ERR_OCCUPIED, &dev, false));
-	EXPECT_FALSE(xdp_attach_skippable(-EEXIST, &dev, false));
-	EXPECT_TRUE(xdp_attach_skippable(-EXDEV, &dev, false));
-	EXPECT_TRUE(xdp_attach_skippable(-ENODEV, &dev, false));
-	EXPECT_FALSE(xdp_attach_skippable(0, &dev, false));
+	EXPECT_FALSE(xdp_attach_skippable(XDP_ERR_OCCUPIED, &dev));
+	EXPECT_FALSE(xdp_attach_skippable(XDP_ERR_OCCUPIED, &gone));
+	EXPECT_FALSE(xdp_attach_skippable(-EEXIST, &dev));
+	EXPECT_TRUE(xdp_attach_skippable(-EXDEV, &dev));
+	EXPECT_TRUE(xdp_attach_skippable(-ENODEV, &dev));
+	EXPECT_FALSE(xdp_attach_skippable(0, &dev));
 }
 
 static void multibuf_is_required_of_native_xdp_alone(void)
@@ -299,8 +300,8 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(veth_without_a_peer_is_not_selected),
 	UNIT_CASE(unresolved_devices_sit_out),
 	UNIT_CASE(reconcile_never_touches_another_program),
-	UNIT_CASE(restore_fails_on_a_driver_refusal),
-	UNIT_CASE(load_stops_on_an_occupied_device),
+	UNIT_CASE(attach_fails_on_a_refusal_of_a_device_still_there),
+	UNIT_CASE(attach_stops_on_an_occupied_device),
 	UNIT_CASE(multibuf_is_required_of_native_xdp_alone),
 	UNIT_CASE(uncovered_devices_say_why),
 	UNIT_CASE(only_a_device_without_xdp_lacks_it),

@@ -672,6 +672,12 @@ program, and the next ``upatch reconcile`` attaches it. Where the
 device cannot run XDP at all, sign the upatch with a class mask that
 leaves the device out.
 
+A device listed as ``another XDP program attached`` because a second
+loaded upatch holds it does not wait for a reconcile pass alone: the
+next boot restore fails on it, ``init`` stops with the register unbound
+and the host comes up ``reboot-pending``. Unload one of the two upatches
+before the next reboot.
+
 A device that stays listed also costs the target work on every
 reconcile pass. The pass takes the register lock, checks the archive
 again, retries the attach and logs a warning, every 60 seconds and on

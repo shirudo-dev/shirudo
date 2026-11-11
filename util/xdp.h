@@ -56,8 +56,7 @@ enum xdp_reconcile xdp_reconcile_action(bool selected, __u32 attached,
 					__u32 prog_id);
 
 /* Whether a failed attach is left for a later pass rather than fatal. */
-bool xdp_attach_skippable(int err, const struct xdp_device *dev,
-			  bool restoring);
+bool xdp_attach_skippable(int err, const struct xdp_device *dev);
 
 int xdp_device_parse(const void *data, size_t len, struct xdp_device *out);
 __u32 xdp_device_class(const struct xdp_device *dev);

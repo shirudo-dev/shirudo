@@ -628,21 +628,18 @@ int xdp_devices_read(struct xdp_device **out, size_t *count)
 }
 
 /*
- * A driver refusal fails a restore as it fails a load: a setting that
- * survives a reboot must not take a device out of the upatch unreported.
- * Only an upatch restored before this one can hold the device then. The
- * kernel reports a vanished ifindex as EINVAL, so ask, and take only an
- * answer that the device is gone or changed: a lookup that itself fails
- * says nothing about the refusal.
+ * A driver refusal or an occupied device fails a restore as it fails a
+ * load: neither a setting that survives a reboot nor another program
+ * may take a device out of the upatch unreported. The kernel reports a
+ * vanished ifindex as EINVAL, so ask, and take only an answer that the
+ * device is gone or changed: a lookup that itself fails says nothing
+ * about the refusal.
  */
-bool xdp_attach_skippable(int err, const struct xdp_device *dev,
-			  bool restoring)
+bool xdp_attach_skippable(int err, const struct xdp_device *dev)
 {
 	if (err >= 0 || err == -EACCES || err == -EPERM ||
-	    err == XDP_ERR_LINK_SCOPE)
+	    err == XDP_ERR_LINK_SCOPE || err == XDP_ERR_OCCUPIED)
 		return false;
-	if (err == XDP_ERR_OCCUPIED)
-		return restoring;
 	if (err == -EXDEV || err == -ENODEV)
 		return true;
 	err = xdp_device_verify(dev);

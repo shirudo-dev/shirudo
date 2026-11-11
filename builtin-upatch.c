@@ -1394,7 +1394,7 @@ static int xdp_attach_one(int prog_fd, const struct prog_spec *spec,
 
 static int attach_xdp_devices(int prog_fd, const struct prog_spec *spec,
 			      const struct xdp_device *devices, size_t count,
-			      const char *dir, __u32 *pinned, bool restoring)
+			      const char *dir, __u32 *pinned)
 {
 	__u32 attached = 0;
 	size_t i;
@@ -1416,7 +1416,7 @@ static int attach_xdp_devices(int prog_fd, const struct prog_spec *spec,
 				dev->name, dev->ifindex, xdp_device_class(dev));
 			continue;
 		}
-		if (xdp_attach_skippable(ret, dev, restoring)) {
+		if (xdp_attach_skippable(ret, dev)) {
 			pr_warn("XDP: skipping %s (ifindex %u): %s", dev->name,
 				dev->ifindex, xdp_attach_strerror(ret));
 			continue;
@@ -1445,7 +1445,7 @@ static int attach_xdp_devices(int prog_fd, const struct prog_spec *spec,
 static int attach_and_pin_progs(const struct loader_ctx *cx,
 				size_t prog_desc_off, __u32 nr_progs,
 				const char *name,
-				const struct prog_spec *specs, bool restoring)
+				const struct prog_spec *specs)
 {
 	char dir[PATH_MAX], serializers_dir[PATH_MAX + 16];
 	bool made_dir = false, made_serializers = false;
@@ -1571,7 +1571,7 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 				goto out;
 			made[i] = true;
 			ret = attach_xdp_devices(inner_fd, spec, devices, nr_devices,
-						 dir, &pinned_links, restoring);
+						 dir, &pinned_links);
 			if (ret)
 				goto out;
 			continue;
@@ -1920,7 +1920,7 @@ static void apply_policy_labels(const struct upatch *u)
 }
 
 /* Shared by `upatch load` and boot restore: one signature-verified path. */
-static int __upatch_apply(const char *path, bool verify_only, bool restoring,
+static int __upatch_apply(const char *path, bool verify_only,
 			  struct op_report *rep)
 {
 	struct upatch u;
@@ -2308,7 +2308,7 @@ static int __upatch_apply(const char *path, bool verify_only, bool restoring,
 	 * exits.
 	 */
 	ret = attach_and_pin_progs(cx, prog_desc_off, u.hdr.nr_progs,
-				   upatch_name, prog_specs, restoring);
+				   upatch_name, prog_specs);
 	if (ret) {
 		int e = -ret;
 		const char *cat;
@@ -2369,7 +2369,7 @@ out:
 
 int upatch_restore(const char *path)
 {
-	return __upatch_apply(path, false, true, NULL);
+	return __upatch_apply(path, false, NULL);
 }
 
 /*
@@ -3053,7 +3053,7 @@ static int upatch_load(const struct load_args *args)
 		goto done;
 	}
 
-	if (__upatch_apply(file, false, false, &rep) != 0)
+	if (__upatch_apply(file, false, &rep) != 0)
 		goto done;
 	if (!have_id) {		/* loaded but couldn't read identity */
 		ret = 0;
@@ -3242,7 +3242,7 @@ static int cmd_upatch_unload(int argc, const char **argv)
 	if (undo_unmeasured(&rep, "unload"))
 		goto done;
 	/* A bad signature fails here, before anything is removed. */
-	if (__upatch_apply(file, true, false, &rep) != 0) {
+	if (__upatch_apply(file, true, &rep) != 0) {
 		pr_err("upatch unload: signature verification failed; refusing");
 		goto done;
 	}
@@ -4413,7 +4413,7 @@ static int reconcile_attach(int prog_fd, const char *name,
 			 xdp_attach_strerror(ret));
 		return 1;
 	} else if (ret < 0 && ret != XDP_ERR_OCCUPIED &&
-		   !xdp_attach_skippable(ret, dev, false)) {
+		   !xdp_attach_skippable(ret, dev)) {
 		pr_warn("XDP: upatch %s: attach %s (ifindex %u): %s", name,
 			dev->name, dev->ifindex, xdp_attach_strerror(ret));
 	}

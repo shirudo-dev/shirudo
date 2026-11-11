@@ -210,7 +210,8 @@ signed config image.
    * - ``t3112-xdp-reconcile``
      - ``upatch reconcile`` attaches a device added after load, adds no
        pin or event on a second pass, leaves a device another program
-       occupies, does not read a gone device as tampering, removes its
+       occupies, without a warning, while ``status`` lists it under
+       ``XdpCovered``, and attaches it once that program is unloaded, does not read a gone device as tampering, removes its
        pin without reusing a live index, does nothing after unload, and leaves the link on a veth
        end moved to another namespace. A changed archive is covered by
        the ``upatch_verify`` unit cases. An unload racing a pass is not
@@ -844,7 +845,9 @@ Most of these attacks are open threats in
   with ``CONFIG_LSM="bpf"`` alone.
 - ``bpm config update --base-package`` running commands from a package
   fetched from a registry.
-- A boot restore that fails part way.
+- A boot restore that fails part way, among them one that finds a
+  device another XDP program holds: only a reboot runs the restore.
+  ``t3111`` covers the load, which attaches through the same code.
 - Loading an older artifact signed by the same key, and an unload
   directive signed by another trusted key than the load.
 - Stopping a running shirudo with ``SIGSTOP``, ``mount_setattr(2)``,

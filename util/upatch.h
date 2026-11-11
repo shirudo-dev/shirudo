@@ -174,8 +174,7 @@ __u32 prog_specs_xdp_classes(const struct prog_spec *specs, __u32 nr_progs);
 
 /*
  * The target's upatch lifecycle, which builtin-upatch.c implements for
- * init, bpm and keys: boot restore, install, unload. A restore leaves a
- * device that an upatch restored before it holds, where a load fails.
+ * init, bpm and keys: boot restore, install, unload.
  */
 int upatch_restore(const char *path);
 int upatch_install(const char *path);

@@ -257,9 +257,11 @@ one upatch must select disjoint classes: ``shirudo build`` refuses
 ``SEC("xdp/3")`` beside ``SEC("xdp/2")``. ``bpm tree append`` refuses an
 upatch that selects a class another upatch of the tree selects on the
 same nodes. Two upatches loaded another way can still select the same
-device. The second one's ``upatch load`` then fails, at boot
-restore it is restored without that device, and ``status`` lists the
-device under ``XdpCovered`` as ``another XDP program attached``.
+device. While such a device is there, the second one's ``upatch load``
+fails. When the device appears after both loaded, reconcile attaches the
+first, ``status`` lists the device for the second under ``XdpCovered``
+as ``another XDP program attached``, and the next boot restore fails on
+it.
 
 .. list-table::
    :header-rows: 1
@@ -322,9 +324,9 @@ keeps it, and ``status`` shows it as ``xdp (waiting for a device)``. Other
 errors undo the load's links, including an occupied XDP attachment point
 or a driver refusing the program. Boot restore fails the same way, and
 ``init`` stops with the register unbound. Only a device that went away
-during the restore, or that an upatch restored before this one holds, is
-skipped. That includes a device reconcile only warned about before the
-reboot. A setting root makes after boot is the reconcile pass's to meet,
+during the restore is skipped. A device that an upatch restored before
+this one holds fails the restore like any other, also one that reconcile
+only warned about before the reboot. A setting root makes after boot is the reconcile pass's to meet,
 which leaves the device unattached, warns, and lets ``status`` list it. Existing XDP
 programs are never replaced. Device classification and peer identity
 are rechecked around attachment, and the returned link's ifindex is

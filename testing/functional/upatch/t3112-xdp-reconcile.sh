@@ -90,8 +90,17 @@ test_xdp_success 'a device another program occupies is left alone' '
 	add_pair xdpc 30010 xdpd 30011 &&
 	load "$CONFLICT" &&
 	id=$("$H" query xdpc) && [ "$id" -gt 0 ] &&
+	out=$(reconcile 2>&1) &&
+	[ "$("$H" query xdpc)" = "$id" ] &&
+	! printf "%s\n" "$out" | grep -q "attach xdpc" &&
+	! ls "$B/$NAME" | grep -q "^link_" &&
+	"$SHIRUDO_BIN" status |
+		grep -q "XdpCovered *WARN .*$NAME on xdpc (another XDP program attached)" &&
+	unload "$CONFLICT" &&
 	reconcile &&
-	[ "$("$H" query xdpc)" = "$id" ]
+	[ -e "$B/$NAME/link_0" ] &&
+	[ "$("$H" query xdpc)" -gt 0 ] &&
+	! "$SHIRUDO_BIN" status | grep -q "XdpCovered *WARN"
 '
 
 test_xdp_success 'a gone device loses its pin and no live index is reused' '
