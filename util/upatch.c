@@ -600,6 +600,75 @@ __u32 prog_specs_xdp_classes(const struct prog_spec *specs, __u32 nr_progs)
 	return classes;
 }
 
+static int parse_uprobe_targets(const __u8 **pos, const __u8 *end, struct prog_spec *specs,
+				__u32 nr_progs, __u32 nr_uprobes)
+{
+	struct upatch_uprobe_targets targets;
+	const __u8 *cursor = *pos;
+	__u32 nr_targets, i;
+
+	if ((size_t)(end - cursor) < sizeof(targets))
+		return -EINVAL;
+	memcpy(&targets, cursor, sizeof(targets));
+	cursor += sizeof(targets);
+	nr_targets = le32_to_cpu(targets.nr_targets);
+	if (le32_to_cpu(targets.magic) != UPATCH_UPROBE_TARGET_MAGIC ||
+	    le32_to_cpu(targets.version) != UPATCH_UPROBE_TARGET_VERSION ||
+	    le32_to_cpu(targets.reserved) != 0 || nr_targets != nr_uprobes)
+		return -EINVAL;
+
+	for (i = 0; i < nr_targets; i++) {
+		struct upatch_uprobe_target record;
+		__u32 prog_idx, path_len, build_id_len, nr_offsets, j;
+		struct prog_spec *spec;
+		size_t payload_len;
+
+		if ((size_t)(end - cursor) < sizeof(record))
+			return -EINVAL;
+		memcpy(&record, cursor, sizeof(record));
+		cursor += sizeof(record);
+		prog_idx = le32_to_cpu(record.prog_idx);
+		path_len = le32_to_cpu(record.path_len);
+		build_id_len = le32_to_cpu(record.build_id_len);
+		nr_offsets = le32_to_cpu(record.nr_offsets);
+		if (prog_idx >= nr_progs || specs[prog_idx].kind != UPATCH_ATTACH_UPROBE_MULTI ||
+		    specs[prog_idx].uprobe_path || path_len == 0 ||
+		    path_len >= UPATCH_UPROBE_PATH_MAX || build_id_len == 0 ||
+		    build_id_len > UPATCH_BUILD_ID_MAX || nr_offsets == 0 ||
+		    nr_offsets > UPATCH_UPROBE_OFFSETS_MAX)
+			return -EINVAL;
+		payload_len = (size_t)path_len + build_id_len + (size_t)nr_offsets * sizeof(__u64);
+		if ((size_t)(end - cursor) < payload_len ||
+		    cursor[0] != '/' || memchr(cursor, '\0', path_len))
+			return -EINVAL;
+		spec = &specs[prog_idx];
+		spec->uprobe_path = xstrndup((const char *)cursor, path_len);
+		if (!spec->uprobe_path)
+			return -ENOMEM;
+		spec->uprobe_path_len = path_len;
+		cursor += path_len;
+		memcpy(spec->build_id, cursor, build_id_len);
+		spec->build_id_len = build_id_len;
+		cursor += build_id_len;
+		spec->uprobe_offsets = xcalloc(nr_offsets, sizeof(*spec->uprobe_offsets));
+		if (!spec->uprobe_offsets)
+			return -ENOMEM;
+		spec->nr_uprobe_offsets = nr_offsets;
+		for (j = 0; j < nr_offsets; j++) {
+			spec->uprobe_offsets[j] = get_le64(cursor);
+			cursor += sizeof(__le64);
+			if (j && spec->uprobe_offsets[j] <= spec->uprobe_offsets[j - 1])
+				return -EINVAL;
+		}
+	}
+	for (i = 0; i < nr_progs; i++) {
+		if (specs[i].kind == UPATCH_ATTACH_UPROBE_MULTI && !specs[i].uprobe_path)
+			return -EINVAL;
+	}
+	*pos = cursor;
+	return 0;
+}
+
 int prog_specs_parse(const void *metadata, __u32 metadata_len,
 		     __u32 nr_maps, __u32 nr_progs, struct prog_spec **out)
 {
@@ -727,96 +796,16 @@ int prog_specs_parse(const void *metadata, __u32 metadata_len,
 			goto out;
 	}
 
-	if (!nr_uprobes) {
-		if (metadata_len != base_len)
-			goto out;
-		*out = specs;
-		return 0;
-	}
-
 	cursor = (const __u8 *)metadata + base_len;
 	end = (const __u8 *)metadata + metadata_len;
-	if ((size_t)(end - cursor) <
-	    sizeof(struct upatch_uprobe_targets))
-		goto out;
-	{
-		struct upatch_uprobe_targets targets;
-		__u32 nr_targets;
-
-		memcpy(&targets, cursor, sizeof(targets));
-		cursor += sizeof(targets);
-		nr_targets = le32_to_cpu(targets.nr_targets);
-		if (le32_to_cpu(targets.magic) !=
-		    UPATCH_UPROBE_TARGET_MAGIC ||
-		    le32_to_cpu(targets.version) !=
-		    UPATCH_UPROBE_TARGET_VERSION ||
-		    le32_to_cpu(targets.reserved) != 0 || nr_targets != nr_uprobes)
+	if (nr_uprobes) {
+		ret = parse_uprobe_targets(&cursor, end, specs, nr_progs, nr_uprobes);
+		if (ret)
 			goto out;
-
-		for (i = 0; i < nr_targets; i++) {
-			struct upatch_uprobe_target record;
-			struct prog_spec *spec;
-			__u32 prog_idx, path_len, build_id_len, nr_offsets, j;
-			size_t payload_len;
-
-			if ((size_t)(end - cursor) < sizeof(record))
-				goto out;
-			memcpy(&record, cursor, sizeof(record));
-			cursor += sizeof(record);
-			prog_idx = le32_to_cpu(record.prog_idx);
-			path_len = le32_to_cpu(record.path_len);
-			build_id_len = le32_to_cpu(record.build_id_len);
-			nr_offsets = le32_to_cpu(record.nr_offsets);
-			if (prog_idx >= nr_progs ||
-			    specs[prog_idx].kind !=
-			    UPATCH_ATTACH_UPROBE_MULTI ||
-			    specs[prog_idx].uprobe_path || path_len == 0 ||
-			    path_len >= UPATCH_UPROBE_PATH_MAX ||
-			    build_id_len == 0 ||
-			    build_id_len > UPATCH_BUILD_ID_MAX ||
-			    nr_offsets == 0 ||
-			    nr_offsets > UPATCH_UPROBE_OFFSETS_MAX)
-				goto out;
-			payload_len = (size_t)path_len + build_id_len +
-				      (size_t)nr_offsets * sizeof(__u64);
-			if ((size_t)(end - cursor) < payload_len ||
-			    cursor[0] != '/' || memchr(cursor, '\0', path_len))
-				goto out;
-			spec = &specs[prog_idx];
-			spec->uprobe_path = xstrndup((const char *)cursor,
-						     path_len);
-			if (!spec->uprobe_path) {
-				ret = -ENOMEM;
-				goto out;
-			}
-			spec->uprobe_path_len = path_len;
-			cursor += path_len;
-			memcpy(spec->build_id, cursor, build_id_len);
-			spec->build_id_len = build_id_len;
-			cursor += build_id_len;
-			spec->uprobe_offsets =
-				xcalloc(nr_offsets, sizeof(*spec->uprobe_offsets));
-			if (!spec->uprobe_offsets) {
-				ret = -ENOMEM;
-				goto out;
-			}
-			spec->nr_uprobe_offsets = nr_offsets;
-			for (j = 0; j < nr_offsets; j++) {
-				spec->uprobe_offsets[j] = get_le64(cursor);
-				cursor += sizeof(__le64);
-				if (j && spec->uprobe_offsets[j] <=
-				    spec->uprobe_offsets[j - 1])
-					goto out;
-			}
-		}
 	}
+	ret = -EINVAL;
 	if (cursor != end)
 		goto out;
-	for (i = 0; i < nr_progs; i++) {
-		if (specs[i].kind == UPATCH_ATTACH_UPROBE_MULTI &&
-		    !specs[i].uprobe_path)
-			goto out;
-	}
 	*out = specs;
 	return 0;
 out:

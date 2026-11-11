@@ -16,7 +16,7 @@ upatch-policy-labels	--unwind 3 LEN=0,19,20,4187,4188,4189,8356
 upatch-name		--unwind 33
 upatch-signed-sections	--refine-arithmetic --unwind 2 --unwindset parse_signed_sections.0:4,parse_decoders.0:0,parse_policy_labels.0:0 LEN=15,16,40,64
 upatch-signed-name	--refine-arithmetic --unwind 2 --unwindset parse_signed_sections.0:2,parse_decoders.0:2,parse_policy_labels.0:0 LEN=288
-upatch-prog-specs	--refine-arithmetic --memory-leak-check --malloc-may-fail --malloc-fail-null --unwind 3 --unwindset memchr.0:129,memcmp.0:129,strchr.0:129,strnlen.0:1,strlen.0:1,prog_specs_parse.2:0,prog_specs_parse.3:0,uprobe_valid.0:1 LEN=3,15,16,176
+upatch-prog-specs	--refine-arithmetic --memory-leak-check --malloc-may-fail --malloc-fail-null --unwind 3 --unwindset memchr.0:129,memcmp.0:129,strchr.0:129,strnlen.0:1,strlen.0:1,parse_uprobe_targets.0:0,parse_uprobe_targets.1:0,uprobe_valid.0:1 LEN=3,15,16,176
 upatch-prog-uprobes	--memory-leak-check --malloc-may-fail --malloc-fail-null --unwind 3 --unwindset memchr.0:129,memcmp.0:129,strchr.0:129,strnlen.0:12,strlen.0:12,prog_specs_parse.2:3,prog_specs_parse.3:2,uprobe_valid.0:3 LEN=226
 upatch-loader		-I ../../../vendor/libbpf/include/uapi -I ../../../vendor/libbpf --unwind 50 LEN=4,5,25,49
 upatch-rodata-btf	-I ../../../vendor/libbpf/include/uapi -I ../../../vendor/libbpf --refine-arithmetic --object-bits 10 --unwind 16 LEN=4,10,15
