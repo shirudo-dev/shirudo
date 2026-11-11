@@ -12,6 +12,7 @@
 #include <stddef.h>
 
 #include <shirudo/types.h>
+#include <shirudo/upatch.h>
 
 struct upatch_pins {
 	bool	has_link;
@@ -50,6 +51,12 @@ int upatch_link_pin(char *out, size_t cap, const char *dir, __u32 index);
 
 /* The pin that keeps XDP program index of name loaded: 0 or -ENAMETOOLONG. */
 int upatch_xdp_prog_pin(char *out, size_t cap, const char *name, __u32 index);
+
+/*
+ * The payload hash a load set on the pin directory of name: 0,
+ * -ENAMETOOLONG, -EINVAL when it is not a hash, or the -errno of the read.
+ */
+int upatch_pin_payload(const char *name, __u8 out[UPATCH_PAYLOAD_HASH_LEN]);
 
 /*
  * Calls cb with the name of each upatch that has a pin directory and stops

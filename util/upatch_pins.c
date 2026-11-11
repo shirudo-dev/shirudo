@@ -10,6 +10,7 @@
 #include <limits.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/xattr.h>
 
 #include <shirudo/string.h>
 #include <shirudo/upatch.h>
@@ -141,6 +142,19 @@ int upatch_xdp_prog_pin(char *out, size_t cap, const char *name, __u32 index)
 	    upatch_pin_path(out, cap, name, entry, NULL))
 		return -ENAMETOOLONG;
 	return 0;
+}
+
+int upatch_pin_payload(const char *name, __u8 out[UPATCH_PAYLOAD_HASH_LEN])
+{
+	char dir[PATH_MAX];
+	ssize_t n;
+
+	if (upatch_pin_path(dir, sizeof(dir), name, NULL))
+		return -ENAMETOOLONG;
+	n = getxattr(dir, XATTR_PAYLOAD, out, UPATCH_PAYLOAD_HASH_LEN);
+	if (n < 0)
+		return -errno;
+	return n == UPATCH_PAYLOAD_HASH_LEN ? 0 : -EINVAL;
 }
 
 int upatch_each_pinned(int (*cb)(const char *name, void *ctx), void *ctx)

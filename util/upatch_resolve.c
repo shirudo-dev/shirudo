@@ -12,7 +12,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/xattr.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -328,17 +327,10 @@ void upatch_loaded_at(const char *name, char *out, size_t cap)
 
 void upatch_payload_sha256(const char *name, char *out, size_t cap)
 {
-	char dir[PATH_MAX];
-	__u8 raw[32];
-	ssize_t n;
+	__u8 raw[UPATCH_PAYLOAD_HASH_LEN];
 
 	out[0] = '\0';
-	if (cap < 65)
-		return;
-	if (upatch_pin_path(dir, sizeof(dir), name, NULL))
-		return;
-	n = getxattr(dir, XATTR_PAYLOAD, raw, sizeof(raw));
-	if (n != (ssize_t)sizeof(raw))
+	if (cap < 2 * sizeof(raw) + 1 || upatch_pin_payload(name, raw))
 		return;
 	hex_encode(raw, sizeof(raw), out);
 }

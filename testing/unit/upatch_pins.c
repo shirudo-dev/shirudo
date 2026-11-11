@@ -127,6 +127,18 @@ static void link_pins_read_back_as_links(void)
 		  -ENAMETOOLONG);
 }
 
+static void payload_of_absent_upatch_is_enoent(void)
+{
+	__u8 payload[UPATCH_PAYLOAD_HASH_LEN];
+	char name[PATH_MAX];
+
+	EXPECT_EQ(upatch_pin_payload("shirudo-unit-no-such-upatch", payload),
+		  -ENOENT);
+	memset(name, 'a', sizeof(name) - 1);
+	name[sizeof(name) - 1] = '\0';
+	EXPECT_EQ(upatch_pin_payload(name, payload), -ENAMETOOLONG);
+}
+
 static int count_pinned(const char *name, void *ctx)
 {
 	(*(int *)ctx)++;
@@ -151,6 +163,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(absent_upatch_has_no_pins),
 	UNIT_CASE(xdp_program_pins_have_one_name),
 	UNIT_CASE(link_pins_read_back_as_links),
+	UNIT_CASE(payload_of_absent_upatch_is_enoent),
 	UNIT_CASE(no_pin_directory_is_no_upatch),
 	{}
 };

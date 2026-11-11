@@ -1790,21 +1790,6 @@ static int set_pin_payload(const char *name, const __u8 payload[32])
 	return ret;
 }
 
-static int get_pin_payload(const char *name, __u8 out[32])
-{
-	char dir[PATH_MAX];
-	ssize_t n;
-
-	if (upatch_pin_path(dir, sizeof(dir), name, NULL))
-		return -ENAMETOOLONG;
-	n = getxattr(dir, XATTR_PAYLOAD, out, 32);
-	if (n < 0)
-		return -errno;
-	if (n != 32)
-		return -EINVAL;
-	return 0;
-}
-
 /* Resolve the kernel BPF keyring and compare it with the frozen record. */
 static int trust_anchor_keyring(key_serial_t *keyring, key_serial_t *serial,
 				struct op_report *rep)
@@ -3031,7 +3016,7 @@ static int upatch_load(const struct load_args *args)
 	 * it. An install of the very payload loaded is done: bpm retries one
 	 * that a stop cut off between this load and its own record.
 	 */
-	if (have_id && !get_pin_payload(name, live)) {
+	if (have_id && !upatch_pin_payload(name, live)) {
 		if (args->loaded_is_done &&
 		    !memcmp(live, payload, sizeof(live))) {
 			pr_info("upatch load: %s is already loaded with this payload",
@@ -3252,7 +3237,7 @@ static int cmd_upatch_unload(int argc, const char **argv)
 		__u8 live[UPATCH_PAYLOAD_HASH_LEN];
 		int xrc;
 
-		xrc = get_pin_payload(name, live);
+		xrc = upatch_pin_payload(name, live);
 		if (xrc == 0) {
 			if (memneq_explicit(live, payload, sizeof(payload))) {
 				pr_err("upatch unload: payload_mismatch, the "
@@ -4239,7 +4224,7 @@ static int pin_is_measured(const char *name, __u8 *payload, bool *held)
 
 static int reconcile_read(struct xdp_work *w)
 {
-	if (get_pin_payload(w->name, w->payload))
+	if (upatch_pin_payload(w->name, w->payload))
 		return -ENODATA;
 	return upatch_archive_specs(w->name, w->payload, &w->u, &w->specs);
 }

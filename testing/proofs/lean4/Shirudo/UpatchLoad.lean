@@ -465,7 +465,7 @@ inductive Step (V : Variant) :
       (s.procs i = some ⟨c, .undoPins m todo f⟩ ∨
        s.procs i = some ⟨c, .undoArch m todo f⟩) → V.refuse = false →
       Step V s (s.go i c .acted)
-  /-- A load past `get_pin_payload()`, which refuses a directory with an
+  /-- A load past `upatch_pin_payload()`, which refuses a directory with an
   xattr: `mkdir_if_absent()` of its directory. -/
   | loadMkdir (s) (i n p) : s.procs i = some ⟨.load n p, .acted⟩ →
       (∀ d, s.pins n = some d → d.xattr = none) →

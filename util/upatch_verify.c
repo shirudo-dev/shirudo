@@ -9,7 +9,6 @@
 #include <limits.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/xattr.h>
 #include <unistd.h>
 
 #include <bpf/bpf.h>
@@ -266,11 +265,8 @@ bool upatch_pin_measured(const struct measured_set *s, const char *name,
 			 __u8 payload[UPATCH_PAYLOAD_HASH_LEN])
 {
 	char hex[2 * UPATCH_PAYLOAD_HASH_LEN + 1];
-	char dir[PATH_MAX];
 
-	if (upatch_pin_path(dir, sizeof(dir), name, NULL) ||
-	    getxattr(dir, XATTR_PAYLOAD, payload, UPATCH_PAYLOAD_HASH_LEN) !=
-	    UPATCH_PAYLOAD_HASH_LEN)
+	if (upatch_pin_payload(name, payload))
 		return false;
 	hex_encode(payload, UPATCH_PAYLOAD_HASH_LEN, hex);
 	return measured_holds(s, name, hex);
