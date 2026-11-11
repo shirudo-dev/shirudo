@@ -326,10 +326,14 @@ Other make targets
      - Renders the documentation and serves it on
        ``http://127.0.0.1:8000``. See
        :doc:`/contribute/documentation/writing-docs`.
+   * - ``make tags``, ``make cscope``
+     - Index the C sources, untracked ones and the generated
+       ``vendor/linux/vmlinux.h`` included, for an editor: ``tags`` with
+       ctags, ``cscope.files`` and ``cscope.out`` with cscope.
    * - ``make clean``, ``make distclean``
      - Remove the build products, and with ``distclean`` also
        ``config.mk``, the target dependencies and the vendored libbpf
-       build.
+       build and the source indexes.
    * - ``make help``, ``make -C testing help``
      - List the targets.
 

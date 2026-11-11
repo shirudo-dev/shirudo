@@ -1,3 +1,10 @@
+# Source indexes (make tags, make cscope)
+/tags
+/cscope.files
+/cscope.out
+/cscope.in.out
+/cscope.po.out
+
 # Build artefacts
 /build/
 /shirudo

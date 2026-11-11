@@ -51,7 +51,7 @@ export prefix exec_prefix bindir libexecdir sharedir libdir mandir completionsdi
        systemdunitdir udevrulesdir dracutmodulesdir SHIRUDO_TARGET_PKG_CONFIG_PATH \
        SHIRUDO_TARGET_STATIC_LIBDIR
 
-.PHONY: all help target target-deps target-deps-clean shirudo-target target-config shirudo-build docs bpf-deps install install-target install-operator clean distclean config tests proofs proofs-cbmc proofs-lean4 sparse
+.PHONY: all help target target-deps target-deps-clean shirudo-target target-config shirudo-build docs bpf-deps install install-target install-operator clean distclean config tests proofs proofs-cbmc proofs-lean4 sparse tags cscope
 
 all: config
 	+$(Q)$(MAKE) -f Makefile.shirudo PROFILE=operator CONFIG_MK=config.mk all
@@ -90,6 +90,7 @@ help:
 	  '  Build: make, make target, make target-deps, make bpf-deps, make install' \
 	  '  Local stack: make stack-up, make oci, make telemetry, make vm, make stack-down' \
 	  '  Checks: make sparse' \
+	  '  Source index: make tags (ctags), make cscope' \
 	  '  Install roles: make install-target, make install-operator' \
 	  '  Package: make -C packaging help' \
 	  '  Tests: make tests (all of them), make -C testing help' \
@@ -108,6 +109,23 @@ docs:
 
 tests:
 	+$(Q)$(MAKE) -C testing
+
+# The C sources of the tree, untracked ones included, and the generated
+# vmlinux.h that the BPF code reads its kernel types from.
+TAGS_FILES = { git ls-files --cached --others --exclude-standard -- '*.[ch]' 2>/dev/null || \
+	       find . -path ./build -prune -o -name '*.[ch]' -print; } | sort -u; \
+	     [ ! -f vendor/linux/vmlinux.h ] || echo vendor/linux/vmlinux.h
+
+tags:
+	@printf '  GEN     tags\n'
+	$(Q)rm -f tags
+	$(Q)($(TAGS_FILES)) | ctags -L - -f tags
+
+cscope:
+	@printf '  GEN     cscope\n'
+	$(Q)rm -f cscope.files cscope.out cscope.in.out cscope.po.out
+	$(Q)($(TAGS_FILES)) > cscope.files
+	$(Q)cscope -b -q -k -i cscope.files
 
 proofs: proofs-cbmc proofs-lean4
 
@@ -146,6 +164,7 @@ clean:
 
 distclean: clean
 	$(Q)rm -f config.mk
+	$(Q)rm -f tags cscope.files cscope.out cscope.in.out cscope.po.out
 	+$(Q)$(MAKE) -f Makefile.target-deps TARGET_DEPS_DIR="$(TARGET_DEPS_DIR)" clean
 	$(Q)$(MAKE) -f Makefile.shirudo distclean
 
