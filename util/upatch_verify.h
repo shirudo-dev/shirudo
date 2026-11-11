@@ -44,9 +44,6 @@ int upatch_archive_specs(const char *name,
 			 const __u8 payload[UPATCH_PAYLOAD_HASH_LEN],
 			 struct upatch *u, struct prog_spec **specs);
 
-/* The fd of XDP program index pinned for name, its id in *id, or -errno. */
-int upatch_xdp_prog_open(const char *name, __u32 index, __u32 *id);
-
 /*
  * Calls cb for each device an XDP program of name selects and that does not
  * run it, with what the device runs instead as devices were read, 0 for

@@ -53,6 +53,12 @@ int upatch_link_pin(char *out, size_t cap, const char *dir, __u32 index);
 int upatch_xdp_prog_pin(char *out, size_t cap, const char *name, __u32 index);
 
 /*
+ * The fd of XDP program index pinned for name, its id in *id, or -errno;
+ * -ESTALE when the pin holds a program that is not XDP.
+ */
+int upatch_xdp_prog_open(const char *name, __u32 index, __u32 *id);
+
+/*
  * The payload hash a load set on the pin directory of name: 0,
  * -ENAMETOOLONG, -EINVAL when it is not a hash, or the -errno of the read.
  */

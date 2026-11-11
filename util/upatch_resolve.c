@@ -88,10 +88,8 @@ static const char *loc_prefix(__u32 prog_type, __u32 attach_type)
 int upatch_first_prog_id(const char *name, __u32 *out)
 {
 	struct bpf_link_info linfo = {};
-	struct bpf_prog_info info = {};
 	__u32 len = sizeof(linfo);
 	struct upatch_pins pins;
-	char pin[PATH_MAX];
 	int fd, ret;
 
 	*out = 0;
@@ -111,18 +109,11 @@ int upatch_first_prog_id(const char *name, __u32 *out)
 		return ret;
 	if (!pins.nr_xdp_progs)
 		return -ENOENT;
-	if (upatch_xdp_prog_pin(pin, sizeof(pin), name, pins.first_xdp_prog))
-		return -ENAMETOOLONG;
-	fd = bpf_obj_get(pin);
+	fd = upatch_xdp_prog_open(name, pins.first_xdp_prog, out);
 	if (fd < 0)
-		return -errno;
-	len = sizeof(info);
-	ret = bpf_prog_get_info_by_fd(fd, &info, &len);
+		return fd;
 	close(fd);
-	if (ret)
-		return ret;
-	*out = info.id;
-	return info.id ? 0 : -EINVAL;
+	return *out ? 0 : -EINVAL;
 }
 
 struct xdp_links {

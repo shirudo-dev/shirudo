@@ -11,8 +11,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <bpf/bpf.h>
-#include <bpf/libbpf.h>
 #include <linux/bpf.h>
 
 #include <shirudo/misc.h>
@@ -195,29 +193,6 @@ int upatch_archive_specs(const char *name,
 	if (ret)
 		upatch_close(u);
 	return ret;
-}
-
-int upatch_xdp_prog_open(const char *name, __u32 index, __u32 *id)
-{
-	struct bpf_prog_info info = {};
-	__u32 len = sizeof(info);
-	char pin[PATH_MAX];
-	int fd, ret;
-
-	if (upatch_xdp_prog_pin(pin, sizeof(pin), name, index))
-		return -ENAMETOOLONG;
-	fd = bpf_obj_get(pin);
-	if (fd < 0)
-		return -errno;
-	ret = bpf_prog_get_info_by_fd(fd, &info, &len);
-	if (!ret && info.type != BPF_PROG_TYPE_XDP)
-		ret = -ESTALE;
-	if (ret) {
-		close(fd);
-		return ret;
-	}
-	*id = info.id;
-	return fd;
 }
 
 int upatch_xdp_each_uncovered(const char *name, const struct prog_spec *specs,

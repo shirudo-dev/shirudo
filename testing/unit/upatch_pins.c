@@ -113,6 +113,15 @@ static void xdp_program_pins_have_one_name(void)
 		  -ENAMETOOLONG);
 }
 
+static void an_unpinned_xdp_program_does_not_open(void)
+{
+	__u32 id = 0;
+
+	EXPECT_TRUE(upatch_xdp_prog_open("shirudo-unit-no-such-upatch", 0,
+					 &id) < 0);
+	EXPECT_EQ(id, 0);
+}
+
 static void link_pins_read_back_as_links(void)
 {
 	struct upatch_pins pins = {};
@@ -162,6 +171,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(complete_means_every_link),
 	UNIT_CASE(absent_upatch_has_no_pins),
 	UNIT_CASE(xdp_program_pins_have_one_name),
+	UNIT_CASE(an_unpinned_xdp_program_does_not_open),
 	UNIT_CASE(link_pins_read_back_as_links),
 	UNIT_CASE(payload_of_absent_upatch_is_enoent),
 	UNIT_CASE(no_pin_directory_is_no_upatch),

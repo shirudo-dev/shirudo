@@ -11,6 +11,10 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/xattr.h>
+#include <unistd.h>
+
+#include <bpf/bpf.h>
+#include <linux/bpf.h>
 
 #include <shirudo/string.h>
 #include <shirudo/upatch.h>
@@ -142,6 +146,29 @@ int upatch_xdp_prog_pin(char *out, size_t cap, const char *name, __u32 index)
 	    upatch_pin_path(out, cap, name, entry, NULL))
 		return -ENAMETOOLONG;
 	return 0;
+}
+
+int upatch_xdp_prog_open(const char *name, __u32 index, __u32 *id)
+{
+	struct bpf_prog_info info = {};
+	__u32 len = sizeof(info);
+	char pin[PATH_MAX];
+	int fd, ret;
+
+	if (upatch_xdp_prog_pin(pin, sizeof(pin), name, index))
+		return -ENAMETOOLONG;
+	fd = bpf_obj_get(pin);
+	if (fd < 0)
+		return -errno;
+	ret = bpf_prog_get_info_by_fd(fd, &info, &len);
+	if (!ret && info.type != BPF_PROG_TYPE_XDP)
+		ret = -ESTALE;
+	if (ret) {
+		close(fd);
+		return ret;
+	}
+	*id = info.id;
+	return fd;
 }
 
 int upatch_pin_payload(const char *name, __u8 out[UPATCH_PAYLOAD_HASH_LEN])
