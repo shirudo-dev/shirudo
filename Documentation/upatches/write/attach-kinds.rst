@@ -287,6 +287,35 @@ the next boot restore fails on it.
      - Devices without sufficient classification evidence. This bit is
        a catchall class, not a wildcard; 27 selects every class.
 
+A shared class is checked at these places:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 46 30
+
+   * - Place
+     - Check
+     - Result
+   * - ``shirudo build``
+     - Two XDP programs of one upatch select the same class.
+     - The build is refused.
+   * - ``upatch load``
+     - The same, when the target reads the signed attach metadata of
+       the artifact.
+     - ``parser_rejected``
+   * - ``bpm tree append``
+     - An upatch selects a class another upatch of the tree selects on
+       the same nodes.
+     - The append is refused and nothing is published.
+   * - ``upatch load``
+     - None across loaded upatches. The kernel refuses the second link
+       on a device both select.
+     - ``xdp_device_occupied``, and the load is undone.
+
+``upatch load`` does not compare the classes of the loaded upatches. It
+would have to read and verify every loaded archive on each load, and the
+checks above and the kernel's refusal already cover the case.
+
 Bit 4 is not a class, and a mask with it is refused. Loopback has no
 native XDP, so it has no class and no mask selects it. Every other
 interface has exactly one class. A device on the ``xen-backend`` bus,
@@ -414,6 +443,119 @@ The signed artifact and TPM measurement
 cover the class policy, not a fixed device inventory. The location
 ``status`` and ``upatch get`` report names the first device still
 attached and how many more there are, as in ``xdp/eth0 (+1)``.
+
+The table sums up what each condition does at load and boot restore, at
+reconcile and in ``status``. Skipped means the program is not attached
+to that device and the operation carries on with the others; reconcile
+tries the device again on its next pass. Failed means the operation
+stops: a load is undone, ``init`` stops with the register unbound, and
+a reconcile pass exits 1.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 17 15 24 12 12 20
+
+   * - Condition
+     - Load category
+     - Journal
+     - Load and boot restore
+     - Reconcile
+     - ``status``
+   * - No native XDP, such as a bridge
+     - none
+     - ``XDP: skipping <device> (ifindex <n>, class <c>): native XDP
+       unsupported``
+     - Skipped
+     - Skipped
+     - ``degraded``, ``no native XDP``
+   * - No multi-buffer support
+     - ``xdp_multibuf_unsupported``
+     - ``XDP: attach <device> (ifindex <n>): the device does not report
+       multi-buffer XDP support``
+     - Failed
+     - Skipped, with a warning on every pass
+     - ``degraded``, ``no multi-buffer XDP``
+   * - The driver refuses in its current settings
+     - ``xdp_driver_refused``
+     - ``XDP: the driver of <device> refused the program: <error>``
+     - Failed
+     - Skipped, with a warning on every pass
+     - ``degraded``, ``not attached``
+   * - Another XDP program on the device, in any mode
+     - ``xdp_device_occupied``
+     - ``XDP: attach <device> (ifindex <n>): the device runs another XDP
+       program``
+     - Failed
+     - Skipped, without a warning
+     - ``degraded``, ``another XDP program attached``
+   * - A link on another device, or a run outside the initial network
+       namespace
+     - ``attach_scope_mismatch``
+     - ``XDP: attach <device> (ifindex <n>): the link is not on the
+       device it was made for``
+     - Failed
+     - Failed
+     - No condition of its own
+   * - The device changed or went away during the attach
+     - none
+     - ``XDP: skipping <device> (ifindex <n>): <reason>``
+     - Skipped
+     - Skipped
+     - None
+   * - The driver name or devlink port cannot be read
+     - none
+     - ``XDP: cannot classify <device> (ifindex <n>), it sits out:
+       <error>``
+     - Skipped
+     - Skipped
+     - ``degraded``, ``not classified: <error>``
+   * - No device matches the mask
+     - none
+     - ``XDP: no attachable interface matches signed class mask <n> yet``
+     - Loads and waits
+     - Attaches when a device appears
+     - ``ok``, location ``xdp (waiting for a device)``
+   * - The archive differs from the loaded payload
+     - not a load failure
+     - ``upatch reconcile: the archive of <name> is not what was loaded
+       (tampered)``
+     - Not checked
+     - Failed, ``tampered``
+     - ``tampered``, ``UpatchesMeasured``
+   * - An ``xdp_prog_<i>`` pin is missing
+     - not a load failure
+     - ``upatch reconcile: an XDP program of <name>: <error>``
+     - Not checked
+     - Failed, ``tampered``
+     - ``tampered``, ``UpatchesMeasured``
+   * - An ``xdp_prog_<i>`` pin holds no XDP program
+     - not a load failure
+     - The same line
+     - Not checked
+     - Failed, ``tampered``
+     - None: ``status`` checks that the pin exists, not what it holds
+   * - The guards refuse the pin or the link
+     - not a load failure
+     - The same line, or the report message ``the guards refused the XDP
+       link``
+     - Not checked
+     - Failed, ``lsm_denied``
+     - The verdict does not change. The tamper counters count a refusal
+       by shirudo's own guards.
+   * - The pin cannot be opened for lack of descriptors or memory
+     - not a load failure
+     - The same line
+     - Not checked
+     - Failed, ``unknown``
+     - None
+
+``status`` reports what it finds itself, not the result of a reconcile
+pass, and the keepalive carries the verdict of ``status``. A load that
+fails is undone, so it does not change the verdict; the journal, the
+report and the tree sync report carry the failure. A boot restore that
+fails leaves the host ``reboot-pending``. :doc:`/reference/failure-categories`
+has the errno and the remedy of each category, and
+:doc:`/operate/run/read-status` each reason ``XdpCovered`` gives.
 
 Programs that attach nowhere
 ----------------------------
