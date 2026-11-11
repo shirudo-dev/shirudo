@@ -113,6 +113,21 @@ static const char *cat_from_load_errno(int e)
 	}
 }
 
+/* Only a pin that is gone or holds another object says what the pin is. */
+static const char *cat_from_pin_errno(int e)
+{
+	switch (e) {
+	case EACCES:
+	case EPERM:
+		return "lsm_denied";
+	case ENOENT:
+	case ESTALE:
+		return "tampered";
+	default:
+		return "unknown";
+	}
+}
+
 static const char *flag_str(const struct upatch *u)
 {
 	return upatch_is_unload(u) ? "UNLOAD-directive" : "LOAD";
@@ -2342,6 +2357,17 @@ int upatch_restore(const char *path)
 	return __upatch_apply(path, false, NULL);
 }
 
+static int preflight_lsm_pin_failed(int err, struct op_report *rep)
+{
+	const char *cat = cat_from_pin_errno(err);
+
+	pr_err("upatch: pre-flight refused (category: %s%s): open %s: %s", cat,
+	       err == ENOENT ? ", message: lsm_detached" : "", LSM_LINK_PIN,
+	       strerror(err));
+	rep_fail(rep, "pre_flight", cat, err, "cannot open the LSM link pin");
+	return -1;
+}
+
 /*
  * The tamper gate before any BPF_PROG_LOAD: a concurrent operator who
  * advanced the register, a detached LSM or a missing anchor surface
@@ -2369,12 +2395,8 @@ static int upatch_preflight(const char *expect_chain,
 		return -1;
 
 	fd = bpf_obj_get(LSM_LINK_PIN);
-	if (fd < 0) {
-		pr_err("upatch load: pre-flight refused (category: tampered, "
-		       "message: lsm_detached): %s not pinned",
-		       LSM_LINK_PIN);
-		return -1;
-	}
+	if (fd < 0)
+		return preflight_lsm_pin_failed(errno, rep);
 	close(fd);
 
 	if (!expect_chain)
@@ -4396,16 +4418,8 @@ static int reconcile_prog_failed(const char *name, int err,
 {
 	pr_err("upatch reconcile: an XDP program of %s: %s", name,
 	       strerror(-err));
-	if (err == -EACCES || err == -EPERM)
-		rep_fail(rep, "pre_flight", "lsm_denied", err,
-			 "the guards refused the XDP program pin");
-	/* Only these say what the pin is; EMFILE or ENOMEM say nothing. */
-	else if (err == -ENOENT || err == -ESTALE)
-		rep_fail(rep, "pre_flight", "tampered", err,
-			 "an XDP program pin is missing or not XDP");
-	else
-		rep_fail(rep, "pre_flight", "unknown", err,
-			 "cannot open an XDP program pin");
+	rep_fail(rep, "pre_flight", cat_from_pin_errno(-err), err,
+		 "cannot open an XDP program pin");
 	return 1;
 }
 

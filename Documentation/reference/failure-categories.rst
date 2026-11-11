@@ -102,13 +102,14 @@ Categories
        config, see :doc:`/operate/maintain/keys`.
    * - ``tampered``
      - ``pre_flight``, ``tpm_extend``
-     - none, ``EPERM``, ``EACCES``
+     - none, ``EPERM``, ``EACCES``, ``ENOENT``, ``ESTALE``
      - The ``.bpf`` keyring is not the frozen anchor (no errno), the
-       ``lsm_link`` pin cannot be opened, the register differs from
+       ``lsm_link`` pin is missing (``ENOENT``), the register differs from
        ``--expect-chain`` or cannot be read (``EPERM``), or the register
        is not the one ``init`` bound (``EACCES``, the load is undone). From
        ``upatch reconcile``: the archive of a loaded XDP upatch differs
-       from what the records say was loaded, or its program pin is missing.
+       from what the records say was loaded, or its program pin is missing
+       (``ENOENT``) or holds no XDP program (``ESTALE``).
      - Do not retry. Keep the eventlog and the journal and handle the
        target as an incident: :doc:`/operate/troubleshoot/incident-tampered`.
    * - ``not_initialized``
@@ -183,10 +184,13 @@ Categories
      - Build the kernel with ``CONFIG_CRYPTO_MLDSA``, see
        :doc:`/operate/plan/system-requirements`.
    * - ``lsm_denied``
-     - ``target_verify``, ``signed_loader_load``, ``link_create``
+     - ``pre_flight``, ``target_verify``, ``signed_loader_load``,
+       ``link_create``
      - ``EACCES``, ``EPERM``
      - The kernel refused an operation with ``EACCES`` or ``EPERM``,
-       normally an LSM, shirudo's own or another one.
+       normally an LSM, shirudo's own or another one. In ``pre_flight``
+       it refused to open the ``lsm_link`` pin or, from ``upatch
+       reconcile``, an XDP program pin.
      - Check the tamper counters in ``shirudo status`` and the other
        LSMs' audit records.
    * - ``verifier_rejected``
@@ -252,9 +256,9 @@ Categories
      - Any other failure: out of memory, a failed hash of the loader, an
        unclassified attach error, a payload that cannot be recorded on the
        pin directory or a failed archive copy (the load is undone for
-       both). From ``upatch reconcile``, an XDP program pin that cannot
-       be opened for a reason that says nothing about the pin, such as
-       ``EMFILE`` or ``ENOMEM``.
+       both). In ``pre_flight``, the ``lsm_link`` pin or, from ``upatch
+       reconcile``, an XDP program pin that cannot be opened for a reason
+       that says nothing about the pin, such as ``EMFILE`` or ``ENOMEM``.
      - Read ``message`` and the journal. For ``persist``, check the space
        on the file system that holds ``/var/lib/shirudo``.
 
