@@ -197,6 +197,18 @@ static void only_a_device_without_xdp_lacks_it(void)
 		     "the link is not on the device and namespace it was made for");
 }
 
+static void a_driver_refusal_is_told_from_other_errors(void)
+{
+	EXPECT_TRUE(xdp_driver_refused(-EOPNOTSUPP));
+	EXPECT_TRUE(xdp_driver_refused(-EINVAL));
+	EXPECT_TRUE(xdp_driver_refused(-ENOSPC));
+	EXPECT_TRUE(xdp_driver_refused(-ERANGE));
+	EXPECT_FALSE(xdp_driver_refused(-EBUSY));
+	EXPECT_FALSE(xdp_driver_refused(-ENOMEM));
+	EXPECT_FALSE(xdp_driver_refused(-EPERM));
+	EXPECT_FALSE(xdp_driver_refused(0));
+}
+
 static void attach_errors_never_alias_an_errno(void)
 {
 	EXPECT_EQ(xdp_attach_errno(XDP_ERR_NO_MULTIBUF), -EMEDIUMTYPE);
@@ -318,6 +330,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(multibuf_is_required_of_native_xdp_alone),
 	UNIT_CASE(uncovered_devices_say_why),
 	UNIT_CASE(only_a_device_without_xdp_lacks_it),
+	UNIT_CASE(a_driver_refusal_is_told_from_other_errors),
 	UNIT_CASE(attach_errors_never_alias_an_errno),
 	UNIT_CASE(device_features_are_checked),
 	UNIT_CASE(link_messages_are_checked),

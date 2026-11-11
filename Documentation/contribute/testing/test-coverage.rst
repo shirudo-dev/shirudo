@@ -205,7 +205,9 @@ signed config image.
        and alternate-attachment lockdown; a repeated init adopts the
        archived XDP without another event. A veth with a peer MTU of 9000
        and the ``virtio_net`` guest adapter at MTU 9000 attach, which only a
-       multi-buffer program can. Each case cleans up its state
+       multi-buffer program can. A veth with too few rx queues, which its
+       driver refuses with ``ENOSPC``, fails the load as
+       ``xdp_driver_refused`` and leaves nothing. Each case cleans up its state
        so a failed assertion does not contaminate later cases.
    * - ``t3112-xdp-reconcile``
      - ``upatch reconcile`` attaches a device added after load, adds no

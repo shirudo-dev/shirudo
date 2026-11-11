@@ -313,11 +313,14 @@ failing the load. A kernel that does not answer a netlink request within
 
 Links use ``XDP_FLAGS_DRV_MODE``. A device without native XDP, which
 refuses with ``EOPNOTSUPP`` and reports no XDP features, such as a
-bridge, is logged and skipped. A device that reports native XDP and refuses
-with ``EOPNOTSUPP`` is refusing in its current settings, as
-``virtio_net`` does while the host does GRO_HW or checksum offload and
-``bnxt`` with header-data split, and fails like any other driver
-refusal, with the load category ``xdp_driver_refused``. A device that
+bridge, is logged and skipped. Any other refusal is the driver ruling XDP
+out in its current settings, and fails with the load category
+``xdp_driver_refused``: ``EOPNOTSUPP`` from a device that reports native
+XDP, as ``virtio_net`` gives while the host does GRO_HW or checksum
+offload and ``bnxt`` with header-data split, ``EINVAL`` from ``mlx5``
+with LRO or hardware GRO on, ``ENOSPC`` from a veth with fewer rx queues
+than its peer has tx queues, and ``ERANGE`` from a driver whose MTU is
+too large. The journal names the driver's own errno. A device that
 changes or goes away during attachment is skipped too. An XDP program
 with no device to attach to still loads: a pin of its own, ``xdp_prog_<i>``,
 keeps it, and ``status`` shows it as ``xdp (waiting for a device)``. Other

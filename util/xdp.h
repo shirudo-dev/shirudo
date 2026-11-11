@@ -79,6 +79,13 @@ bool xdp_multibuf_refused(__u64 features);
  */
 bool xdp_attach_unsupported(int err, __u64 features);
 
+/*
+ * Whether a failed link create is the driver refusing in its current
+ * settings: mlx5 with LRO says EINVAL, veth with too few rx queues ENOSPC,
+ * a driver whose MTU is too large ERANGE.
+ */
+bool xdp_driver_refused(int err);
+
 /* err is an enum xdp_attach_err or a negative errno. */
 const char *xdp_attach_strerror(int err);
 

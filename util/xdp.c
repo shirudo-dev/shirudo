@@ -536,6 +536,12 @@ bool xdp_attach_unsupported(int err, __u64 features)
 	return err == -EOPNOTSUPP && !(features & NETDEV_XDP_ACT_BASIC);
 }
 
+bool xdp_driver_refused(int err)
+{
+	return err == -EOPNOTSUPP || err == -EINVAL || err == -ENOSPC ||
+	       err == -ERANGE;
+}
+
 const char *xdp_attach_strerror(int err)
 {
 	switch (err) {

@@ -124,6 +124,17 @@ test_xdp_success 'veth attaches above the single-buffer MTU' '
 	unload "$NAME"
 '
 
+test_xdp_success 'a driver refusing the program fails the load as xdp_driver_refused' '
+	ip link add xdpa index 30000 numrxqueues 1 type veth \
+		peer name xdpc index 30001 numtxqueues 2 &&
+	ip link set xdpa up && ip link set xdpc up &&
+	category=$("$SHIRUDO_BIN" upatch load "$FIXTURES/$NAME.upatch" \
+		--no-precheck --report=- 2>/dev/null | report_field category) &&
+	[ "$category" = xdp_driver_refused ] &&
+	[ ! -e "$B/$NAME" ] &&
+	[ "$("$H" query xdpa)" = 0 ]
+'
+
 test_xdp_success 'both host endpoints of separate cross-namespace pairs attach' '
 	ip netns add xdp-test-a && ip netns add xdp-test-b &&
 	ip link add xdpa type veth peer name xdpa-peer netns xdp-test-a &&
