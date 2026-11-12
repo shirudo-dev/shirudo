@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 #
-# t3006 -- uprobe.multi SEC metadata resolves a standard libbpf glob to
-# sorted ELF file offsets and records the target's GNU build ID.
+# t3007 -- uprobe.multi and uretprobe.multi SEC metadata resolves a
+# standard libbpf glob to sorted ELF file offsets and records the target's
+# GNU build ID; a uprobe section without a binary is refused.
 
 cd "$(dirname "$0")/../.."
 . ./test-lib.sh
@@ -44,6 +45,7 @@ esac
 
 write_probe() {
 	pattern=$1
+	sec=${2:-uprobe.multi/$WORK/target:$pattern}
 	cat > "$WORK/probe.bpf.c" <<EOF
 // SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
 #include "vmlinux.h"
@@ -51,7 +53,7 @@ write_probe() {
 
 char _license[] SEC("license") = "Dual BSD/GPL";
 
-SEC("uprobe.multi/$WORK/target:$pattern")
+SEC("$sec")
 int probe(struct pt_regs *ctx)
 {
 	return 0;
@@ -85,6 +87,29 @@ test_expect_success 'comma alternation is rejected with an actionable error' '
 		--name uprobe-alternation --key "$WORK/k.pem" \
 		--cert "$WORK/c.der" ) >"$WORK/alternation.log" 2>&1 &&
 	grep -q "alternation are unsupported" "$WORK/alternation.log"
+'
+
+test_expect_success 'a uretprobe.multi glob records the return kind' '
+	write_probe "*Func" "uretprobe.multi/$WORK/target:*Func" &&
+	( cd .. && "$B" "$WORK/probe.bpf.c" \
+		-o "$WORK/uretprobe.upatch" --vmlinux vendor/linux/vmlinux.h \
+		--name uretprobe-multi-test --key "$WORK/k.pem" \
+		--cert "$WORK/c.der" ) >/dev/null 2>&1 &&
+	"$CHECK" "$WORK/uretprobe.upatch" uretprobe-multi \
+		"$WORK/target" "*Func" 2
+'
+
+refused() {
+	write_probe "" "$1" &&
+	! ( cd .. && "$B" "$WORK/probe.bpf.c" \
+		-o "$WORK/refused.upatch" --vmlinux vendor/linux/vmlinux.h \
+		--name uprobe-refused --key "$WORK/k.pem" \
+		--cert "$WORK/c.der" ) >"$WORK/refused.log" 2>&1 &&
+	grep -q "unsupported uprobe section" "$WORK/refused.log"
+}
+
+test_expect_success 'a uprobe without a binary is refused' '
+	refused "uprobe"
 '
 
 test_done

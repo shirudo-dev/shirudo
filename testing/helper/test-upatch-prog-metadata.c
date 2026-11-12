@@ -98,7 +98,7 @@ static int expect_serializer(const struct upatch *u)
 	return arena && error ? 0 : fail("serializer map mismatch");
 }
 
-static int expect_uprobe_multi(const struct upatch *u,
+static int expect_uprobe_multi(const struct upatch *u, __u32 kind,
 			       const char *path, const char *pattern,
 			       __u32 expected_offsets)
 {
@@ -123,7 +123,7 @@ static int expect_uprobe_multi(const struct upatch *u,
 	    le32_to_cpu(md.nr_progs) != 1)
 		return fail("unexpected metadata header");
 	if (le32_to_cpu(prog.role) != UPATCH_PROG_ROLE_ATTACH ||
-	    le32_to_cpu(prog.kind) != UPATCH_ATTACH_UPROBE_MULTI ||
+	    le32_to_cpu(prog.kind) != kind ||
 	    le64_to_cpu(prog.offset) != 0 ||
 	    !memchr(prog.target, '\0', sizeof(prog.target)) ||
 	    strcmp(prog.target, pattern) != 0)
@@ -253,14 +253,16 @@ int main(int argc, char **argv)
 				ret = fail("XDP metadata mismatch");
 			prog_specs_free(specs, u.hdr.nr_progs);
 		}
-	} else if (strcmp(mode, "uprobe-multi") == 0 && argc == 6) {
+	} else if ((strcmp(mode, "uprobe-multi") == 0 ||
+		    strcmp(mode, "uretprobe-multi") == 0) && argc == 6) {
+		__u32 kind = strcmp(mode, "uretprobe-multi") == 0 ?
+			     UPATCH_ATTACH_URETPROBE_MULTI : UPATCH_ATTACH_UPROBE_MULTI;
 		__u64 count;
 
 		if (parse_u64(argv[5], strlen(argv[5]), UINT32_MAX, &count))
 			ret = fail("invalid expected uprobe offset count");
 		else
-			ret = expect_uprobe_multi(&u, argv[3], argv[4],
-						  (__u32)count);
+			ret = expect_uprobe_multi(&u, kind, argv[3], argv[4], (__u32)count);
 	} else if (strcmp(mode, "policy-labels") == 0 && argc == 3) {
 		ret = expect_policy_labels(&u);
 	} else {
