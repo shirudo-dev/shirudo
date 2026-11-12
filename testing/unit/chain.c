@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /* Copyright (c) 2026 Authors of shirudo */
 
+#include <errno.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include "chain.h"
 #include "crypto.h"
 #include "unit.h"
@@ -86,6 +92,55 @@ static void chain_fold_extends_like_the_register(void)
 	EXPECT_MEMEQ(chain, want, sizeof(want));
 }
 
+/* The anchor is appended to systemd's log in systemd's own record shape. */
+static void chain_log_anchor_appends_a_systemd_record(void)
+{
+	static const char anchor[] = "nvpcr-init:shirudo:0x1818e00:000b01";
+	char path[] = "/tmp/shirudo-unit-measure-XXXXXX", buf[2048] = {}, hex[65];
+	const char *rec, *boot;
+	struct stat st;
+	__u8 digest[32];
+	ssize_t n;
+	int fd;
+
+	fd = mkstemp(path);
+	ASSERT_TRUE(fd >= 0);
+	ASSERT_EQ(setenv("SYSTEMD_MEASURE_LOG_USERSPACE", path, 1), 0);
+	ASSERT_EQ(sha256_buffer(anchor, strlen(anchor), digest), 0);
+	hex_encode(digest, sizeof(digest), hex);
+	ASSERT_EQ(chain_log_anchor(anchor, digest), 0);
+	ASSERT_EQ(chain_log_anchor(anchor, digest), 0);
+	n = read(fd, buf, sizeof(buf) - 1);
+	ASSERT_TRUE(n > 0);
+	EXPECT_EQ(buf[0], 0x1e);
+	rec = strchr(buf + 1, 0x1e);
+	ASSERT_TRUE(rec);
+	EXPECT_EQ(rec[-1], '\n');
+	EXPECT_TRUE(strstr(buf, "{\"pcr\":9,\"digests\":[{\"hashAlg\":"
+			   "\"sha256\",\"digest\":\"") == buf + 1);
+	EXPECT_TRUE(strstr(buf, hex));
+	EXPECT_TRUE(strstr(buf, "\"content_type\":\"systemd\",\"content\":"
+			   "{\"string\":\"nvpcr-init:shirudo:0x1818e00:"
+			   "000b01\",\"bootId\":\""));
+	EXPECT_TRUE(strstr(buf, "\"eventType\":\"nvpcr-init\"}}\n"));
+	boot = strstr(buf, "\"bootId\":\"");
+	ASSERT_TRUE(boot);
+	EXPECT_EQ(strspn(boot + 10, "0123456789abcdef"), 32);
+	ASSERT_EQ(fstat(fd, &st), 0);
+	EXPECT_EQ(st.st_mode & 07777, 0600);
+
+	/* A record cut short marks the log aborted: nothing more is appended. */
+	ASSERT_EQ(fchmod(fd, 0600 | S_ISVTX), 0);
+	EXPECT_EQ(chain_log_anchor(anchor, digest), -ESTALE);
+	ASSERT_EQ(fstat(fd, &st), 0);
+	EXPECT_EQ(st.st_size, n);
+	/* Nothing that would need JSON escaping is written. */
+	EXPECT_EQ(chain_log_anchor("nvpcr-init:\"x", digest), -EINVAL);
+	close(fd);
+	unlink(path);
+	unsetenv("SYSTEMD_MEASURE_LOG_USERSPACE");
+}
+
 static const struct unit_case cases[] = {
 	UNIT_CASE(sha256_2_hashes_the_concatenation),
 	UNIT_CASE(sha256_2_reports_a_failure),
@@ -93,6 +148,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(upatch_tags_are_distinct),
 	UNIT_CASE(java_unload_event_hashes_its_documented_input),
 	UNIT_CASE(chain_fold_extends_like_the_register),
+	UNIT_CASE(chain_log_anchor_appends_a_systemd_record),
 	{}
 };
 

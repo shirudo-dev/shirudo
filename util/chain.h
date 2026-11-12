@@ -73,6 +73,13 @@ int chain_history_step(const __u8 prev[32], const __u8 operation_digest[32],
 		       __u8 out[32]) __must_check;
 
 /* The PCR record anchoring a register name: nvpcr-init:shirudo:0x..:<name>. */
+/*
+ * Append the PCR 9 anchor to systemd's userspace measurement log
+ * ($SYSTEMD_MEASURE_LOG_USERSPACE for an unprivileged caller) as an
+ * nvpcr-init record; digest is the SHA-256 of anchor.
+ */
+int chain_log_anchor(const char *anchor, const __u8 digest[32]);
+
 int chain_anchor(const __u8 name[TPM_NAME_LEN],
 		 char *out, size_t cap) __must_check;
 

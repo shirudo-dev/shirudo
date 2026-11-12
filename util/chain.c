@@ -11,8 +11,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <shirudo/misc.h>
@@ -21,6 +23,7 @@
 #include "chain.h"
 #include "config.h"
 #include "crypto.h"
+#include "eventlog.h"
 #include "initrd.h"
 #include "log.h"
 #include "malloc.h"
@@ -164,6 +167,73 @@ int chain_fold(__u8 chain[32], const __u8 event[32])
 	memcpy(cat, chain, 32);
 	memcpy(cat + 32, event, 32);
 	return sha256_buffer(cat, sizeof(cat), chain);
+}
+
+/*
+ * Append the PCR 9 anchor to systemd's userspace measurement log, in the
+ * record shape systemd writes for its own nvpcr-init anchors, so a verifier
+ * replays PCR 9 from the firmware log and that one log alone. The register
+ * is bound in the initrd, before systemd-pcrnvdone measures nvpcr-separator
+ * in the host. Locking and the sticky "write in progress" bit follow
+ * systemd: a record a crash cut short marks the whole log as aborted. A
+ * failure is reported and leaves the PCR as extended; a verifier that
+ * cannot replay PCR 9 fails closed.
+ */
+#define SYSTEMD_MEASURE_LOG	"/run/log/systemd/tpm2-measure.log"
+
+int chain_log_anchor(const char *anchor, const __u8 digest[32])
+{
+	const char *path = getenv("SYSTEMD_MEASURE_LOG_USERSPACE");
+	char boot[64], id[33], hex[65], record[768];
+	struct timespec now;
+	struct stat st;
+	size_t i, j;
+	int fd, len, ret = 0;
+
+	if (!path || geteuid() != getuid())
+		path = SYSTEMD_MEASURE_LOG;
+	for (i = 0; anchor[i]; i++)
+		if (anchor[i] == '"' || anchor[i] == '\\' ||
+		    (__u8)anchor[i] < 0x20)
+			return -EINVAL;
+	eventlog_boot_id(boot, sizeof(boot));
+	for (i = 0, j = 0; boot[i] && j < 32; i++)
+		if (boot[i] != '-' && boot[i] != '\n')
+			id[j++] = boot[i];
+	id[j] = '\0';
+	if (j != 32 || clock_gettime(CLOCK_BOOTTIME, &now))
+		return -EIO;
+	hex_encode(digest, 32, hex);
+	len = strsprintf(record, sizeof(record), "\x1e{\"pcr\":%u,\"digests\":[{\"hashAlg\":"
+		     "\"sha256\",\"digest\":\"%s\"}],\"content_type\":"
+		     "\"systemd\",\"content\":{\"string\":\"%s\","
+		     "\"bootId\":\"%s\",\"timestamp\":%llu,\"eventType\":"
+		     "\"nvpcr-init\"}}\n", CHAIN_PCR, hex, anchor, id,
+		     (__u64)now.tv_sec * 1000000ULL +
+		     (__u64)now.tv_nsec / 1000ULL);
+	if (len < 0)
+		return -E2BIG;
+	mkdir("/run/log", 0755);
+	mkdir("/run/log/systemd", 0755);
+	fd = open(path, O_CREAT | O_WRONLY | O_CLOEXEC | O_NOCTTY |
+		  O_NOFOLLOW, 0600);
+	if (fd < 0)
+		return -errno;
+	if (flock(fd, LOCK_EX) || fstat(fd, &st)) {
+		ret = -errno;
+		goto out;
+	}
+	if (!S_ISREG(st.st_mode) || (st.st_mode & S_ISVTX)) {
+		ret = -ESTALE;
+		goto out;
+	}
+	if (fchmod(fd, 0600 | S_ISVTX) || lseek(fd, 0, SEEK_END) < 0 ||
+	    write(fd, record, len) != len || fsync(fd) ||
+	    fchmod(fd, 0600) || fsync(fd))
+		ret = errno ? -errno : -EIO;
+out:
+	close(fd);
+	return ret;
 }
 
 int chain_anchor(const __u8 name[TPM_NAME_LEN],
@@ -401,6 +471,10 @@ int chain_init(const __u8 event[32],
 		       CHAIN_PCR);
 		goto out;
 	}
+	ret = chain_log_anchor(info->anchor, info->anchor_digest);
+	if (ret)
+		pr_warn("tpm: PCR %u anchor not in systemd's measurement "
+			"log: %s", CHAIN_PCR, strerror(-ret));
 	ret = tpm_nv_read(tpm, NV_INDEX, info->value);
 out:
 	tpm_close(tpm);

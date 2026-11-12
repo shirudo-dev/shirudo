@@ -522,7 +522,8 @@ Kernel and system interfaces
      - The ``boot_id`` of eventlog records.
    * - ``/sys/kernel/security/tpm0/binary_bios_measurements``,
        ``/run/log/systemd/tpm2-measure.log``
-     - The firmware and systemd event logs ``attest`` includes.
+     - The firmware and systemd event logs ``attest`` includes. ``init``
+       appends the register's PCR 9 anchor to the systemd log.
    * - ``/sys/bus/event_source/devices/kprobe/type``,
        ``/sys/bus/event_source/devices/kprobe/format/retprobe``
      - Attaching kprobe and kretprobe programs.

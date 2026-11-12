@@ -197,7 +197,16 @@ The binding takes these steps:
    software policy before the extension.
 #. Extend PCR 9 with SHA-256 of the anchor string
    ``nvpcr-init:shirudo:0x1818e00:<written name>``, systemd's
-   ``nvpcr-init`` format. From then on PCR 9 no longer holds
+   ``nvpcr-init`` format, and append the same record systemd writes for
+   its own anchors (``content_type`` ``systemd``, ``eventType``
+   ``nvpcr-init``) to systemd's userspace measurement log,
+   ``/run/log/systemd/tpm2-measure.log``, under systemd's lock. The
+   register is bound in the initrd, so the record precedes the
+   ``nvpcr-separator`` that ``systemd-pcrnvdone`` measures in the
+   host, and a verifier replays PCR 9 from the firmware log and that one
+   log. A failure to log is reported and leaves PCR 9 extended: a
+   verifier that cannot replay it fails closed. From then on PCR 9 no
+   longer holds
    ``pcr_before``, so the ``init`` branch cannot be satisfied again before
    the next TPM reset. Once systemd measures ``leave-initrd``, PCR 11 no
    longer holds ``phase_before`` either.

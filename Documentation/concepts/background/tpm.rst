@@ -338,7 +338,9 @@ register from the initrd.
 4. Record the :term:`anchor`. ``init`` extends PCR 9 with the SHA-256 of
    ``nvpcr-init:shirudo:0x1818e00:<written-name>``, systemd's anchor
    format, where ``<written-name>`` is the index's written Name in
-   lowercase ASCII hex.
+   lowercase ASCII hex. The same record goes into systemd's userspace
+   measurement log, ``/run/log/systemd/tpm2-measure.log``, as an
+   ``nvpcr-init`` event, before systemd measures ``nvpcr-separator``.
 
 The Name contains the two-byte SHA-256 algorithm identifier ``0x000B``
 followed by the SHA-256 hash of the index's public fields. Those fields
