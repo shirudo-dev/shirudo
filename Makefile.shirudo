@@ -243,6 +243,7 @@ UTIL_SRCS := \
     util/bpm_tree.c \
     util/bpm_tree_state.c \
     util/bpm_oci.c \
+    util/curl.c \
     util/bpm_package.c \
     util/bpm_state.c \
     util/kernel_build_id.c \
@@ -488,7 +489,7 @@ tools/shirudo-build/shirudo-build: $(BUILD_OBJS) util/sign.o util/config_image.o
                                    util/elf_target.o util/hex.o util/keys.o \
                                    util/seal.o util/harden.o util/string.o \
                                    util/crypto_openssl.o util/tls_openssl.o \
-                                   util/bpm_oci.o util/bpm_package.o \
+                                   util/bpm_oci.o util/curl.o util/bpm_package.o \
                                    util/upatch_rodata.o \
                                    util/bpm_tree.o $(VERSION_OBJ) \
                                    $(LIBBPF_A)
@@ -815,7 +816,7 @@ testing/helper/test-signed-load: testing/helper/test-signed-load.c
 	    -o $@ $^ -lcrypto
 
 testing/helper/test-otel-map: testing/helper/test-otel-map.c util/upatch_maps.o \
-                        util/upatch_maps_otel.o util/crypto_openssl.o \
+                        util/upatch_maps_otel.o util/curl.o util/crypto_openssl.o \
                         util/tls_openssl.o util/serializer.o util/seal.o \
                         util/config.o util/image_config.o \
                         util/upatch_decode.o util/upatch_resolve.o \
@@ -952,8 +953,10 @@ $(UNIT_LIB): $(UTIL_OBJS) $(VERSION_OBJ)
 build/unit/%: testing/unit/%.c testing/unit/unit.c testing/unit/unit.h \
 		$(UNIT_LIB) $(LIBBPF_A)
 	@printf '  CC      $@\n'
-	$(Q)$(CC) $(CFLAGS) -Itesting/unit -o $@ $< testing/unit/unit.c \
+	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) -Itesting/unit -o $@ $< testing/unit/unit.c \
 		$(UNIT_LIB) $(LIBBPF_A) $(DYNAMIC_LIBS)
+
+build/unit/curl: LDFLAGS += -Wl,--wrap=curl_slist_free_all
 
 unit-tests: $(UNIT_TESTS)
 
@@ -1003,8 +1006,8 @@ FUZZ_BASE := util/json.c util/string.c util/hex.c util/malloc.c \
              testing/fuzz/log.c
 FUZZ_CONFIG := util/config.c util/image_config.c
 FUZZ_SEAL := util/seal.c $(FUZZ_CONFIG)
-FUZZ_OCI := util/bpm_oci.c util/io.c $(FUZZ_SEAL) util/crypto_openssl.c \
-            util/tls_openssl.c
+FUZZ_OCI := util/bpm_oci.c util/curl.c util/io.c $(FUZZ_SEAL) \
+            util/crypto_openssl.c util/tls_openssl.c
 FUZZ_PACKAGE := util/bpm_package.c util/bpm_tree.c util/upatch.c \
                 util/keys.c $(FUZZ_OCI)
 
@@ -1068,7 +1071,8 @@ testing/fuzz/fuzz-decoder: testing/fuzz/fuzz-decoder.c $(FUZZ_BASE) \
 testing/fuzz/fuzz-decoder: FUZZ_CFLAGS += $(LUAJIT_CFLAGS) -DHAVE_LUAJIT
 testing/fuzz/fuzz-decoder: FUZZ_LIBS += $(LUAJIT_LIBS)
 testing/fuzz/fuzz-otel: testing/fuzz/fuzz-otel.c $(FUZZ_BASE) \
-                        util/upatch_maps_otel.c util/crypto_openssl.c \
+                        util/upatch_maps_otel.c util/curl.c \
+                        util/crypto_openssl.c \
                         util/tls_openssl.c util/io.c util/version_id.c \
                         $(FUZZ_SEAL)
 testing/fuzz/fuzz-beefile: testing/fuzz/fuzz-beefile.c $(FUZZ_BASE) \

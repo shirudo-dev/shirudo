@@ -33,11 +33,12 @@
 #include <shirudo/string.h>
 #include <shirudo/upatch.h>
 
+#include "config.h"
 #include "crypto.h"
+#include "curl.h"
 #include "hex.h"
 #include "json.h"
 #include "log.h"
-#include "config.h"
 #include "malloc.h"
 #include "paths.h"
 #include "tenant_id.h"
@@ -1484,7 +1485,7 @@ static int otel_open_transport(enum otel_signal signal,
 err_global:
 	curl_global_cleanup();
 err:
-	curl_slist_free_all(st->headers);
+	curl_slist_free_sensitive(st->headers);
 	xfree(st, sizeof(*st));
 	return ret;
 }
@@ -1543,7 +1544,7 @@ static int otel_close(void *state)
 
 	if (!st)
 		return 0;
-	curl_slist_free_all(st->headers);
+	curl_slist_free_sensitive(st->headers);
 	xfree(st, sizeof(*st));
 	curl_global_cleanup();
 	return 0;
@@ -2163,7 +2164,7 @@ static noinline_for_stack int s3_put(struct otel_s3_state *st,
 		return -EINVAL;
 	ret = s3_headers(st, v, snapshot, &headers);
 	if (ret) {
-		curl_slist_free_all(headers);
+		curl_slist_free_sensitive(headers);
 		return ret;
 	}
 	if (strsprintf(sigv4, sizeof(sigv4), "aws:amz:%s:s3", st->region) < 0) {
@@ -2243,7 +2244,7 @@ static noinline_for_stack int s3_put(struct otel_s3_state *st,
 			   response.retry_after_valid);
 	}
 out:
-	curl_slist_free_all(headers);
+	curl_slist_free_sensitive(headers);
 	return ret;
 }
 

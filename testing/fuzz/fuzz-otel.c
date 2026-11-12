@@ -156,7 +156,7 @@ int LLVMFuzzerTestOneInput(const __u8 *data, size_t size)
 					abort();
 			}
 		}
-		curl_slist_free_all(st.headers);
+		curl_slist_free_sensitive(st.headers);
 	}
 	xfree(body, size + 1);
 	return 0;

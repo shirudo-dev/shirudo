@@ -25,6 +25,7 @@
 
 #include "bpm_oci.h"
 #include "crypto.h"
+#include "curl.h"
 #include "hex.h"
 #include "io.h"
 #include "seal.h"
@@ -464,7 +465,7 @@ static int curl_once_ex(struct bpm_oci_client *c, const char *method,
 	}
 	curl = curl_easy_init();
 	if (!curl) {
-		curl_slist_free_all(headers);
+		curl_slist_free_sensitive(headers);
 		return -ENOMEM;
 	}
 	curl_easy_setopt(curl, CURLOPT_URL, url);
@@ -499,8 +500,8 @@ static int curl_once_ex(struct bpm_oci_client *c, const char *method,
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
 	if (tls_curl_policy(curl, &c->tls_ca)) {
 		pr_err("bpm OCI request %s: cannot apply TLS policy", url);
-		curl_slist_free_all(headers);
 		curl_easy_cleanup(curl);
+		curl_slist_free_sensitive(headers);
 		return -EHOSTUNREACH;
 	}
 	if (body) {
@@ -527,16 +528,16 @@ static int curl_once_ex(struct bpm_oci_client *c, const char *method,
 	}
 	if (file && cc == CURLE_FILESIZE_EXCEEDED)
 		file->overflow = true;
-	curl_slist_free_all(headers);
 	curl_easy_cleanup(curl);
+	curl_slist_free_sensitive(headers);
 	tls_ca_cleanup(&c->tls_ca);
 	return status < 0 ? -EHOSTUNREACH : 0;
 
 too_long:
-	curl_slist_free_all(headers);
+	curl_slist_free_sensitive(headers);
 	return -E2BIG;
 no_memory:
-	curl_slist_free_all(headers);
+	curl_slist_free_sensitive(headers);
 	return -ENOMEM;
 }
 
@@ -718,8 +719,8 @@ out:
 	memzero_explicit(auth_header, sizeof(auth_header));
 	curl_free(esc_service);
 	curl_free(esc_scope);
-	curl_slist_free_all(headers);
 	curl_easy_cleanup(curl);
+	curl_slist_free_sensitive(headers);
 	tls_ca_cleanup(&c->tls_ca);
 	bpm_buffer_free(&r.body);
 	return ret;

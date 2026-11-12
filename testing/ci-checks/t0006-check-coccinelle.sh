@@ -530,6 +530,18 @@ test_expect_success 'each scrub rule reports its samples and spares the scrubbed
 	[ "$(grep -c "^[a-z_]*: " "$W/err")" = 15 ]
 '
 
+test_expect_success 'curl_slist_free reports lists freed without scrubbing' '
+	R5=$W/curl-slist &&
+	mkdir -p "$R5/testing/coccinelle" &&
+	git init -q "$R5" &&
+	cp "$ROOT/testing/coccinelle/curl_slist_free.cocci" \
+		"$R5/testing/coccinelle/" &&
+	printf "void headers_free(struct curl_slist *headers)\n{\n\tcurl_slist_free_all(headers);\n}\n" \
+		>"$R5/samples.c" &&
+	! (cd "$R5" && git add -A && sh "$S") >"$W/out" 2>"$W/err" &&
+	[ "$(grep -c "^curl_slist_free: samples.c:" "$W/err")" = 1 ]
+'
+
 test_expect_success 'the tree passes' '
 	(cd "$ROOT" && sh "$S") >"$W/out" 2>"$W/err" &&
 	grep -q "rules, no match" "$W/out"

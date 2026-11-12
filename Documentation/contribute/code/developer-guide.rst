@@ -575,6 +575,9 @@ can rewrite what it finds does so with ``-D patch``:
        of such a struct.
        The structs come from the headers under :src:`include/`,
        :src:`util/` and :src:`tools/` and at the top of the tree.
+   * - ``curl_slist_free``
+     - A libcurl header list freed without first scrubbing its copied
+       header strings with ``curl_slist_free_sensitive()``.
    * - ``secret_cmp``
      - ``memcmp()`` of a secret or what derives from one rather than
        ``memneq_explicit()``.
