@@ -25,7 +25,8 @@ make -C testing help
 ```
 
 Host tests run as they are. A target test, `t?1??`, runs in a fresh VM
-per family, which needs root, KVM, the test kernel and the bundle; see
+per family, which needs KVM, an unlimited `ulimit -l`, the test kernel
+and the bundle, but not root; see
 below. The VM always boots the dm-verity runtime and the signed config
 from a dracut initrd. The runner caches the initrd by kernel, bundle and
 initrd inputs, while each family keeps its own VM and guest state. CI
@@ -119,7 +120,7 @@ anyway. Never stop, replace or clean a VM without that answer.
 
 ## Commands
 
-Run each as root, as the testing guide does.
+Run each as yourself; root is not needed.
 
 ```sh
 make -C testing vm VM_NAME=<name> [KERNEL=<kernel>]

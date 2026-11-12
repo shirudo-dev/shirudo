@@ -27,8 +27,9 @@ Before you begin
 - For the ``ci-checks`` tests: ``git``, ``jq``, ``pkg-config``,
   ``readelf`` and ``spatch`` from Coccinelle. A test whose tool is
   missing skips. The runner of the ``CI suite`` workflow has them all.
-- For the tests that boot a VM: root, a readable and writable
-  ``/dev/kvm``, an x86-64 or arm64 host and what ``make target`` needs,
+- For the tests that boot a VM: a readable and writable ``/dev/kvm``,
+  a locked-memory limit (``ulimit -l``) of ``unlimited``, which the
+  shirudo binaries the runner calls require, an x86-64 or arm64 host and what ``make target`` needs,
   since the bundle a VM boots holds the static target binary. On Ubuntu,
   ``.github/scripts/tests.sh setup`` installs ``cloud-image-utils``,
   ``dracut-core``, ``file``, ``isc-dhcp-client``, ``libguestfs-tools``,
@@ -173,7 +174,7 @@ Run everything, as CI does:
 
 .. code-block:: console
 
-   # make tests
+   $ make tests
 
 ``make -C testing help`` lists the unit suites and the families. Run
 one tier, one unit suite or one family:
@@ -182,7 +183,7 @@ one tier, one unit suite or one family:
 
    $ make -C testing unit
    $ make -C testing unit/<suite>
-   # make -C testing functional/<family>
+   $ make -C testing functional/<family>
 
 ``<suite>`` is a file name under :src:`testing/unit/` without ``.c``, such
 as ``json``. ``<family>`` is a directory under :src:`testing/functional/`,
@@ -190,7 +191,7 @@ such as ``upatch``. A family runs its operator tests in number order,
 then boots its VM and runs its target tests there. ``make -j`` boots the
 VMs of several families side by side.
 
-Leave out every test that boots a VM, for a host without KVM or root:
+Leave out every test that boots a VM, for a host without KVM:
 
 .. code-block:: console
 
@@ -563,7 +564,7 @@ From the checkout root, run the following commands in any order:
 
    $ make oci
    $ make telemetry
-   # make vm
+   $ make vm
 
 ``make oci`` starts a persistent TLS OCI registry on
 ``127.0.0.1:15444``. ``make telemetry`` starts the OTLP collector on
@@ -627,7 +628,7 @@ tests.
 
 .. code-block:: console
 
-   # make -C testing end2end
+   $ make -C testing end2end
 
 The host side writes to ``build/test-vm/end2end/``. The guest reaches
 the registry and collector through QEMU's address for the host. ClickHouse
@@ -758,7 +759,7 @@ Write a shell test
 
    .. code-block:: console
 
-      # make -C testing functional/<family>
+      $ make -C testing functional/<family>
 
 A target test finds loaded only what its family loaded, because each
 family boots a VM of its own. ``require_loaded <fixture>`` loads a

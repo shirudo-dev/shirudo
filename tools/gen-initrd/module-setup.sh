@@ -98,9 +98,12 @@ install() {
 	[[ -r $conf ]] || return 1
 	inst_simple "$conf" /etc/shirudo/shirudo.conf || return 1
 	inst_multiple mount || return 1
-	# dracut keeps the owner of what it copies, and init refuses keys
-	# and configuration another user could change.
-	chown -R 0:0 "$initdir/etc/shirudo" || return 1
+	# dracut run as root keeps the owner of what it copies, and init
+	# refuses keys and configuration another user could change. Run as
+	# anyone else, it writes every member of the archive as 0:0.
+	if [[ $EUID == 0 ]]; then
+		chown -R 0:0 "$initdir/etc/shirudo" || return 1
+	fi
 	inst_simple "$unit" "$systemdsystemunitdir/shirudo-initrd.service" ||
 		return 1
 	$SYSTEMCTL -q --root "$initdir" enable shirudo-initrd.service ||

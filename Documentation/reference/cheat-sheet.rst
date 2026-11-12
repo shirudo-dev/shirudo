@@ -456,13 +456,13 @@ List the suites and families:
 
    $ make -C testing help
 
-Boot the interactive test VM, log in and stop it. Booting needs root:
+Boot the interactive test VM, log in and stop it:
 
 .. code-block:: console
 
-   # make -C testing vm
-   # make -C testing vm-ssh
-   # make -C testing vm-stop
+   $ make -C testing vm
+   $ make -C testing vm-ssh
+   $ make -C testing vm-stop
 
 Run the fuzz targets for a minute each:
 

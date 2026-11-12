@@ -21,9 +21,10 @@ Before you begin
 
 - A Linux host on x86-64 or arm64 with KVM. ``/dev/kvm`` must be readable
   and writable.
-- Root on that host. The test VM builds its initrd with dracut, which needs
-  root, and the signing key it generates for the VM belongs to root. Run
-  every host command on this page as root.
+- A locked-memory limit of ``unlimited`` (``ulimit -l``): the shirudo
+  binaries lock their memory and refuse to run without it. Root is not
+  needed; the test VM builds its initrd with dracut as you, without
+  changing the host's dracut.
 - Network access. The first boot clones the bpf-next kernel tree and
   downloads an Ubuntu cloud image.
 - To build shirudo: a C toolchain with ``make`` and ``pkg-config``, a

@@ -1333,7 +1333,6 @@ if [[ "$VM_INITRD" == 1 ]]; then
 fi
 check_host_dependencies
 validate_host_bundle
-[[ "$EUID" == 0 ]] || die "building the initrd with dracut needs root"
 [[ "$CPUS" =~ ^[1-9][0-9]*$ ]] || die "TEST_VM_CPUS must be a positive integer"
 [[ "$VM_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die "TEST_VM_TIMEOUT must be a positive integer"
 

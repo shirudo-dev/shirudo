@@ -27,6 +27,13 @@ test_expect_success 'the generator check refuses a missing initrd' '
 	! bash $G --check "$W/none.img" >/dev/null 2>&1
 '
 
+if [ "$(id -u)" != 0 ]; then
+	test_expect_success 'the generator needs root only to replace the host initrd' '
+		! bash $G --kver 0 >/dev/null 2>"$W/err" &&
+		grep -q "run as root, or name an --output" "$W/err"
+	'
+fi
+
 test_expect_success 'the installer plans the package, the certificate and the initrd' '
 	bash $I --dry-run --package "$W/shirudo-target_0_amd64.deb" \
 		--cert "$W/cert.der" --no-cmdline --no-initrd >"$W/plan" &&

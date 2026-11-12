@@ -223,15 +223,20 @@ shirudo-gen-initrd
    shirudo-gen-initrd --print-cmdline
 
 Runs ``dracut --force --add shirudo`` for a kernel release, then checks
-the result. It runs as root and requires ``dracut``. The initrd holds the
+the result. It requires ``dracut``, and root unless ``--output`` names
+where to write: without it the initrd replaces the one the host boots.
+Run as another user, dracut writes every member of the archive as owned
+by root. The initrd holds the
 binary at its root file system path, the primary certificate as
 ``/etc/shirudo/keys/cert.der``, the trusted certificates and their vouches
 under ``/etc/shirudo/keys/trusted/``, the bootstrap
 ``/etc/shirudo/shirudo.conf`` and ``shirudo-initrd.service``, enabled.
 
-When the script's own directory holds ``module-setup.sh`` that differs
-from ``/usr/lib/dracut/modules.d/90shirudo/module-setup.sh``, it installs
-its copy there. Paths given on the command line reach the module through a
+When ``--module-dir`` or the script's own directory holds
+``module-setup.sh``, dracut runs on a private copy of its base directory
+whose ``modules.d/90shirudo`` is that module, and the host's
+``/usr/lib/dracut`` is left as it is. Otherwise the module comes from
+``/usr/lib/dracut/modules.d/90shirudo``. Paths given on the command line reach the module through a
 generated ``dracut.conf`` that also leaves out the host's drop-ins.
 
 The check lists the archive with ``lsinitrd`` and fails unless it holds
@@ -290,7 +295,7 @@ kernel's command line lacks ``bpf.keyring_unsealed=1`` or
      - Embed no kernel modules.
    * - ``--module-dir``
      - the script's directory
-     - Where to install the dracut module from.
+     - The dracut module to build with.
    * - ``--``
      -
      - Pass the remaining arguments to ``dracut``.

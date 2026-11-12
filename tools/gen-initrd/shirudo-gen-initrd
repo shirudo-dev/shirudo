@@ -29,7 +29,7 @@ Regenerate the initrd of a kernel with shirudo inside, through dracut.
   --bootstrap-conf <file> authenticated bootstrap shirudo.conf to embed
   --kmoddir <dir>        kernel modules to take from <dir>/<release>
   --no-kernel            embed no kernel modules (all-built-in kernels)
-  --module-dir <dir>     dracut module to install from (default: this
+  --module-dir <dir>     dracut module to build with (default: this
                          script's directory, when it holds module-setup.sh)
   -h, --help             this text
 
@@ -148,12 +148,11 @@ if [ "$check_only" = 1 ]; then
 	exit 0
 fi
 
-[ "$(id -u)" = 0 ] || die "run as root"
+# Without --output the initrd replaces the one this host boots.
+[ -n "$output" ] || [ "$(id -u)" = 0 ] || die "run as root, or name an --output"
 command -v dracut >/dev/null 2>&1 ||
 	die "dracut not found; the production configuration needs a systemd initrd built by dracut"
 
-# The module comes from the package or from this checkout; dracut only
-# takes modules from its modules.d, so a checkout's copy is installed.
 if [ -z "$module_dir" ]; then
 	here=$(cd "$(dirname "$0")" && pwd)
 	if [ -f "$here/module-setup.sh" ]; then
@@ -162,14 +161,11 @@ if [ -z "$module_dir" ]; then
 fi
 if [ -n "$module_dir" ] && [ "$module_dir" != "$MODULE_DIR_INSTALLED" ]; then
 	[ -f "$module_dir/module-setup.sh" ] || die "no module-setup.sh in $module_dir"
-	if ! cmp -s "$module_dir/module-setup.sh" "$MODULE_DIR_INSTALLED/module-setup.sh"; then
-		install -d "$MODULE_DIR_INSTALLED"
-		install -m 0755 "$module_dir/module-setup.sh" "$MODULE_DIR_INSTALLED/module-setup.sh"
-		say "installed the dracut module into $MODULE_DIR_INSTALLED"
-	fi
+else
+	[ -f "$MODULE_DIR_INSTALLED/module-setup.sh" ] ||
+		die "no dracut module at $MODULE_DIR_INSTALLED; install the shirudo-target package"
+	module_dir=
 fi
-[ -f "$MODULE_DIR_INSTALLED/module-setup.sh" ] ||
-	die "no dracut module at $MODULE_DIR_INSTALLED; install the shirudo-target package"
 
 if [ -z "$unit" ] && [ ! -f "$UNIT_INSTALLED" ]; then
 	here=${here:-$(cd "$(dirname "$0")" && pwd)}
@@ -193,6 +189,24 @@ fi
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+
+# dracut takes modules only from the modules.d of its base directory. A
+# module from elsewhere goes into a private base that links the host's,
+# so that building an initrd never changes the host's dracut.
+dracut_base=${dracutbasedir:-/usr/lib/dracut}
+if [ -n "$module_dir" ]; then
+	[ -d "$dracut_base/modules.d" ] || die "no dracut modules at $dracut_base/modules.d"
+	mkdir "$tmp/dracut" "$tmp/dracut/modules.d" "$tmp/dracut/modules.d/90shirudo"
+	for entry in "$dracut_base"/*; do
+		[ "${entry##*/}" = modules.d ] || ln -s "$entry" "$tmp/dracut/"
+	done
+	for entry in "$dracut_base"/modules.d/*; do
+		[ "${entry##*/}" = 90shirudo ] || ln -s "$entry" "$tmp/dracut/modules.d/"
+	done
+	install -m 0755 "$module_dir/module-setup.sh" \
+		"$tmp/dracut/modules.d/90shirudo/module-setup.sh"
+	dracut_base=$tmp/dracut
+fi
 
 # Paths that differ from the installed ones reach the module through a
 # dracut.conf(5) file of their own, which also shuts out the host's
@@ -222,7 +236,7 @@ out=${output:-$(default_output)}
 [ -z "$output" ] || args+=("$output")
 
 say "running dracut for $kver"
-dracut "${args[@]}"
+dracutbasedir=$dracut_base dracut "${args[@]}"
 check_initrd "$out"
 
 for parameter in $CMDLINE_PARAM; do
