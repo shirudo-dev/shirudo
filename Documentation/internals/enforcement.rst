@@ -59,7 +59,10 @@ The objects share seven maps, which ``init`` hands from ``bpf2`` to
        keyring serial and kind, the serials of the enrolled keys, the
        ``.dm-verity`` keyring and key serials, the NV index, the NV
        writer's public modulus and seed, and the ECC endorsement key
-       name used to salt authenticated sessions.
+       name used to salt authenticated sessions. Created with
+       ``BPF_F_RDONLY_PROG``, so the verifier refuses any BPF program
+       that writes it; only ``init``'s one update before the freeze
+       populates it.
    * - ``shirudo_tasks``
      - ``task_authority``
      - Task storage with each task's mark and exec candidate.
@@ -86,6 +89,17 @@ The objects share seven maps, which ``init`` hands from ``bpf2`` to
 mapping. ``bpf2`` also keeps ``shirudo_mnt_rec`` for the bpffs
 mount it records, and ``seal`` keeps its scratch buffer and the inode
 storage of directory marks.
+
+A map no BPF program ever writes, such as ``shirudo_bpffs_sb``, is
+created with ``BPF_F_RDONLY_PROG`` as well as frozen: freezing
+(``BPF_MAP_FREEZE``) blocks only the syscall side, so without the flag
+a BPF program could still write the map's value through a lookup's
+return pointer and the verifier would allow it. A map a BPF program
+does write, even once, such as ``shirudo_mnt_rec`` or the task, socket
+and inode storage maps above, does not take the flag. The same applies
+to a map a future change adds: set ``BPF_F_RDONLY_PROG`` at creation
+the moment no BPF program writes it, and drop the flag the moment one
+does.
 
 Telling shirudo from root
 -------------------------

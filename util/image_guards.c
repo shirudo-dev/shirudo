@@ -144,7 +144,7 @@ const struct guard_map shirudo_guard_maps[GUARD_MAP_COUNT] = {
 	[GUARD_IDENTITY] = {
 		"shirudo_bpffs_sb", IDENTITY_PIN,
 		BPF_MAP_TYPE_ARRAY, sizeof(__u32),
-		sizeof(struct identity), 1, 0,
+		sizeof(struct identity), 1, BPF_F_RDONLY_PROG,
 	},
 	[GUARD_TASKS] = {
 		"shirudo_tasks", BPFFS_DIR "/task_authority",

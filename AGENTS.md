@@ -216,6 +216,16 @@ one usually still compiles and passes tests.
   value the target wrote about itself is not a check.
 - **Pin the bpf_link before anything else fallible** in `shirudo init`,
   or a crash leaves an attached, unowned link that the kernel detaches.
+- **A map no BPF program writes is created with `BPF_F_RDONLY_PROG`.**
+  `BPF_MAP_FREEZE` only blocks the syscall side; without the flag a BPF
+  program could still write the map's value through a lookup's return
+  pointer, and the verifier would allow it. `shirudo_bpffs_sb` carries
+  the flag for that reason. A map a BPF program writes, even once
+  (`shirudo_mnt_rec`, the task, socket and inode storage maps,
+  `shirudo_tamper`, `shirudo_devices`, upatch state), does not take it.
+  A map added later that fits the no-BPF-write criterion takes the flag
+  from the commit that adds it; a map that stops fitting it drops the
+  flag in the same commit that adds the write.
 - **init runs twice in production.** The authenticated systemd initrd binds
   persistent state writable, verifies runtime and config, enrolls and seals the
   `.bpf` and `.dm-verity` keyrings, labels state, attaches all guards, restores

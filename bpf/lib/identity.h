@@ -29,6 +29,7 @@ struct sb_id {
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
 	__uint(max_entries, 1);
+	__uint(map_flags, BPF_F_RDONLY_PROG);
 	__type(key, __u32);
 	__type(value, struct sb_id);
 } shirudo_bpffs_sb SEC(".maps");

@@ -307,9 +307,11 @@ Assets
      - The bpffs inode and mount guards, the descriptor checks (T2).
    * - Identity map
      - ``shirudo_bpffs_sb``, pinned as ``identity``
-     - Frozen by ``init``; opened only by tasks with runtime authority
-       (T13). It holds the keyring serials, the runtime root, the EK
-       name, the NV writer seed and public key, and the NV index.
+     - Frozen by ``init`` and created with ``BPF_F_RDONLY_PROG``, so
+       neither userspace nor a BPF program can write it; opened only by
+       tasks with runtime authority (T13). It holds the keyring
+       serials, the runtime root, the EK name, the NV writer seed and
+       public key, and the NV index.
    * - Task marks
      - ``shirudo_tasks`` task storage, pinned as ``task_authority``
      - Frozen against ``bpf()`` writes; only the seal's programs set a
