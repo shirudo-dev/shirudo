@@ -52,7 +52,7 @@ def declared_with_cleanup(p):
                 return "__cleanup(" in line
     return False
 
-// What a memzero_explicit() names is no use the secret starts from.
+// Keep scrub references out of the use positions below.
 @m@
 identifier x;
 position pm;
@@ -74,7 +74,7 @@ position pd, p1 != {m.pm, m2.pm}, p2;
 struct sname@pd x;
 ... when != x
 x@p1
-... when != memzero_explicit(&x, ...)
+... when != memzero_explicit(&x, sizeof(x))
 return@p2 ...;
 
 @c@

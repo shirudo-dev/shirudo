@@ -412,6 +412,35 @@ int digest_public(const char *hex)
 		return -EINVAL;
 	return use(digest);
 }
+
+int address_output(const char *hex)
+{
+	__u8 credential[16];
+
+	if (getrandom(&credential, sizeof(credential), 0) < 0)
+		return -EIO;
+	return use(credential);
+}
+
+int partial_scrub(const char *hex)
+{
+	__u8 credential[16];
+
+	if (hex_decode(hex, credential, sizeof(credential))) {
+		memzero_explicit(credential, 1);
+		return -EINVAL;
+	}
+	memzero_explicit(credential, 1);
+	return 0;
+}
+
+void credential_fallthrough(void)
+{
+	__u8 credential[16];
+
+	getrandom(credential, sizeof(credential), 0);
+	use(credential);
+}
 EOF
 }
 
@@ -420,7 +449,7 @@ EOF
 # return before its use, the scrubbed form and the __cleanup() one not.
 write_sensitive_samples() {
 	mkdir -p "$1/include" &&
-	printf 'struct client {\n\tchar name[32];\n\tchar __sensitive password[64];\n};\n' \
+	printf 'struct client {\n\tchar name[32];\n\tchar password[64] __sensitive;\n\tchar token[32] __sensitive;\n};\n' \
 		>"$1/include/client.h" &&
 	cat >"$1/sensitive.c" <<'EOF'
 int client_left(const char *url)
@@ -471,6 +500,17 @@ int client_field(const char *url)
 	memzero_explicit(c.password, sizeof(c.password));
 	return 0;
 }
+
+int client_partial_scrub(const char *url)
+{
+	struct client c = {};
+
+	if (client_parse(url, &c))
+		return -EINVAL;
+	memzero_explicit(&c, 1);
+	return use(&c);
+}
+
 EOF
 }
 
@@ -485,9 +525,9 @@ test_expect_success 'each scrub rule reports its samples and spares the scrubbed
 	write_sensitive_samples "$R4" &&
 	! (cd "$R4" && git add -A && sh "$S") >"$W/out" 2>"$W/err" &&
 	grep -q "2 of 2 rules matched" "$W/err" &&
-	[ "$(grep -c "^scrub_missing: samples.c:" "$W/err")" = 4 ] &&
-	[ "$(grep -c "^sensitive_scrub: sensitive.c:" "$W/err")" = 4 ] &&
-	[ "$(grep -c "^[a-z_]*: " "$W/err")" = 8 ]
+	[ "$(grep -c "^scrub_missing: samples.c:" "$W/err")" = 9 ] &&
+	[ "$(grep -c "^sensitive_scrub: sensitive.c:" "$W/err")" = 6 ] &&
+	[ "$(grep -c "^[a-z_]*: " "$W/err")" = 15 ]
 '
 
 test_expect_success 'the tree passes' '

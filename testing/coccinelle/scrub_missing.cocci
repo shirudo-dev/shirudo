@@ -2,9 +2,10 @@
 // Copyright (c) 2026 Authors of shirudo
 //
 // A local that a function filled with a secret is scrubbed with
-// memzero_explicit() on every path out of the function, the error paths
-// included: what the stack keeps is the next call's to read, and a core
-// dump's. The producers are those of the tree whose output is secret, an
+// a full-size memzero_explicit() on every path out of the function, the
+// error paths included: what the stack keeps is the next call's to read,
+// and a core dump's. The producers are those of the tree whose output is
+// secret, an
 // activated credential, a KDF output and an ECDH shared value, and
 // hex_bytes(), hex_decode() and getrandom() when the local is named for
 // a secret. A secret in a struct is sensitive_scrub's.
@@ -35,18 +36,18 @@ position p1, p2;
 )
 ... when any
 (
-  tpm_activate_credential@p1(..., \(x\|x.fld\), E, E1)
+  tpm_activate_credential@p1(..., \(x\|&x\|x.fld\|&x.fld\), E, E1)
 |
-  tpm_kdfa@p1(..., \(x\|x.fld\), E)
+  tpm_kdfa@p1(..., \(x\|&x\|x.fld\|&x.fld\), E)
 |
-  tpm_kdfe@p1(..., \(x\|x.fld\))
+  tpm_kdfe@p1(..., \(x\|&x\|x.fld\|&x.fld\))
 |
-  ecdh_p256_ephemeral@p1(..., \(x\|x.fld\))
+  ecdh_p256_ephemeral@p1(..., \(x\|&x\|x.fld\|&x.fld\))
 )
-... when != memzero_explicit(x, ...)
-    when != memzero_explicit(&x, ...)
-    when != memzero_explicit(x.fld, ...)
-    when != memzero_explicit(&x.fld, ...)
+... when != memzero_explicit(x, sizeof(x))
+    when != memzero_explicit(&x, sizeof(x))
+    when != memzero_explicit(x.fld, sizeof(x.fld))
+    when != memzero_explicit(&x.fld, sizeof(x.fld))
 return@p2 ...;
 
 @n exists@
@@ -62,14 +63,14 @@ position p1, p2;
 )
 ... when any
 (
-  hex_bytes@p1(E, x, ...)
+  hex_bytes@p1(E, \(x\|&x\), ...)
 |
-  hex_decode@p1(E, x, ...)
+  hex_decode@p1(E, \(x\|&x\), ...)
 |
-  getrandom@p1(x, ...)
+  getrandom@p1(\(x\|&x\), ...)
 )
-... when != memzero_explicit(x, ...)
-    when != memzero_explicit(&x, ...)
+... when != memzero_explicit(x, sizeof(x))
+    when != memzero_explicit(&x, sizeof(x))
 return@p2 ...;
 
 @script:python depends on report@
@@ -86,3 +87,4 @@ p2 << n.p2;
 @@
 if SECRET_NAME.search(x):
     unscrubbed(x, p1, p2)
+
