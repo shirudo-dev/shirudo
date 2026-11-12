@@ -61,3 +61,8 @@ programs are dual-licensed BSD/GPL. Each source file holds a SPDX
 license identifier. The tree vendors a few source files from
 third-party projects under different but compatible licenses; those
 files retain their original SPDX identifier and copyright notices.
+
+## Origins
+
+shirudo was created by the [Isovalent](https://isovalent.com) team 
+at Cisco, and first [presented at LPC'26](https://lpc.events/event/20/contributions/2437/attachments/2170/4833/shirudo.pdf). 
