@@ -105,7 +105,6 @@ if [[ "$PACKAGE_FORMAT" == deb ]]; then
     libelf-dev
     libncurses-dev
     libssl-dev
-    llvm
     openssl
     pahole
     python3
