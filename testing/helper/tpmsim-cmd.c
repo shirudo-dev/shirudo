@@ -8,6 +8,8 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,6 +22,51 @@
 #include <shirudo/misc.h>
 
 #define SIM_CMD_MAX	(64u * 1024u)
+
+/*
+ * tss2's "cmd" TCTI reaps this process with SIGTERM before it closes
+ * stdin, so a plain blocking read() never sees the EOF that would
+ * otherwise drive save_state() below. Route the signal through a
+ * self-pipe and treat it exactly like EOF instead of dying with
+ * whatever TPM state is still unsaved.
+ */
+static int shutdown_pipe[2] = { -1, -1 };
+
+static void request_shutdown(int sig)
+{
+	char byte = 0;
+
+	if (write(shutdown_pipe[1], &byte, 1) < 0)
+		return;
+}
+
+static int install_shutdown_handler(void)
+{
+	struct sigaction sa = { .sa_handler = request_shutdown };
+
+	if (pipe(shutdown_pipe) != 0)
+		return -1;
+	if (fcntl(shutdown_pipe[1], F_SETFL, O_NONBLOCK) != 0)
+		return -1;
+	return sigaction(SIGTERM, &sa, NULL);
+}
+
+/* 1: a command is ready on stdin, 0: shutdown requested, -1: error. */
+static int wait_for_command(void)
+{
+	struct pollfd pfd[2] = {
+		{ .fd = STDIN_FILENO, .events = POLLIN },
+		{ .fd = shutdown_pipe[0], .events = POLLIN },
+	};
+	int ret;
+
+	do {
+		ret = poll(pfd, ARRAY_SIZE(pfd), -1);
+	} while (ret < 0 && errno == EINTR);
+	if (ret < 0)
+		return -1;
+	return (pfd[1].revents & POLLIN) ? 0 : 1;
+}
 
 /* TPM2_Startup(TPM_SU_CLEAR): sent when no volatile state was restored. */
 static const __u8 startup_clear[] = {
@@ -161,6 +208,10 @@ int main(int argc, char **argv)
 		perror("tpmsim-cmd: state directory");
 		return 1;
 	}
+	if (install_shutdown_handler() != 0) {
+		perror("tpmsim-cmd: shutdown handler");
+		return 1;
+	}
 	setenv("TPM_PATH", ".", 1);
 	if (TPMLIB_ChooseTPMVersion(TPMLIB_TPM_VERSION_2) != TPM_SUCCESS) {
 		fprintf(stderr, "tpmsim-cmd: TPM 2.0 unsupported by libtpms\n");
@@ -194,7 +245,13 @@ int main(int argc, char **argv)
 	for (;;) {
 		__u8 cmd[SIM_CMD_MAX];
 		__u32 len;
+		int avail;
 
+		avail = wait_for_command();
+		if (avail <= 0) {
+			ret = avail < 0;
+			break;
+		}
 		if (read_full(STDIN_FILENO, cmd, 10) != 0)
 			break;
 		len = ((__u32)cmd[2] << 24) | ((__u32)cmd[3] << 16) |
