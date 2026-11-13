@@ -190,6 +190,9 @@ one.
    * - ``shirudo-test-uprobe-multi``
      - ``uprobe.multi`` on ``/tmp/shirudo-test-uprobe-target``. Copy
        ``shirudo-test-uprobe-target`` from the fixtures to that path first.
+   * - ``shirudo-test-uretprobe-multi``
+     - ``uretprobe.multi`` on the same binary and functions, counting in
+       the map ``hits``
    * - ``shirudo-test-scope-cgroup``, ``shirudo-test-scope-netfilter``,
        ``shirudo-test-scope-kprobe``
      - ``cgroup_skb``, ``netfilter`` and ``kprobe`` attachments and the

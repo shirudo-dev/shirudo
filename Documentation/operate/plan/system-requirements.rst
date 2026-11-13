@@ -253,7 +253,7 @@ point is missing fails to load.
    * - ``CONFIG_BPF_KPROBE_OVERRIDE``
      - ``bpf_override_return()`` from a ``kprobe`` upatch.
    * - ``CONFIG_UPROBE_EVENTS``
-     - ``uprobe.multi`` upatches.
+     - ``uprobe.multi`` and ``uretprobe.multi`` upatches.
    * - ``CONFIG_CGROUP_BPF``
      - ``cgroup_skb`` upatches.
    * - ``CONFIG_NETFILTER``, ``CONFIG_NETFILTER_BPF_LINK``

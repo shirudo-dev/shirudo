@@ -204,18 +204,20 @@ where the caller is the loader.
        Kind 6, netfilter: ``attach_type`` ``BPF_NETFILTER``, ``pf`` 10
        (``NFPROTO_IPV6``), ``hooknum`` 0 (``NF_INET_PRE_ROUTING``),
        ``priority`` -450 (``NF_IP6_PRI_RAW_BEFORE_DEFRAG``), ``flags`` 0.
-       Kind 7, ``uprobe.multi``: ``attach_type``
-       ``BPF_TRACE_UPROBE_MULTI``, ``offsets``, ``cnt``, ``flags``
-       ``BPF_F_UPROBE_MULTI_PATH_FD``, ``path_fd`` a descriptor of the
-       target binary opened and checked by build ID.
+       Kinds 7 and 9, ``uprobe.multi`` and ``uretprobe.multi``:
+       ``attach_type`` ``BPF_TRACE_UPROBE_MULTI``, ``offsets``, ``cnt``,
+       ``flags`` ``BPF_F_UPROBE_MULTI_PATH_FD``, with
+       ``BPF_F_UPROBE_MULTI_RETURN`` for kind 9, ``path_fd`` a descriptor
+       of the target binary opened and checked by build ID.
        Kind 8, XDP: ``target_ifindex`` a selected device,
        ``attach_type`` ``BPF_XDP``, ``flags`` ``XDP_FLAGS_DRV_MODE``.
    * - ``BPF_OBJ_GET_INFO_BY_FD``
      - On each link before it is pinned. Cgroup links: ``cgroup_id`` 1.
        Netfilter: ``pf``, ``hooknum``, ``priority`` as set, and the
        caller's network namespace cookie (``SO_NETNS_COOKIE``) 7. Kprobe:
-       perf event type, function name and offset as signed. Uprobe:
-       offset count. ``fmod_ret``: ``BPF_MODIFY_RETURN``.
+       perf event type, function name and offset as signed. Uprobe
+       multi: offset count and the return flag. ``fmod_ret``:
+       ``BPF_MODIFY_RETURN``.
        XDP: ``BPF_LINK_TYPE_XDP`` and ``xdp.ifindex`` matching the selected
        device; the initial namespace, device class and peer scope are
        rechecked around attachment.

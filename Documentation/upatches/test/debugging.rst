@@ -98,9 +98,10 @@ Find the cause
       * - ``target_verify``
         - ``attach_target_missing``, ``binary_mismatch``,
           ``parser_rejected``, ``lsm_denied``
-        - A ``uprobe.multi`` binary is missing, differs from the one the
-          upatch was built against, is shorter than a recorded offset, or
-          could not be read. Rebuild against the binary the target runs.
+        - A ``uprobe.multi`` or ``uretprobe.multi`` binary is missing,
+          differs from the one the upatch was built against, is shorter
+          than a recorded offset, or could not be read. Rebuild against
+          the binary the target runs.
       * - ``signed_loader_load``
         - ``signature_rejected``
         - The signature does not verify against the ``.bpf`` keyring: the

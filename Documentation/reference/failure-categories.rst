@@ -40,8 +40,8 @@ measures in ``tpm_extend`` and removes the pins in ``pin``.
        name, the signed name, ``payload_sha256`` against the loader and
        data, and the signed attach metadata.
    * - ``target_verify``
-     - Opening each ``uprobe.multi`` target binary and comparing its GNU
-       build ID with the one the artifact records.
+     - Opening each ``uprobe.multi`` and ``uretprobe.multi`` target binary
+       and comparing its GNU build ID with the one the artifact records.
    * - ``signed_loader_load``
      - Creating, filling and freezing ``__loader.map`` and the
        ``BPF_PROG_LOAD`` of the signed loader, where the kernel verifies

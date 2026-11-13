@@ -186,7 +186,7 @@ without ``CAP_BPF``. What bounds a target is the attach point.
    * - ``kprobe``, ``kretprobe``
      - No limit per symbol; every attachment is a perf event of its own
      -
-   * - ``uprobe.multi``
+   * - ``uprobe.multi``, ``uretprobe.multi``
      - 1,048,576 offsets per link, which shirudo also enforces
      - ``MAX_UPROBE_MULTI_CNT`` in ``kernel/trace/bpf_trace.c``
    * - ``cgroup_skb``

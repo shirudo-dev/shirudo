@@ -369,8 +369,9 @@ Each program entry is 160 bytes:
      - 128
      - ``target``
      - NUL-terminated. The kernel symbol for ``kprobe`` and
-       ``kretprobe``, the function glob for ``uprobe.multi`` (no ``,`` or
-       ``|``). Empty for every other kind and role.
+       ``kretprobe``, the function glob for ``uprobe.multi`` and
+       ``uretprobe.multi`` (no ``,`` or ``|``). Empty for every other kind
+       and role.
    * - +144
      - 16
      - ``map``
@@ -424,11 +425,14 @@ Each program entry is 160 bytes:
      - netfilter IPv6 pre-routing
      - ``netfilter``
    * - 7
-     - uprobe.multi entry probe
+     - uprobe.multi
      - ``uprobe.multi/<absolute-path>:<function-glob>``
    * - 8
      - native XDP device classes
      - ``xdp/<decimal-mask>``
+   * - 9
+     - uretprobe.multi
+     - ``uretprobe.multi/<absolute-path>:<function-glob>``
 
 :doc:`/upatches/write/attach-kinds` describes how the target attaches each kind.
 XDP retains the 160-byte entry and UPGM version 1; readers that do not
@@ -438,9 +442,9 @@ selects all classes. Bit 4 is not a class, and a reader refuses a mask
 that sets it or any bit above 16, and a table whose XDP entries share a
 class.
 
-When any entry has kind 7, one ``UPUT`` block follows the program entries
-and ends the section. Without a kind 7 entry the section ends after the
-program entries.
+When any entry has kind 7 or 9, one ``UPUT`` block follows the program
+entries and ends the section. Without a kind 7 or 9 entry the section ends
+after the program entries.
 
 .. list-table::
    :header-rows: 1
@@ -461,7 +465,8 @@ program entries.
    * - +8
      - 4
      - ``nr_targets``
-     - Number of target records, equal to the number of kind 7 entries.
+     - Number of target records, equal to the number of kind 7 and 9
+       entries.
    * - +12
      - 4
      - ``reserved``
@@ -479,7 +484,7 @@ variable parts:
      - Value
    * - +0
      - ``prog_idx``
-     - Index of a kind 7 program entry. Each such entry has exactly one
+     - Index of a kind 7 or 9 program entry. Each such entry has exactly one
        record.
    * - +4
      - ``path_len``
@@ -756,9 +761,9 @@ of checks 1 to 6 is reported as ``parser_rejected``, see
 #. A ``UPGM`` section is present and parses: version 1 (any other version
    is ``EOPNOTSUPP``), ``nr_maps`` and ``nr_progs`` equal to the header's,
    every entry valid for its role and kind, and a ``UPUT`` block that is
-   present exactly when a kind 7 entry exists and ends the section.
-#. Each ``uprobe.multi`` target file is a regular file whose GNU build ID
-   equals the recorded one.
+   present exactly when a kind 7 or 9 entry exists and ends the section.
+#. Each ``uprobe.multi`` and ``uretprobe.multi`` target file is a regular
+   file whose GNU build ID equals the recorded one.
 #. The kernel verifies the signature in ``BPF_PROG_LOAD``.
 
 An unload directive passes the reader, then these checks:
@@ -828,15 +833,16 @@ Limits
    * - Name of an upatch
      - 255 characters of ``[A-Za-z0-9._-]``, each ``.`` counting as two,
        not starting with ``.``
-   * - ``kprobe``, ``kretprobe`` or ``uprobe.multi`` target
+   * - ``kprobe``, ``kretprobe``, ``uprobe.multi`` or ``uretprobe.multi``
+       target
      - 127 bytes
    * - Serializer map name
      - 15 bytes
-   * - ``uprobe.multi`` path
+   * - ``uprobe.multi`` or ``uretprobe.multi`` path
      - 4095 bytes
    * - GNU build ID
      - 1 to 64 bytes
-   * - ``uprobe.multi`` offsets per program
+   * - ``uprobe.multi`` or ``uretprobe.multi`` offsets per program
      - 1 to 1048576
    * - Decoder source
      - 16 MiB per file

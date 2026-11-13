@@ -57,6 +57,10 @@ the link against the metadata and pins it.
      - ``BPF_LINK_CREATE``, ``BPF_TRACE_UPROBE_MULTI``,
        ``BPF_F_UPROBE_MULTI_PATH_FD``
      - ``CONFIG_UPROBE_EVENTS``
+   * - ``uretprobe.multi/<path>:<glob>``
+     - kprobe
+     - as ``uprobe.multi``, with ``BPF_F_UPROBE_MULTI_RETURN``
+     - ``CONFIG_UPROBE_EVENTS``
    * - ``cgroup_skb/ingress``, ``cgroup_skb/egress``
      - cgroup skb
      - ``BPF_LINK_CREATE`` on ``/sys/fs/cgroup``,
@@ -178,16 +182,18 @@ allows that only at the entry of a function on its error-injection list
 and with ``CONFIG_BPF_KPROBE_OVERRIDE``. Elsewhere the kernel refuses
 the link, and the load fails in phase ``link_create``.
 
-uprobe.multi
-------------
+uprobe.multi and uretprobe.multi
+--------------------------------
 
-``uprobe.multi/<path>:<glob>`` attaches to the entry of every function in
-a userspace binary whose symbol matches the glob, in every process, for
-example ``SEC("uprobe.multi//usr/bin/example:*Func")``. ``<path>`` is
-absolute. The glob has libbpf's syntax: ``*`` matches any sequence and
-``?`` one character.
+``uprobe.multi/<path>:<glob>`` and ``uretprobe.multi/<path>:<glob>``
+attach to the entry or the return of every function in a userspace binary
+whose symbol matches the glob, in every process, for example
+``SEC("uprobe.multi//usr/bin/example:*Func")``. ``<path>`` is absolute.
+The glob has libbpf's syntax: ``*`` matches any sequence and ``?`` one
+character. A return program reads the return value with
+``PT_REGS_RC()``; by then the registers no longer hold the arguments.
 
-This kind is resolved on the operator host. The builder opens the binary
+These kinds are resolved on the operator host. The builder opens the binary
 at ``<path>``, matches the glob against its function symbols, converts the
 matches to sorted file offsets and records them with the binary's GNU
 build ID in the signed metadata. It refuses a glob that matches nothing
@@ -199,8 +205,9 @@ every offset lies inside the file, and compares the build ID. A different
 binary fails with ``binary_mismatch`` in phase ``target_verify``, before
 any BPF is loaded. shirudo keeps that descriptor open and attaches with
 ``BPF_LINK_CREATE``, ``BPF_TRACE_UPROBE_MULTI`` and
-``BPF_F_UPROBE_MULTI_PATH_FD``, so the probes land in the inode it checked,
-not in whatever the path names later. There is no path fallback.
+``BPF_F_UPROBE_MULTI_PATH_FD``, and ``BPF_F_UPROBE_MULTI_RETURN`` for
+``uretprobe.multi``, so the probes land in the inode it checked, not in
+whatever the path names later. There is no path fallback.
 
 .. list-table::
    :header-rows: 1
@@ -594,9 +601,12 @@ it generates a loader.
        ``kretprobe.multi*``
      - ``unsupported kprobe section '<section>'; use kprobe/<symbol> or
        kretprobe/<symbol>``
-   * - ``uprobe``, ``uprobe/*``, ``uretprobe*``, other ``uprobe.*`` forms
+   * - ``uprobe``, ``uprobe/*``, ``uretprobe``, ``uretprobe/*``, other
+       ``uprobe.*`` and ``uretprobe.*`` forms, the sleepable
+       ``uprobe.multi.s`` and ``uretprobe.multi.s`` among them
      - ``unsupported uprobe section '<section>'; use
-       uprobe.multi//absolute/path:function_glob (entry probes only)``
+       uprobe.multi//absolute/path:function_glob or
+       uretprobe.multi//absolute/path:function_glob``
    * - ``sk_skb``, ``sk_skb/*``
      - ``unsupported sk_skb section '<section>'; supported network packet
        sections are cgroup_skb/ingress, cgroup_skb/egress, and netfilter``
@@ -612,8 +622,8 @@ it generates a loader.
    * - every other section, ``tp/``, ``raw_tp/``, ``xdp`` and ``tc`` among
        them
      - ``unsupported section '<section>'; supported are fentry, fexit,
-       fmod_ret, lsm, tp_btf, kprobe, kretprobe, uprobe.multi, cgroup_skb,
-       netfilter and xdp/<mask>``
+       fmod_ret, lsm, tp_btf, kprobe, kretprobe, uprobe.multi,
+       uretprobe.multi, cgroup_skb, netfilter and xdp/<mask>``
    * - ``syscall`` with another program name
      - ``SEC("syscall") program '<name>' must be named shirudo_test__<id>``
 
@@ -641,8 +651,9 @@ metadata:
    * - ``kprobe``, ``kretprobe``
      - a perf event link of the kprobe or kretprobe type, with the same
        symbol and offset
-   * - ``uprobe.multi``
-     - a uprobe multi link with as many offsets as recorded
+   * - ``uprobe.multi``, ``uretprobe.multi``
+     - a uprobe multi link with as many offsets as recorded and the same
+       direction
    * - ``fmod_ret``
      - a tracing link with attach type ``BPF_MODIFY_RETURN``
    * - ``fentry``, ``fexit``, ``lsm``, ``tp_btf``
@@ -658,8 +669,9 @@ Missing attach targets
 ``attach_target_missing`` reports a site that does not exist on this
 target: a ``kprobe`` symbol that kallsyms does not list, often because the
 module that holds it is not loaded, a kernel without the kprobe PMU, a
-missing ``/sys/fs/cgroup``, or a ``uprobe.multi`` binary that is not
-there. ``shirudo upatch load`` exits with status 2 for it, not 1.
+missing ``/sys/fs/cgroup``, or a ``uprobe.multi`` or ``uretprobe.multi``
+binary that is not there. ``shirudo upatch load`` exits with status 2 for
+it, not 1.
 
 The BTF-based kinds never report it. ``fentry``, ``fexit``, ``fmod_ret``,
 ``lsm`` and ``tp_btf`` targets are looked up inside the signed loader, and

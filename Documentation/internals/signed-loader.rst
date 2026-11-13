@@ -97,8 +97,9 @@ loader inside the kernel, which ``lsm/bpf`` sees with ``kernel`` true.
      - The file is read once into ``/var/lib/shirudo/incoming``. The
        signed name must equal the header name, ``payload_sha256`` must
        equal SHA-256 of ``loader_insns || data``, and the signed attach
-       metadata must parse. Each ``uprobe.multi`` target is opened and
-       its GNU build ID compared before any BPF loads.
+       metadata must parse. Each ``uprobe.multi`` and ``uretprobe.multi``
+       target is opened and its GNU build ID compared before any BPF
+       loads.
    * - userspace
      - ``BPF_MAP_CREATE`` of ``__loader.map``
      - ``lsm/bpf`` allows it to a task with runtime authority, else
