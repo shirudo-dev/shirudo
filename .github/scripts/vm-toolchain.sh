@@ -5,10 +5,12 @@
 # .github/scripts/vm-toolchain.sh -- prepare the LVH guest a workflow builds
 # in, or the runner itself: check that the kernel the BPF objects are
 # built for takes signed BPF, install clang 23 with install-clang.sh and the
-# build dependencies, and build or reuse an OpenSSL 3.5 toolchain, since the
-# distribution's predates ML-DSA. The
-# environment the build then needs is written to build/vm-toolchain.env
-# for the caller to source.
+# build dependencies, build or reuse an OpenSSL 3.5 toolchain since the
+# distribution's predates ML-DSA, and build or reuse a libtpms with
+# install-libtpms.sh since the distribution's segfaults under the
+# functional TPM tests' load (see that script for why). The environment
+# the build then needs is written to build/vm-toolchain.env for the
+# caller to source.
 #
 #   .github/scripts/vm-toolchain.sh [<apt package>...]
 #
@@ -27,6 +29,7 @@ OPENSSL_SHA256=603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a
 root=$(cd "$(dirname "$0")/../.." && pwd)
 OPENSSL_PREFIX=$root/build/host-openssl
 OPENSSL_STAMP=$OPENSSL_PREFIX/.shirudo-openssl-built
+LIBTPMS_PREFIX=$root/build/host-libtpms
 
 openssl_ready() {
 	[ -f "$OPENSSL_STAMP" ] &&
@@ -62,7 +65,6 @@ apt-get install -y --no-install-recommends \
 	libcurl4-openssl-dev \
 	libelf-dev \
 	libluajit-5.1-dev \
-	libtpms-dev \
 	libtss2-dev \
 	zlib1g-dev \
 	"$@"
@@ -91,9 +93,11 @@ else
 	echo "using cached OpenSSL $OPENSSL_VERSION from $OPENSSL_PREFIX"
 fi
 
+sh "$root/.github/scripts/install-libtpms.sh" "$LIBTPMS_PREFIX"
+
 mkdir -p build
 cat >build/vm-toolchain.env <<EOT
 export PATH=$OPENSSL_PREFIX/bin:\$PATH
-export PKG_CONFIG_PATH=$OPENSSL_PREFIX/lib/pkgconfig
-export LD_LIBRARY_PATH=$OPENSSL_PREFIX/lib
+export PKG_CONFIG_PATH=$OPENSSL_PREFIX/lib/pkgconfig:$LIBTPMS_PREFIX/lib/pkgconfig
+export LD_LIBRARY_PATH=$OPENSSL_PREFIX/lib:$LIBTPMS_PREFIX/lib
 EOT

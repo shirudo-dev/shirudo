@@ -84,6 +84,13 @@ jobs:
           path: build/host-openssl
           key: host-openssl-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/vm-toolchain.sh') }}
 
+      - name: Restore the host libtpms toolchain
+        id: host-libtpms
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/host-libtpms
+          key: host-libtpms-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/vm-toolchain.sh', '.github/scripts/install-libtpms.sh') }}
+
       - name: Restore the VM images
         if: matrix.vm == '1'
         id: images
@@ -157,6 +164,13 @@ jobs:
         with:
           path: build/host-openssl
           key: ${{ steps.host-openssl.outputs.cache-primary-key }}
+
+      - name: Save the host libtpms toolchain
+        if: always() && steps.host-libtpms.outputs.cache-hit != 'true' && hashFiles('build/host-libtpms/lib/libtpms.so') != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/host-libtpms
+          key: ${{ steps.host-libtpms.outputs.cache-primary-key }}
 
       # hashFiles reads every byte it matches and gives up after two
       # minutes, too short for an image; the key file beside one is
