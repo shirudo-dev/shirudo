@@ -55,6 +55,8 @@ The probe stops with ``shirudo: missing prerequisite:`` and an install
 hint for each module it cannot find. It writes what it found to
 ``config.mk``, which ``make distclean`` removes.
 
+.. _dev-openssl:
+
 Install OpenSSL 3.5
 -------------------
 

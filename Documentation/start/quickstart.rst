@@ -32,6 +32,8 @@ Before you begin
   ``/usr/bin/clang``, and the development files of OpenSSL 3.5 or later,
   libelf, zlib, libcurl 7.75 or later, tpm2-tss (``tss2-esys`` 4.0 or later
   and ``tss2-tctildr``) and LuaJIT.
+- OpenSSL 3.5 or newer (``openssl version``). If it reports an older
+  version, follow :ref:`the developer guide's steps <dev-openssl>` first.
 - For the test VM, with their Debian and Ubuntu names: QEMU
   (``qemu-system-x86`` or ``qemu-system-arm``), ``qemu-utils``, ``swtpm``,
   ``cloud-image-utils``, ``libguestfs-tools``, ``dracut-core``,
