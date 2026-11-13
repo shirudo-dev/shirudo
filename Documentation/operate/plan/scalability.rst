@@ -183,8 +183,8 @@ without ``CAP_BPF``. What bounds a target is the attach point.
    * - ``tp_btf``
      - No limit per tracepoint
      -
-   * - ``kprobe``, ``kretprobe``
-     - No limit per symbol; every attachment is a perf event of its own
+   * - ``kprobe``, ``kretprobe``, ``uprobe``, ``uretprobe``
+     - No limit per site; every attachment is a perf event of its own
      -
    * - ``uprobe.multi``, ``uretprobe.multi``
      - 1,048,576 offsets per link, which shirudo also enforces

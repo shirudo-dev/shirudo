@@ -52,6 +52,17 @@ the link against the metadata and pins it.
      - kprobe
      - as ``kprobe``, with the return-probe bit set
      - ``CONFIG_KPROBES``, ``CONFIG_KPROBE_EVENTS``
+   * - ``uprobe/<path>:<function>[+<offset>]``, ``uprobe/<path>:0x<offset>``,
+       their ``uprobe.s`` forms
+     - kprobe
+     - ``perf_event_open`` on the uprobe PMU, ``BPF_LINK_CREATE``,
+       ``BPF_PERF_EVENT``
+     - ``CONFIG_UPROBE_EVENTS``
+   * - ``uretprobe/<path>:<function>``, ``uretprobe/<path>:0x<offset>``,
+       their ``uretprobe.s`` forms
+     - kprobe
+     - as ``uprobe``, with the return-probe bit set
+     - ``CONFIG_UPROBE_EVENTS``
    * - ``uprobe.multi/<path>:<glob>``, ``uprobe.multi.s/<path>:<glob>``
      - kprobe
      - ``BPF_LINK_CREATE``, ``BPF_TRACE_UPROBE_MULTI``,
@@ -182,6 +193,39 @@ A kprobe may call ``bpf_override_return()`` to refuse a call. The kernel
 allows that only at the entry of a function on its error-injection list
 and with ``CONFIG_BPF_KPROBE_OVERRIDE``. Elsewhere the kernel refuses
 the link, and the load fails in phase ``link_create``.
+
+uprobe and uretprobe
+--------------------
+
+``uprobe/<path>:<function>`` and ``uretprobe/<path>:<function>`` attach to
+the entry or the return of one function in a userspace binary, in every
+process, for example ``SEC("uprobe//usr/bin/example:fooFunc")``.
+``<path>`` is absolute. ``uprobe/<path>:<function>+<offset>`` probes an
+instruction inside the function; the offset is decimal or ``0x``
+hexadecimal, a leading zero is refused rather than read as octal, and a
+``uretprobe`` takes none. ``<path>:0x<offset>`` in place of a function
+probes that file offset in the binary, for code no symbol names. The
+program reads its arguments and, in a ``uretprobe``, the return value from
+``struct pt_regs``, as a ``kprobe`` does.
+
+The builder resolves the function as libbpf does, refusing a name that
+matches no symbol or several at different addresses, adds the offset and
+records the one file offset it gets with the binary's GNU build ID in the
+signed metadata, as for ``uprobe.multi``. It refuses an offset that lies
+outside the file, and one beyond 4 GiB, because the kernel reports a
+uprobe link's offset in 32 bits.
+
+On the target, shirudo opens and checks the binary as for
+``uprobe.multi``, then reads the uprobe PMU's type from
+``/sys/bus/event_source/devices/uprobe/type`` and, for a return probe, the
+return-probe bit from ``.../uprobe/format/retprobe``, and opens a perf
+event on every CPU for ``/proc/self/fd/<n>``, the descriptor it checked,
+at the recorded offset. The kernel resolves that path to the inode
+shirudo checked, not to whatever ``<path>`` names later. shirudo attaches
+the program to the event with ``BPF_LINK_CREATE`` and ``BPF_PERF_EVENT``.
+
+``uprobe.s`` and ``uretprobe.s`` declare sleepable programs, as the
+``.s`` forms of ``uprobe.multi`` do, with the same attach kinds, 10 and 11.
 
 uprobe.multi and uretprobe.multi
 --------------------------------
@@ -608,12 +652,22 @@ it generates a loader.
        ``kretprobe.multi*``
      - ``unsupported kprobe section '<section>'; use kprobe/<symbol> or
        kretprobe/<symbol>``
-   * - ``uprobe``, ``uprobe/*``, ``uretprobe``, ``uretprobe/*``, other
-       ``uprobe.*`` and ``uretprobe.*`` forms, ``uprobe.session`` and
+   * - ``uprobe`` and ``uretprobe`` without a binary, other ``uprobe.*``
+       and ``uretprobe.*`` forms, ``uprobe.session`` and
        ``uprobe.session.s`` among them
      - ``unsupported uprobe section '<section>'; use
+       uprobe[.s]//absolute/path:function[+offset],
+       uretprobe[.s]//absolute/path:function,
        uprobe.multi[.s]//absolute/path:function_glob or
        uretprobe.multi[.s]//absolute/path:function_glob``
+   * - ``uprobe`` or ``uretprobe`` with a relative path, no function or a
+       malformed offset
+     - ``invalid uprobe section '<section>'; expected
+       uprobe[.s]//absolute/path:function[+offset],
+       uretprobe[.s]//absolute/path:function or a 0x file offset in place
+       of the function``
+   * - ``uretprobe`` or ``uretprobe.s`` with ``+<offset>``
+     - ``uretprobe offsets are unsupported in section '<section>'``
    * - ``sk_skb``, ``sk_skb/*``
      - ``unsupported sk_skb section '<section>'; supported network packet
        sections are cgroup_skb/ingress, cgroup_skb/egress, and netfilter``
@@ -629,8 +683,9 @@ it generates a loader.
    * - every other section, ``tp/``, ``raw_tp/``, ``xdp`` and ``tc`` among
        them
      - ``unsupported section '<section>'; supported are fentry, fexit,
-       fmod_ret, lsm, tp_btf, kprobe, kretprobe, uprobe.multi[.s],
-       uretprobe.multi[.s], cgroup_skb, netfilter and xdp/<mask>``
+       fmod_ret, lsm, tp_btf, kprobe, kretprobe, uprobe[.s],
+       uretprobe[.s], uprobe.multi[.s], uretprobe.multi[.s], cgroup_skb,
+       netfilter and xdp/<mask>``
    * - ``syscall`` with another program name
      - ``SEC("syscall") program '<name>' must be named shirudo_test__<id>``
 
@@ -640,9 +695,9 @@ Attach-scope check
 The site a kprobe, uprobe, cgroup or netfilter program attaches at depends
 on state that root can arrange on the target: the mount of
 ``/sys/fs/cgroup``, the network namespace of the loading process, the
-sysfs file that names the kprobe PMU. Before shirudo pins a link, it asks
-the kernel about the link and compares the answer with the signed
-metadata:
+sysfs files that name the kprobe and uprobe PMUs. Before shirudo pins a
+link, it asks the kernel about the link and compares the answer with the
+signed metadata:
 
 .. list-table::
    :header-rows: 1
@@ -658,6 +713,12 @@ metadata:
    * - ``kprobe``, ``kretprobe``
      - a perf event link of the kprobe or kretprobe type, with the same
        symbol and offset
+   * - ``uprobe``, ``uretprobe``
+     - a perf event link of the uprobe or uretprobe type, with the recorded
+       file offset and no reference counter. Not the file name: the
+       descriptor the event was opened through fixes the inode, and the
+       name the kernel reports can differ from the signed path by a
+       symlink
    * - ``uprobe.multi``, ``uretprobe.multi``
      - a uprobe multi link with as many offsets as recorded and the same
        direction
@@ -676,8 +737,8 @@ Missing attach targets
 ``attach_target_missing`` reports a site that does not exist on this
 target: a ``kprobe`` symbol that kallsyms does not list, often because the
 module that holds it is not loaded, a kernel without the kprobe PMU, a
-missing ``/sys/fs/cgroup``, or a ``uprobe.multi`` or ``uretprobe.multi``
-binary that is not there. ``shirudo upatch load`` exits with status 2 for
+missing ``/sys/fs/cgroup``, or the binary of a uprobe, uretprobe or
+their multi forms that is not there. ``shirudo upatch load`` exits with status 2 for
 it, not 1.
 
 The BTF-based kinds never report it. ``fentry``, ``fexit``, ``fmod_ret``,

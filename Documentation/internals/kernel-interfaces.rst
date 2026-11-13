@@ -199,7 +199,8 @@ where the caller is the loader.
        ``attach_type`` ``BPF_MODIFY_RETURN``. Kinds 3 and 4,
        ``cgroup_skb``: ``target_fd`` an ``O_DIRECTORY`` descriptor of
        ``/sys/fs/cgroup``, ``attach_type`` ``BPF_CGROUP_INET_INGRESS`` or
-       ``BPF_CGROUP_INET_EGRESS``. Kinds 1 and 2, kprobe and kretprobe:
+       ``BPF_CGROUP_INET_EGRESS``. Kinds 1 and 2, kprobe and kretprobe,
+       and kinds 10 and 11, uprobe and uretprobe with their ``.s`` forms:
        ``target_fd`` a perf event, ``attach_type`` ``BPF_PERF_EVENT``.
        Kind 6, netfilter: ``attach_type`` ``BPF_NETFILTER``, ``pf`` 10
        (``NFPROTO_IPV6``), ``hooknum`` 0 (``NF_INET_PRE_ROUTING``),
@@ -217,8 +218,9 @@ where the caller is the loader.
      - On each link before it is pinned. Cgroup links: ``cgroup_id`` 1.
        Netfilter: ``pf``, ``hooknum``, ``priority`` as set, and the
        caller's network namespace cookie (``SO_NETNS_COOKIE``) 7. Kprobe:
-       perf event type, function name and offset as signed. Uprobe
-       multi: offset count and the return flag. ``fmod_ret``:
+       perf event type, function name and offset as signed. Uprobe:
+       perf event type, the file offset as signed and ``ref_ctr_offset``
+       0. Uprobe multi: offset count and the return flag. ``fmod_ret``:
        ``BPF_MODIFY_RETURN``.
        XDP: ``BPF_LINK_TYPE_XDP`` and ``xdp.ifindex`` matching the selected
        device; the initial namespace, device class and peer scope are
@@ -232,7 +234,10 @@ A kprobe link's perf event comes from ``perf_event_open(2)`` with
 ``type`` read from ``/sys/bus/event_source/devices/kprobe/type``,
 ``config1`` the symbol, ``config2`` the offset, the bit named in
 ``.../kprobe/format/retprobe`` set in ``config`` for a kretprobe, ``pid``
--1, ``cpu`` 0 and ``PERF_FLAG_FD_CLOEXEC``.
+-1, ``cpu`` 0 and ``PERF_FLAG_FD_CLOEXEC``. A uprobe link's comes from
+the same call on the uprobe PMU, ``/sys/bus/event_source/devices/uprobe``,
+with ``config1`` the path ``/proc/self/fd/<n>`` of the target binary's
+checked descriptor and ``config2`` the recorded file offset.
 
 An unload directive makes the first four calls and no others.
 

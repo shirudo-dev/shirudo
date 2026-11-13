@@ -193,6 +193,9 @@ one.
    * - ``shirudo-test-uretprobe-multi``
      - ``uretprobe.multi`` on the same binary and functions, counting in
        the map ``hits``
+   * - ``shirudo-test-uprobe``, ``shirudo-test-uretprobe``
+     - ``uprobe`` and ``uretprobe`` on ``fooFunc`` of the same binary,
+       counting in ``hits``
    * - ``shirudo-test-uprobe-multi-sleepable``
      - sleepable ``uprobe.multi.s`` on the same binary and functions,
        counting in ``hits`` each call whose ``bpf_copy_from_user()`` of the

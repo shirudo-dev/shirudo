@@ -98,7 +98,8 @@ Find the cause
       * - ``target_verify``
         - ``attach_target_missing``, ``binary_mismatch``,
           ``parser_rejected``, ``lsm_denied``
-        - A ``uprobe.multi`` or ``uretprobe.multi`` binary is missing,
+        - The binary of a ``uprobe``, ``uretprobe``, ``uprobe.multi`` or
+          ``uretprobe.multi`` upatch is missing,
           differs from the one the upatch was built against, is shorter
           than a recorded offset, or could not be read. Rebuild against
           the binary the target runs.

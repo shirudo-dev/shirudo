@@ -256,8 +256,9 @@ target's before it ships.
 It cannot attach anywhere other than where its signed metadata says.
 Before shirudo pins a link, it compares what the kernel reports about the
 link with the metadata: the link type and attach type, the kprobe symbol
-and offset, the cgroup, the netfilter hook and network namespace, the
-number of offsets and the direction of a uprobe multi link. A mismatch
+and offset, the uprobe file offset, the cgroup, the netfilter hook and
+network namespace, the number of offsets and the direction of a uprobe
+multi link. A mismatch
 unpins what the load made and fails with ``attach_scope_mismatch``. For
 fentry, fexit, ``fmod_ret``, LSM and ``tp_btf`` programs the site is the
 BTF target the verifier bound at load.

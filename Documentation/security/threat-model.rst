@@ -1545,7 +1545,8 @@ R20 The TPM owner password is not a secret on the target
 R21 upatches can be neutralized by changing their targets
    An upatch stays loaded and measured while root makes it ineffective:
    by unloading the module a kprobe targets, by replacing the binary a
-   ``uprobe.multi`` or ``uretprobe.multi`` target names with a new inode,
+   ``uprobe``, ``uretprobe``, ``uprobe.multi`` or ``uretprobe.multi``
+   target names with a new inode,
    or, without lockdown (A4), by disabling kprobes through debugfs. These
    are readings of the kernel source and are not tested.
 
