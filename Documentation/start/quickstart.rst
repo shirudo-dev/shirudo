@@ -45,6 +45,20 @@ Before you begin
 
 :doc:`/operate/plan/system-requirements` lists the requirements in full.
 
+Build a target kernel
+----------------------
+
+Before we build shirudo, we need a kernel for it to build against:
+shirudo's embedded BPF objects compile against a kernel's BTF and use
+the signed-loader ABI that only a bpf-next kernel patched under
+:src:`kernel/` has. Without one, the build falls back to the BTF of the
+kernel you are running, which lacks that ABI and fails to build. Build
+one first:
+
+.. code-block:: console
+
+   operator$ make -C testing kernel
+
 Build shirudo
 -------------
 
