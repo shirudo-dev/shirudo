@@ -7,6 +7,12 @@ on:
     tags:
       - '*'
   pull_request:
+  workflow_dispatch:
+    inputs:
+      additional_config_cert:
+        description: Base64-encoded DER X.509 config verification certificate; public data only
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -207,6 +213,7 @@ jobs:
           SHIRUDO_DIR: ${{ github.workspace }}
           SHIRUDO_PACKAGE_DIR: ${{ runner.temp }}/shirudo-packages
           OUTPUT_DIR: ${{ runner.temp }}/shirudo-image-assets
+          SHIRUDO_ADDITIONAL_CONFIG_CERT_B64: ${{ github.event.inputs.additional_config_cert }}
         run: .github/scripts/build-image-assets.sh
 
       - name: Upload image assets

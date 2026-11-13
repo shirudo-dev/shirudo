@@ -30,6 +30,15 @@ test -x "${SHIRUDO_DIR}/tools/gen-image/shirudo-gen-runtime"
 
 install -d -m 0700 "$config_keys_dir" "$image_dir" "$asset_dir" "$OUTPUT_DIR"
 
+additional_config_cert_args=()
+if [[ -n "${SHIRUDO_ADDITIONAL_CONFIG_CERT_B64:-}" ]]; then
+	additional_config_cert="${work_dir}/additional-config-cert.der"
+	printf '%s' "$SHIRUDO_ADDITIONAL_CONFIG_CERT_B64" |
+		base64 --decode > "$additional_config_cert"
+	openssl x509 -inform DER -in "$additional_config_cert" -noout >/dev/null
+	additional_config_cert_args+=(--config-cert "$additional_config_cert")
+fi
+
 target_deb="$(find "$SHIRUDO_PACKAGE_DIR" -type f -name 'shirudo-target_*_amd64.deb' -print -quit)"
 operator_deb="$(find "$SHIRUDO_PACKAGE_DIR" -type f -name 'shirudo-operator_*_amd64.deb' -print -quit)"
 if [[ -z "$target_deb" || -z "$operator_deb" ]]; then
@@ -64,6 +73,7 @@ shirudo genkey --keys-dir "$config_keys_dir"
 	--bootstrap-conf "$runtime_conf" \
 	--cert "$bpf_cert" \
 	--config-cert "${config_keys_dir}/cert.der" \
+	"${additional_config_cert_args[@]}" \
 	--output "$runtime_prefix" \
 	--keys-dir "$config_keys_dir" \
 	--builder "$builder" \

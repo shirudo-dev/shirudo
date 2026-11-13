@@ -23,6 +23,42 @@ The wrapper uses the latest successful kernel package run from
 and image-assets runs from `shirudo-dev/shirudo:main`. Start those workflows
 before building if you need them to publish new artifacts.
 
+## Embed an additional config verification certificate
+
+Target image builds can embed an additional config verification certificate.
+This lets a downstream operator sign live config updates with a private key
+that stays outside upstream CI and the AMI.
+
+1. Generate a config signing key once on the downstream operator host and keep
+   its private key secure:
+
+   ```bash
+   shirudo genkey --keys-dir /secure/path/config-signing
+   ```
+
+2. Base64-encode the public DER certificate:
+
+   ```bash
+   base64 -i /secure/path/config-signing/cert.der | tr -d '\n'
+   ```
+
+3. Dispatch the **Build packages** workflow on `main` with the
+   `additional_config_cert` input set to that base64 value. The input is the
+   public certificate; never submit `signing_key.pem`.
+
+4. After the workflow succeeds, build the AMI using that workflow run's ID:
+
+   ```bash
+   ./scripts/build-with-temporary-instance-profile.sh \
+     --shirudo-image-assets-run-id IMAGE_ASSETS_RUN_ID \
+     .
+   ```
+
+The workflow signs the initial config with its temporary key and embeds the
+downstream certificate in the runtime. Keep the matching downstream
+`signing_key.pem` to sign future config images, then activate them with
+`shirudo image update`.
+
 ## Build
 
 From the Shirudo repository root:
