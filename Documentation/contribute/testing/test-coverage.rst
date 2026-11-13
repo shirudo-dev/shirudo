@@ -161,8 +161,9 @@ signed config image.
    * - ``t3006-cgroup-skb-metadata``
      - ``cgroup_skb`` ingress and egress attach metadata
    * - ``t3007-uprobe-multi-metadata``
-     - ``uprobe.multi`` and ``uretprobe.multi`` globs to file offsets and
-       the target's build ID, and the uretprobe forms the builder refuses
+     - ``uprobe.multi`` and ``uretprobe.multi`` globs, sleepable ``.s``
+       forms included, to file offsets and the target's build ID, and the
+       uprobe forms the builder refuses
    * - ``t3008-override-metadata``
      - kprobe override and ``fmod_ret`` attach metadata
    * - ``t3009-netfilter-metadata``
@@ -189,8 +190,9 @@ signed config image.
    * - ``t3106-upatch-get``
      - ``upatch get`` source lines and JSON
    * - ``t3107-uprobe-multi``
-     - A live ``uprobe.multi`` load, refusal after a build ID change, and
-       a live ``uretprobe.multi`` load that runs and unloads
+     - A live ``uprobe.multi`` load, refusal after a build ID change, a
+       live ``uretprobe.multi`` load that runs and unloads, and a live
+       sleepable ``uprobe.multi.s`` load that reads user memory
    * - ``t3108-status-many``
      - ``status --json`` with eighty loaded upatches lists all of them
    * - ``t3109-policy-labels``
@@ -662,7 +664,8 @@ Coverage by area
      - Offline metadata: ``t3006``, ``t3007``, ``t3008``, ``t3009``,
        ``t3010``. Loaded on a target: fentry (fixtures), ``lsm``
        (``t9101``), ``cgroup_skb`` and netfilter (``t6116``),
-       ``uprobe.multi`` and ``uretprobe.multi`` (``t3107``)
+       ``uprobe.multi``, ``uretprobe.multi`` and ``uprobe.multi.s``
+       (``t3107``)
    * - bpffs pins and mounts
      - ``t4101``, ``t6105``, ``t6106``, ``t6108``, ``t6120``,
        ``t6121``

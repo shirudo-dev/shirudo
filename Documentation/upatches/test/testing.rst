@@ -193,6 +193,10 @@ one.
    * - ``shirudo-test-uretprobe-multi``
      - ``uretprobe.multi`` on the same binary and functions, counting in
        the map ``hits``
+   * - ``shirudo-test-uprobe-multi-sleepable``
+     - sleepable ``uprobe.multi.s`` on the same binary and functions,
+       counting in ``hits`` each call whose ``bpf_copy_from_user()`` of the
+       task's arguments succeeds
    * - ``shirudo-test-scope-cgroup``, ``shirudo-test-scope-netfilter``,
        ``shirudo-test-scope-kprobe``
      - ``cgroup_skb``, ``netfilter`` and ``kprobe`` attachments and the

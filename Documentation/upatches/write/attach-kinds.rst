@@ -52,12 +52,13 @@ the link against the metadata and pins it.
      - kprobe
      - as ``kprobe``, with the return-probe bit set
      - ``CONFIG_KPROBES``, ``CONFIG_KPROBE_EVENTS``
-   * - ``uprobe.multi/<path>:<glob>``
+   * - ``uprobe.multi/<path>:<glob>``, ``uprobe.multi.s/<path>:<glob>``
      - kprobe
      - ``BPF_LINK_CREATE``, ``BPF_TRACE_UPROBE_MULTI``,
        ``BPF_F_UPROBE_MULTI_PATH_FD``
      - ``CONFIG_UPROBE_EVENTS``
-   * - ``uretprobe.multi/<path>:<glob>``
+   * - ``uretprobe.multi/<path>:<glob>``,
+       ``uretprobe.multi.s/<path>:<glob>``
      - kprobe
      - as ``uprobe.multi``, with ``BPF_F_UPROBE_MULTI_RETURN``
      - ``CONFIG_UPROBE_EVENTS``
@@ -208,6 +209,12 @@ any BPF is loaded. shirudo keeps that descriptor open and attaches with
 ``BPF_F_UPROBE_MULTI_PATH_FD``, and ``BPF_F_UPROBE_MULTI_RETURN`` for
 ``uretprobe.multi``, so the probes land in the inode it checked, not in
 whatever the path names later. There is no path fallback.
+
+``uprobe.multi.s`` and ``uretprobe.multi.s`` declare sleepable programs,
+which may call ``bpf_copy_from_user()`` and fault in the user memory they
+read. They take the same attach kinds, 7 and 9: ``BPF_F_SLEEPABLE`` is a
+load flag the signed loader sets, so the signature covers it, and the
+target attaches them as it does the others.
 
 .. list-table::
    :header-rows: 1
@@ -602,11 +609,11 @@ it generates a loader.
      - ``unsupported kprobe section '<section>'; use kprobe/<symbol> or
        kretprobe/<symbol>``
    * - ``uprobe``, ``uprobe/*``, ``uretprobe``, ``uretprobe/*``, other
-       ``uprobe.*`` and ``uretprobe.*`` forms, the sleepable
-       ``uprobe.multi.s`` and ``uretprobe.multi.s`` among them
+       ``uprobe.*`` and ``uretprobe.*`` forms, ``uprobe.session`` and
+       ``uprobe.session.s`` among them
      - ``unsupported uprobe section '<section>'; use
-       uprobe.multi//absolute/path:function_glob or
-       uretprobe.multi//absolute/path:function_glob``
+       uprobe.multi[.s]//absolute/path:function_glob or
+       uretprobe.multi[.s]//absolute/path:function_glob``
    * - ``sk_skb``, ``sk_skb/*``
      - ``unsupported sk_skb section '<section>'; supported network packet
        sections are cgroup_skb/ingress, cgroup_skb/egress, and netfilter``
@@ -622,8 +629,8 @@ it generates a loader.
    * - every other section, ``tp/``, ``raw_tp/``, ``xdp`` and ``tc`` among
        them
      - ``unsupported section '<section>'; supported are fentry, fexit,
-       fmod_ret, lsm, tp_btf, kprobe, kretprobe, uprobe.multi,
-       uretprobe.multi, cgroup_skb, netfilter and xdp/<mask>``
+       fmod_ret, lsm, tp_btf, kprobe, kretprobe, uprobe.multi[.s],
+       uretprobe.multi[.s], cgroup_skb, netfilter and xdp/<mask>``
    * - ``syscall`` with another program name
      - ``SEC("syscall") program '<name>' must be named shirudo_test__<id>``
 

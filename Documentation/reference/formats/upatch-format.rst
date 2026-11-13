@@ -426,13 +426,15 @@ Each program entry is 160 bytes:
      - ``netfilter``
    * - 7
      - uprobe.multi
-     - ``uprobe.multi/<absolute-path>:<function-glob>``
+     - ``uprobe.multi/<absolute-path>:<function-glob>``,
+       ``uprobe.multi.s/<absolute-path>:<function-glob>``
    * - 8
      - native XDP device classes
      - ``xdp/<decimal-mask>``
    * - 9
      - uretprobe.multi
-     - ``uretprobe.multi/<absolute-path>:<function-glob>``
+     - ``uretprobe.multi/<absolute-path>:<function-glob>``,
+       ``uretprobe.multi.s/<absolute-path>:<function-glob>``
 
 :doc:`/upatches/write/attach-kinds` describes how the target attaches each kind.
 XDP retains the 160-byte entry and UPGM version 1; readers that do not

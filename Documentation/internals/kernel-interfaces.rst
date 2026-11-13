@@ -204,7 +204,9 @@ where the caller is the loader.
        Kind 6, netfilter: ``attach_type`` ``BPF_NETFILTER``, ``pf`` 10
        (``NFPROTO_IPV6``), ``hooknum`` 0 (``NF_INET_PRE_ROUTING``),
        ``priority`` -450 (``NF_IP6_PRI_RAW_BEFORE_DEFRAG``), ``flags`` 0.
-       Kinds 7 and 9, ``uprobe.multi`` and ``uretprobe.multi``:
+       Kinds 7 and 9, ``uprobe.multi`` and ``uretprobe.multi`` and their
+       sleepable ``.s`` forms, whose ``BPF_F_SLEEPABLE`` the signed loader
+       sets at load:
        ``attach_type`` ``BPF_TRACE_UPROBE_MULTI``, ``offsets``, ``cnt``,
        ``flags`` ``BPF_F_UPROBE_MULTI_PATH_FD``, with
        ``BPF_F_UPROBE_MULTI_RETURN`` for kind 9, ``path_fd`` a descriptor
