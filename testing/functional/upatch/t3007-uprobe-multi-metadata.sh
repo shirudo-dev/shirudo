@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 #
-# t3007 -- uprobe.multi and uretprobe.multi SEC metadata resolves a
-# standard libbpf glob to sorted ELF file offsets and records the target's
-# GNU build ID; a uprobe section without a binary is refused.
+# t3007 -- uprobe.multi and uretprobe.multi SEC metadata, sleepable forms
+# included, resolves a standard libbpf glob to sorted ELF file offsets and
+# records the target's GNU build ID; a uprobe section without a binary is
+# refused.
 
 cd "$(dirname "$0")/../.."
 . ./test-lib.sh
@@ -110,6 +111,30 @@ refused() {
 
 test_expect_success 'a uprobe without a binary is refused' '
 	refused "uprobe"
+'
+
+test_expect_success 'a sleepable uprobe.multi.s glob records the entry kind' '
+	write_probe "*Func" "uprobe.multi.s/$WORK/target:*Func" &&
+	( cd .. && "$B" "$WORK/probe.bpf.c" \
+		-o "$WORK/uprobe-s.upatch" --vmlinux vendor/linux/vmlinux.h \
+		--name uprobe-multi-s-test --key "$WORK/k.pem" \
+		--cert "$WORK/c.der" ) >/dev/null 2>&1 &&
+	"$CHECK" "$WORK/uprobe-s.upatch" uprobe-multi \
+		"$WORK/target" "*Func" 2
+'
+
+test_expect_success 'a sleepable uretprobe.multi.s glob records the return kind' '
+	write_probe "*Func" "uretprobe.multi.s/$WORK/target:*Func" &&
+	( cd .. && "$B" "$WORK/probe.bpf.c" \
+		-o "$WORK/uretprobe-s.upatch" --vmlinux vendor/linux/vmlinux.h \
+		--name uretprobe-multi-s-test --key "$WORK/k.pem" \
+		--cert "$WORK/c.der" ) >/dev/null 2>&1 &&
+	"$CHECK" "$WORK/uretprobe-s.upatch" uretprobe-multi \
+		"$WORK/target" "*Func" 2
+'
+
+test_expect_success 'a sleepable uprobe.session.s is refused' '
+	refused "uprobe.session.s/$WORK/target:*Func"
 '
 
 test_done
