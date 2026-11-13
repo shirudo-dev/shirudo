@@ -162,6 +162,11 @@ struct prog_spec {
 	struct stat target_stat;
 };
 
+static inline bool kind_is_uprobe_multi(__u32 kind)
+{
+	return kind == UPATCH_ATTACH_UPROBE_MULTI || kind == UPATCH_ATTACH_URETPROBE_MULTI;
+}
+
 /*
  * The attach metadata of a load upatch, parsed strictly into one spec
  * per program, target_fd -1. 0 or -errno; free with prog_specs_free().

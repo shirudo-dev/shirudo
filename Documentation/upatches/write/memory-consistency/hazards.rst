@@ -49,7 +49,7 @@ program types against a second run and not others:
      - Can be preempted with preemptible RCU. The kernel skips a run of a
        program that is already running on the CPU, so a program does not
        nest in itself, but other programs can run in between.
-   * - ``lsm``, ``uprobe.multi``
+   * - ``lsm``, ``uprobe.multi``, ``uretprobe.multi``
      - Can be preempted with preemptible RCU and are not guarded: a
        second run of the same program can start on the CPU before the
        first one ends, and an ``lsm`` hook a softirq calls can run on top

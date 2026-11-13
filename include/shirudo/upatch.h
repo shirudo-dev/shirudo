@@ -201,6 +201,7 @@ enum upatch_attach_kind {
 	UPATCH_ATTACH_NETFILTER_IPV6_PRE_ROUTING = 6,
 	UPATCH_ATTACH_UPROBE_MULTI = 7,
 	UPATCH_ATTACH_XDP = 8,
+	UPATCH_ATTACH_URETPROBE_MULTI = 9,
 };
 
 /* Bit 4 is not a class: loopback has no native XDP, so nothing selects it. */
@@ -246,7 +247,7 @@ struct upatch_prog_metadata {
 
 /*
  * UPGM v1 optionally appends one UPUT block after the fixed program
- * entries. It is required when any program has UPROBE_MULTI attach kind
+ * entries. It is required when any program has a uprobe multi attach kind
  * and absent otherwise. Each variable-length record is followed by
  * path_len path bytes (without NUL), build_id_len build-ID bytes, and
  * nr_offsets little-endian __u64 file offsets. Records have no padding.

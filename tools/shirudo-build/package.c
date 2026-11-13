@@ -550,7 +550,8 @@ static bool unsupported_uprobe_section(const char *sec)
 		sec++;
 	if (!sec)
 		return false;
-	if (strncmp(sec, "uprobe.multi/", 13) == 0 && sec[13])
+	if ((strncmp(sec, "uprobe.multi/", 13) == 0 && sec[13]) ||
+	    (strncmp(sec, "uretprobe.multi/", 16) == 0 && sec[16]))
 		return false;
 	return strcmp(sec, "uprobe") == 0 ||
 	       strncmp(sec, "uprobe/", 7) == 0 ||
@@ -648,6 +649,10 @@ static __u32 attach_kind_from_section(const char *sec,
 	if (strncmp(sec, "uprobe.multi/", 13) == 0 && sec[13]) {
 		*target = sec + 13;
 		return UPATCH_ATTACH_UPROBE_MULTI;
+	}
+	if (strncmp(sec, "uretprobe.multi/", 16) == 0 && sec[16]) {
+		*target = sec + 16;
+		return UPATCH_ATTACH_URETPROBE_MULTI;
 	}
 	if (strcmp(sec, "cgroup_skb/ingress") == 0)
 		return UPATCH_ATTACH_CGROUP_SKB_INGRESS;
@@ -1282,7 +1287,7 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 			goto err_free;
 		}
 		if (unsupported_uprobe_section(sec)) {
-			pr_err("unsupported uprobe section '%s'; use uprobe.multi//absolute/path:function_glob (entry probes only)",
+			pr_err("unsupported uprobe section '%s'; use uprobe.multi//absolute/path:function_glob or uretprobe.multi//absolute/path:function_glob",
 			       sec);
 			err = -EOPNOTSUPP;
 			goto err_free;
@@ -1314,7 +1319,7 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 		kind = attach_kind_from_section(sec, &target);
 		if (kind == UPATCH_ATTACH_RAW_TRACEPOINT &&
 		    !default_attach_section(sec)) {
-			pr_err("unsupported section '%s'; supported are fentry, fexit, fmod_ret, lsm, tp_btf, kprobe, kretprobe, uprobe.multi, cgroup_skb, netfilter and xdp/<mask>",
+			pr_err("unsupported section '%s'; supported are fentry, fexit, fmod_ret, lsm, tp_btf, kprobe, kretprobe, uprobe.multi, uretprobe.multi, cgroup_skb, netfilter and xdp/<mask>",
 			       sec);
 			err = -EOPNOTSUPP;
 			goto err_free;
@@ -1344,7 +1349,7 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 			md->progs[i].xdp.device_classes = cpu_to_le32((__u32)mask);
 			i++;
 			continue;
-		} else if (kind == UPATCH_ATTACH_UPROBE_MULTI) {
+		} else if (kind_is_uprobe_multi(kind)) {
 			struct build_uprobe_target *ut =
 				&uprobe_targets[nr_uprobe_targets];
 
@@ -1354,10 +1359,10 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 						  sizeof(md->progs[i].target));
 			if (err) {
 				if (err == -EOPNOTSUPP)
-					pr_err("invalid uprobe.multi section '%s': ',' and '|' alternation are unsupported; use one '*'/'?' glob",
+					pr_err("invalid uprobe multi section '%s': ',' and '|' alternation are unsupported; use one '*'/'?' glob",
 					       sec);
 				else
-					pr_err("invalid uprobe.multi section '%s'; expected uprobe.multi//absolute/path:function_glob",
+					pr_err("invalid uprobe multi section '%s'; expected uprobe.multi//absolute/path:function_glob or uretprobe.multi//absolute/path:function_glob",
 					       sec);
 				goto err_free;
 			}
@@ -1367,10 +1372,10 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 						 md->progs[i].target, &ut->elf);
 			if (err) {
 				if (err == -ENOENT)
-					pr_err("uprobe.multi pattern '%s' matched no functions in %s (or the ELF has no GNU build ID)",
+					pr_err("uprobe multi pattern '%s' matched no functions in %s (or the ELF has no GNU build ID)",
 					       md->progs[i].target, ut->path);
 				else
-					pr_err("cannot resolve uprobe.multi target %s:%s: %s",
+					pr_err("cannot resolve uprobe multi target %s:%s: %s",
 					       ut->path, md->progs[i].target,
 					       strerror(-err));
 				goto err_free;

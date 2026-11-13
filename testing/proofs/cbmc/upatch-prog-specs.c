@@ -27,7 +27,7 @@ static bool needs_target(__u32 kind)
 {
 	return kind == UPATCH_ATTACH_KPROBE ||
 	       kind == UPATCH_ATTACH_KRETPROBE ||
-	       kind == UPATCH_ATTACH_UPROBE_MULTI;
+	       kind_is_uprobe_multi(kind);
 }
 
 static void uprobe_valid(const struct prog_spec *s)
@@ -51,7 +51,7 @@ static void uprobe_valid(const struct prog_spec *s)
 static void attach_valid(const struct prog_spec *s)
 {
 	__CPROVER_assert(!s->map[0], "no map");
-	__CPROVER_assert(s->kind <= UPATCH_ATTACH_XDP, "a known attach kind");
+	__CPROVER_assert(s->kind <= UPATCH_ATTACH_URETPROBE_MULTI, "a known attach kind");
 	if (s->kind == UPATCH_ATTACH_XDP)
 		__CPROVER_assert(s->device_classes &&
 				 !(s->device_classes & ~(__u32)UPATCH_XDP_ALL),
@@ -64,7 +64,7 @@ static void attach_valid(const struct prog_spec *s)
 	__CPROVER_assert(s->target[0], "a target");
 	__CPROVER_assert(s->kind == UPATCH_ATTACH_KPROBE || !s->offset,
 			 "an offset for a kprobe alone");
-	if (s->kind == UPATCH_ATTACH_UPROBE_MULTI)
+	if (kind_is_uprobe_multi(s->kind))
 		uprobe_valid(s);
 }
 
@@ -74,7 +74,7 @@ static void spec_valid(const struct prog_spec *s)
 	__CPROVER_assert(terminated(s->target, sizeof(s->target)) &&
 			 terminated(s->map, sizeof(s->map)),
 			 "terminated target and map");
-	if (s->kind != UPATCH_ATTACH_UPROBE_MULTI)
+	if (!kind_is_uprobe_multi(s->kind))
 		__CPROVER_assert(!s->uprobe_path && !s->uprobe_offsets,
 				 "uprobe targets for uprobes alone");
 	if (s->kind != UPATCH_ATTACH_XDP)

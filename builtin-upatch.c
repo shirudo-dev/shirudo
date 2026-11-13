@@ -1064,6 +1064,8 @@ static const char *attach_kind_name(__u32 kind)
 		return "uprobe.multi";
 	case UPATCH_ATTACH_XDP:
 		return "xdp";
+	case UPATCH_ATTACH_URETPROBE_MULTI:
+		return "uretprobe.multi";
 	default:
 		return "unknown";
 	}
@@ -1082,7 +1084,7 @@ static int prepare_uprobe_targets(struct prog_spec *specs,
 		struct stat opened_stat;
 		int path_fd, fd, ret;
 
-		if (spec->kind != UPATCH_ATTACH_UPROBE_MULTI)
+		if (!kind_is_uprobe_multi(spec->kind))
 			continue;
 		path_fd = open(spec->uprobe_path, O_PATH | O_CLOEXEC);
 		if (path_fd < 0)
@@ -1152,6 +1154,8 @@ static int prog_attach_uprobe_multi(int prog_fd,
 		ptr_to_u64(spec->uprobe_offsets);
 	attr.link_create.uprobe_multi.cnt = spec->nr_uprobe_offsets;
 	attr.link_create.uprobe_multi.flags = BPF_F_UPROBE_MULTI_PATH_FD;
+	if (spec->kind == UPATCH_ATTACH_URETPROBE_MULTI)
+		attr.link_create.uprobe_multi.flags |= BPF_F_UPROBE_MULTI_RETURN;
 	attr.link_create.uprobe_multi.path_fd = (__u32)spec->target_fd;
 	fd = syscall(__NR_bpf, BPF_LINK_CREATE, &attr, sizeof(attr));
 	return fd >= 0 ? (int)fd : -errno;
@@ -1176,6 +1180,7 @@ static int prog_attach_for_spec(int prog_fd,
 	case UPATCH_ATTACH_NETFILTER_IPV6_PRE_ROUTING:
 		return prog_attach_netfilter_ipv6_pre_routing(prog_fd);
 	case UPATCH_ATTACH_UPROBE_MULTI:
+	case UPATCH_ATTACH_URETPROBE_MULTI:
 		return prog_attach_uprobe_multi(prog_fd, spec);
 	case UPATCH_ATTACH_KPROBE:
 	case UPATCH_ATTACH_KRETPROBE:
@@ -1252,8 +1257,11 @@ static int link_matches_spec(int link_fd,
 			return -EXDEV;
 		return 0;
 	case UPATCH_ATTACH_UPROBE_MULTI:
+	case UPATCH_ATTACH_URETPROBE_MULTI:
+		ret = spec->kind == UPATCH_ATTACH_URETPROBE_MULTI;
 		if (info.type != BPF_LINK_TYPE_UPROBE_MULTI ||
-		    info.uprobe_multi.count != spec->nr_uprobe_offsets)
+		    info.uprobe_multi.count != spec->nr_uprobe_offsets ||
+		    !!(info.uprobe_multi.flags & BPF_F_UPROBE_MULTI_RETURN) != ret)
 			return -EXDEV;
 		return 0;
 	case UPATCH_ATTACH_FMOD_RET:
@@ -1568,7 +1576,7 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 
 		link_fd = prog_attach_for_spec(inner_fd, spec);
 		if (link_fd < 0) {
-			if (spec->kind == UPATCH_ATTACH_UPROBE_MULTI)
+			if (kind_is_uprobe_multi(spec->kind))
 				pr_err("attach prog %u (%s %s:%s): %s", i,
 				       attach_kind_name(spec->kind),
 				       spec->uprobe_path, spec->target,

@@ -631,7 +631,7 @@ static int parse_uprobe_targets(const __u8 **pos, const __u8 *end, struct prog_s
 		path_len = le32_to_cpu(record.path_len);
 		build_id_len = le32_to_cpu(record.build_id_len);
 		nr_offsets = le32_to_cpu(record.nr_offsets);
-		if (prog_idx >= nr_progs || specs[prog_idx].kind != UPATCH_ATTACH_UPROBE_MULTI ||
+		if (prog_idx >= nr_progs || !kind_is_uprobe_multi(specs[prog_idx].kind) ||
 		    specs[prog_idx].uprobe_path || path_len == 0 ||
 		    path_len >= UPATCH_UPROBE_PATH_MAX || build_id_len == 0 ||
 		    build_id_len > UPATCH_BUILD_ID_MAX || nr_offsets == 0 ||
@@ -662,7 +662,7 @@ static int parse_uprobe_targets(const __u8 **pos, const __u8 *end, struct prog_s
 		}
 	}
 	for (i = 0; i < nr_progs; i++) {
-		if (specs[i].kind == UPATCH_ATTACH_UPROBE_MULTI && !specs[i].uprobe_path)
+		if (kind_is_uprobe_multi(specs[i].kind) && !specs[i].uprobe_path)
 			return -EINVAL;
 	}
 	*pos = cursor;
@@ -762,6 +762,7 @@ int prog_specs_parse(const void *metadata, __u32 metadata_len,
 		case UPATCH_ATTACH_KRETPROBE:
 			break;
 		case UPATCH_ATTACH_UPROBE_MULTI:
+		case UPATCH_ATTACH_URETPROBE_MULTI:
 			if (prog.offset)
 				goto out;
 			nr_uprobes++;
@@ -791,7 +792,7 @@ int prog_specs_parse(const void *metadata, __u32 metadata_len,
 		spec->target[sizeof(spec->target) - 1] = '\0';
 		if (kind == UPATCH_ATTACH_KRETPROBE && spec->offset)
 			goto out;
-		if (kind == UPATCH_ATTACH_UPROBE_MULTI &&
+		if (kind_is_uprobe_multi(kind) &&
 		    (strchr(spec->target, ',') || strchr(spec->target, '|')))
 			goto out;
 	}

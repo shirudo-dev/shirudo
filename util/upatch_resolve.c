@@ -246,8 +246,9 @@ int upatch_resolve_location(struct btf *vbtf, const char *name,
 			xfree(path, path_size);
 			return -EINVAL;
 		}
-		ret = strsprintf(out, cap, "uprobe.multi/%s (%u funcs)", path,
-				 count) < 0 ? -E2BIG : 0;
+		ret = strsprintf(out, cap, "%s/%s (%u funcs)",
+				 linfo.uprobe_multi.flags & BPF_F_UPROBE_MULTI_RETURN ?
+				 "uretprobe.multi" : "uprobe.multi", path, count) < 0 ? -E2BIG : 0;
 		xfree(path, path_size);
 		return ret;
 	}

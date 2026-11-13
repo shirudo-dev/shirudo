@@ -55,8 +55,9 @@ reasoning; leave the plain form where only one guarded program, or only
 
 The kernel skips `kprobe` and `kretprobe` runs while another runs on the
 CPU or the CPU is in a `bpf()` map call, nested `fentry`, `fexit`,
-`fmod_ret` and `tp_btf` runs, and `kretprobe` returns beyond its
-instances, so a detector can miss what it looks for. Refuse an
+`fmod_ret` and `tp_btf` runs, `kretprobe` returns beyond its
+instances and `uretprobe.multi` returns beyond the task's 64, so a
+detector can miss what it looks for. Refuse an
 operation in an `lsm` program, never in `fmod_ret`: a skipped
 `fmod_ret` run lets the call through, and a task can arrange the skip.
 An `lsm` program does not see what an LSM before it refused, and its
