@@ -57,7 +57,8 @@ program types against a second run and not others:
    * - ``syscall``
      - Run with only migration disabled on any kernel and are not
        guarded: another task can preempt a run.
-   * - ``lsm.s``, ``fentry.s``, ``fexit.s``, ``fmod_ret.s``
+   * - ``lsm.s``, ``fentry.s``, ``fexit.s``, ``fmod_ret.s``,
+       ``uprobe.multi.s``, ``uretprobe.multi.s``
      - Can be preempted and sleep on any kernel. Another run can take the
        CPU at any sleeping call.
    * - ``cgroup_skb``, ``netfilter``

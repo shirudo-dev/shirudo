@@ -544,14 +544,42 @@ static bool unsupported_kprobe_section(const char *sec)
 		strncmp(sec, "kretprobe.multi", 15) == 0);
 }
 
+/*
+ * The sleepable forms take the same attach kinds: BPF_F_SLEEPABLE is a
+ * load flag, which the signed loader carries, not part of the link.
+ */
+static const char *uprobe_multi_section_target(const char *sec, __u32 *kind)
+{
+	static const struct {
+		const char *prefix;
+		__u32 kind;
+	} forms[] = {
+		{ "uprobe.multi/", UPATCH_ATTACH_UPROBE_MULTI },
+		{ "uprobe.multi.s/", UPATCH_ATTACH_UPROBE_MULTI },
+		{ "uretprobe.multi/", UPATCH_ATTACH_URETPROBE_MULTI },
+		{ "uretprobe.multi.s/", UPATCH_ATTACH_URETPROBE_MULTI },
+	};
+	size_t i, n;
+
+	for (i = 0; i < ARRAY_SIZE(forms); i++) {
+		n = strlen(forms[i].prefix);
+		if (!strncmp(sec, forms[i].prefix, n) && sec[n]) {
+			*kind = forms[i].kind;
+			return sec + n;
+		}
+	}
+	return NULL;
+}
+
 static bool unsupported_uprobe_section(const char *sec)
 {
+	__u32 kind;
+
 	if (sec && sec[0] == '?')
 		sec++;
 	if (!sec)
 		return false;
-	if ((strncmp(sec, "uprobe.multi/", 13) == 0 && sec[13]) ||
-	    (strncmp(sec, "uretprobe.multi/", 16) == 0 && sec[16]))
+	if (uprobe_multi_section_target(sec, &kind))
 		return false;
 	return strcmp(sec, "uprobe") == 0 ||
 	       strncmp(sec, "uprobe/", 7) == 0 ||
@@ -633,6 +661,8 @@ static bool default_attach_section(const char *sec)
 static __u32 attach_kind_from_section(const char *sec,
 				      const char **target)
 {
+	__u32 kind;
+
 	*target = NULL;
 	if (!sec)
 		return UPATCH_ATTACH_RAW_TRACEPOINT;
@@ -646,14 +676,9 @@ static __u32 attach_kind_from_section(const char *sec,
 		*target = sec + 10;
 		return UPATCH_ATTACH_KRETPROBE;
 	}
-	if (strncmp(sec, "uprobe.multi/", 13) == 0 && sec[13]) {
-		*target = sec + 13;
-		return UPATCH_ATTACH_UPROBE_MULTI;
-	}
-	if (strncmp(sec, "uretprobe.multi/", 16) == 0 && sec[16]) {
-		*target = sec + 16;
-		return UPATCH_ATTACH_URETPROBE_MULTI;
-	}
+	*target = uprobe_multi_section_target(sec, &kind);
+	if (*target)
+		return kind;
 	if (strcmp(sec, "cgroup_skb/ingress") == 0)
 		return UPATCH_ATTACH_CGROUP_SKB_INGRESS;
 	if (strcmp(sec, "cgroup_skb/egress") == 0)
@@ -1287,7 +1312,7 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 			goto err_free;
 		}
 		if (unsupported_uprobe_section(sec)) {
-			pr_err("unsupported uprobe section '%s'; use uprobe.multi//absolute/path:function_glob or uretprobe.multi//absolute/path:function_glob",
+			pr_err("unsupported uprobe section '%s'; use uprobe.multi[.s]//absolute/path:function_glob or uretprobe.multi[.s]//absolute/path:function_glob",
 			       sec);
 			err = -EOPNOTSUPP;
 			goto err_free;
@@ -1319,7 +1344,7 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 		kind = attach_kind_from_section(sec, &target);
 		if (kind == UPATCH_ATTACH_RAW_TRACEPOINT &&
 		    !default_attach_section(sec)) {
-			pr_err("unsupported section '%s'; supported are fentry, fexit, fmod_ret, lsm, tp_btf, kprobe, kretprobe, uprobe.multi, uretprobe.multi, cgroup_skb, netfilter and xdp/<mask>",
+			pr_err("unsupported section '%s'; supported are fentry, fexit, fmod_ret, lsm, tp_btf, kprobe, kretprobe, uprobe.multi[.s], uretprobe.multi[.s], cgroup_skb, netfilter and xdp/<mask>",
 			       sec);
 			err = -EOPNOTSUPP;
 			goto err_free;
@@ -1362,7 +1387,7 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 					pr_err("invalid uprobe multi section '%s': ',' and '|' alternation are unsupported; use one '*'/'?' glob",
 					       sec);
 				else
-					pr_err("invalid uprobe multi section '%s'; expected uprobe.multi//absolute/path:function_glob or uretprobe.multi//absolute/path:function_glob",
+					pr_err("invalid uprobe multi section '%s'; expected uprobe.multi[.s]//absolute/path:function_glob or uretprobe.multi[.s]//absolute/path:function_glob",
 					       sec);
 				goto err_free;
 			}
