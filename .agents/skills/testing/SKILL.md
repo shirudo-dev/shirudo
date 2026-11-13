@@ -92,6 +92,40 @@ parser of input from outside the host gets a target in `testing/fuzz/`.
   when only that variable changes: remove
   `tools/shirudo-build/compile.o` first.
 
+## Run unconfined
+
+No VM goal needs root. A terminal installed as a snap, such as
+Alacritty, gives everything it starts its `snap.<name>` AppArmor label
+(`cat /proc/self/attr/current`), and Ubuntu's `swtpm` profile takes
+signals only from unconfined processes and from `swtpm`: Ctrl-C, the
+runner's cleanup and `vm-stop` then leave `swtpm` running. Run the goal
+as a transient user service, which runs unconfined. It starts with the
+environment and limits of the user manager, not the shell's: pass on the
+`PATH` and `LD_LIBRARY_PATH` a host with an older OpenSSL or clang than
+the tree needs, and check that `systemctl --user show -p
+DefaultLimitMEMLOCK` reads `infinity`, the unlimited `ulimit -l` a VM
+goal needs.
+
+```sh
+systemd-run --user --pipe --same-dir --wait --collect \
+	--setenv=PATH="$PATH" --setenv=LD_LIBRARY_PATH="$LD_LIBRARY_PATH" \
+	--setenv=PKG_CONFIG_PATH="$PKG_CONFIG_PATH" \
+	--setenv=SHIRUDO_CLANG_PATH="${SHIRUDO_CLANG_PATH:-/usr/bin/clang}" \
+	make -C testing <goal>
+```
+
+- `make -C testing vm` adds `-p KillMode=process`, so that QEMU and
+  `swtpm`, started inside the unit, outlive it. Leave it out for the
+  families and `end2end`, whose VM ends with the run: stopping the unit,
+  `systemctl --user stop run-u<N>.service` with the name `systemd-run`
+  prints, then stops everything the run started.
+- Run `vm-stop` and `vm-clean` the same way. `vm-ssh` and `vm-console`
+  need the terminal and signal nothing; run them from the shell.
+- A leftover `swtpm` dies the same way, by PID:
+  `systemd-run --user --wait --collect --quiet kill <pid>...`. A
+  `pkill -f <pattern>` also matches the shell whose command line
+  carries the pattern, and kills it.
+
 ## Kernel
 
 The optional argument is passed as `KERNEL=`. Leave it out for
@@ -145,7 +179,7 @@ anyway. Never stop, replace or clean a VM without that answer.
 
 ## Commands
 
-Run each as yourself; root is not needed.
+Run each as yourself, as above; root is not needed.
 
 ```sh
 make -C testing vm VM_NAME=<name> [KERNEL=<kernel>]
