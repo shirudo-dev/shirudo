@@ -743,6 +743,8 @@ queue_fixture build_fixture arena-tree-serializer.bpf.c shirudo-test-arena-tree 
 queue_fixture build_fixture uprobe-multi.bpf.c shirudo-test-uprobe-multi "$FIXTURE_WORK/trusted"
 queue_fixture build_fixture uretprobe-multi.bpf.c shirudo-test-uretprobe-multi "$FIXTURE_WORK/trusted"
 queue_fixture build_fixture uprobe-multi-sleepable.bpf.c shirudo-test-uprobe-multi-sleepable "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture uprobe.bpf.c shirudo-test-uprobe "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture uretprobe.bpf.c shirudo-test-uretprobe "$FIXTURE_WORK/trusted"
 queue_fixture build_fixture scope-netfilter.bpf.c shirudo-test-scope-netfilter "$FIXTURE_WORK/trusted"
 queue_fixture build_fixture scope-cgroup.bpf.c shirudo-test-scope-cgroup "$FIXTURE_WORK/trusted"
 queue_fixture build_fixture scope-kprobe.bpf.c shirudo-test-scope-kprobe "$FIXTURE_WORK/trusted"
@@ -782,6 +784,12 @@ uretprobe_payload="$($REPO_ROOT/shirudo upatch info \
 	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
 uprobe_sleepable_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/shirudo-test-uprobe-multi-sleepable.upatch" --json |
+	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+uprobe_single_payload="$($REPO_ROOT/shirudo upatch info \
+	"$TMP_DIR/fixtures/shirudo-test-uprobe.upatch" --json |
+	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+uretprobe_single_payload="$($REPO_ROOT/shirudo upatch info \
+	"$TMP_DIR/fixtures/shirudo-test-uretprobe.upatch" --json |
 	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
 otel_backend_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/shirudo-test-otel-backend.upatch" --json |
@@ -851,6 +859,8 @@ kernel-obs $observability_anomaly_payload kernel-obs-cred-anomaly.unload.upatch
 shirudo-test-uprobe-multi $uprobe_payload shirudo-test-uprobe-multi.unload.upatch
 shirudo-test-uretprobe-multi $uretprobe_payload shirudo-test-uretprobe-multi.unload.upatch
 shirudo-test-uprobe-multi-sleepable $uprobe_sleepable_payload shirudo-test-uprobe-multi-sleepable.unload.upatch
+shirudo-test-uprobe $uprobe_single_payload shirudo-test-uprobe.unload.upatch
+shirudo-test-uretprobe $uretprobe_single_payload shirudo-test-uretprobe.unload.upatch
 EOF
 wait_fixture_jobs
 

@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 #
-# t3007 -- uprobe.multi and uretprobe.multi SEC metadata, sleepable forms
-# included, resolves a standard libbpf glob to sorted ELF file offsets and
-# records the target's GNU build ID; a uprobe section without a binary is
-# refused.
+# t3007 -- uprobe, uretprobe, uprobe.multi and uretprobe.multi SEC
+# metadata, sleepable forms included, resolves a function, a function and
+# offset, a raw file offset or a standard libbpf glob to ELF file offsets
+# and records the target's GNU build ID.
 
 cd "$(dirname "$0")/../.."
 . ./test-lib.sh
@@ -111,6 +111,75 @@ refused() {
 
 test_expect_success 'a uprobe without a binary is refused' '
 	refused "uprobe"
+'
+
+# build_probe <name> <section>: build the probe into $WORK/<name>.upatch.
+build_probe() {
+	write_probe "" "$2" &&
+	( cd .. && "$B" "$WORK/probe.bpf.c" \
+		-o "$WORK/$1.upatch" --vmlinux vendor/linux/vmlinux.h \
+		--name "$1" --key "$WORK/k.pem" \
+		--cert "$WORK/c.der" ) >"$WORK/$1.log" 2>&1
+}
+
+# check_probe <name> <mode> <target> <entry offset> <file offset>
+check_probe() {
+	"$CHECK" "$WORK/$1.upatch" "$2" "$WORK/target" "$3" "$4" >"$WORK/$1.out" &&
+	[ "$(head -n 1 "$WORK/$1.out")" = "$5" ]
+}
+
+test_expect_success 'a uprobe on a function records its one file offset' '
+	build_probe uprobe-func "uprobe/$WORK/target:fooFunc" &&
+	"$CHECK" "$WORK/uprobe-func.upatch" uprobe "$WORK/target" fooFunc 0 \
+		>"$WORK/uprobe-func.out" &&
+	base=$(head -n 1 "$WORK/uprobe-func.out") &&
+	[ "$base" -gt 0 ] &&
+	echo "$base" >"$WORK/base"
+'
+
+base=$(cat "$WORK/base" 2>/dev/null || echo 0)
+
+test_expect_success 'a uprobe at function+offset adds the offset' '
+	build_probe uprobe-off "uprobe/$WORK/target:fooFunc+4" &&
+	check_probe uprobe-off uprobe fooFunc 4 $((base + 4))
+'
+
+test_expect_success 'a uprobe at a raw file offset records it as given' '
+	raw=$(printf "0x%x" "$base") &&
+	build_probe uprobe-raw "uprobe/$WORK/target:$raw" &&
+	check_probe uprobe-raw uprobe "$raw" 0 "$base"
+'
+
+test_expect_success 'a uretprobe on a function records the return kind' '
+	build_probe uretprobe-func "uretprobe/$WORK/target:fooFunc" &&
+	check_probe uretprobe-func uretprobe fooFunc 0 "$base"
+'
+
+test_expect_success 'the sleepable uprobe.s and uretprobe.s take the same kinds' '
+	build_probe uprobe-s "uprobe.s/$WORK/target:fooFunc" &&
+	check_probe uprobe-s uprobe fooFunc 0 "$base" &&
+	build_probe uretprobe-s "uretprobe.s/$WORK/target:fooFunc" &&
+	check_probe uretprobe-s uretprobe fooFunc 0 "$base"
+'
+
+test_expect_success 'a uretprobe offset is refused' '
+	! build_probe uretprobe-off "uretprobe/$WORK/target:fooFunc+4" &&
+	grep -q "uretprobe offsets are unsupported" "$WORK/uretprobe-off.log"
+'
+
+test_expect_success 'a uprobe on a missing function is refused' '
+	! build_probe uprobe-missing "uprobe/$WORK/target:noSuchFunc" &&
+	grep -q "not found in" "$WORK/uprobe-missing.log"
+'
+
+test_expect_success 'a uprobe offset past the end of the file is refused' '
+	! build_probe uprobe-past "uprobe/$WORK/target:0x10000000" &&
+	grep -q "lies outside" "$WORK/uprobe-past.log"
+'
+
+test_expect_success 'a uprobe on a relative path is refused' '
+	! build_probe uprobe-relative "uprobe/target:fooFunc" &&
+	grep -q "invalid uprobe section" "$WORK/uprobe-relative.log"
 '
 
 test_expect_success 'a sleepable uprobe.multi.s glob records the entry kind' '
