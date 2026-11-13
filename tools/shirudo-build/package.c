@@ -548,12 +548,16 @@ static bool unsupported_kprobe_section(const char *sec)
  * The sleepable forms take the same attach kinds: BPF_F_SLEEPABLE is a
  * load flag, which the signed loader carries, not part of the link.
  */
-static const char *uprobe_multi_section_target(const char *sec, __u32 *kind)
+static const char *uprobe_section_target(const char *sec, __u32 *kind)
 {
 	static const struct {
 		const char *prefix;
 		__u32 kind;
 	} forms[] = {
+		{ "uprobe/", UPATCH_ATTACH_UPROBE },
+		{ "uprobe.s/", UPATCH_ATTACH_UPROBE },
+		{ "uretprobe/", UPATCH_ATTACH_URETPROBE },
+		{ "uretprobe.s/", UPATCH_ATTACH_URETPROBE },
 		{ "uprobe.multi/", UPATCH_ATTACH_UPROBE_MULTI },
 		{ "uprobe.multi.s/", UPATCH_ATTACH_UPROBE_MULTI },
 		{ "uretprobe.multi/", UPATCH_ATTACH_URETPROBE_MULTI },
@@ -579,7 +583,7 @@ static bool unsupported_uprobe_section(const char *sec)
 		sec++;
 	if (!sec)
 		return false;
-	if (uprobe_multi_section_target(sec, &kind))
+	if (uprobe_section_target(sec, &kind))
 		return false;
 	return strcmp(sec, "uprobe") == 0 ||
 	       strncmp(sec, "uprobe/", 7) == 0 ||
@@ -676,7 +680,7 @@ static __u32 attach_kind_from_section(const char *sec,
 		*target = sec + 10;
 		return UPATCH_ATTACH_KRETPROBE;
 	}
-	*target = uprobe_multi_section_target(sec, &kind);
+	*target = uprobe_section_target(sec, &kind);
 	if (*target)
 		return kind;
 	if (strcmp(sec, "cgroup_skb/ingress") == 0)
@@ -763,6 +767,61 @@ static int split_probe_target(const char *src, char *target,
 	memcpy(target, src, len);
 	target[len] = '\0';
 	return 0;
+}
+
+/*
+ * <path>:<function>[+<offset>] or <path>:0x<file offset> of a uprobe or
+ * uretprobe section into prog's target and offset and one file offset
+ * in elf.
+ */
+static int resolve_single_uprobe(const char *sec, __u32 kind, const char *src,
+				 struct upatch_prog_entry *prog, char **path,
+				 __u32 *path_len, struct elf_target *elf)
+{
+	char loc[UPATCH_ATTACH_TARGET_MAX];
+	const char *func = NULL;
+	__u64 offset = 0;
+	int err;
+
+	err = split_uprobe_target(src, path, path_len, loc, sizeof(loc));
+	if (err)
+		goto invalid;
+	if (loc[0] == '0' && (loc[1] == 'x' || loc[1] == 'X')) {
+		err = parse_x64(loc + 2, strlen(loc + 2), UINT64_MAX, &offset);
+		if (err || strscpy(prog->target, loc, sizeof(prog->target)) < 0)
+			goto invalid;
+	} else {
+		err = split_probe_target(loc, prog->target, sizeof(prog->target), &offset);
+		if (err)
+			goto invalid;
+		if (kind == UPATCH_ATTACH_URETPROBE && offset) {
+			pr_err("uretprobe offsets are unsupported in section '%s'", sec);
+			return -EINVAL;
+		}
+		func = prog->target;
+		prog->offset = cpu_to_le64(offset);
+	}
+	err = elf_target_resolve_func(*path, func, offset, elf);
+	if (err == -ENOENT)
+		pr_err("uprobe function '%s' not found in %s (or the ELF has no GNU build ID)",
+		       prog->target, *path);
+	else if (err == -ERANGE)
+		pr_err("uprobe offset in section '%s' lies outside %s", sec, *path);
+	else if (err)
+		pr_err("cannot resolve uprobe target %s:%s: %s", *path, prog->target,
+		       strerror(-err));
+	if (err)
+		return err;
+	/* The kernel reports a uprobe link's offset in 32 bits. */
+	if (elf->offsets[0] > UINT32_MAX) {
+		pr_err("uprobe offset in section '%s' is beyond 4 GiB of %s", sec, *path);
+		return -ERANGE;
+	}
+	return 0;
+invalid:
+	pr_err("invalid uprobe section '%s'; expected uprobe[.s]//absolute/path:function[+offset], uretprobe[.s]//absolute/path:function or a 0x file offset in place of the function",
+	       sec);
+	return -EINVAL;
 }
 
 static bool is_syscall_section(const char *sec)
@@ -1312,7 +1371,7 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 			goto err_free;
 		}
 		if (unsupported_uprobe_section(sec)) {
-			pr_err("unsupported uprobe section '%s'; use uprobe.multi[.s]//absolute/path:function_glob or uretprobe.multi[.s]//absolute/path:function_glob",
+			pr_err("unsupported uprobe section '%s'; use uprobe[.s]//absolute/path:function[+offset], uretprobe[.s]//absolute/path:function, uprobe.multi[.s]//absolute/path:function_glob or uretprobe.multi[.s]//absolute/path:function_glob",
 			       sec);
 			err = -EOPNOTSUPP;
 			goto err_free;
@@ -1344,7 +1403,7 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 		kind = attach_kind_from_section(sec, &target);
 		if (kind == UPATCH_ATTACH_RAW_TRACEPOINT &&
 		    !default_attach_section(sec)) {
-			pr_err("unsupported section '%s'; supported are fentry, fexit, fmod_ret, lsm, tp_btf, kprobe, kretprobe, uprobe.multi[.s], uretprobe.multi[.s], cgroup_skb, netfilter and xdp/<mask>",
+			pr_err("unsupported section '%s'; supported are fentry, fexit, fmod_ret, lsm, tp_btf, kprobe, kretprobe, uprobe[.s], uretprobe[.s], uprobe.multi[.s], uretprobe.multi[.s], cgroup_skb, netfilter and xdp/<mask>",
 			       sec);
 			err = -EOPNOTSUPP;
 			goto err_free;
@@ -1372,6 +1431,17 @@ static int build_prog_metadata(struct bpf_object *obj, __u32 nr_maps,
 			}
 			xdp_classes |= (__u32)mask;
 			md->progs[i].xdp.device_classes = cpu_to_le32((__u32)mask);
+			i++;
+			continue;
+		} else if (kind_is_uprobe_single(kind)) {
+			struct build_uprobe_target *ut =
+				&uprobe_targets[nr_uprobe_targets++];
+
+			ut->prog_idx = i;
+			err = resolve_single_uprobe(sec, kind, target, &md->progs[i], &ut->path,
+						    &ut->path_len, &ut->elf);
+			if (err)
+				goto err_free;
 			i++;
 			continue;
 		} else if (kind_is_uprobe_multi(kind)) {

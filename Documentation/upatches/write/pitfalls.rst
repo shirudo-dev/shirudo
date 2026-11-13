@@ -33,11 +33,11 @@ program's ``recursion_misses``, which ``struct bpf_prog_info`` reports:
 - The return of a function a ``kretprobe`` watches, when more calls of
   it are in flight than the probe has instances for: the larger of 10
   and twice the number of CPUs.
-- The return of a function a ``uretprobe.multi`` or ``uretprobe.multi.s``
-  watches, when the task already waits on the returns of 64 calls that
-  return probes watch, and the return of a function that leaves by
-  ``longjmp()`` or ends the thread. The kernel logs the first case,
-  rate-limited, and counts neither.
+- The return of a function a ``uretprobe``, a ``uretprobe.multi`` or
+  their ``.s`` forms watch, when the task already waits on the returns of
+  64 calls that return probes watch, and the return of a function that
+  leaves by ``longjmp()`` or ends the thread. The kernel logs the first
+  case, rate-limited, and counts neither.
 
 A detector built on these kinds can therefore miss the event it looks
 for, and a count it keeps is a lower bound. ``lsm`` and ``xdp`` programs

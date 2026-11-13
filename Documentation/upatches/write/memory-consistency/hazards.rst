@@ -49,7 +49,8 @@ program types against a second run and not others:
      - Can be preempted with preemptible RCU. The kernel skips a run of a
        program that is already running on the CPU, so a program does not
        nest in itself, but other programs can run in between.
-   * - ``lsm``, ``uprobe.multi``, ``uretprobe.multi``
+   * - ``lsm``, ``uprobe``, ``uretprobe``, ``uprobe.multi``,
+       ``uretprobe.multi``
      - Can be preempted with preemptible RCU and are not guarded: a
        second run of the same program can start on the CPU before the
        first one ends, and an ``lsm`` hook a softirq calls can run on top
@@ -57,8 +58,8 @@ program types against a second run and not others:
    * - ``syscall``
      - Run with only migration disabled on any kernel and are not
        guarded: another task can preempt a run.
-   * - ``lsm.s``, ``fentry.s``, ``fexit.s``, ``fmod_ret.s``,
-       ``uprobe.multi.s``, ``uretprobe.multi.s``
+   * - ``lsm.s``, ``fentry.s``, ``fexit.s``, ``fmod_ret.s``, ``uprobe.s``,
+       ``uretprobe.s``, ``uprobe.multi.s``, ``uretprobe.multi.s``
      - Can be preempted and sleep on any kernel. Another run can take the
        CPU at any sleeping call.
    * - ``cgroup_skb``, ``netfilter``

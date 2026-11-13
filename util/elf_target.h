@@ -20,6 +20,13 @@ struct elf_target {
 int elf_target_resolve(const char *path, const char *pattern,
 		       struct elf_target *out);
 
+/*
+ * One file offset: func's plus offset, or offset itself when func is NULL,
+ * inside the file at path. 0 or -errno; free with elf_target_free().
+ */
+int elf_target_resolve_func(const char *path, const char *func, __u64 offset,
+			    struct elf_target *out);
+
 int elf_build_id_fd(int fd,
 		    __u8 build_id[UPATCH_BUILD_ID_MAX],
 		    __u32 *build_id_len);

@@ -631,11 +631,12 @@ static int parse_uprobe_targets(const __u8 **pos, const __u8 *end, struct prog_s
 		path_len = le32_to_cpu(record.path_len);
 		build_id_len = le32_to_cpu(record.build_id_len);
 		nr_offsets = le32_to_cpu(record.nr_offsets);
-		if (prog_idx >= nr_progs || !kind_is_uprobe_multi(specs[prog_idx].kind) ||
+		if (prog_idx >= nr_progs || !kind_has_uprobe_target(specs[prog_idx].kind) ||
 		    specs[prog_idx].uprobe_path || path_len == 0 ||
 		    path_len >= UPATCH_UPROBE_PATH_MAX || build_id_len == 0 ||
 		    build_id_len > UPATCH_BUILD_ID_MAX || nr_offsets == 0 ||
-		    nr_offsets > UPATCH_UPROBE_OFFSETS_MAX)
+		    nr_offsets > UPATCH_UPROBE_OFFSETS_MAX ||
+		    (kind_is_uprobe_single(specs[prog_idx].kind) && nr_offsets != 1))
 			return -EINVAL;
 		payload_len = (size_t)path_len + build_id_len + (size_t)nr_offsets * sizeof(__u64);
 		if ((size_t)(end - cursor) < payload_len ||
@@ -662,7 +663,7 @@ static int parse_uprobe_targets(const __u8 **pos, const __u8 *end, struct prog_s
 		}
 	}
 	for (i = 0; i < nr_progs; i++) {
-		if (kind_is_uprobe_multi(specs[i].kind) && !specs[i].uprobe_path)
+		if (kind_has_uprobe_target(specs[i].kind) && !specs[i].uprobe_path)
 			return -EINVAL;
 	}
 	*pos = cursor;
@@ -767,6 +768,10 @@ int prog_specs_parse(const void *metadata, __u32 metadata_len,
 				goto out;
 			nr_uprobes++;
 			break;
+		case UPATCH_ATTACH_UPROBE:
+		case UPATCH_ATTACH_URETPROBE:
+			nr_uprobes++;
+			break;
 		case UPATCH_ATTACH_XDP:
 			spec->device_classes = le32_to_cpu(prog.xdp.device_classes);
 			/* A device runs one native XDP program at a time. */
@@ -790,7 +795,8 @@ int prog_specs_parse(const void *metadata, __u32 metadata_len,
 		spec->offset = le64_to_cpu(prog.offset);
 		memcpy(spec->target, prog.target, sizeof(spec->target));
 		spec->target[sizeof(spec->target) - 1] = '\0';
-		if (kind == UPATCH_ATTACH_KRETPROBE && spec->offset)
+		if ((kind == UPATCH_ATTACH_KRETPROBE || kind == UPATCH_ATTACH_URETPROBE) &&
+		    spec->offset)
 			goto out;
 		if (kind_is_uprobe_multi(kind) &&
 		    (strchr(spec->target, ',') || strchr(spec->target, '|')))

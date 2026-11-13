@@ -202,6 +202,8 @@ enum upatch_attach_kind {
 	UPATCH_ATTACH_UPROBE_MULTI = 7,
 	UPATCH_ATTACH_XDP = 8,
 	UPATCH_ATTACH_URETPROBE_MULTI = 9,
+	UPATCH_ATTACH_UPROBE = 10,
+	UPATCH_ATTACH_URETPROBE = 11,
 };
 
 /* Bit 4 is not a class: loopback has no native XDP, so nothing selects it. */
@@ -223,13 +225,13 @@ struct upatch_prog_entry {
 	__le32		role;		/* enum upatch_prog_role */
 	__le32		kind;		/* enum upatch_attach_kind */
 	union {
-		__le64 offset;		/* kprobe offset */
+		__le64 offset;		/* kprobe or uprobe offset in the function */
 		struct {
 			__le32 device_classes;
 			__le32 reserved;
 		} xdp;
 	};
-	char		target[UPATCH_ATTACH_TARGET_MAX]; /* kprobe symbol */
+	char		target[UPATCH_ATTACH_TARGET_MAX]; /* probe symbol or glob */
 	char		map[UPATCH_PROG_MAP_MAX];
 };
 
@@ -247,8 +249,8 @@ struct upatch_prog_metadata {
 
 /*
  * UPGM v1 optionally appends one UPUT block after the fixed program
- * entries. It is required when any program has a uprobe multi attach kind
- * and absent otherwise. Each variable-length record is followed by
+ * entries. It is required when any program has a uprobe attach kind and
+ * absent otherwise; a single uprobe has one offset. Each record is followed by
  * path_len path bytes (without NUL), build_id_len build-ID bytes, and
  * nr_offsets little-endian __u64 file offsets. Records have no padding.
  */

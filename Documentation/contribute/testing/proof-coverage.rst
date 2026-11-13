@@ -297,9 +297,10 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
      - The uprobe target records of ``prog_specs_parse()``
      - One program and one record in 226 bytes, path and build ID up to
        9 bytes, up to 2 offsets
-     - An absolute path of its stated length without a NUL, a target
-       without ``,`` or ``|``, a build ID of 1 to 64 bytes, offsets
-       non-empty and strictly rising, everything freed
+     - An absolute path of its stated length without a NUL, a glob
+       without ``,`` or ``|``, one offset for a single uprobe, a build ID
+       of 1 to 64 bytes, offsets non-empty and strictly rising, everything
+       freed
    * - ``upatch-loader``
      - ``loader_lddw()``, ``sys_bpf_call()``, ``map_create_slot()``,
        ``map_update_slot()``, ``loader_store_source()``

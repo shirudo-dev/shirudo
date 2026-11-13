@@ -27,7 +27,7 @@ static bool needs_target(__u32 kind)
 {
 	return kind == UPATCH_ATTACH_KPROBE ||
 	       kind == UPATCH_ATTACH_KRETPROBE ||
-	       kind_is_uprobe_multi(kind);
+	       kind_has_uprobe_target(kind);
 }
 
 static void uprobe_valid(const struct prog_spec *s)
@@ -37,8 +37,11 @@ static void uprobe_valid(const struct prog_spec *s)
 	__CPROVER_assert(s->uprobe_path && s->uprobe_path[0] == '/' &&
 			 strnlen(s->uprobe_path, s->uprobe_path_len + 1) ==
 			 s->uprobe_path_len, "an absolute path of its length");
-	__CPROVER_assert(!strchr(s->target, ',') && !strchr(s->target, '|'),
-			 "a target without separators");
+	if (kind_is_uprobe_multi(s->kind))
+		__CPROVER_assert(!strchr(s->target, ',') && !strchr(s->target, '|'),
+				 "a glob without separators");
+	else
+		__CPROVER_assert(s->nr_uprobe_offsets == 1, "one offset for a uprobe");
 	__CPROVER_assert(s->build_id_len && s->build_id_len <=
 			 UPATCH_BUILD_ID_MAX, "a build ID");
 	__CPROVER_assert(s->nr_uprobe_offsets && s->uprobe_offsets,
@@ -51,7 +54,7 @@ static void uprobe_valid(const struct prog_spec *s)
 static void attach_valid(const struct prog_spec *s)
 {
 	__CPROVER_assert(!s->map[0], "no map");
-	__CPROVER_assert(s->kind <= UPATCH_ATTACH_URETPROBE_MULTI, "a known attach kind");
+	__CPROVER_assert(s->kind <= UPATCH_ATTACH_URETPROBE, "a known attach kind");
 	if (s->kind == UPATCH_ATTACH_XDP)
 		__CPROVER_assert(s->device_classes &&
 				 !(s->device_classes & ~(__u32)UPATCH_XDP_ALL),
@@ -62,9 +65,9 @@ static void attach_valid(const struct prog_spec *s)
 		return;
 	}
 	__CPROVER_assert(s->target[0], "a target");
-	__CPROVER_assert(s->kind == UPATCH_ATTACH_KPROBE || !s->offset,
-			 "an offset for a kprobe alone");
-	if (kind_is_uprobe_multi(s->kind))
+	__CPROVER_assert(s->kind == UPATCH_ATTACH_KPROBE || s->kind == UPATCH_ATTACH_UPROBE ||
+			 !s->offset, "an offset for a kprobe or uprobe alone");
+	if (kind_has_uprobe_target(s->kind))
 		uprobe_valid(s);
 }
 
@@ -74,7 +77,7 @@ static void spec_valid(const struct prog_spec *s)
 	__CPROVER_assert(terminated(s->target, sizeof(s->target)) &&
 			 terminated(s->map, sizeof(s->map)),
 			 "terminated target and map");
-	if (!kind_is_uprobe_multi(s->kind))
+	if (!kind_has_uprobe_target(s->kind))
 		__CPROVER_assert(!s->uprobe_path && !s->uprobe_offsets,
 				 "uprobe targets for uprobes alone");
 	if (s->kind != UPATCH_ATTACH_XDP)

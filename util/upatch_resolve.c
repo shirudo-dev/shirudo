@@ -194,6 +194,30 @@ static int xdp_location(const char *name, char *out, size_t cap)
 	return n < 0 ? -E2BIG : 0;
 }
 
+static bool link_is_uprobe(const struct bpf_link_info *linfo)
+{
+	return linfo->type == BPF_LINK_TYPE_PERF_EVENT &&
+	       (linfo->perf_event.type == BPF_PERF_EVENT_UPROBE ||
+		linfo->perf_event.type == BPF_PERF_EVENT_URETPROBE);
+}
+
+static int uprobe_location(int link_fd, char *out, size_t cap)
+{
+	struct bpf_link_info linfo = {};
+	char path[PATH_MAX] = {};
+	__u32 len = sizeof(linfo);
+
+	linfo.perf_event.uprobe.file_name = ptr_to_u64(path);
+	linfo.perf_event.uprobe.name_len = sizeof(path);
+	if (bpf_link_get_info_by_fd(link_fd, &linfo, &len))
+		return -errno;
+	if (!link_is_uprobe(&linfo) || !memchr(path, '\0', sizeof(path)))
+		return -EINVAL;
+	return strsprintf(out, cap, "%s/%s+0x%x",
+			  linfo.perf_event.type == BPF_PERF_EVENT_URETPROBE ? "uretprobe" : "uprobe",
+			  path, linfo.perf_event.uprobe.offset) < 0 ? -E2BIG : 0;
+}
+
 int upatch_resolve_location(struct btf *vbtf, const char *name,
 			    char *out, size_t cap)
 {
@@ -250,6 +274,11 @@ int upatch_resolve_location(struct btf *vbtf, const char *name,
 				 linfo.uprobe_multi.flags & BPF_F_UPROBE_MULTI_RETURN ?
 				 "uretprobe.multi" : "uprobe.multi", path, count) < 0 ? -E2BIG : 0;
 		xfree(path, path_size);
+		return ret;
+	}
+	if (link_is_uprobe(&linfo)) {
+		ret = uprobe_location(link_fd, out, cap);
+		close(link_fd);
 		return ret;
 	}
 	close(link_fd);

@@ -1069,6 +1069,10 @@ static const char *attach_kind_name(__u32 kind)
 		return "xdp";
 	case UPATCH_ATTACH_URETPROBE_MULTI:
 		return "uretprobe.multi";
+	case UPATCH_ATTACH_UPROBE:
+		return "uprobe";
+	case UPATCH_ATTACH_URETPROBE:
+		return "uretprobe";
 	default:
 		return "unknown";
 	}
@@ -1087,7 +1091,7 @@ static int prepare_uprobe_targets(struct prog_spec *specs,
 		struct stat opened_stat;
 		int path_fd, fd, ret;
 
-		if (!kind_is_uprobe_multi(spec->kind))
+		if (!kind_has_uprobe_target(spec->kind))
 			continue;
 		path_fd = open(spec->uprobe_path, O_PATH | O_CLOEXEC);
 		if (path_fd < 0)
@@ -1164,6 +1168,23 @@ static int prog_attach_uprobe_multi(int prog_fd,
 	return fd >= 0 ? (int)fd : -errno;
 }
 
+/*
+ * The kernel resolves the binary from a path, so name the descriptor
+ * prepare_uprobe_targets() checked: the probe lands in that inode, not in
+ * whatever spec->uprobe_path names by now.
+ */
+static int perf_event_open_uprobe(const struct prog_spec *spec)
+{
+	char path[64];
+
+	if (spec->target_fd < 0 || !spec->uprobe_offsets || spec->nr_uprobe_offsets != 1)
+		return -EINVAL;
+	if (strsprintf(path, sizeof(path), "/proc/self/fd/%d", spec->target_fd) < 0)
+		return -E2BIG;
+	return perf_event_open_probe("uprobe", path, spec->uprobe_offsets[0],
+				     spec->kind == UPATCH_ATTACH_URETPROBE);
+}
+
 static int prog_attach_for_spec(int prog_fd,
 				const struct prog_spec *spec)
 {
@@ -1189,14 +1210,19 @@ static int prog_attach_for_spec(int prog_fd,
 	case UPATCH_ATTACH_KRETPROBE:
 		perf_fd = perf_event_open_probe("kprobe", spec->target, spec->offset,
 						spec->kind == UPATCH_ATTACH_KRETPROBE);
-		if (perf_fd < 0)
-			return perf_fd;
-		link_fd = prog_attach_perf_event(prog_fd, perf_fd);
-		close(perf_fd);
-		return link_fd;
+		break;
+	case UPATCH_ATTACH_UPROBE:
+	case UPATCH_ATTACH_URETPROBE:
+		perf_fd = perf_event_open_uprobe(spec);
+		break;
 	default:
 		return -EINVAL;
 	}
+	if (perf_fd < 0)
+		return perf_fd;
+	link_fd = prog_attach_perf_event(prog_fd, perf_fd);
+	close(perf_fd);
+	return link_fd;
 }
 
 /* The root of the unified cgroup hierarchy. */
@@ -1211,7 +1237,9 @@ static int prog_attach_for_spec(int prog_fd,
  * its own guards nothing, a kprobe opened through a sysfs that names
  * another PMU lands elsewhere, and each is measured as loaded. What the
  * kernel reports about the link is compared with the spec before the
- * link is pinned; -EXDEV when they differ.
+ * link is pinned; -EXDEV when they differ. A uprobe's file name is not:
+ * the descriptor it was opened through fixes the inode, and the name the
+ * kernel reports can differ from the signed path by a symlink.
  */
 static int link_matches_spec(int link_fd,
 			     const struct prog_spec *spec, __u32 ifindex)
@@ -1257,6 +1285,17 @@ static int link_matches_spec(int link_fd,
 		    info.perf_event.kprobe.name_len > sizeof(func) ||
 		    info.perf_event.kprobe.offset != spec->offset ||
 		    strcmp(func, spec->target))
+			return -EXDEV;
+		return 0;
+	case UPATCH_ATTACH_UPROBE:
+	case UPATCH_ATTACH_URETPROBE:
+		ret = spec->kind == UPATCH_ATTACH_URETPROBE;
+		if (info.type != BPF_LINK_TYPE_PERF_EVENT ||
+		    info.perf_event.type != (ret ? BPF_PERF_EVENT_URETPROBE :
+						   BPF_PERF_EVENT_UPROBE) ||
+		    spec->nr_uprobe_offsets != 1 ||
+		    info.perf_event.uprobe.offset != spec->uprobe_offsets[0] ||
+		    info.perf_event.uprobe.ref_ctr_offset)
 			return -EXDEV;
 		return 0;
 	case UPATCH_ATTACH_UPROBE_MULTI:
@@ -1579,7 +1618,7 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 
 		link_fd = prog_attach_for_spec(inner_fd, spec);
 		if (link_fd < 0) {
-			if (kind_is_uprobe_multi(spec->kind))
+			if (kind_has_uprobe_target(spec->kind))
 				pr_err("attach prog %u (%s %s:%s): %s", i,
 				       attach_kind_name(spec->kind),
 				       spec->uprobe_path, spec->target,
