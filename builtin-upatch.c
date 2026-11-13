@@ -991,33 +991,36 @@ static int read_int_file(const char *path, const char *prefix)
 	return (int)value;
 }
 
-static int determine_kprobe_perf_type(void)
+static int pmu_read_int(const char *pmu, const char *file, const char *prefix)
 {
-	return read_int_file("/sys/bus/event_source/devices/kprobe/type", "");
+	char path[128];
+
+	if (strsprintf(path, sizeof(path), "/sys/bus/event_source/devices/%s/%s",
+		       pmu, file) < 0)
+		return -E2BIG;
+	return read_int_file(path, prefix);
 }
 
-static int determine_kprobe_retprobe_bit(void)
-{
-	return read_int_file("/sys/bus/event_source/devices/kprobe/format/retprobe",
-			     "config:");
-}
-
-static int perf_event_open_kprobe(const char *target, __u64 offset,
-				  bool retprobe)
+/*
+ * A perf event of the kprobe or uprobe PMU on every CPU at name, a kernel
+ * symbol or a binary's path, and offset.
+ */
+static int perf_event_open_probe(const char *pmu, const char *name,
+				 __u64 offset, bool retprobe)
 {
 	struct perf_event_attr attr = {};
 	int type, bit;
 	long fd;
 
-	type = determine_kprobe_perf_type();
+	type = pmu_read_int(pmu, "type", "");
 	if (type < 0)
 		return type;
 	attr.size = sizeof(attr);
 	attr.type = (__u32)type;
-	attr.config1 = ptr_to_u64(target);
+	attr.config1 = ptr_to_u64(name);
 	attr.config2 = offset;
 	if (retprobe) {
-		bit = determine_kprobe_retprobe_bit();
+		bit = pmu_read_int(pmu, "format/retprobe", "config:");
 		if (bit < 0)
 			return bit;
 		if (bit >= 64)
@@ -1184,8 +1187,8 @@ static int prog_attach_for_spec(int prog_fd,
 		return prog_attach_uprobe_multi(prog_fd, spec);
 	case UPATCH_ATTACH_KPROBE:
 	case UPATCH_ATTACH_KRETPROBE:
-		perf_fd = perf_event_open_kprobe(spec->target, spec->offset,
-						 spec->kind == UPATCH_ATTACH_KRETPROBE);
+		perf_fd = perf_event_open_probe("kprobe", spec->target, spec->offset,
+						spec->kind == UPATCH_ATTACH_KRETPROBE);
 		if (perf_fd < 0)
 			return perf_fd;
 		link_fd = prog_attach_perf_event(prog_fd, perf_fd);
