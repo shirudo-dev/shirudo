@@ -4,4 +4,4 @@
 # The documentation toolchain. requirements.txt is generated from this
 # file with pip-compile --generate-hashes --strip-extras --allow-unsafe.
 sphinx==9.2.0
-myst-parser==5.1.0
+myst-parser==5.2.0
