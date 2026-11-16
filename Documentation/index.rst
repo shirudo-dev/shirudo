@@ -7,45 +7,43 @@ shirudo documentation
 
 .. rst-class:: etymology
 
-shirudo (Japanese シールド, pronounced "shee-roo-doh") means "shield"
+shirudo (Japanese シールド, pronounced "shee-roo-doh") means "shield".
 
 shirudo is a BPF-based security platform: Linux targets run only the BPF
 their operator signed, every change is measured into the TPM, and
 functionality ships as signed :doc:`upatches <upatches/learn/concepts>`
-that targets pull from OCI registries.
+(BPF programs) that targets pull from OCI registries.
 
 Use cases
 ---------
 
-shirudo is a platform. It does not understand what an upatch does; it
-makes sure that only signed upatches run and that every change is on
-record. Custom functionality ships as upatches that users and
-developers write on top of shirudo.
+shirudo makes sure only signed upatches run and records every change.
+What an upatch does is up to whoever writes it. Typical uses:
 
 .. container:: grid
 
    .. container::
 
-      Live patching for kernel and userspace
+      Shield vulnerable code paths
 
-      Security mitigations that block vulnerable code paths. They
-      complement traditional kernel live patching with a faster rollout
-      and bridge kernel and userspace deployment cycles.
+      Stop a known kernel or userspace bug from being reached until a
+      fixed version is running. Rolls out faster than a kernel update and
+      complements kernel live patching.
 
    .. container::
 
       System hardening
 
-      Sandboxes for containers, Kubernetes Pods and LLM agents, and
-      kernel hardening implemented as upatches.
+      Remove attack surface a workload does not need, and limit what
+      containers, Kubernetes Pods and LLM agents can access.
 
    .. container::
 
       Runtime security and observability
 
-      For kernel and userspace applications, LLM agents included.
-      Data is collected and aggregated in BPF maps and pushed over
-      OpenTelemetry into collectors.
+      See what kernel and userspace applications, LLM agents included,
+      are doing. upatches collect data in BPF maps and send it to
+      collectors over OpenTelemetry.
 
    .. container::
 
@@ -54,26 +52,6 @@ developers write on top of shirudo.
       Devices that are hard to patch get upatches the same way servers
       do. shirudo runs on x86-64, arm64 and riscv64 and adds little to the
       trusted computing base beyond the kernel.
-
-Defense in depth
-----------------
-
-shirudo is one layer of a target's defense, not all of it. It decides
-which BPF runs and records every change, and it trusts the kernel it
-runs on for everything else. A kernel bug that gives an attacker code
-execution or arbitrary writes in the kernel potentially bypasses every
-check made in that kernel, shirudo's included: nothing that runs inside
-the kernel can police it once an attacker controls it, and detecting
-damage afterwards comes too late.
-
-Hardening a target therefore starts in the kernel, from first
-principles: reduce attack surface to what the workload needs, and
-build the kernel so that bugs that remain are hard or impossible to
-exploit. Both take effect before an attack succeeds, not after. upatches
-can take part in the first: they can remove attack surface and block a
-known vulnerable code path until a fixed kernel is deployed. They do
-not replace mitigations built into the kernel that make memory
-corruption hard to exploit.
 
 Properties
 ----------
@@ -89,14 +67,27 @@ shirudo is built on a set of properties for a BPF security platform:
   kernel verifies before it runs
 - Measured: a TPM-backed register records every operation on upatches,
   and the TPM signs it for a remote verifier
-- Platform, not policy: shirudo protects only its own assets. Everything
-  else ships as upatches: signed BPF light skeletons, a loader and its
-  assets
-- Code, not DSLs: upatches are plain BPF C in small pieces that engineers
-  and agents can read, generate and maintain, and commands take and
-  produce structured data
+- Lightweight core: shirudo protects its own assets and nothing else.
+  Everything else ships as upatches
+- Plain BPF C: upatches are small BPF C programs that engineers and
+  agents can read, generate and maintain. Commands take and produce
+  structured data
 - Pull in, push out: targets pull upatches from OCI registries and push
   telemetry to collectors; nothing on a target listens for connections
+
+Hardening starts in the kernel
+------------------------------
+
+shirudo is one layer of a target's defense. It decides which BPF runs
+and records every change, and it relies on the kernel for everything
+else. An attacker with code execution in the kernel can bypass any check
+made there, shirudo's included. Expose only the attack surface the
+workload needs, and build the kernel so the bugs that remain are hard to
+exploit.
+
+upatches shrink the attack surface and block a known vulnerable code
+path until a fixed kernel is deployed. The kernel's own memory-corruption
+mitigations are still required.
 
 The :doc:`security/threat-model` states where each of these mechanisms
 stops.
