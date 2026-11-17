@@ -29,23 +29,27 @@ PATH=$PWD/build/afl/bin:$PATH make -C testing afl [AFL_SECONDS=600]
 make -C testing help
 ```
 
-The end2end tier runs t9107, and t9109 to t9111 on the host, against
+The end2end tier runs t9107, and t9109 to t9112 on the host, against
 the keepalive backend of `tools/backend`, which `host.sh` starts for
 every run. The tier boots two VMs at once, each with its own
 swtpm: node A runs the tests, node B (`make -C testing vm-node-end2end`,
 node mode of `vm/run.sh`) takes `role=core` from `config-core` and waits.
 Node mode first runs `vm/tpm-builder.sh`, which creates the node's AK
-and EK with tpm2-tools and writes their names to `tpm-names` in the VM's
-state directory; host.sh verifies node B against them and t9109 enrolls
-it in the backend, so node mode needs tpm2-tools and swtpm-tools on the
-host.
-With a backend, a fresh edge node (`END2END_NODE=edge`, `role=edge` from
-`config-edge`) boots once node A has stopped, and `host.sh` runs t9109,
-then t9110, which continues t9109's tree in segments, on the host against
-it and node B. Then a second fresh pair boots in their place, as
-`<name>-2-end2end-edge` and `-b`, the registry restarts empty, and
+and EK with tpm2-tools, writes their names to `tpm-names` in the VM's
+state directory, and stores an EK certificate from a throwaway CA whose
+certificate it leaves in `ek-ca.pem` beside them; host.sh verifies node
+B against the names and t9109 enrolls it in the backend, t9112 enrolls
+the edge node through credential activation against its CA, so node mode
+needs tpm2-tools, the swtpm TCTI of tpm2-tss (`libtss2-tcti-swtpm0t64`),
+swtpm-tools and openssl on the host. The tier needs the quote checker,
+which `make -C testing end2end` builds first. A fresh edge node
+(`END2END_NODE=edge`, `role=edge` from `config-edge`) boots once node A
+has stopped, and `host.sh` runs t9109,
+then t9110, which continues t9109's tree in segments, and t9112, on the
+host against it and node B. Then a second fresh pair boots in their
+place, as `<name>-2-end2end-edge` and `-b`, the registry restarts empty, and
 `host.sh` runs t9111, the backward walk over sealed segments, against
-them. Their output is `build/test-vm/end2end/t9109.log` to `t9111.log`.
+them. Their output is `build/test-vm/end2end/t9109.log` to `t9112.log`.
 A test reaches the nodes with `node_sh b` or `node_sh edge` of
 `testing/end2end/node-lib.sh`, and does to them, the registry and the
 backend what `testing/end2end/pipeline-lib.sh` offers. Their boot logs

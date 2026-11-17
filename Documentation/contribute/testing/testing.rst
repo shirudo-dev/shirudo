@@ -35,8 +35,9 @@ Before you begin
   what ``make target`` needs. On Ubuntu,
   ``.github/scripts/tests.sh setup`` installs ``cloud-image-utils``,
   ``dracut-core``, ``file``, ``isc-dhcp-client``, ``libguestfs-tools``,
-  ``qemu-system-x86``, ``qemu-utils``, ``swtpm``, ``swtpm-tools`` and
-  ``tpm2-tools`` among others. :src:`testing/vm/run.sh` names the packages
+  ``qemu-system-x86``, ``qemu-utils``, ``swtpm``, ``swtpm-tools``,
+  ``tpm2-tools`` and the swtpm TCTI ``libtss2-tcti-swtpm0t64`` among
+  others; ``tpm2-tss`` carries that TCTI on Fedora. :src:`testing/vm/run.sh` names the packages
   it misses with an install command for ``apt-get`` or ``dnf``. The
   bundle carries the TPM simulator helper, so
   :src:`testing/vm/build-bundle.sh` builds no bundle without
@@ -188,10 +189,10 @@ a Python companion with the same stem, such as
 before ``init``. They skip on the build host and run in a separate VM
 that the ``tpm`` family boots without the production initrd.
 
-``t9109``, ``t9110`` and ``t9111`` carry target numbers but run on the
-host: :src:`testing/end2end/host.sh` runs them after node A's suite, in
-that order, against other nodes (see :ref:`testing-two-nodes`), and node
-A's runner leaves them out.
+``t9109`` to ``t9112`` carry target numbers but run on the host:
+:src:`testing/end2end/host.sh` runs them after node A's suite, ``t9109``,
+``t9110``, ``t9112`` and then ``t9111``, against other nodes (see
+:ref:`testing-two-nodes`), and node A's runner leaves them out.
 
 Run the tests
 -------------
@@ -741,10 +742,10 @@ Run the end-to-end tests
 ``make -C testing end2end`` runs ``t9001`` on the host, then
 :src:`testing/end2end/host.sh` runs the test with an operator VM and the
 target nodes: node A, which runs the target tests, node B beside it, and
-with a keepalive backend a fresh edge node after node A (see
-:ref:`testing-two-nodes`). It starts an OCI registry, an OpenTelemetry
-Collector and ClickHouse in Docker containers pinned by digest. The
-registry and collector use a throwaway CA.
+a fresh edge node after node A (see :ref:`testing-two-nodes`). It starts
+an OCI registry, an OpenTelemetry Collector and ClickHouse in Docker
+containers pinned by digest. The registry and collector use a throwaway
+CA.
 
 The operator VM boots from the runtime image with clang 23 and the build
 dependencies of the operator package added, which the runner prepares
@@ -764,7 +765,7 @@ against the headers and ``vmlinux.h`` of the package, pushes it with
 operator VM and node A name the registry ``registry.test``, at QEMU's
 address for the host, so the tree names it as node A reaches it. The
 host's own build and the operator key it keeps still play the operator
-for the keepalive backend's example tree and for ``t9109`` to ``t9111``,
+for the keepalive backend's example tree and for ``t9109`` to ``t9112``,
 which run on the host.
 
 Node A and node B boot next. Node A activates a signed config that
@@ -804,8 +805,11 @@ the host. ClickHouse is available to the collector on the test's Docker
 network.
 
 ``t9107`` runs the backend of :src:`tools/backend/`
-(:doc:`/operate/integrations/backend`). ``host.sh`` starts a ClickHouse
-of the backend's own on ``http://127.0.0.1:18125``, with the backend's schema
+(:doc:`/operate/integrations/backend`), so the tier needs
+``tools/quote-check/shirudo-quote-check``, which
+``make -C testing end2end`` builds first; ``host.sh``, run without it,
+stops before it starts anything. ``host.sh`` starts a ClickHouse of the
+backend's own on ``http://127.0.0.1:18125``, with the backend's schema
 and ``shirudo-quote-check`` as ``tpm_quote_check``, and a collector with
 the backend's configuration on ``https://127.0.0.1:14320``. It publishes
 the example tree of :src:`testing/fixtures/keepalive/` signed with the
@@ -813,14 +817,16 @@ operator key and loads it with the backend's tree ingest job, which runs
 ``bpm tree show``. In the guest, ``t9107`` sends the example keepalives
 with their recorded quotes through that collector and queries
 ClickHouse, both through QEMU's address for the host. After node A,
-``host.sh`` runs ``t9109``, ``t9110`` and ``t9111`` against the same
-backend, see :ref:`testing-pipeline`, :ref:`testing-history` and
-:ref:`testing-walk`. ``host.sh`` writes the example tree's digest to
-``build/test-vm/end2end/backend-tree.digest`` once the backend has loaded
-it. Without that file, as in a run of the family without ``host.sh``,
-:src:`testing/run-target-tests.sh` leaves ``t9107`` out with ``not run
-without a keepalive backend`` rather than failing the family on its
-skip.
+``host.sh`` runs ``t9109`` to ``t9112`` against the same backend, see
+:ref:`testing-pipeline`, :ref:`testing-history`,
+:ref:`testing-activation` and :ref:`testing-walk`. ``host.sh`` writes
+the example tree's digest to ``build/test-vm/end2end/backend-tree.digest``
+when it publishes the tree, and removes it when the backend's tree
+ingest job does not load the tree and when ``host.sh`` stops. Without
+that file, as in a run of the family without ``host.sh``,
+:src:`testing/run-target-tests.sh` leaves
+``t9107`` out with ``not run without a keepalive backend`` rather than
+failing the family on its skip.
 
 .. _testing-two-nodes:
 
@@ -832,9 +838,9 @@ own software TPM and so its own attestation key. The operator VM runs
 beside the first two, node A and node B, and stops before the others
 boot. Node A is the family's
 VM, named ``<name>-end2end``, and runs the target tests in number order.
-Node B, ``<name>-end2end-b``, boots beside it. With a keepalive backend,
-the fresh edge node, ``<name>-end2end-edge``, boots once node A has
-stopped, and ``t9109`` and then ``t9110`` run against it and node B.
+Node B, ``<name>-end2end-b``, boots beside it. The fresh edge node,
+``<name>-end2end-edge``, boots once node A has stopped, and ``t9109``,
+``t9110`` and then ``t9112`` run against it and node B.
 Once both have stopped, a second fresh edge node and node B,
 ``<name>-2-end2end-edge`` and ``<name>-2-end2end-b``, boot for
 ``t9111``. All of them boot with ``make -C testing vm-node-end2end``, ``END2END_NODE=b`` or
@@ -846,9 +852,13 @@ acts as the builder of :doc:`/operate/run/attest`:
 :src:`testing/vm/tpm-builder.sh` creates the attestation key and the
 endorsement key in the node's fresh vTPM state, with the tpm2-tools
 commands that page gives, and writes their names to ``tpm-names`` in the
-VM's state directory. ``host.sh`` copies the file beside the node's SSH
-key and verifies node B's evidence against those names, never against
-the names the evidence carries, and checks that node A's key fails. Each takes its role from a signed
+VM's state directory. As the vTPM's maker, it also writes an
+endorsement certificate for the endorsement key to the ECC index of the
+TCG profile, ``0x01C0000A``, signed by a CA of its own whose key it
+throws away, and leaves the CA's certificate in ``ek-ca.pem`` beside the
+names. ``host.sh`` copies both files beside the node's SSH key and
+verifies node B's evidence against those names, never against the names
+the evidence carries, and checks that node A's key fails. Each takes its role from a signed
 config image, as ``t9105`` configures node A:
 
 .. list-table::
@@ -1034,6 +1044,34 @@ the kernel advisory ``shielded`` by ``xfs-fix`` at seq 3, below the
 window, on the edge node and ``unknown`` on node B, as threat U20 of
 :doc:`/security/threat-model` says.
 
+.. _testing-activation:
+
+The enrollment by activation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``t9112`` enrolls the edge node the way the first method of
+:doc:`/operate/run/attest` does, through credential activation, where
+``t9109`` enrolls node B from its builder's records. ``host.sh`` runs it
+after ``t9110``, against the same nodes and backend, and its output is
+``build/test-vm/end2end/t9112.log``. It:
+
+#. checks that the backend holds the edge node's key ``untrusted``;
+#. collects evidence from the edge node with a fresh nonce, and checks
+   that it names the attestation key of the node's keepalives and
+   carries an ECC endorsement certificate;
+#. makes a challenge with ``--ek-ca`` set to node B's ``ek-ca.pem``,
+   which refuses with ``FAIL  endorsement certificate: chains to``, and
+   then with the edge node's own, which passes and prints the credential;
+#. hands the challenge to node B, which refuses it as made for another
+   attestation key;
+#. has the edge node answer it with a second nonce, and verifies the
+   answer with both names and ``--expect-credential``, which passes with
+   the credential and fails with another;
+#. inserts the key into ``shirudo.nodes`` as ``enrolled``, and checks
+   that ``node_status`` then reads the edge node ``enrolled`` and node B,
+   whose enrollment of ``t9109`` went with the schema ``t9110`` loaded
+   again, still ``untrusted``.
+
 .. _testing-walk:
 
 The backward walk
@@ -1087,7 +1125,7 @@ holds the three segments, ``tree_ops`` the five operations and
 ``node_ops`` each node from seq 1, with no contradiction marked, and
 both nodes are ``healthy`` with ``4 chain: pass``, ``5 head: pass, seq 5
 of 5`` and ``6 set: pass``. :src:`testing/end2end/pipeline-lib.sh` holds
-what ``t9109`` to ``t9111`` do to the nodes, the registry and
+what ``t9109`` to ``t9112`` do to the nodes, the registry and
 ClickHouse.
 
 Select test scripts

@@ -519,9 +519,11 @@ start_swtpm()
 
 	chmod 0700 "$RUN_DIR/tpm"
 	# An end2end node's TPM comes from a builder the operator trusts, which
-	# records the names of its keys before the guest boots.
+	# records the names of its keys before the guest boots, and carries an
+	# endorsement certificate from its maker's CA.
 	if [[ "$VM_MODE" == node ]]; then
 		"$REPO_ROOT/testing/vm/tpm-builder.sh" "$RUN_DIR/tpm" "$RUN_DIR/tpm-names" \
+			"$RUN_DIR/ek-ca.pem" \
 			>>"$RUN_DIR/swtpm.log" 2>&1 ||
 			die "could not create the keys of the vTPM; see $RUN_DIR/swtpm.log"
 	fi
@@ -1565,9 +1567,23 @@ if [[ "$VM_INITRD" == 1 ]]; then
 fi
 if [[ "$VM_MODE" == node ]]; then
 	HOST_DEPENDENCIES+=("tpm2_createprimary:tpm2-tools:tpm2-tools"
-		"swtpm_ioctl:swtpm-tools:swtpm-tools")
+		"swtpm_ioctl:swtpm-tools:swtpm-tools" "openssl:openssl:openssl")
 fi
 check_host_dependencies
+# tpm2-tools load tpm2-tss's swtpm TCTI only when tpm-builder.sh runs. grep
+# reads all of ldconfig's output, which pipefail would otherwise fail on
+# SIGPIPE.
+if [[ "$VM_MODE" == node ]] &&
+	! PATH="$PATH:/sbin:/usr/sbin" ldconfig -p |
+		grep 'libtss2-tcti-swtpm\.so' >/dev/null; then
+	log "error: missing the swtpm TCTI of tpm2-tss, libtss2-tcti-swtpm.so"
+	log "Install it with:"
+	print_dependency_install_command \
+		"$(test_vm_pkg libtss2-tcti-swtpm0t64 tpm2-tss)" >&2
+	[[ "$TEST_VM_HOST_PKG" == dnf ]] ||
+		log "Before Ubuntu 24.04 and Debian 13 the package is libtss2-tcti-swtpm0."
+	exit 1
+fi
 validate_host_bundle
 [[ "$CPUS" =~ ^[1-9][0-9]*$ ]] || die "TEST_VM_CPUS must be a positive integer"
 [[ "$VM_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die "TEST_VM_TIMEOUT must be a positive integer"

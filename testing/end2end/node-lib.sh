@@ -9,8 +9,9 @@
 # set first.
 
 # Where host.sh records each node, in node-<name>/: port, the host port of
-# its SSH server, key, the key of its root, and ready once it is
-# prepared, else failed.
+# its SSH server, key, the key of its root, tpm-names, the names of its
+# keys its builder recorded, ek-ca.pem, the CA of its endorsement
+# certificate, and ready once it is prepared, else failed.
 : "${NODES_DIR:=/mnt/shirudo-src/build/test-vm/end2end}"
 # Where the nodes' SSH ports are forwarded: QEMU's address for the host,
 # as node A sees it.
@@ -37,4 +38,10 @@ node_sh() {
 		-o BatchMode=yes -o ConnectTimeout=10 -o LogLevel=ERROR \
 		-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
 		-p "$(cat "$node_dir/port")" "root@$NODES_HOST" "$@"
+}
+
+# The name of the key $2, ak or ek, that node $1's builder recorded before
+# the node booted.
+node_builder_name() {
+	sed -n "s/^$2-name //p" "$NODES_DIR/node-$1/tpm-names"
 }

@@ -58,11 +58,6 @@ payload() {
 		python3 -c 'import json, sys; print(json.load(sys.stdin)["payload_sha256"])'
 }
 
-# The attestation key name node B's builder recorded before it booted.
-builder_ak() {
-	sed -n "s/^ak-name //p" "$NODES_DIR/node-b/tpm-names"
-}
-
 # Print the rows of node_status, the age of the record aside.
 status_rows() {
 	ch "SELECT ak_name, status, trust, failed_check,
@@ -166,13 +161,13 @@ test_expect_success 'each node sends two quoted keepalives, a few seconds apart'
 '
 
 test_expect_success 'node B keeps the attestation key its builder recorded' '
-	test -n "$(builder_ak)" &&
-	test "$(ak b)" = "$(builder_ak)"
+	test -n "$(node_builder_name b ak)" &&
+	test "$(ak b)" = "$(node_builder_name b ak)"
 '
 
 test_expect_success 'the operator enrolls node B from its builder'\''s records' '
 	ch "INSERT INTO shirudo.nodes (ak_name, trust)
-		VALUES ('\''$(builder_ak)'\'', '\''enrolled'\'')"
+		VALUES ('\''$(node_builder_name b ak)'\'', '\''enrolled'\'')"
 '
 
 test_expect_success 'the backend keeps node B enrolled, the edge node untrusted, and every record' '

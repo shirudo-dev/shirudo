@@ -3,7 +3,7 @@
 # Copyright (c) 2026 Authors of shirudo
 #
 # testing/end2end/pipeline-lib.sh -- what the host tests of the keepalive
-# pipeline, t9109 to t9111, do to the nodes, the registry and the
+# pipeline, t9109 to t9112, do to the nodes, the registry and the
 # backend's ClickHouse. A test sets W, CHECKS, STATE, RUNTIME, E2E and
 # STACK_NAME, and TREE_ID and WINDOW where it uses them, and sources
 # node-lib.sh and stack-lib.sh first.

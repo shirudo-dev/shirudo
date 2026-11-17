@@ -290,7 +290,7 @@ setup() {
 		set -- "$@" autoconf autoconf-archive automake cloud-image-utils \
 			dracut-core file isc-dhcp-client libguestfs-tools libltdl-dev \
 			libtool libzstd-dev qemu-system-x86 qemu-utils swtpm \
-			swtpm-tools tpm2-tools
+			swtpm-tools tpm2-tools libtss2-tcti-swtpm0t64
 	fi
 	mkdir -p build
 	sudo BPF_VMLINUX_BTF="$PWD/$kernel/vmlinux.btf" \

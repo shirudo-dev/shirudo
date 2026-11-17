@@ -53,6 +53,7 @@ test_expect_success 'node mode boots only a core or edge node of the end2end sui
 	grep -Fq "export TEST_VM_NODE_ROLE=" vm/run.sh &&
 	grep -Fq "\"\$REPO_ROOT/testing/vm/tpm-builder.sh\" \"\$RUN_DIR/tpm\" \"\$RUN_DIR/tpm-names\"" \
 		vm/run.sh &&
+	grep -Fq "\"\$RUN_DIR/ek-ca.pem\"" vm/run.sh &&
 	grep -Fq "tpm2_createprimary:tpm2-tools:tpm2-tools" vm/run.sh &&
 	grep -Fq "if [[ \"\$VM_MODE\" == node ]]" vm/guest.sh &&
 	grep -Fq "image update \"/var/lib/shirudo/images/config-\${TEST_VM_NODE_ROLE}\"" \
@@ -1077,13 +1078,15 @@ test_expect_success 'the runners split the tests by number' '
 	test -e end2end/t9109-pipeline.sh &&
 	test -e end2end/t9110-keepalive-history.sh &&
 	test -e end2end/t9111-pipeline-segments.sh &&
+	test -e end2end/t9112-activation.sh &&
 	grep -Fqx "	end2end/t9109-pipeline.sh | end2end/t9110-keepalive-history.sh) continue ;;" \
 		run-target-tests.sh &&
-	grep -Fqx "	end2end/t9111-pipeline-segments.sh) continue ;;" \
+	grep -Fqx "	end2end/t9111-pipeline-segments.sh | end2end/t9112-activation.sh) continue ;;" \
 		run-target-tests.sh &&
-	grep -Fqx "	host_test t9109-pipeline" end2end/host.sh &&
-	grep -Fqx "	host_test t9110-keepalive-history" end2end/host.sh &&
-	grep -Fqx "	host_test t9111-pipeline-segments" end2end/host.sh
+	grep -Fqx "host_test t9109-pipeline" end2end/host.sh &&
+	grep -Fqx "host_test t9110-keepalive-history" end2end/host.sh &&
+	grep -Fqx "host_test t9111-pipeline-segments" end2end/host.sh &&
+	grep -Fqx "host_test t9112-activation" end2end/host.sh
 '
 
 test_expect_success 'test-vm rejects unknown policy modes before boot' '

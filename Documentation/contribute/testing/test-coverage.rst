@@ -781,6 +781,14 @@ signed config image.
        with the masks ``VQ==`` and ``mg==``, no walk once both are at the
        new segment's base, keepalives over all three segments and both
        nodes ``healthy``
+   * - ``t9112-activation``
+     - Enrollment through credential activation on a real vTPM, run by
+       ``host.sh`` after ``t9110`` on the same nodes: an endorsement
+       certificate from the edge node's own test CA chaining through
+       ``attest challenge --ek-ca``, another node's CA refused, the
+       challenge refused by another node, the answer verified with
+       ``--expect-credential``, and the key moving from ``untrusted`` to
+       ``enrolled`` in the backend
 
 Unit suites and fuzz targets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -933,7 +941,8 @@ Coverage by area
        ``t6125``, ``t6128``, ``t6143``, ``t6144``. Unit: ``chain``
    * - Attestation
      - ``t2003``, ``t2005``, ``t4003``, ``t4004``, ``t4102``,
-       ``t4104``, ``t9105``, ``t9109``. Fuzz: ``attest``, ``tpm-wire``
+       ``t4104``, ``t9105``, ``t9109``, ``t9112``. Fuzz: ``attest``,
+       ``tpm-wire``
    * - Eventlog
      - ``t4002``, ``t4102``, ``t5007``, ``t6114``, ``t6128``. Fuzz:
        ``eventlog``. Unit: ``eventlog``, ``io``
@@ -1027,7 +1036,7 @@ The threats are those of :doc:`/security/threat-model`.
    * - T8 Quantum-capable adversaries
      - ``t2001``, ``t2002``, ``t5001``, ``t8005``
    * - T9 A target lying about its state
-     - ``t4001``, ``t4003``, ``t4004``, ``t4102``, ``t9105``
+     - ``t4001``, ``t4003``, ``t4004``, ``t4102``, ``t9105``, ``t9112``
    * - T10 An attempt that leaves no trace
      - ``t6003``, ``t6108``, ``t6118``, ``t6119``, ``t6120``,
        ``t6121``, ``t6124``, ``t6126``, ``t6135``, ``t6137``
