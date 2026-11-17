@@ -1,0 +1,13 @@
+an enrollment row changes only trust
+000baa	QUtB	edge-01	0	enrolled
+000bbb	QUtC	core-01	0	enrolled
+000bcc			1	enrolled
+000bdd	QUtD	lab-01	0	untrusted
+latest carries trust
+000baa	edge-01	enrolled
+000bbb	core-01	enrolled
+000bdd	lab-01	untrusted
+node_status carries trust beside status
+000baa	unhealthy	enrolled	3	1 signed: pass, enrolled, 0 rejected in the last hour
+000bbb	unhealthy	enrolled	3	1 signed: pass, enrolled, 0 rejected in the last hour
+000bdd	unhealthy	untrusted	3	1 signed: pass, untrusted, 0 rejected in the last hour

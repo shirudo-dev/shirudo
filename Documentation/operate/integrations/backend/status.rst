@@ -71,7 +71,7 @@ A UI reads ``node_status`` as often as it likes:
    * - ``status``
      - ``stale``, ``unhealthy`` or ``healthy``, see below.
    * - ``trust``
-     - The node's ``trust`` from ``shirudo.nodes``, ``untrusted`` for every node. It is never part of ``status``: a healthy node is one whose records are consistent and match the tree, a trusted one would be one whose key is known to live in a TPM. Show both.
+     - The node's ``trust`` from ``shirudo.nodes``: ``untrusted``, or ``enrolled`` once the operator has recorded its key as a TPM's (:doc:`maintain`). It is never part of ``status``: a healthy node is one whose records are consistent and match the tree, an enrolled one is one whose key is known to live in a TPM. Show both.
    * - ``failed_check``
      - The first check that failed: 2 for ``stale``, 3 to 7 for ``unhealthy``, 0 for ``healthy``.
    * - ``log``

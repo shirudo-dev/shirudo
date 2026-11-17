@@ -262,7 +262,7 @@ CREATE TABLE IF NOT EXISTS shirudo.node_status
     ak_name String,
     host_name String,
     status Enum8('healthy' = 1, 'unhealthy' = 2, 'stale' = 3),
-    trust Enum8('untrusted' = 0),
+    trust Enum8('untrusted' = 0, 'enrolled' = 1),
     failed_check UInt8,
     log Array(String),
     last_seen DateTime64(3),

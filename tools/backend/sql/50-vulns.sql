@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS shirudo.node_vulns
     ak_name String,
     host_name String,
     status Enum8('healthy' = 1, 'unhealthy' = 2, 'stale' = 3),
-    trust Enum8('untrusted' = 0),
+    trust Enum8('untrusted' = 0, 'enrolled' = 1),
     image_id String,
     image_version String,
     binding Enum8('verified' = 1, 'declared' = 2, 'root_mismatch' = 3, 'no_sbom' = 4, 'no_image' = 5),

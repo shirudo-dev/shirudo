@@ -869,8 +869,9 @@ Backend tests
 
 The SQL tests of :src:`tools/backend/test/` cover the backend's schema
 against a ClickHouse container (:ref:`testing-backend`): the quote
-check of every record and the reasons a record is refused, each status
-check and the history it reads, ``node_vulns`` and its inputs, the
+check of every record and the reasons a record is refused, a key's
+trust from ``untrusted`` to ``enrolled``, each status check and the
+history it reads, ``node_vulns`` and its inputs, the
 retention script and the views that keep boot baselines, the tree
 ingest job on a single publication and on a walk over sealed segments,
 and the SBOM scan job on a store that holds an image in every state.

@@ -160,8 +160,10 @@ with the row from the node, so its attributes are what the node
 declares, and a software P-256 key can carry the same bits (U1 of
 :doc:`/security/threat-model`). That a key is a TPM's comes only from
 credential activation, :doc:`attest-challenge` and ``shirudo attest
---challenge``, and from pinning its name in :doc:`attest-verify`; a
-backend treats every node as ``untrusted`` until it has done that (R17).
+--challenge``, or from the records of the builder that created it, and
+from pinning its name in :doc:`attest-verify`; a backend treats every
+node as ``untrusted`` until the operator records it as ``enrolled``
+(R17).
 
 Output
 ------

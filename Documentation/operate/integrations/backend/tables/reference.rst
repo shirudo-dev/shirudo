@@ -49,14 +49,16 @@ shirudo.nodes
    - To relabel, insert argMinState('<name>', toDateTime64(0, 3)) for the
      ak_name. Epoch 0 wins argMin. Leave ak_public and first_seen out so
      they don't change.
-   - trust only ever rises, and nothing sets it above untrusted today. It is
-     shown but never part of status.
+   - trust only ever rises. The operator inserts (ak_name, 'enrolled') once
+     credential activation or a builder's records show the key is a TPM's,
+     before or after the node's first record. It is shown but never part
+     of status.
 
    :ak_name: Node identity.
    :ak_public: Public area of the key.
    :node_id: Label: the host name the key claimed first, unless relabeled.
    :first_seen: First accepted record.
-   :trust: Defaults to untrusted.
+   :trust: untrusted by default, enrolled once the operator records the key.
 
 shirudo.expected_builds
 -----------------------

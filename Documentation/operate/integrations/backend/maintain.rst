@@ -30,12 +30,27 @@ Check 3 fails a node whose ``version_id`` is not listed:
 
    INSERT INTO shirudo.expected_builds (version_id, note) VALUES ('<version_id>', 'shirudo 2026.11');
 
-Node trust
-----------
+Enroll a node
+-------------
 
-Every node is ``untrusted``: a keepalive proves that one key signed each
-record, not what hardware holds the key. Nothing in the backend raises
-``trust``.
+Every node starts ``untrusted``: a keepalive proves that one key signed
+each record, not what hardware holds the key. Once you know the key
+lives in a TPM, from credential activation (``shirudo attest verify
+--expect-credential`` passed) or from the records of the builder that
+created the TPM's keys, raise it:
+
+.. code-block:: sql
+
+   INSERT INTO shirudo.nodes (ak_name, trust) VALUES ('<ak_name>', 'enrolled');
+
+The row may come before the node's first record, as it does when a
+builder hands you the name before the node boots. It changes nothing
+but ``trust``, and no row lowers it again: a key that is no longer
+trusted, such as one whose TPM was replaced, shows up under a new
+``ak_name``, which starts ``untrusted``. ``enrolled`` says who signed,
+not that what they signed is true: a node's root can have its TPM quote
+a body of its own, so only ``shirudo attest verify`` confirms its
+state.
 
 Rename a node
 -------------

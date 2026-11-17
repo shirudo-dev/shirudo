@@ -9,15 +9,17 @@
 -- claimed; to relabel a node, insert argMinState('<name>',
 -- toDateTime64(0, 3)) for its ak_name, which is why a row that leaves
 -- ak_public and first_seen out must not change them. trust only ever
--- rises: a keepalive never sets it, so a node stays untrusted until
--- something else says more.
+-- rises: a keepalive never sets it, so a node stays untrusted until the
+-- operator inserts enrolled for its ak_name, once credential activation
+-- or a builder's records have shown that the key lives in a TPM. The
+-- row may come before the node's first record.
 CREATE TABLE IF NOT EXISTS shirudo.nodes
 (
     ak_name String,
     ak_public SimpleAggregateFunction(max, String),
     node_id AggregateFunction(argMin, String, DateTime64(3)),
     first_seen SimpleAggregateFunction(min, Nullable(DateTime64(3))),
-    trust SimpleAggregateFunction(max, Enum8('untrusted' = 0)) DEFAULT 'untrusted'
+    trust SimpleAggregateFunction(max, Enum8('untrusted' = 0, 'enrolled' = 1)) DEFAULT 'untrusted'
 )
 ENGINE = AggregatingMergeTree
 ORDER BY ak_name;

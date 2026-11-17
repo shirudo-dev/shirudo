@@ -50,8 +50,10 @@ What it does
 operator package, :doc:`/reference/cli/quote-check` and
 :doc:`/reference/cli/bpm` describe them. A pass of the quote check says
 that the body is what one key signed, not that the key lives in a
-genuine TPM, so every node reads ``untrusted``, nor that the body is
-true: root on a target can have its TPM quote a body of its own, so
+genuine TPM, so every node reads ``untrusted`` until you enroll its key
+(:doc:`backend/maintain`) and insert ``enrolled`` for its ``ak_name``
+into ``shirudo.nodes``. Neither says that the body is true: root on a
+target can have its TPM quote a body of its own, so
 ``healthy`` is the target's own account until ``shirudo attest verify``
 confirms it (R17 of :doc:`/security/threat-model`).
 
