@@ -3,6 +3,7 @@
 # Copyright (c) 2026 Authors of shirudo
 
 set -euo pipefail
+umask 022
 source_dir=$(cd "$(dirname "$0")/../.." && pwd)
 templates="$source_dir/testing/vm/files"
 [ "$#" -eq 4 ] || exit 2
