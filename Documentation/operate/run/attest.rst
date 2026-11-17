@@ -194,7 +194,7 @@ nonce, and a challenge in between.
 
 8. If you run the keepalive backend, mark the key as enrolled, so that
    the node reads ``enrolled`` rather than ``untrusted``
-   (:doc:`/operate/integrations/backend`):
+   (:doc:`/operate/backend/index`):
 
    .. code-block:: console
 

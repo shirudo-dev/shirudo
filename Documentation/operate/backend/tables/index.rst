@@ -11,13 +11,9 @@ are read from the schema when the documentation is built; the pages add
 only what the schema cannot say. A table the schema has and these pages
 do not document, or a column either side lacks, fails the build.
 
-:doc:`overview` draws how a keepalive moves through the tables and
-sums what they cost at a reference fleet.
-
 .. toctree::
    :maxdepth: 1
 
-   overview
    ingest
    reference
    latest

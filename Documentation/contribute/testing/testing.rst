@@ -805,7 +805,7 @@ the host. ClickHouse is available to the collector on the test's Docker
 network.
 
 ``t9107`` runs the backend of :src:`tools/backend/`
-(:doc:`/operate/integrations/backend`), so the tier needs
+(:doc:`/operate/backend/index`), so the tier needs
 ``tools/quote-check/shirudo-quote-check``, which
 ``make -C testing end2end`` builds first; ``host.sh``, run without it,
 stops before it starts anything. ``host.sh`` starts a ClickHouse of the

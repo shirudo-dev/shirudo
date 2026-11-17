@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Authors of shirudo
 #
 # The backend has nothing to build; this runs its SQL tests. Its
-# documentation is Documentation/operate/integrations/backend.
+# documentation is Documentation/operate/backend/.
 
 .DEFAULT_GOAL := help
 

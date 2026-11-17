@@ -26,6 +26,8 @@ refusal or verdict is an incident: follow
   attest targets
 - :doc:`integrations/index`: send telemetry to ClickHouse,
   Elasticsearch, Grafana and Splunk
+- :doc:`backend/index`: check every keepalive's quote and each target's
+  state against its upatch tree
 - :doc:`maintain/index`: signing keys, upgrades, backup, recovery and
   decommissioning
 - :doc:`troubleshoot/index`: failures by symptom, tampered targets and bug
@@ -38,5 +40,6 @@ refusal or verdict is an incident: follow
    deploy/index
    run/index
    integrations/index
+   backend/index
    maintain/index
    troubleshoot/index

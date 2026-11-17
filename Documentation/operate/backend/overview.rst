@@ -8,14 +8,28 @@
 Overview
 ========
 
-How the tables connect and what they cost. The arrows and the colours
-of the diagram are checked against :src:`tools/backend/sql/` and the table pages when
-the documentation is built.
+How the tables connect and what they cost.
+
+What a keepalive is
+-------------------
+
+Once a minute ``shirudo status --otel`` sends one OTLP log record with
+the event name ``shirudo.keepalive``. Its body is a compact JSON object,
+sent as a string, and its only attribute, ``shirudo.quote``, is a TPM
+quote over the SHA-256 of that string:
+
+.. code-block:: none
+
+   attest=<base64 TPMS_ATTEST>;sig=<base64 TPMT_SIGNATURE>;ak=<base64 TPMT_PUBLIC>
+
+A node is known by the name of its attestation key, ``ak_name``, never
+by the host name it claims, and its records are ordered by the quote's
+``reset_count`` and ``clock``, never by a wall clock.
 
 How a keepalive moves through the schema
 ----------------------------------------
 
-A keepalive enters at :table:`otel.otel_logs`, is checked once on its way
+A keepalive sent from Shirudo enters the backend at :table:`otel.otel_logs`, is checked once on its way
 into :table:`checked`, and from there fans out on insert to
 :table:`keepalive`, :table:`rejected`, :table:`nodes`,
 :table:`keepalive_latest` and :table:`boot_first`. Refreshed views then

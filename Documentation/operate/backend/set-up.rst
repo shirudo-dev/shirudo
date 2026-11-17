@@ -5,8 +5,8 @@
 :page-type: How-to
 :audience: Operators
 
-Set up the backend
-==================
+Set up
+======
 
 You need a ClickHouse server, the OpenTelemetry Collector Contrib
 distribution (``otelcol-contrib``) and ``shirudo-quote-check`` from
