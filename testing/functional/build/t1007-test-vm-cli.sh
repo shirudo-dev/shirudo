@@ -51,6 +51,9 @@ test_expect_success 'node mode boots only a core or edge node of the end2end sui
 	grep -Fq "TEST_VM_NODE_ROLE=\$(if \$(filter edge,\$(END2END_NODE)),edge,core)" \
 		../testing/Makefile &&
 	grep -Fq "export TEST_VM_NODE_ROLE=" vm/run.sh &&
+	grep -Fq "\"\$REPO_ROOT/testing/vm/tpm-builder.sh\" \"\$RUN_DIR/tpm\" \"\$RUN_DIR/tpm-names\"" \
+		vm/run.sh &&
+	grep -Fq "tpm2_createprimary:tpm2-tools:tpm2-tools" vm/run.sh &&
 	grep -Fq "if [[ \"\$VM_MODE\" == node ]]" vm/guest.sh &&
 	grep -Fq "image update \"/var/lib/shirudo/images/config-\${TEST_VM_NODE_ROLE}\"" \
 		vm/guest.sh

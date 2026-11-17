@@ -105,7 +105,8 @@ signed config image.
    * - ``t1007-test-vm-cli``
      - Test VM scripts: kernel selection, host dependencies, arm64
        boot settings, the bundle stamp, the build container, serve mode,
-       node mode only for a core or edge node of the end-to-end tier, the
+       node mode only for a core or edge node of the end-to-end tier,
+       whose vTPM keys the builder helper creates before boot, the
        operator VM's role and its signing key
    * - ``t1008-kernel-ami-config``
      - The slim kernel configuration for NitroTPM CRB, EC2, EFI and SSM
@@ -757,8 +758,10 @@ signed config image.
        by ``host.sh`` on the host: ``bpm build`` and ``bpm tree append``
        of an upatch with ``fixes``, tree sync on both nodes, quoted
        keepalives through the backend's collector and checker, its tree
-       ingest and sbom-scan jobs, ``node_status`` with the masks ``VA==``
-       and ``qA==``, each node's records against the backend's rows,
+       ingest and sbom-scan jobs, node B enrolled from its vTPM
+       builder's names and the edge node left untrusted,
+       ``node_status`` with the masks ``VA==`` and ``qA==``, each node's
+       records against the backend's rows,
        every SBOM state, ``node_vulns`` exposure and a body altered in
        transit
    * - ``t9110-keepalive-history``
@@ -930,7 +933,7 @@ Coverage by area
        ``t6125``, ``t6128``, ``t6143``, ``t6144``. Unit: ``chain``
    * - Attestation
      - ``t2003``, ``t2005``, ``t4003``, ``t4004``, ``t4102``,
-       ``t4104``, ``t9105``. Fuzz: ``attest``, ``tpm-wire``
+       ``t4104``, ``t9105``, ``t9109``. Fuzz: ``attest``, ``tpm-wire``
    * - Eventlog
      - ``t4002``, ``t4102``, ``t5007``, ``t6114``, ``t6128``. Fuzz:
        ``eventlog``. Unit: ``eventlog``, ``io``

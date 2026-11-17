@@ -9,6 +9,9 @@
 # collector; the backend's tree ingest and sbom-scan jobs load the tree
 # and the SBOM of the nodes' image; and node_status and node_vulns give
 # each node's health and exposure. A body altered in transit is refused.
+# The operator enrolls node B from the names its vTPM's builder recorded
+# before it booted, so the backend trusts its key; the edge node, never
+# enrolled, stays untrusted.
 #
 # end2end/host.sh runs it on the host after node A's suite, as root, with
 # the keepalive backend it started, the operator key and the two nodes.
@@ -53,6 +56,11 @@ payload() {
 	tar -xzf "$W/pkg/$1/xfs-fix-$1.bee" -C "$W/pkg/$1" &&
 	"$S" upatch info --json "$W/pkg/$1/xfs-fix-$1/upatches/xfs-fix.upatch" |
 		python3 -c 'import json, sys; print(json.load(sys.stdin)["payload_sha256"])'
+}
+
+# The attestation key name node B's builder recorded before it booted.
+builder_ak() {
+	sed -n "s/^ak-name //p" "$NODES_DIR/node-b/tpm-names"
 }
 
 # Print the rows of node_status, the age of the record aside.
@@ -157,8 +165,19 @@ test_expect_success 'each node sends two quoted keepalives, a few seconds apart'
 	test "$(ak edge)" != "$(ak b)"
 '
 
-test_expect_success 'the backend keeps both nodes, untrusted, and every record' '
-	printf "%s\tuntrusted\n" "$(ak b)" "$(ak edge)" | sort >"$W/nodes" &&
+test_expect_success 'node B keeps the attestation key its builder recorded' '
+	test -n "$(builder_ak)" &&
+	test "$(ak b)" = "$(builder_ak)"
+'
+
+test_expect_success 'the operator enrolls node B from its builder'\''s records' '
+	ch "INSERT INTO shirudo.nodes (ak_name, trust)
+		VALUES ('\''$(builder_ak)'\'', '\''enrolled'\'')"
+'
+
+test_expect_success 'the backend keeps node B enrolled, the edge node untrusted, and every record' '
+	{ printf "%s\tenrolled\n" "$(ak b)" &&
+	  printf "%s\tuntrusted\n" "$(ak edge)"; } | sort >"$W/nodes" &&
 	ch_cmp "SELECT ak_name, max(trust) FROM shirudo.nodes
 		GROUP BY ak_name ORDER BY ak_name" "$W/nodes" &&
 	test "$(ch "SELECT count() FROM shirudo.rejected")" = 0 &&
@@ -172,13 +191,14 @@ test_expect_success 'the backend keeps both nodes, untrusted, and every record' 
 		ON k.ak_name = l.ak_name AND k.newest = l.clock AND k.newest_body = l.body")" = 2
 '
 
-test_expect_success 'node_status shows both nodes healthy with the masks VA== and qA==' '
+test_expect_success 'node_status shows both nodes healthy, node B enrolled, with the masks VA== and qA==' '
 	version=$(on edge "$RUNTIME version --version-id") &&
 	test "$version" = "$(on b "$RUNTIME version --version-id")" &&
 	ch "INSERT INTO shirudo.expected_builds (version_id, note)
 		VALUES ('\''$version'\'', '\''t9109'\'')" &&
 	refresh node_status_mv node_vulns_mv &&
-	printf "%s\thealthy\tuntrusted\t0\n" "$(ak b)" "$(ak edge)" | sort >"$W/status" &&
+	{ printf "%s\thealthy\tenrolled\t0\n" "$(ak b)" &&
+	  printf "%s\thealthy\tuntrusted\t0\n" "$(ak edge)"; } | sort >"$W/status" &&
 	ch_cmp "SELECT ak_name, status, trust, failed_check FROM shirudo.node_status
 		ORDER BY ak_name" "$W/status" &&
 	status_log edge >"$W/log-edge" &&

@@ -80,7 +80,7 @@ node_run_dir() {
 
 # Boot node $1, b with the core role or edge with the edge role, prepared
 # like node A but without tests, and record in $NODES_DIR/node-$1 how to
-# reach it.
+# reach it and the key names its vTPM's builder recorded before it booted.
 node_boot() {
 	run=$(node_run_dir "$1")
 	mkdir -p "$NODES_DIR/node-$1"
@@ -89,6 +89,7 @@ node_boot() {
 		TEST_VM_CPUS=2 TEST_VM_MEMORY="${TEST_VM_NODE_MEMORY:-2G}" \
 		>"$W/node-$1$NODE_ROUND.log" 2>&1 &&
 	   cp "$run/ssh.port" "$NODES_DIR/node-$1/port" &&
+	   cp "$run/tpm-names" "$NODES_DIR/node-$1/tpm-names" &&
 	   install -m 0600 "$run/ssh/id_ed25519" "$NODES_DIR/node-$1/key"; then
 		: >"$NODES_DIR/node-$1/ready"
 	else
@@ -329,18 +330,25 @@ ak=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["ak"]["nam
 node_sh b "/usr/local/bin/shirudo-runtime attest --nonce=$(cat "$W/nonce")" \
 	>"$W/node-b-evidence.json" || die "node B gave no evidence"
 # Node B loads nothing of its own: a test gives it only what a tree holds.
-ak_b=$(python3 -c 'import json, sys
+python3 -c 'import json, sys
 evidence = json.load(open(sys.argv[1]))
-assert not [r for r in evidence["eventlog"] if r["type"] == "upatch_load"]
-print(evidence["ak"]["name"])' "$W/node-b-evidence.json") ||
+assert not [r for r in evidence["eventlog"] if r["type"] == "upatch_load"]' \
+	"$W/node-b-evidence.json" ||
 	die "node B loaded an upatch while it was prepared"
+# The names come from the builder, never from the node.
+ak_b=$(sed -n 's/^ak-name //p' "$NODES_DIR/node-b/tpm-names")
+ek_b=$(sed -n 's/^ek-name //p' "$NODES_DIR/node-b/tpm-names")
 "$S" attest verify --evidence="$W/node-b-evidence.json" \
-	--nonce="$(cat "$W/nonce")" --ak-name="$ak_b" --allow-runtime-events \
-	--require-initrd >"$W/node-b-verify.out" 2>&1 &&
+	--nonce="$(cat "$W/nonce")" --ak-name="$ak_b" --ek-name="$ek_b" \
+	--allow-runtime-events --require-initrd >"$W/node-b-verify.out" 2>&1 &&
 	grep -qx 'verdict: ok' "$W/node-b-verify.out" || {
 	cat "$W/node-b-verify.out" >&2
-	die "the evidence of node B does not verify"
+	die "the evidence of node B does not verify against its builder's names"
 }
+! "$S" attest verify --evidence="$W/node-b-evidence.json" \
+	--nonce="$(cat "$W/nonce")" --ak-name="$ak" --ek-name="$ek_b" \
+	--allow-runtime-events --require-initrd >"$W/node-b-wrong.out" 2>&1 ||
+	die "the evidence of node B verifies against node A's attestation key"
 [ "$ak_b" != "$ak" ] || die "node A and node B share an attestation key"
 [ "$(node_sh b cat /run/shirudo/config/etc/shirudo/node.labels)" = role=core ] ||
 	die "node B is not labelled role=core"

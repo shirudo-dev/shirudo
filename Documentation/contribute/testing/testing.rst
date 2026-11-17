@@ -841,7 +841,14 @@ Once both have stopped, a second fresh edge node and node B,
 ``edge``: the runner's
 node mode prepares a node as it prepares node A, activates the config
 image of its role, runs no tests, starts no timers and leaves it running
-until ``host.sh`` stops it at the end. Each takes its role from a signed
+until ``host.sh`` stops it at the end. Before the guest boots, node mode
+acts as the builder of :doc:`/operate/run/attest`:
+:src:`testing/vm/tpm-builder.sh` creates the attestation key and the
+endorsement key in the node's fresh vTPM state, with the tpm2-tools
+commands that page gives, and writes their names to ``tpm-names`` in the
+VM's state directory. ``host.sh`` copies the file beside the node's SSH
+key and verifies node B's evidence against those names, never against
+the names the evidence carries, and checks that node A's key fails. Each takes its role from a signed
 config image, as ``t9105`` configures node A:
 
 .. list-table::
@@ -965,12 +972,16 @@ and the nodes' directory in its environment; its output is
 #. writes the SBOM store of the nodes' image, and one image for each
    other state of an SBOM, and runs the backend's sbom-scan job with the
    stub ``trivy`` of the fixtures, which prints one ``openssl`` finding;
+#. checks that node B's records carry the attestation key its builder
+   recorded, and enrolls that key, inserting ``enrolled`` for it into
+   ``shirudo.nodes`` as an operator does;
 #. seeds the kernel advisory of the fixtures, whose range holds every test
    kernel, and the nodes' build, and refreshes ``node_status`` and
    ``node_vulns``.
 
-It then checks the tree, the stored records and their quotes,
-``node_status`` with the masks ``VA==`` and ``qA==``, each node's
+It then checks the tree, the stored records and their quotes, node B
+``enrolled`` and the edge node ``untrusted`` in ``nodes`` and
+``node_status``, ``node_status`` with the masks ``VA==`` and ``qA==``, each node's
 ``state.json``, ``outcomes``, ``tree-eventlog`` and loaded set against
 the backend's rows, the state of every SBOM, and the exposure of each
 node: the kernel advisory ``shielded`` by ``xfs-fix`` on the edge node and

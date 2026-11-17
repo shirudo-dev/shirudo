@@ -34,6 +34,11 @@ the keepalive backend of `tools/backend`, which `host.sh` starts for
 every run. The tier boots two VMs at once, each with its own
 swtpm: node A runs the tests, node B (`make -C testing vm-node-end2end`,
 node mode of `vm/run.sh`) takes `role=core` from `config-core` and waits.
+Node mode first runs `vm/tpm-builder.sh`, which creates the node's AK
+and EK with tpm2-tools and writes their names to `tpm-names` in the VM's
+state directory; host.sh verifies node B against them and t9109 enrolls
+it in the backend, so node mode needs tpm2-tools and swtpm-tools on the
+host.
 With a backend, a fresh edge node (`END2END_NODE=edge`, `role=edge` from
 `config-edge`) boots once node A has stopped, and `host.sh` runs t9109,
 then t9110, which continues t9109's tree in segments, on the host against

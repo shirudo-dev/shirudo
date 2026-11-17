@@ -518,6 +518,13 @@ start_swtpm()
 	local _
 
 	chmod 0700 "$RUN_DIR/tpm"
+	# An end2end node's TPM comes from a builder the operator trusts, which
+	# records the names of its keys before the guest boots.
+	if [[ "$VM_MODE" == node ]]; then
+		"$REPO_ROOT/testing/vm/tpm-builder.sh" "$RUN_DIR/tpm" "$RUN_DIR/tpm-names" \
+			>>"$RUN_DIR/swtpm.log" 2>&1 ||
+			die "could not create the keys of the vTPM; see $RUN_DIR/swtpm.log"
+	fi
 	if user_systemd_available; then
 		SWTPM_UNIT_FILE="${RUN_DIR}/swtpm.unit"
 		SWTPM_UNIT="shirudo-vm-${VM_NAME}-swtpm.service"
@@ -1555,6 +1562,10 @@ validate_bpm_oci
 	die "custom trust and repository inputs must be built into signed config fixtures"
 if [[ "$VM_INITRD" == 1 ]]; then
 	HOST_DEPENDENCIES+=("dracut:dracut-core:dracut" "lsinitrd:dracut-core:dracut" "file:file:file")
+fi
+if [[ "$VM_MODE" == node ]]; then
+	HOST_DEPENDENCIES+=("tpm2_createprimary:tpm2-tools:tpm2-tools"
+		"swtpm_ioctl:swtpm-tools:swtpm-tools")
 fi
 check_host_dependencies
 validate_host_bundle
