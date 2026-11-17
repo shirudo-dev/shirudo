@@ -1,0 +1,16 @@
+at the head
+clean	healthy	0	5 head: pass, seq 3 of 3, generation 3	6 set: pass, 1 loaded
+drift	unhealthy	6	5 head: pass, seq 3 of 3, generation 3	6 set: FAIL drift, 1 loaded
+drift-both	unhealthy	6	5 head: pass, seq 3 of 3, generation 3	6 set: FAIL sync in progress at head, 1 loaded
+drift-pending	unhealthy	6	5 head: pass, seq 3 of 3, generation 3	6 set: FAIL sync in progress at head, 1 loaded
+drift-unsettled	healthy	0	5 head: pass, seq 3 of 3, generation 3	6 set: snapshot unsettled, 1 loaded
+pending	unhealthy	6	5 head: pass, seq 3 of 3, generation 3	6 set: FAIL sync in progress at head, 1 loaded
+one operation behind
+clean	healthy	0	5 head: behind, seq 3 of 4, generation 3	6 set: pass, 1 loaded
+drift	unhealthy	6	5 head: behind, seq 3 of 4, generation 3	6 set: FAIL drift, 1 loaded
+drift-both	healthy	0	5 head: behind, seq 3 of 4, generation 3	6 set: sync in progress, 1 loaded
+drift-pending	healthy	0	5 head: behind, seq 3 of 4, generation 3	6 set: sync in progress, 1 loaded
+drift-unsettled	healthy	0	5 head: behind, seq 3 of 4, generation 3	6 set: snapshot unsettled, 1 loaded
+pending	healthy	0	5 head: behind, seq 3 of 4, generation 3	6 set: sync in progress, 1 loaded
+caught up
+clean	healthy	0	4 chain: pass, root 3babcd63	5 head: pass, seq 4 of 4, generation 4	6 set: pass, 2 loaded

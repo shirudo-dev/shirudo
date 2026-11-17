@@ -1,0 +1,7 @@
+{
+  "image_id": "fleet-os",
+  "image_version": "2026.11.6",
+  "image_root": "",
+  "sbom_sha256": "d89d4d8966a7264023fb306de62ee1b5a40e6376dfffec4b59d0774fb988f333",
+  "built_at": "2026-11-07T08:00:00Z"
+}

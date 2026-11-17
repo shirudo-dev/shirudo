@@ -1,0 +1,75 @@
+base-at-0	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	shield_pending	xfs-fix	0		3	add	true	fixes
+base-at-0	verified	kernel	EXAMPLE-0303	linux	7.4.2		shield_pending	xfs-fix	0		3	add	true	manual
+base-at-0	verified	kernel	EXAMPLE-0606	linux	7.4.2		exposed_no_shield		0		0		false	none
+base-at-1	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	shielded	xfs-fix	1	add	3	add	true	fixes
+base-at-1	verified	kernel	EXAMPLE-0303	linux	7.4.2		shield_pending	xfs-fix	1	add	3	add	true	manual
+base-at-1	verified	kernel	EXAMPLE-0606	linux	7.4.2		shielded	xfs-fix	1	add	3	add	false	manual
+base-at-1-excluded	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	shield_excludes_node	xfs-fix	1	add	3	add	true	fixes
+base-at-1-excluded	verified	kernel	EXAMPLE-0303	linux	7.4.2		shield_pending	xfs-fix	1	add	3	add	true	manual
+base-at-1-excluded	verified	kernel	EXAMPLE-0606	linux	7.4.2		shield_excludes_node	xfs-fix	1	add	3	add	false	manual
+base-at-1-module-absent	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	shield_module_absent	xfs-fix	1	add	3	add	true	fixes
+base-at-1-module-absent	verified	kernel	EXAMPLE-0303	linux	7.4.2		shield_pending	xfs-fix	1	add	3	add	true	manual
+base-at-1-module-absent	verified	kernel	EXAMPLE-0606	linux	7.4.2		shield_module_absent	xfs-fix	1	add	3	add	false	manual
+base-at-2	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	shield_withdrawn	xfs-fix	2	delete	3	add	true	fixes
+base-at-2	verified	kernel	EXAMPLE-0303	linux	7.4.2		shield_pending	xfs-fix	2	delete	3	add	true	manual
+base-at-2	verified	kernel	EXAMPLE-0606	linux	7.4.2		shield_withdrawn	xfs-fix	2	delete	3	add	false	manual
+base-at-3	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	shielded	xfs-fix	3	add	3	add	true	fixes
+base-at-3	verified	kernel	EXAMPLE-0303	linux	7.4.2		shielded	xfs-fix	3	add	3	add	true	manual
+base-at-3	verified	kernel	EXAMPLE-0606	linux	7.4.2		exposed_no_shield		0		0		false	none
+base-at-3-module-absent	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	shield_module_absent	xfs-fix	3	add	3	add	true	fixes
+base-at-3-module-absent	verified	kernel	EXAMPLE-0303	linux	7.4.2		shield_module_absent	xfs-fix	3	add	3	add	true	manual
+base-at-3-module-absent	verified	kernel	EXAMPLE-0606	linux	7.4.2		exposed_no_shield		0		0		false	none
+binding-clean	verified	none					none		0		0		false	none
+binding-no-sbom-format	no_sbom	none					unknown		0		0		false	none
+binding-no-sbom-hash	no_sbom	none					unknown		0		0		false	none
+binding-no-sbom-missing	no_sbom	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	shielded	xfs-fix	3	add	3	add	true	fixes
+binding-no-sbom-missing	no_sbom	kernel	EXAMPLE-0303	linux	7.4.2		shielded	xfs-fix	3	add	3	add	true	manual
+binding-no-sbom-missing	no_sbom	kernel	EXAMPLE-0606	linux	7.4.2		exposed_no_shield		0		0		false	none
+binding-no-sbom-no-row	no_sbom	none					unknown		0		0		false	none
+binding-no-sbom-parse	no_sbom	none					unknown		0		0		false	none
+binding-root-mismatch	root_mismatch	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	shielded	xfs-fix	3	add	3	add	true	fixes
+binding-root-mismatch	root_mismatch	sbom	EXAMPLE-0202	openssl	3.5.1-1	3.5.1-2	exposed_no_shield		0		0		false	none
+binding-root-mismatch	root_mismatch	kernel	EXAMPLE-0303	linux	7.4.2		shielded	xfs-fix	3	add	3	add	true	manual
+binding-root-mismatch	root_mismatch	kernel	EXAMPLE-0606	linux	7.4.2		exposed_no_shield		0		0		false	none
+build-no-root	declared	sbom	EXAMPLE-0808	curl	8.1-2		exposed_no_shield		0		0		false	none
+build-other-root	root_mismatch	sbom	EXAMPLE-0808	curl	8.1-2		exposed_no_shield		0		0		false	none
+build-own-root	verified	sbom	EXAMPLE-0707	curl	8.1-1		exposed_no_shield		0		0		false	none
+kernel-fixed	verified	kernel	EXAMPLE-0303	linux	7.4.5		shielded	xfs-fix	3	add	3	add	true	manual
+kernel-fixed	verified	kernel	EXAMPLE-0606	linux	7.4.5		exposed_no_shield		0		0		false	none
+kernel-unreadable	verified	none					none		0		0		false	none
+mask-too-short-at-3	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	unknown	xfs-fix	3	add	3	add	true	fixes
+mask-too-short-at-3	verified	kernel	EXAMPLE-0303	linux	7.4.2		unknown	xfs-fix	3	add	3	add	true	manual
+mask-too-short-at-3	verified	kernel	EXAMPLE-0606	linux	7.4.2		exposed_no_shield		0		0		false	none
+no-mask-at-0	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	shield_pending	xfs-fix	0		3	add	true	fixes
+no-mask-at-0	verified	kernel	EXAMPLE-0303	linux	7.4.2		shield_pending	xfs-fix	0		3	add	true	manual
+no-mask-at-0	verified	kernel	EXAMPLE-0606	linux	7.4.2		exposed_no_shield		0		0		false	none
+no-mask-at-2	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	shield_withdrawn	xfs-fix	2	delete	3	add	true	fixes
+no-mask-at-2	verified	kernel	EXAMPLE-0303	linux	7.4.2		shield_pending	xfs-fix	2	delete	3	add	true	manual
+no-mask-at-2	verified	kernel	EXAMPLE-0606	linux	7.4.2		shield_withdrawn	xfs-fix	2	delete	3	add	false	manual
+no-mask-at-3	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	unknown	xfs-fix	3	add	3	add	true	fixes
+no-mask-at-3	verified	kernel	EXAMPLE-0303	linux	7.4.2		unknown	xfs-fix	3	add	3	add	true	manual
+no-mask-at-3	verified	kernel	EXAMPLE-0606	linux	7.4.2		exposed_no_shield		0		0		false	none
+old-at-0	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	shield_withdrawn	old-fix	0		2	delete	false	fixes
+old-at-0	verified	kernel	EXAMPLE-0303	linux	7.4.2		exposed_no_shield		0		0		false	none
+old-at-0	verified	kernel	EXAMPLE-0606	linux	7.4.2		exposed_no_shield		0		0		false	none
+old-at-1	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	shielded	old-fix	1	add	2	delete	false	fixes
+old-at-1	verified	kernel	EXAMPLE-0303	linux	7.4.2		exposed_no_shield		0		0		false	none
+old-at-1	verified	kernel	EXAMPLE-0606	linux	7.4.2		exposed_no_shield		0		0		false	none
+old-at-2	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	shield_withdrawn	old-fix	2	delete	2	delete	false	fixes
+old-at-2	verified	kernel	EXAMPLE-0303	linux	7.4.2		exposed_no_shield		0		0		false	none
+old-at-2	verified	kernel	EXAMPLE-0606	linux	7.4.2		exposed_no_shield		0		0		false	none
+shield-best-of-two	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	shielded	fix-b	2	add	2	add	true	fixes
+shield-best-of-two	verified	kernel	EXAMPLE-0303	linux	7.4.2		exposed_no_shield		0		0		false	none
+shield-best-of-two	verified	kernel	EXAMPLE-0606	linux	7.4.2		exposed_no_shield		0		0		false	none
+shield-live-before-withdrawn	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	shield_excludes_node	fix-b	2	add	2	add	true	fixes
+shield-live-before-withdrawn	verified	kernel	EXAMPLE-0303	linux	7.4.2		exposed_no_shield		0		0		false	none
+shield-live-before-withdrawn	verified	kernel	EXAMPLE-0606	linux	7.4.2		exposed_no_shield		0		0		false	none
+shield-no-tree	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	exposed_no_shield		0		0		false	none
+shield-no-tree	verified	kernel	EXAMPLE-0303	linux	7.4.2		exposed_no_shield		0		0		false	none
+shield-no-tree	verified	kernel	EXAMPLE-0606	linux	7.4.2		exposed_no_shield		0		0		false	none
+nodes	29	29
+shielded now, delete coming
+old-at-1	EXAMPLE-0101	old-fix	1	2
+shielded now, add coming
+base-at-1	EXAMPLE-0101	xfs-fix	1	3	true
+base-at-1	EXAMPLE-0606	xfs-fix	1	3	false

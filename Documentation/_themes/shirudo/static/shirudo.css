@@ -260,3 +260,61 @@ aside.footnote-list { border-top: 1px solid var(--line); margin-top: 2em; paddin
   .body h1 { font-size: 1.7rem; }
 }
 @media (prefers-reduced-motion: reduce) { .tree .chev svg { transition: none; } }
+
+/* table reference (clickhouse_schema) */
+.body p.meta[class*="kind-"] { margin: -2px 0 12px; }
+.body p.rubric { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 8px 0 0; }
+table.columns td:first-child code { white-space: nowrap; }
+table.columns td code { overflow-wrap: anywhere; }
+table.columns code.codec, table.columns p.default { color: var(--muted); }
+table.columns p.default { font-size: 12.5px; }
+table.sizes td:last-child, table.sizes th:last-child { text-align: right; padding-right: 0; }
+table.sizes p.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.sizes tr.total td { font-weight: 600; border-top: 2px solid var(--line); border-bottom: 0; }
+
+/* flow diagram (clickhouse-flow): one colour per kind of table */
+:root {
+  --k-null: #8a6d1e;    --k-null-bg: #f6eed6;
+  --k-store: #1d6b57;   --k-store-bg: #e2efe9;
+  --k-ref: #3d5a9c;     --k-ref-bg: #e4eaf7;
+  --k-derived: #8a3f6b; --k-derived-bg: #f4e3ed;
+  --k-ui: #a2461f;      --k-ui-bg: #f9e5db;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --k-null: #e0c070;    --k-null-bg: #332c17;
+    --k-store: #6cc4a8;   --k-store-bg: #1e332c;
+    --k-ref: #93aee8;     --k-ref-bg: #1f2840;
+    --k-derived: #e39cc6; --k-derived-bg: #38202f;
+    --k-ui: #f0a07b;      --k-ui-bg: #3a2318;
+  }
+}
+:root[data-theme="dark"] {
+  --k-null: #e0c070;    --k-null-bg: #332c17;
+  --k-store: #6cc4a8;   --k-store-bg: #1e332c;
+  --k-ref: #93aee8;     --k-ref-bg: #1f2840;
+  --k-derived: #e39cc6; --k-derived-bg: #38202f;
+  --k-ui: #f0a07b;      --k-ui-bg: #3a2318;
+}
+figure.flow { margin: 16px 0 24px; }
+.flow-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+figure.flow svg { display: block; width: 100%; min-width: 640px; height: auto; }
+figure.flow svg text { font: 500 12px var(--mono); fill: var(--fg); }
+figure.flow svg text.lbl { font: 400 11px var(--sans); fill: var(--muted); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+figure.flow svg .edge { fill: none; stroke: var(--muted); stroke-width: 1.2; }
+figure.flow svg .edge.dash { stroke-dasharray: 5 4; }
+figure.flow svg marker path { fill: var(--muted); }
+figure.flow svg rect.box { stroke-width: 1.2; }
+figure.flow svg a:hover rect.box { stroke-width: 2.2; }
+figure.flow svg .k-null { fill: var(--k-null-bg); stroke: var(--k-null); }
+figure.flow svg .k-store { fill: var(--k-store-bg); stroke: var(--k-store); }
+figure.flow svg .k-ref { fill: var(--k-ref-bg); stroke: var(--k-ref); }
+figure.flow svg .k-derived { fill: var(--k-derived-bg); stroke: var(--k-derived); }
+figure.flow svg .k-ui { fill: var(--k-ui-bg); stroke: var(--k-ui); }
+figure.flow figcaption .key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 4px 0 10px; vertical-align: -1px; }
+figure.flow figcaption .key:first-child { margin-left: 0; }
+figure.flow figcaption .k-null { background: var(--k-null); }
+figure.flow figcaption .k-store { background: var(--k-store); }
+figure.flow figcaption .k-ref { background: var(--k-ref); }
+figure.flow figcaption .k-derived { background: var(--k-derived); }
+figure.flow figcaption .k-ui { background: var(--k-ui); }

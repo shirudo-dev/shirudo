@@ -1,0 +1,170 @@
+#!/bin/sh
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+#
+# jobs/sbom-scan -- scan the SBOM of every image in the SBOM store and
+# load the outcome into shirudo.sbom_images and shirudo.sbom_vulns.
+#
+#   jobs/sbom-scan [--store <url>] [--trivy <path>] [--cache-dir <dir>]
+#
+# The store is file://<directory> or s3://<bucket>[/<prefix>], holding
+# <image_id>/<image_version>/<image_root or ->/image.json and the SBOM
+# beside it. Every run scans every image again, with Trivy as the matcher
+# and an advisory database it does not update: update it before the run.
+#
+#   SBOM_STORE         the store, in place of --store.
+#   TRIVY              the trivy binary. Default: trivy.
+#   TRIVY_CACHE_DIR    the cache with Trivy's database, in place of
+#                      --cache-dir. Default: Trivy's.
+#   S3_CLIENT          the AWS command line and its options, split at
+#                      spaces, for an s3:// store. Default: aws.
+#   CLICKHOUSE_CLIENT  the client command and its options, split at
+#                      spaces. Default: clickhouse-client, which reads
+#                      CLICKHOUSE_HOST, CLICKHOUSE_USER and
+#                      CLICKHOUSE_PASSWORD itself.
+#
+# Exit status: 0 when every image was loaded; 1 when an object or an
+# image was left out, each named on standard error with the rest loaded,
+# or when nothing could be loaded; 2 for wrong usage.
+
+set -eu
+
+here=$(cd "$(dirname "$0")" && pwd)
+store=${SBOM_STORE:-}
+trivy=${TRIVY:-trivy}
+cache=${TRIVY_CACHE_DIR:-}
+incomplete=0
+work=
+
+die()
+{
+	printf 'sbom-scan: %s\n' "$1" >&2
+	exit 1
+}
+
+usage()
+{
+	printf '%s\n' \
+		'usage: sbom-scan [--store <url>] [--trivy <path>] [--cache-dir <dir>]' >&2
+	exit 2
+}
+
+cleanup()
+{
+	[ -z "$work" ] || rm -rf "$work"
+}
+
+client()
+{
+	# shellcheck disable=SC2086 # a command with its options, to be split
+	${CLICKHOUSE_CLIENT:-clickhouse-client} "$@"
+}
+
+s3()
+{
+	# shellcheck disable=SC2086 # a command with its options, to be split
+	${S3_CLIENT:-aws} "$@"
+}
+
+insert()
+{
+	[ -s "$work/$1.jsonl" ] || return 0
+	client --query "INSERT INTO shirudo.$1 FORMAT JSONEachRow" \
+		<"$work/$1.jsonl" || die "cannot insert into shirudo.$1"
+}
+
+# step <step> <arguments>...: run a step of sbom-rows.py, where status 3
+# says that something was left out and the rest is done.
+step()
+{
+	status=0
+	python3 "$here/sbom-rows.py" "$@" || status=$?
+	case "$status" in
+	0) ;;
+	3) incomplete=1 ;;
+	*) exit 1 ;;
+	esac
+}
+
+# matcher <command> <arguments>...: run Trivy with the options every run
+# gives it.
+matcher()
+{
+	command=$1
+	shift
+	if [ -n "$cache" ]; then
+		"$trivy" "$command" --format json --cache-dir "$cache" "$@" </dev/null
+	else
+		"$trivy" "$command" --format json "$@" </dev/null
+	fi
+}
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--store|--trivy|--cache-dir)
+		[ $# -ge 2 ] || usage
+		case "$1" in
+		--store) store=$2 ;;
+		--trivy) trivy=$2 ;;
+		--cache-dir) cache=$2 ;;
+		esac
+		shift 2 ;;
+	*)
+		usage ;;
+	esac
+done
+[ -n "$store" ] || usage
+
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+work=$(mktemp -d)
+
+case "$store" in
+file://?*)
+	directory=${store#file://} ;;
+s3://?*)
+	# Only the objects the job reads, every one of them: each run
+	# scans every image again.
+	set --
+	for name in $(python3 "$here/sbom-rows.py" files); do
+		set -- "$@" --include "*/$name"
+	done
+	directory=$work/store
+	mkdir "$directory"
+	s3 s3 cp --recursive --only-show-errors "$store" "$directory" \
+		--exclude '*' "$@" </dev/null ||
+		die "cannot copy $store, nothing loaded" ;;
+*)
+	die "the store $store is neither file://<directory> nor s3://<bucket>" ;;
+esac
+
+step images "$directory" "$work"
+
+if cut -f 2 "$work/images.tsv" | grep -qx ok; then
+	matcher version >"$work/version.json" ||
+		die 'trivy version failed, nothing loaded'
+fi
+while IFS='	' read -r n state copy label; do
+	[ "$state" = ok ] || continue
+	matcher sbom --skip-db-update --quiet "$copy" \
+		>"$work/trivy-$n.json" 2>"$work/trivy-$n.err" && continue
+	printf 'sbom-scan: %s: trivy sbom failed, not loaded:\n' "$label" >&2
+	sed 's/^/    /' "$work/trivy-$n.err" >&2
+	rm -f "$work/trivy-$n.json"
+	incomplete=1
+done <"$work/images.tsv"
+
+# Every scan gets a time of its own, after every scan before it, so that
+# the findings of two runs never share the scanned_at sbom_vulns is
+# joined on.
+scanned_at=$(client --query 'SELECT toUnixTimestamp(greatest(now(),
+	(SELECT max(scanned_at) FROM shirudo.sbom_images) + 1))' </dev/null) ||
+	die 'cannot read shirudo.sbom_images, nothing loaded'
+step rows "$work" "$scanned_at"
+
+# The findings go first: a row of sbom_images is what makes a node read
+# them, and one without its findings would read as clean.
+insert sbom_vulns
+insert sbom_images
+cat "$work/summary"
+exit "$incomplete"

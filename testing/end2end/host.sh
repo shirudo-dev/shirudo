@@ -34,6 +34,7 @@ BACKEND_CLICKHOUSE=127.0.0.1:18125
 STACK_NAME=shirudo-end2end
 STACK_PERSIST=0
 S=$REPO/shirudo
+BACKEND=$REPO/tools/backend
 export SHIRUDO_BUILD="$REPO/tools/shirudo-build/shirudo-build"
 export BPM_OCI_CA_FILE="$W/ca.pem"
 MAKE=${MAKE:-make}
@@ -184,27 +185,6 @@ second_pair() {
 		die "the second pair is not labelled role=edge and role=core"
 }
 
-# The keepalive backend t9107 runs against, in $BACKEND: BACKEND_DIR, a
-# directory relative to the checkout or a git URL cloned into $W, by
-# default ../backend. Without the variable and without that directory
-# there is none, and t9107 skips.
-backend_find() {
-	case "${BACKEND_DIR-}" in
-	"")
-		[ -d ../backend ] || return 1
-		BACKEND=$(cd ../backend && pwd) ;;
-	*://* | *@*:*)
-		git clone --quiet --depth 1 "$BACKEND_DIR" "$W/backend" ||
-			die "cannot clone BACKEND_DIR $BACKEND_DIR"
-		BACKEND=$W/backend ;;
-	*)
-		[ -d "$BACKEND_DIR" ] || die "BACKEND_DIR is no directory: $BACKEND_DIR"
-		BACKEND=$(cd "$BACKEND_DIR" && pwd) ;;
-	esac
-	[ -f "$BACKEND/otelcol.yaml" ] && [ -x "$BACKEND/jobs/tree-ingest" ] ||
-		die "no keepalive backend in $BACKEND"
-}
-
 # Publish the example tree of the keepalive fixtures, signed with the
 # operator key, at oci://$REGISTRY/$1:stable. Its operations name
 # artifacts that do not exist, so bpm tree append cannot write it: the
@@ -265,19 +245,17 @@ if [ $# -eq 1 ]; then
 	say "the operator builds, pushes and publishes kernel-obs"
 	operator "$OPERATOR_SH" publish
 	operator cat "$OPERATOR_OUT/nonce" >"$W/nonce"
-	if [ -n "${BACKEND-}" ]; then
-		say "the keepalive backend of $BACKEND loads the example tree"
-		operator cat "$OPERATOR_OUT/pkg/kernel-obs-1.0.0.bee" >"$BEE"
-		publish_document shirudo/fleet-base >"$W/backend-tree.digest" ||
-			die "cannot publish the example tree"
-		CLICKHOUSE_CLIENT="docker exec -i $STACK_NAME-backend-clickhouse clickhouse-client" \
-			SHIRUDO="$S" "$BACKEND/jobs/tree-ingest" --cert "$KEYS/cert.der" \
-			"oci://$REGISTRY/shirudo/fleet-base" >"$W/tree-ingest.out" 2>&1 || {
-			cat "$W/tree-ingest.out" >&2
-			rm -f "$W/backend-tree.digest"
-			die "the tree ingest job did not load the example tree"
-		}
-	fi
+	say "the keepalive backend of tools/backend loads the example tree"
+	operator cat "$OPERATOR_OUT/pkg/kernel-obs-1.0.0.bee" >"$BEE"
+	publish_document shirudo/fleet-base >"$W/backend-tree.digest" ||
+		die "cannot publish the example tree"
+	CLICKHOUSE_CLIENT="docker exec -i $STACK_NAME-backend-clickhouse clickhouse-client" \
+		SHIRUDO="$S" "$BACKEND/jobs/tree-ingest" --cert "$KEYS/cert.der" \
+		"oci://$REGISTRY/shirudo/fleet-base" >"$W/tree-ingest.out" 2>&1 || {
+		cat "$W/tree-ingest.out" >&2
+		rm -f "$W/backend-tree.digest"
+		die "the tree ingest job did not load the example tree"
+	}
 	# Node B outlives this run, which ends with its boot over, or with it
 	# stopped when the run fails.
 	trap '[ $? -eq 0 ] || node_down b "$NODE_B_PID"' EXIT
@@ -315,16 +293,10 @@ say "the registry, collector and ClickHouse"
 stack_oci || die "the registry did not come up"
 stack_telemetry || die "the telemetry stack did not come up"
 
-BACKEND=
-if backend_find; then
-	say "the keepalive backend of $BACKEND"
-	[ -x "$CHECKER" ] || die "no quote checker: $CHECKER"
-	stack_backend "$BACKEND" "$CHECKER" ||
-		die "the keepalive backend did not come up"
-else
-	say "no keepalive backend at ../backend and no BACKEND_DIR: t9107 and t9109 to t9111 do not run"
-fi
-export BACKEND
+say "the keepalive backend of tools/backend"
+[ -x "$CHECKER" ] || die "no quote checker: $CHECKER"
+stack_backend "$BACKEND" "$CHECKER" ||
+	die "the keepalive backend did not come up"
 
 say "the operator, in $E2E_VM-operator"
 # Each VM's name goes on make's command line, where a VM_NAME the caller

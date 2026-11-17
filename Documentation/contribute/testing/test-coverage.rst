@@ -745,13 +745,13 @@ signed config image.
        unlabeled files; socket-storage bits allow 127.0.0.1 for policy A
        and deny it for B; final evidence includes the loaded policy upatch
    * - ``t9107-keepalive-backend``
-     - The keepalive backend that ``BACKEND_DIR`` names: its tree ingest
-       job loads the example publication through ``bpm tree show``, the
-       example keepalives of node A and node B with their recorded quotes
-       pass its collector and ``shirudo-quote-check``, and
-       ``node_status`` gives the example's results; a body altered in
-       transit is ``body_mismatch``, a replayed record collapses and an
-       older one does not become the latest
+     - The backend of ``tools/backend``: its tree ingest job loads the
+       example publication through ``bpm tree show``, the example
+       keepalives of node A and node B with their recorded quotes pass
+       its collector and ``shirudo-quote-check``, and ``node_status``
+       gives the example's results; a body altered in transit is
+       ``body_mismatch``, a replayed record collapses and an older one
+       does not become the latest
    * - ``t9109-pipeline``
      - The whole keepalive pipeline on a fresh edge node and node B, run
        by ``host.sh`` on the host: ``bpm build`` and ``bpm tree append``
@@ -863,6 +863,17 @@ the functional tests run.
      - The tree's ``state.json``, eventlog and outcome lines
    * - ``upatch``
      - A ``.upatch`` container and its decoder table
+
+Backend tests
+~~~~~~~~~~~~~
+
+The SQL tests of :src:`tools/backend/test/` cover the backend's schema
+against a ClickHouse container (:ref:`testing-backend`): the quote
+check of every record and the reasons a record is refused, each status
+check and the history it reads, ``node_vulns`` and its inputs, the
+retention script and the views that keep boot baselines, the tree
+ingest job on a single publication and on a walk over sealed segments,
+and the SBOM scan job on a store that holds an image in every state.
 
 Coverage by area
 ----------------

@@ -1,0 +1,37 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:6a1c1d0e-0b1e-4c55-9a0b-2026111000003",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-11-02T08:00:00Z",
+    "component": {
+      "bom-ref": "image",
+      "type": "container",
+      "name": "fleet-os"
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "os",
+      "type": "operating-system",
+      "name": "debian",
+      "version": "13"
+    },
+    {
+      "bom-ref": "pkg:deb/debian/openssl@3.5.1-1?arch=amd64&distro=debian-13",
+      "type": "library",
+      "name": "openssl",
+      "version": "3.5.1-1",
+      "purl": "pkg:deb/debian/openssl@3.5.1-1?arch=amd64&distro=debian-13"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "os",
+      "dependsOn": [
+        "pkg:deb/debian/openssl@3.5.1-1?arch=amd64&distro=debian-13"
+      ]
+    }
+  ]
+}

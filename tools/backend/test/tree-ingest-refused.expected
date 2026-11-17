@@ -1,0 +1,97 @@
+tree-ingest: input refused: it is not a JSON value
+empty: status 1
+tree-ingest: input refused: it is not a JSON value
+not JSON: status 1
+tree-ingest: input refused: it is not a JSON value
+cut short: status 1
+tree-ingest: input refused: the input is not an object
+an array: status 1
+tree-ingest: input refused: base.seq of segment 2 of the walk is not the seq of head of segment 1
+two objects: status 1
+tree-ingest: input refused: the input has no manifest_digest
+a line per value: status 1
+tree-ingest: input refused: the input has no manifest_digest
+no manifest digest: status 1
+tree-ingest: input refused: the input has no document
+no document: status 1
+tree-ingest: input refused: manifest_digest of the input is not "sha256:" and 64 lowercase hex digits
+digest without algorithm: status 1
+tree-ingest: input refused: layer_digest of artifact of the operation with seq 1 is not "sha256:" and 64 lowercase hex digits
+short digest: status 1
+tree-ingest: input refused: schema of the document is not 1
+schema 2: status 1
+tree-ingest: input refused: tree_id of the document is not 1 to 255 characters of [A-Za-z0-9._-]
+tree_id: status 1
+tree-ingest: input refused: generation of the document is not an unsigned 64-bit integer
+generation: status 1
+tree-ingest: input refused: seq of operation 2 of the document is not an unsigned 64-bit integer
+negative seq: status 1
+tree-ingest: input refused: seq of head is not an unsigned 64-bit integer
+fractional seq: status 1
+tree-ingest: input refused: seq of operation 2 of the document is used twice
+seq twice: status 1
+tree-ingest: input refused: op of the operation with seq 2 is neither add nor delete
+op: status 1
+tree-ingest: input refused: selector of the operation with seq 1 is not an object
+selector: status 1
+tree-ingest: input refused: the operation with seq 1 has no artifact
+no artifact: status 1
+tree-ingest: input refused: operations of the document is not an array
+operations: status 1
+tree-ingest: input refused: a key is given twice in one object
+key twice: status 1
+tree-ingest: input refused: base has no segment_manifest_digest
+segment: status 1
+tree-ingest: input refused: base has history_root but its seq is 0
+base keys at seq 0: status 1
+tree-ingest: input refused: seq of operation 3 of the document is not above base.seq and at most the seq of head
+operation past head: status 1
+tree-ingest: input refused: segment 1 of the walk has base.seq 2: the walk does not reach base.seq 0
+walk from a later segment: status 1
+tree-ingest: input refused: segment 1 of the walk has base.seq 4: the walk does not reach base.seq 0
+segments newest first: status 1
+tree-ingest: input refused: base.seq of segment 2 of the walk is not the seq of head of segment 1
+a segment left out: status 1
+tree-ingest: input refused: base.seq of segment 2 of the walk is not the seq of head of segment 1
+base not the head before: status 1
+tree-ingest: input refused: segment_manifest_digest of segment 2 of the walk is not the manifest digest of segment 1
+another predecessor: status 1
+tree-ingest: input refused: segment 2 of the walk: base has no segment_manifest_digest
+no predecessor: status 1
+tree-ingest: input refused: segment 2 of the walk: base has no history_root
+no history root: status 1
+tree-ingest: input refused: segment 2 of the walk: history_root of base is not 64 lowercase hex digits
+history root with sha256:: status 1
+tree-ingest: input refused: generation of segment 3 of the walk is not above that of segment 2
+generation going back: status 1
+tree-ingest: input refused: tree_id of segment 3 of the walk is not that of segment 2
+another tree: status 1
+tree-ingest: input refused: segment 3 of the walk: seq of operation 1 of the document is not above base.seq and at most the seq of head
+operation below base: status 1
+tree-ingest: input refused: segment 3 of the walk: the document has no operations but its base.seq is above 0
+no operations: status 1
+tree-ingest: input refused: a key is given twice in one object
+key twice in a segment: status 1
+rows after the refusals:
+0	0	0
+stub-shirudo: bpm tree show oci://registry.example.com/shirudo/fleet-base --cert /certs/operator.pem --walk
+tree-ingest: bpm tree show failed, nothing loaded
+failed command: status 1
+0	0	0
+tree-ingest: needs --cert or TREE_CERT
+no certificate: status 1
+usage: tree-ingest [--shirudo <path>] [--reference <ref>] [--cert <file>] [oci://<repository>]
+       tree-ingest --input <file>|-
+no repository: status 2
+stub-shirudo: bpm tree show oci://registry.example.com/shirudo/fleet-base --reference tree --cert /certs/operator.pem --walk
+tree-ingest: loaded fleet-base generation 3 (operations: 3, fixes: 2)
+tree-ingest: fleet-base generation 3 is loaded with manifest 4c1d7e6b0a9f38e2d5c4b3a2918f7e6d5c4b3a29180f7e6d5c4b3a2918f7e6d5, this one is 5c1d7e6b0a9f38e2d5c4b3a2918f7e6d5c4b3a29180f7e6d5c4b3a2918f7e6d5; nothing loaded
+another manifest: status 1
+tree-ingest: loaded fleet-segments generation 2 (operations: 2, fixes: 1)
+tree-ingest: loaded fleet-segments generation 4 (operations: 2, fixes: 1)
+tree-ingest: fleet-segments generation 4 is loaded with manifest e114111ddf285a40bff312f278926be5b38f2021a417adcf83d07aca76f4f440, this one is f114111ddf285a40bff312f278926be5b38f2021a417adcf83d07aca76f4f440; nothing loaded
+another manifest in a walk: status 1
+fleet-base	3	4c1d7e6b0a9f38e2d5c4b3a2918f7e6d5c4b3a29180f7e6d5c4b3a2918f7e6d5	3
+fleet-segments	2	2960661252c50e7232cd9781a0ccdbee045bfc40e2f081d89ba3c8fbe1c23495	2
+fleet-segments	4	e114111ddf285a40bff312f278926be5b38f2021a417adcf83d07aca76f4f440	4
+7	4

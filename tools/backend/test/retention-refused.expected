@@ -1,0 +1,12 @@
+apply-retention.sh: boot_first_retention_seconds is "3600", need a number of seconds of at least 86400
+keepalive 7200, boot_first 3600: status 1
+boot_first	TTL last_used + toIntervalSecond(2592000)
+keepalive	TTL toDateTime(received) + toIntervalSecond(3600)
+apply-retention.sh: keepalive_retention_seconds is "0", need a number of seconds above 0
+keepalive 0, boot_first 5184000: status 1
+boot_first	TTL last_used + toIntervalSecond(2592000)
+keepalive	TTL toDateTime(received) + toIntervalSecond(3600)
+keepalive 7200, boot_first 86400: status 0
+boot_first	TTL last_used + toIntervalSecond(86400)
+keepalive	TTL toDateTime(received) + toIntervalSecond(7200)
+7200	86400

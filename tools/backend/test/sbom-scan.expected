@@ -1,0 +1,49 @@
+sbom-scan: fleet-os/2026.11.1/image.json is not <image_id>/<image_version>/<image_root or ->/image.json, left out
+sbom-scan: fleet-os/2026.11.12/not-a-root/image.json is not <image_id>/<image_version>/<image_root or ->/image.json, left out
+sbom-scan: fleet-os/2026.11.11/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: trivy sbom failed, not loaded:
+    FATAL stub: the scan failed
+sbom-scan: fleet-os/2026.11.10/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: the matcher's report is refused, not loaded: a vulnerability of the report has no PkgName
+sbom-scan: fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c: ok, components: 4, findings: 2, of kernel packages left out: 3
+sbom-scan: fleet-os/2026.11.13/-: ok, components: 4, findings: 2, of kernel packages left out: 3, the SBOM of fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c
+sbom-scan: fleet-os/2026.11.2/-: missing, no sbom.cdx.json
+sbom-scan: fleet-os/2026.11.3/3333333333333333333333333333333333333333333333333333333333333333: hash_mismatch, the SHA-256 of sbom.cdx.json is not sbom_sha256
+sbom-scan: fleet-os/2026.11.4/4444444444444444444444444444444444444444444444444444444444444444: parse_error, bomFormat of sbom.cdx.json is not "CycloneDX"
+sbom-scan: fleet-os/2026.11.5/5555555555555555555555555555555555555555555555555555555555555555: unsupported_format, sbom_format "spdx-json" has no reader
+sbom-scan: fleet-os/2026.11.6/-: ok, components: 2, findings: 0
+sbom-scan: fleet-os/2026.11.7/7777777777777777777777777777777777777777777777777777777777777777: parse_error, sbom.cdx.json is not a JSON value
+sbom-scan: fleet-os/2026.11.8/8888888888888888888888888888888888888888888888888888888888888888: parse_error, image.json is not a JSON value
+sbom-scan: fleet-os/2026.11.9/-: parse_error, image_version of image.json is not the one of its path
+sbom-scan: loaded images: 10, findings: 2
+first run: status 1
+stub-trivy: version --format json
+stub-trivy: sbom --format json --skip-db-update --quiet 1.sbom.cdx.json
+stub-trivy: sbom --format json --skip-db-update --quiet 2.sbom.cdx.json
+stub-trivy: sbom --format json --skip-db-update --quiet 3.sbom.cdx.json
+stub-trivy: sbom --format json --skip-db-update --quiet 4.sbom.cdx.json
+stub-trivy: sbom --format json --skip-db-update --quiet 9.sbom.cdx.json
+sbom-scan: fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c: ok, components: 4, findings: 2, of kernel packages left out: 3
+sbom-scan: loaded images: 1, findings: 2
+second run: status 0
+stub-trivy: version --format json --cache-dir /var/cache/trivy-test
+stub-trivy: sbom --format json --cache-dir /var/cache/trivy-test --skip-db-update --quiet 1.sbom.cdx.json
+sbom_images
+fleet-os	2026.11.1	a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c	cyclonedx-json	fd2407ebf451915ddb23cd4cabd3cee23db62e7f1d7a81c8c3cfb3b1c48596e4	ok	2026-11-02 08:00:00	2026-11-11T06:00:00Z
+fleet-os	2026.11.13		cyclonedx-json	fd2407ebf451915ddb23cd4cabd3cee23db62e7f1d7a81c8c3cfb3b1c48596e4	ok	2026-11-12 08:00:00	2026-11-11T06:00:00Z
+fleet-os	2026.11.2		cyclonedx-json		missing	2026-11-03 08:00:00	
+fleet-os	2026.11.3	3333333333333333333333333333333333333333333333333333333333333333	cyclonedx-json		hash_mismatch	2026-11-04 08:00:00	
+fleet-os	2026.11.4	4444444444444444444444444444444444444444444444444444444444444444	cyclonedx-json		parse_error	2026-11-05 08:00:00	
+fleet-os	2026.11.5	5555555555555555555555555555555555555555555555555555555555555555	spdx-json		unsupported_format	2026-11-06 08:00:00	
+fleet-os	2026.11.6		cyclonedx-json	d89d4d8966a7264023fb306de62ee1b5a40e6376dfffec4b59d0774fb988f333	ok	2026-11-07 08:00:00	2026-11-11T06:00:00Z
+fleet-os	2026.11.7	7777777777777777777777777777777777777777777777777777777777777777	cyclonedx-json		parse_error	2026-11-08 08:00:00	
+fleet-os	2026.11.8	8888888888888888888888888888888888888888888888888888888888888888	cyclonedx-json		parse_error	1970-01-01 00:00:00	
+fleet-os	2026.11.9		cyclonedx-json		parse_error	1970-01-01 00:00:00	
+scanned again	['2026.11.1']
+scans	2
+sbom_vulns
+fd2407ebf451915ddb23cd4cabd3cee23db62e7f1d7a81c8c3cfb3b1c48596e4	EXAMPLE-0202	openssl	3.5.1-1	3.5.1-2	HIGH	0
+fd2407ebf451915ddb23cd4cabd3cee23db62e7f1d7a81c8c3cfb3b1c48596e4	EXAMPLE-0505	zlib	1.3-1		MEDIUM	0
+fd2407ebf451915ddb23cd4cabd3cee23db62e7f1d7a81c8c3cfb3b1c48596e4	EXAMPLE-0202	openssl	3.5.1-1	3.5.1-2	HIGH	1
+fd2407ebf451915ddb23cd4cabd3cee23db62e7f1d7a81c8c3cfb3b1c48596e4	EXAMPLE-0505	zlib	1.3-1		MEDIUM	1
+node_vulns
+edge-01	2026.11.1	verified	false	sbom	EXAMPLE-0202	openssl	3.5.1-1	3.5.1-2	HIGH	exposed_no_shield
+edge-01	2026.11.1	verified	false	sbom	EXAMPLE-0505	zlib	1.3-1		MEDIUM	exposed_no_shield

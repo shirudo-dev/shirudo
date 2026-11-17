@@ -181,3 +181,14 @@ jobs:
         with:
           path: build/test-vm/cache
           key: ${{ steps.images.outputs.cache-primary-key }}
+
+  backend:
+    name: Backend SQL tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run the SQL tests in a ClickHouse container
+        run: make -C tools/backend tests

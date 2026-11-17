@@ -1,0 +1,11 @@
+keepalive
+good	2026-11-11 10:00:00.000000000	000bcb89b50ad47313877815c714aa19926c4e4f7211dbed37c4e8000df4fb1b81a8	7	60000	168d20a1-5011-4e1b-9924-d8b73c85aa4e	ok	1	1
+nodes
+000bcb89b50ad47313877815c714aa19926c4e4f7211dbed37c4e8000df4fb1b81a8	QUtB	good	untrusted
+rejected
+altered	body_mismatch		0	0
+forged	bad_signature		0	0
+reordered	malformed		0	0
+spaced	malformed		0	0
+unquoted	malformed		0	0
+wrapped	clock_range	000bcb89b50ad47313877815c714aa19926c4e4f7211dbed37c4e8000df4fb1b81a8	16777216	5

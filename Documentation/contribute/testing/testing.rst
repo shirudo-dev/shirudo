@@ -98,12 +98,16 @@ Test tiers
      - :src:`testing/proofs/`
      - On the build host, with CBMC and Lean 4, hours of CPU for all
      - ``make proofs``
+   * - Backend
+     - :src:`tools/backend/test/`
+     - On the build host, against a ClickHouse container
+     - ``make -C tools/backend tests``
 
 ``make tests`` in the checkout root, or ``make -C testing``, runs the
 unit, CI check, functional and end-to-end tiers in that order. The fuzz
-targets and the proofs run on their own. CI runs the proofs only after
-a push to main, in the ``Proofs`` workflow, never on a pull request:
-:doc:`proofs` says which to run for a change.
+targets, the proofs and the backend tests run on their own. CI runs the
+proofs only after a push to main, in the ``Proofs`` workflow, never on a
+pull request: :doc:`proofs` says which to run for a change.
 
 Each functional family with target tests gets a fresh VM. The VM runner
 caches the generated dracut initrd in ``build/test-vm/cache/initrd/``
@@ -799,12 +803,9 @@ The guests reach the registry and collector through QEMU's address for
 the host. ClickHouse is available to the collector on the test's Docker
 network.
 
-``t9107`` runs the reference keepalive backend, which lives in a
-repository of its own, ``shirudo-dev/backend``. ``host.sh`` finds it
-through ``BACKEND_DIR``: a directory, relative to the checkout when the
-path is relative, ``../backend`` by default, or a git URL, which it
-clones into ``build/test-vm/end2end/backend``. It starts a ClickHouse of
-the backend's own on ``http://127.0.0.1:18125``, with the backend's schema
+``t9107`` runs the backend of :src:`tools/backend/`
+(:doc:`/operate/integrations/backend`). ``host.sh`` starts a ClickHouse
+of the backend's own on ``http://127.0.0.1:18125``, with the backend's schema
 and ``shirudo-quote-check`` as ``tpm_quote_check``, and a collector with
 the backend's configuration on ``https://127.0.0.1:14320``. It publishes
 the example tree of :src:`testing/fixtures/keepalive/` signed with the
@@ -814,17 +815,12 @@ with their recorded quotes through that collector and queries
 ClickHouse, both through QEMU's address for the host. After node A,
 ``host.sh`` runs ``t9109``, ``t9110`` and ``t9111`` against the same
 backend, see :ref:`testing-pipeline`, :ref:`testing-history` and
-:ref:`testing-walk`. Without ``BACKEND_DIR`` and without ``../backend``,
-none of ``t9107`` and ``t9109`` to ``t9111`` runs: ``host.sh`` writes the
-example tree's digest to ``build/test-vm/end2end/backend-tree.digest``
-only when it started the backend, and without it
-:src:`testing/run-target-tests.sh` leaves ``t9107`` out with
-``not run without a keepalive backend`` rather than failing the family
-on its skip:
-
-.. code-block:: console
-
-   # make -C testing end2end BACKEND_DIR=/path/to/backend
+:ref:`testing-walk`. ``host.sh`` writes the example tree's digest to
+``build/test-vm/end2end/backend-tree.digest`` once the backend has loaded
+it. Without that file, as in a run of the family without ``host.sh``,
+:src:`testing/run-target-tests.sh` leaves ``t9107`` out with ``not run
+without a keepalive backend`` rather than failing the family on its
+skip.
 
 .. _testing-two-nodes:
 
@@ -1105,6 +1101,61 @@ An empty filter selects everything; invalid expressions fail with status
 2. ``-t`` overrides ``TEST_FILTER``. For unit tests, the filter selects
 suite executable names. Filtering preserves order and does not add
 prerequisite scripts or skip the normal build and VM setup.
+
+.. _testing-backend:
+
+Run the backend tests
+---------------------
+
+The SQL tests of the backend start a ClickHouse container with docker
+or podman, at the image :src:`testing/vm/stack-lib.sh` pins, install
+:src:`tools/backend/test/stub-quote-check.sh` as ``tpm_quote_check``,
+and run every ``test/<name>.sql`` against a freshly loaded schema,
+comparing what it prints with ``test/<name>.expected``:
+
+.. code-block:: console
+
+   $ make -C tools/backend tests
+
+``tools/backend/test/run.sh <name>...`` runs only the tests named. The
+runner loads the schema as an installation does,
+``sql/apply-retention.sh`` included. A test that needs other settings
+in place when that script runs puts them in ``test/<name>.setup.sql``.
+
+A test that has a ``test/<name>.sh`` runs that script before its SQL,
+with ``CLICKHOUSE_CLIENT`` set to the client of the test's server, and
+what the script prints comes first in ``test/<name>.expected``. The
+tests of ``jobs/tree-ingest`` run the job this way, on
+``test/tree-show-1.1.0.json``, a ``bpm tree show`` output built from
+:src:`testing/fixtures/keepalive/tree-1.1.0.json` with a made-up
+manifest digest, and on ``test/tree-show-walk.json``, a ``bpm tree show
+--walk`` output of the same three operations and two more in three
+segments of two, two and one operation, at generations 2, 4 and 5. Its
+manifest digests and the artifacts of operations 4 and 5 are made up.
+Its operation digests and history roots are computed from them with
+shirudo's formulas. ``test/stub-shirudo.sh`` stands in for ``shirudo``.
+The tests need ``python3`` on the host.
+
+The tests of ``jobs/sbom-scan`` run the job the same way, on the store
+``test/sbom-store``, which holds an image in every state and objects out
+of place, with ``test/stub-trivy.sh`` in place of Trivy and
+``test/stub-aws.sh`` in place of ``aws``. The stub matches nothing: it
+prints the report in ``test/trivy/`` named by the SHA-256 of the SBOM it
+is given. A script that exits with status 77 skips its test and says
+why. ``test/sbom-scan-trivy`` is skipped unless ``trivy`` is on the host
+and ``SBOM_TRIVY_CACHE`` names a Trivy cache directory with a database,
+since its findings would change with every database CI could fetch.
+With them it runs the job with Trivy and checks what does not depend on
+the database.
+
+The stub quote checker verifies nothing. It reads the checker's rows and
+prints the checker's answers, steered by fields that only look like
+base64: ``attest`` is ``<reset_count>/<clock>/<body_sha256>``, ``sig`` is
+``good`` or anything else for ``bad_signature``, and ``ak`` is any text.
+With ``SHIRUDO_QUOTE_CHECK=<path>`` the runner installs that program
+instead. It has to run inside the container, so it needs the libraries
+it links there. A test named ``<name>-stub`` feeds quotes in the stub's
+form and is skipped then.
 
 Write a test
 ------------

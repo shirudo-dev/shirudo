@@ -1,0 +1,22 @@
+tree-ingest: loaded no-fixes generation 3 (operations: 3, fixes: 0)
+tree-ingest: operation 1: fixes is not an array of strings, loaded without fixes
+tree-ingest: loaded bad-fixes generation 3 (operations: 3, fixes: 1)
+tree-ingest: operation 1: fixes is not an array of strings, loaded without fixes
+tree-ingest: loaded mixed-fixes generation 3 (operations: 3, fixes: 1)
+tree-ingest: loaded first.tree generation 1 (operations: 1, fixes: 2)
+tree_pubs
+bad-fixes	3	4ee49208ad87695d862c8cc976d1c910170a3de611cfcee2ce181efd8e0a2942	3
+first.tree	1		1
+mixed-fixes	3	4ee49208ad87695d862c8cc976d1c910170a3de611cfcee2ce181efd8e0a2942	3
+no-fixes	3	4ee49208ad87695d862c8cc976d1c910170a3de611cfcee2ce181efd8e0a2942	3
+tree_ops
+bad-fixes	3	[1,2,3]
+first.tree	1	[1]
+mixed-fixes	3	[1,2,3]
+no-fixes	3	[1,2,3]
+{"architecture":["x86_64","aarch64"],"kernel_release_prefix":["7.4."],"labels":{"role":["edge"],"site":["café \\"1\\""]}}	['café "1"']
+upatch_fixes
+bad-fixes	3	xfs-fix	EXAMPLE-0101	fixes
+first.tree	1	xfs-fix	EXAMPLE-0101	fixes
+first.tree	1	xfs-fix	EXAMPLE-0202	fixes
+mixed-fixes	3	xfs-fix	EXAMPLE-0101	fixes

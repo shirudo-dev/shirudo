@@ -1,0 +1,10 @@
+boot_first after forty days
+long-boot	00000000-0000-4000-8000-00000000000a	3	1
+rebooted	00000000-0000-4000-8000-00000000000c	0	1
+silent	00000000-0000-4000-8000-00000000000d	4	1
+check 3 today
+long-boot	unhealthy	3	3 reported: FAIL, verdict ok, cond 0x1555, flags 0, tamper +2, build d6d918ad
+lost-baseline	unhealthy	3	3 reported: FAIL, verdict ok, cond 0x1555, flags 0, tamper +2, build d6d918ad
+lost-baseline-at-zero	healthy	0	3 reported: pass, verdict ok, cond 0x1555, flags 0, tamper +0, build d6d918ad
+rebooted	healthy	0	3 reported: pass, verdict ok, cond 0x1555, flags 0, tamper +0, build d6d918ad
+silent	healthy	0	3 reported: pass, verdict ok, cond 0x1555, flags 0, tamper +0, build d6d918ad

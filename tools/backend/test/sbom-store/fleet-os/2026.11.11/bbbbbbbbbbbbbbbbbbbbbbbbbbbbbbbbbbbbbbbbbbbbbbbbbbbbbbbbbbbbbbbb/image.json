@@ -1,0 +1,8 @@
+{
+  "image_id": "fleet-os",
+  "image_version": "2026.11.11",
+  "image_root": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "sbom_format": "cyclonedx-json",
+  "sbom_sha256": "67b15da716e8b47de1b70e10b04e6629f0582be47137b363211ec699d42ea537",
+  "built_at": "2026-11-12T08:00:00Z"
+}

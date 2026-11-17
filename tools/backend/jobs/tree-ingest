@@ -1,0 +1,161 @@
+#!/bin/sh
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+#
+# jobs/tree-ingest -- load every segment of an upatch tree into
+# shirudo.tree_pubs, shirudo.tree_ops and shirudo.upatch_fixes.
+#
+#   jobs/tree-ingest [--shirudo <path>] [--reference <ref>] [--cert <file>]
+#                    [oci://<repository>]
+#   jobs/tree-ingest --input <file>|-
+#
+# The first form runs `shirudo bpm tree show --walk`, which fetches the
+# publication and every sealed segment before it back to base.seq 0 and
+# verifies each against the certificate. The second reads a stored
+# output of that command, from standard input when the file is "-". The
+# job verifies nothing itself and trusts what it reads for that reason:
+# give it only what `bpm tree show` printed.
+#
+#   SHIRUDO            the shirudo binary. Default: shirudo.
+#   TREE_REPOSITORY    the tree's repository, oci://<repository>.
+#   TREE_REFERENCE     the tag or digest to read. Default: shirudo's.
+#   TREE_CERT          the certificate the publication is signed under.
+#   CLICKHOUSE_CLIENT  the client command and its options, split at
+#                      spaces. Default: clickhouse-client, which reads
+#                      CLICKHOUSE_HOST, CLICKHOUSE_USER and
+#                      CLICKHOUSE_PASSWORD itself.
+#
+# Exit status: 0 when every segment is loaded or was loaded before, 1
+# when the input is refused or a command fails, 2 for wrong usage.
+
+set -eu
+
+here=$(cd "$(dirname "$0")" && pwd)
+shirudo=${SHIRUDO:-shirudo}
+repository=${TREE_REPOSITORY:-}
+reference=${TREE_REFERENCE:-}
+cert=${TREE_CERT:-}
+input=
+work=
+
+die()
+{
+	printf 'tree-ingest: %s\n' "$1" >&2
+	exit 1
+}
+
+usage()
+{
+	printf '%s\n' \
+		'usage: tree-ingest [--shirudo <path>] [--reference <ref>] [--cert <file>] [oci://<repository>]' \
+		'       tree-ingest --input <file>|-' >&2
+	exit 2
+}
+
+cleanup()
+{
+	[ -z "$work" ] || rm -rf "$work"
+}
+
+client()
+{
+	# shellcheck disable=SC2086 # a command with its options, to be split
+	${CLICKHOUSE_CLIENT:-clickhouse-client} "$@"
+}
+
+insert()
+{
+	[ -s "$work/new.$1.jsonl" ] || return 0
+	client --query "INSERT INTO shirudo.$2 FORMAT JSONEachRow" \
+		<"$work/new.$1.jsonl" || die "cannot insert into shirudo.$2"
+}
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--shirudo|--reference|--cert|--input)
+		[ $# -ge 2 ] || usage
+		case "$1" in
+		--shirudo) shirudo=$2 ;;
+		--reference) reference=$2 ;;
+		--cert) cert=$2 ;;
+		--input) input=$2 ;;
+		esac
+		shift 2 ;;
+	oci://*)
+		repository=$1
+		shift ;;
+	*)
+		usage ;;
+	esac
+done
+
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+work=$(mktemp -d)
+
+if [ "$input" = - ]; then
+	cat >"$work/show"
+elif [ -n "$input" ]; then
+	[ -f "$input" ] || die "no input file $input"
+	cat "$input" >"$work/show"
+else
+	[ -n "$repository" ] || usage
+	[ -n "$cert" ] || die 'needs --cert or TREE_CERT'
+	set -- bpm tree show "$repository"
+	[ -z "$reference" ] || set -- "$@" --reference "$reference"
+	"$shirudo" "$@" --cert "$cert" --walk >"$work/show" ||
+		die 'bpm tree show failed, nothing loaded'
+fi
+
+tree_id=$(python3 "$here/tree-rows.py" "$work" <"$work/show") || exit 1
+
+client --param_tree_id="$tree_id" \
+	--query 'SELECT generation, manifest_digest FROM shirudo.tree_pubs FINAL
+		 WHERE tree_id = {tree_id:String}' >"$work/loaded" ||
+	die 'cannot read shirudo.tree_pubs'
+
+# Every segment is held against what is loaded before anything is
+# inserted, so a conflict in any of them loads none.
+: >"$work/new.pub.jsonl"
+: >"$work/new.ops.jsonl"
+: >"$work/new.fixes.jsonl"
+: >"$work/new"
+already=0
+newest=
+awk -F '	' -v OFS='	' -v loaded="$work/loaded" '
+	BEGIN { while ((getline line <loaded) > 0) {
+			split(line, f, "\t"); digest[f[1]] = f[2] } }
+	{ print $0, digest[$2] }' "$work/segments.tsv" \
+	>"$work/segments"
+while IFS='	' read -r k generation digest ops fixes loaded; do
+	if [ "$loaded" = "$digest" ]; then
+		already=$((already + 1))
+		newest=$generation
+		continue
+	fi
+	[ -z "$loaded" ] ||
+		die "$tree_id generation $generation is loaded with manifest $loaded, this one is $digest; nothing loaded"
+	cat "$work/$k.pub.jsonl" >>"$work/new.pub.jsonl"
+	cat "$work/$k.ops.jsonl" >>"$work/new.ops.jsonl"
+	cat "$work/$k.fixes.jsonl" >>"$work/new.fixes.jsonl"
+	printf '%s\t%s\t%s\n' "$generation" "$ops" "$fixes" >>"$work/new"
+done <"$work/segments"
+
+if [ "$already" -eq 1 ]; then
+	printf 'tree-ingest: %s generation %s is loaded already\n' \
+		"$tree_id" "$newest"
+elif [ "$already" -gt 1 ]; then
+	printf 'tree-ingest: %s: %d segments up to generation %s are loaded already\n' \
+		"$tree_id" "$already" "$newest"
+fi
+
+# The publications' own rows go last: they are what says a segment is
+# loaded, so a run that stops earlier is done again by the next one,
+# and no reader finds a publication without its operations.
+insert ops tree_ops
+insert fixes upatch_fixes
+insert pub tree_pubs
+while IFS='	' read -r generation ops fixes; do
+	printf 'tree-ingest: loaded %s generation %s (operations: %d, fixes: %d)\n' \
+		"$tree_id" "$generation" "$ops" "$fixes"
+done <"$work/new"

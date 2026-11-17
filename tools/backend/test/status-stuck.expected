@@ -1,0 +1,26 @@
+an hour allowed, the newest publication is 10 minutes old
+at-3	unhealthy	5	3	3	6
+at-4	healthy	0	4	4	6
+at-5	healthy	0	6	5	6
+at-6	healthy	0	7	6	6
+at-3	4 chain: pass, root 15452248
+at-3	5 head: FAIL stuck, seq 3 of 6, generation 3
+at-3	6 set: pass, 1 loaded
+at-3	7 peers: no peers, 1 in group
+at-4	4 chain: pass, root 3babcd63
+at-4	5 head: behind, seq 4 of 6, generation 4
+at-4	6 set: pass, 2 loaded
+at-4	7 peers: no peers, 1 in group
+at-5	4 chain: pass, root 3babcd63
+at-5	5 head: behind, seq 5 of 6, generation 6
+at-5	6 set: pass, 2 loaded
+at-5	7 peers: no peers, 1 in group
+at-6	4 chain: pass, root 3babcd63
+at-6	5 head: pass, seq 6 of 6, generation 7
+at-6	6 set: pass, 2 loaded
+at-6	7 peers: no peers, 1 in group
+two hours allowed
+at-3	healthy	0	5 head: behind, seq 3 of 6, generation 3
+at-4	healthy	0	5 head: behind, seq 4 of 6, generation 4
+at-5	healthy	0	5 head: behind, seq 5 of 6, generation 6
+at-6	healthy	0	5 head: pass, seq 6 of 6, generation 7

@@ -1,0 +1,38 @@
+node-a	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	shielded	xfs-fix	3	add	3	add
+node-a	verified	sbom	EXAMPLE-0202	openssl	3.5.1-1	3.5.1-2	exposed_no_shield		0		0	
+node-b	declared	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	shield_excludes_node	xfs-fix	3	add	3	add
+node-b	declared	sbom	EXAMPLE-0202	openssl	3.5.1-1	3.5.1-2	exposed_no_shield		0		0	
+node-c	no_image	none					unknown		0		0	
+the other columns
+node-a	000b23602ab98bfb	edge-01	healthy	untrusted	fleet-os	2026.11.1	CRITICAL	fixes	1
+node-a	000b23602ab98bfb	edge-01	healthy	untrusted	fleet-os	2026.11.1	HIGH	none	1
+node-b	000b9d72e08380a1	core-01	healthy	untrusted	fleet-os	2026.11.1	CRITICAL	fixes	1
+node-b	000b9d72e08380a1	core-01	healthy	untrusted	fleet-os	2026.11.1	HIGH	none	1
+node-c	000b0c	lab-01	healthy	untrusted				none	1
+fleet, worst first
+EXAMPLE-0101	CRITICAL	shield_excludes_node	1
+EXAMPLE-0101	CRITICAL	shielded	1
+EXAMPLE-0202	HIGH	exposed_no_shield	2
+one node
+EXAMPLE-0101	CRITICAL	linux	7.4.2	7.4.5	shield_excludes_node	xfs-fix	declared	healthy
+EXAMPLE-0202	HIGH	openssl	3.5.1-1	3.5.1-2	exposed_no_shield		declared	healthy
+shields whose selector leaves nodes out
+xfs-fix	EXAMPLE-0101	['node-b']
+coverage
+verified	1
+declared	1
+no_image	1
+shielded now, delete coming
+the refresh read
+shirudo.keepalive_latest
+shirudo.kernel_vulns
+shirudo.latest
+shirudo.node_ops
+shirudo.node_status
+shirudo.node_vulns_mv
+shirudo.nodes
+shirudo.sbom_images
+shirudo.sbom_vulns
+shirudo.settings
+shirudo.tree_ops
+shirudo.upatch_fixes

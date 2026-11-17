@@ -29,10 +29,9 @@ PATH=$PWD/build/afl/bin:$PATH make -C testing afl [AFL_SECONDS=600]
 make -C testing help
 ```
 
-The end2end tier runs t9107 against the keepalive backend that
-`BACKEND_DIR` names, a checkout or a git URL, `../backend` by default;
-without one none of t9107 and t9109 to t9111 runs, so say so when
-reporting the tier. The tier boots two VMs at once, each with its own
+The end2end tier runs t9107, and t9109 to t9111 on the host, against
+the keepalive backend of `tools/backend`, which `host.sh` starts for
+every run. The tier boots two VMs at once, each with its own
 swtpm: node A runs the tests, node B (`make -C testing vm-node-end2end`,
 node mode of `vm/run.sh`) takes `role=core` from `config-core` and waits.
 With a backend, a fresh edge node (`END2END_NODE=edge`, `role=edge` from

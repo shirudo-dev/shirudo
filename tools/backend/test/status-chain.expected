@@ -1,0 +1,20 @@
+applied	healthy	0	4 chain: pass, root 15452248	6 set: pass, 1 loaded
+applied-too	healthy	0	4 chain: pass, root 15452248	6 set: pass, 1 loaded
+module-missing	healthy	0	4 chain: pass, root 15452248	6 set: pass, 0 loaded
+passed-over	healthy	0	4 chain: pass, root 00000000	6 set: pass, 0 loaded
+no-mask	unhealthy	3	4 chain: no mask	6 set: no mask
+mask-not-base64	unhealthy	4	4 chain: FAIL, root 15452248	6 set: FAIL drift, 1 loaded
+no-last-seq	unhealthy	4	4 chain: FAIL, root 15452248	6 set: FAIL drift, 1 loaded
+past-the-head	unhealthy	4	4 chain: FAIL, root 15452248	6 set: pass, 1 loaded
+root-not-hex	unhealthy	4	4 chain: FAIL, root zzzz2248	6 set: pass, 1 loaded
+root-too-long	unhealthy	4	4 chain: FAIL, root 15452248	6 set: FAIL drift, 1 loaded
+unreached	unhealthy	4	4 chain: FAIL, root 15452248	6 set: FAIL drift, 1 loaded
+wrong-mask	unhealthy	4	4 chain: FAIL, root 15452248	6 set: FAIL drift, 1 loaded
+wrong-root	unhealthy	4	4 chain: FAIL, root a042a582	6 set: pass, 0 loaded
+no-mask	1 signed: pass, untrusted, 0 rejected in the last hour
+no-mask	2 fresh: pass, last record N s ago
+no-mask	3 reported: FAIL, verdict ok, cond 0x1555, flags 4, tamper +0, build d6d918ad
+no-mask	4 chain: no mask
+no-mask	5 head: no mask
+no-mask	6 set: no mask
+no-mask	7 peers: no mask

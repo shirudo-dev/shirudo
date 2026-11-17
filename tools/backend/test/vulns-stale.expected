@@ -1,0 +1,16 @@
+fresh-clean	2026.11.3	verified	false	none			none
+fresh-findings	2026.11.2	verified	false	sbom	EXAMPLE-0707	curl	exposed_no_shield
+no-sbom	2026.11.4	no_sbom	false	none			unknown
+stale-expired	2026.11.6	declared	true	none			unknown
+stale-findings	2026.11.1	verified	true	sbom	EXAMPLE-0202	openssl	exposed_no_shield
+stale-kernel	2026.11.6	declared	true	kernel	EXAMPLE-0101	linux	exposed_no_shield
+stale images
+fleet-os	2026.11.1	1
+fleet-os	2026.11.6	2
+sbom_stale_seconds 1800
+fresh-clean	2026.11.3	verified	true	none			unknown
+fresh-findings	2026.11.2	verified	true	sbom	EXAMPLE-0707	curl	exposed_no_shield
+no-sbom	2026.11.4	no_sbom	false	none			unknown
+stale-expired	2026.11.6	declared	true	none			unknown
+stale-findings	2026.11.1	verified	true	sbom	EXAMPLE-0202	openssl	exposed_no_shield
+stale-kernel	2026.11.6	declared	true	kernel	EXAMPLE-0101	linux	exposed_no_shield

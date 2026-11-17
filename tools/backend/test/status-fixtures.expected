@@ -1,0 +1,68 @@
+node-a-1.1.0	0cc0ebca20e6d16e625c7bd3b40666b5a8effd7993d0f4489583900fcb5a47bb
+node-b-1.1.0	8a1815fd4bc50cac387f63bdf5def017f770ac1db208e27ff53a41569e85c8bc
+Row 1:
+──────
+node_id:      core-01
+ak_name:      000b9d72e08380a1
+host_name:    core-01
+status:       healthy
+trust:        untrusted
+failed_check: 0
+generation:   3
+last_seq:     3
+head_seq:     3
+loaded:       0
+set_sha256:   e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+Row 2:
+──────
+node_id:      edge-01
+ak_name:      000b23602ab98bfb
+host_name:    edge-01
+status:       healthy
+trust:        untrusted
+failed_check: 0
+generation:   3
+last_seq:     3
+head_seq:     3
+loaded:       1
+set_sha256:   74e5bd2c665109f6d8f926af5476c266ad70ab07293ff13b1a13d0b89aa5c1bf
+
+Row 3:
+──────
+node_id:      lab-01
+ak_name:      000b0c
+host_name:    lab-01
+status:       healthy
+trust:        untrusted
+failed_check: 0
+generation:   ᴺᵁᴸᴸ
+last_seq:     ᴺᵁᴸᴸ
+head_seq:     ᴺᵁᴸᴸ
+loaded:       0
+set_sha256:   e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+core-01	1 signed: pass, untrusted, 0 rejected in the last hour
+core-01	2 fresh: pass, last record N s ago
+core-01	3 reported: pass, verdict ok, cond 0x1555, flags 0, tamper +0, build d6d918ad
+core-01	4 chain: pass, root 00000000
+core-01	5 head: pass, seq 3 of 3, generation 3
+core-01	6 set: pass, 0 loaded
+core-01	7 peers: no peers, 1 in group
+edge-01	1 signed: pass, untrusted, 0 rejected in the last hour
+edge-01	2 fresh: pass, last record N s ago
+edge-01	3 reported: pass, verdict ok, cond 0x1555, flags 0, tamper +0, build d6d918ad
+edge-01	4 chain: pass, root 15452248
+edge-01	5 head: pass, seq 3 of 3, generation 3
+edge-01	6 set: pass, 1 loaded
+edge-01	7 peers: no peers, 1 in group
+lab-01	1 signed: pass, untrusted, 0 rejected in the last hour
+lab-01	2 fresh: pass, last record N s ago
+lab-01	3 reported: pass, verdict ok, cond 0x1555, flags 0, tamper +0, build d6d918ad
+lab-01	4 chain: no tree
+lab-01	5 head: no tree
+lab-01	6 set: no tree
+lab-01	7 peers: no tree
+node_status is what was received	3
+lab-01	lab-01	000b0c	healthy
+node-a	edge-01	000b23602ab98bfb	healthy
+node-b	core-01	000b9d72e08380a1	healthy

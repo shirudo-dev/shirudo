@@ -1,0 +1,80 @@
+round 1
+core-01	healthy	0	4 chain: pass, root 00000000	6 set: pass, 0 loaded	7 peers: no peers, 1 in group
+edge-01	healthy	0	4 chain: pass, root a042a582	6 set: pass, 0 loaded	7 peers: pass, 3 in group
+edge-02	healthy	0	4 chain: pass, root a042a582	6 set: pass, 0 loaded	7 peers: pass, 3 in group
+edge-liar	healthy	0	4 chain: pass, root a042a582	6 set: pass, 0 loaded	7 peers: pass, 3 in group
+edge-swap	healthy	0	4 chain: pass, root a042a582	6 set: pass, 0 loaded	7 peers: no peers, 1 in group
+round 2
+core-01	healthy	0	4 chain: pass, root 00000000	6 set: pass, 0 loaded	7 peers: no peers, 1 in group
+edge-01	healthy	0	4 chain: pass, root 61fc83b3	6 set: pass, 2 loaded	7 peers: pass, 3 in group
+edge-02	healthy	0	4 chain: pass, root 61fc83b3	6 set: pass, 2 loaded	7 peers: pass, 3 in group
+edge-liar	healthy	0	4 chain: pass, root 61fc83b3	6 set: pass, 2 loaded	7 peers: pass, 3 in group
+edge-swap	healthy	0	4 chain: pass, root 61fc83b3	6 set: pass, 2 loaded	7 peers: no peers, 1 in group
+round 3
+core-01	healthy	0	4 chain: pass, root 7eb926ee	6 set: pass, 1 loaded	7 peers: no peers, 1 in group
+edge-01	healthy	0	4 chain: pass, root c7a9860a	6 set: pass, 2 loaded	7 peers: pass, 3 in group
+edge-02	healthy	0	4 chain: pass, root c7a9860a	6 set: pass, 2 loaded	7 peers: pass, 3 in group
+edge-liar	unhealthy	4	4 chain: FAIL, root 78b6a625, base differs from history	6 set: FAIL drift, 1 loaded	7 peers: FAIL outlier, 3 in group
+edge-swap	healthy	0	4 chain: pass, root c7a9860a	6 set: pass, 2 loaded	7 peers: no peers, 1 in group
+round 4
+core-01	healthy	0	4 chain: pass, root 2b11a79d	6 set: pass, 0 loaded	7 peers: no peers, 1 in group
+edge-01	healthy	0	4 chain: pass, root 7abe8b4e	6 set: pass, 1 loaded	7 peers: pass, 3 in group
+edge-02	healthy	0	4 chain: pass, root 7abe8b4e	6 set: pass, 1 loaded	7 peers: pass, 3 in group
+edge-liar	unhealthy	4	4 chain: FAIL, root 7abe8b4e, marked: contradicted history at seq 4	6 set: set unverified (gap), 1 loaded	7 peers: pass, 3 in group
+edge-swap	unhealthy	4	4 chain: FAIL, root 7abe8b4e, window differs from history at seq 6	6 set: pass, 1 loaded	7 peers: no peers, 1 in group
+marks
+edge-liar	fleet-long	4	base
+edge-swap	fleet-long	6	window
+cleared
+edge-liar	healthy	0	4 chain: pass, root 7abe8b4e, base unverified (gap)	6 set: set unverified (gap), 1 loaded	7 peers: pass, 3 in group
+edge-swap	unhealthy	4	4 chain: FAIL, root 7abe8b4e, window differs from history at seq 6	6 set: pass, 1 loaded	7 peers: no peers, 1 in group
+marks
+edge-swap	fleet-long	6	window
+history
+core-01	1	2	00000000
+core-01	2	2	00000000
+core-01	3	2	00000000
+core-01	4	2	00000000
+core-01	5	1	7eb926ee
+core-01	6	2	7eb926ee
+core-01	7	1	2b11a79d
+core-01	8	2	2b11a79d
+edge-01	1	1	04f83540
+edge-01	2	1	a042a582
+edge-01	3	1	15452248
+edge-01	4	1	61fc83b3
+edge-01	5	2	61fc83b3
+edge-01	6	1	c7a9860a
+edge-01	7	2	c7a9860a
+edge-01	8	1	7abe8b4e
+edge-02	1	1	04f83540
+edge-02	2	1	a042a582
+edge-02	3	1	15452248
+edge-02	4	1	61fc83b3
+edge-02	5	2	61fc83b3
+edge-02	6	1	c7a9860a
+edge-02	7	2	c7a9860a
+edge-02	8	1	7abe8b4e
+edge-liar	1	1	04f83540
+edge-liar	2	1	a042a582
+edge-liar	3	1	15452248
+edge-liar	4	1	61fc83b3
+edge-liar	6	0	c7a9860a
+edge-liar	7	2	c7a9860a
+edge-liar	8	1	7abe8b4e
+edge-swap	1	1	04f83540
+edge-swap	2	1	a042a582
+edge-swap	3	1	15452248
+edge-swap	4	1	61fc83b3
+edge-swap	5	2	61fc83b3
+edge-swap	6	1	c7a9860a
+core-01	log-tap	7	delete	8b0e0931
+edge-01	net-guard	8	delete	45517a96
+edge-01	xfs-fix	3	add	82db4a71
+edge-02	net-guard	8	delete	45517a96
+edge-02	xfs-fix	3	add	82db4a71
+edge-liar	net-guard	8	delete	45517a96
+edge-liar	xfs-fix	3	add	82db4a71
+edge-swap	net-guard	6	add	04327d1d
+edge-swap	xfs-fix	3	add	82db4a71
+rows	37

@@ -17,7 +17,7 @@ This is a do-it-yourself example to get started from, not an
 integration that shirudo ships or maintains. Adapt retention, access
 control and sizing to your deployment. To check the keepalives' quotes
 and compare each target with its upatch tree as well, start from the
-:doc:`keepalive-backend` instead.
+:doc:`backend` instead.
 
 Before you begin
 ----------------
@@ -204,7 +204,7 @@ Next steps
 - :doc:`/upatches/write/decoders` to turn a map into log records or
   metrics
 - :doc:`grafana` to chart the same data
-- :doc:`keepalive-backend` to check the quotes and the tree state the
+- :doc:`backend` to check the quotes and the tree state the
   keepalives report
 - :doc:`/concepts/background/siem-export` for how the records reach a
   backend and what to build on them

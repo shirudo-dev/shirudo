@@ -1,0 +1,39 @@
+generation 3 is the newest
+at-3	at-3	healthy	untrusted	0	3	3	3	1
+at-3	5 head: pass, seq 3 of 3, generation 3
+generation 4, an hour allowed
+ahead-of-ingest	ahead-of-ingest	healthy	untrusted	0	5	5	4	1
+at-1-of-generation-1	at-1-of-generation-1	unhealthy	untrusted	5	1	1	4	1
+at-2-of-generation-2	at-2-of-generation-2	unhealthy	untrusted	5	2	2	4	0
+at-3	at-3	healthy	untrusted	0	3	3	4	1
+at-4	at-4	healthy	untrusted	0	4	4	4	2
+generation-1-wrong-root	generation-1-wrong-root	unhealthy	untrusted	4	1	1	4	1
+other-tree	other-tree	healthy	untrusted	0	3	3	\N	1
+ahead-of-ingest	4 chain: publication unknown
+ahead-of-ingest	5 head: publication unknown
+ahead-of-ingest	6 set: publication unknown
+ahead-of-ingest	7 peers: publication unknown
+at-1-of-generation-1	5 head: FAIL stuck, seq 1 of 4, generation 1
+at-2-of-generation-2	5 head: FAIL stuck, seq 2 of 4, generation 2
+at-3	5 head: behind, seq 3 of 4, generation 3
+at-4	5 head: pass, seq 4 of 4, generation 4
+generation-1-wrong-root	4 chain: FAIL, root 04f93540
+generation-1-wrong-root	5 head: FAIL stuck, seq 1 of 4, generation 1
+generation-1-wrong-root	6 set: pass, 1 loaded
+generation-1-wrong-root	7 peers: pass, 2 in group
+other-tree	5 head: publication unknown
+generation 4, forty minutes allowed
+ahead-of-ingest	ahead-of-ingest	healthy	untrusted	0	5	5	4	1
+at-1-of-generation-1	at-1-of-generation-1	unhealthy	untrusted	5	1	1	4	1
+at-2-of-generation-2	at-2-of-generation-2	unhealthy	untrusted	5	2	2	4	0
+at-3	at-3	unhealthy	untrusted	5	3	3	4	1
+at-4	at-4	healthy	untrusted	0	4	4	4	2
+generation-1-wrong-root	generation-1-wrong-root	unhealthy	untrusted	4	1	1	4	1
+other-tree	other-tree	healthy	untrusted	0	3	3	\N	1
+ahead-of-ingest	5 head: publication unknown
+at-1-of-generation-1	5 head: FAIL stuck, seq 1 of 4, generation 1
+at-2-of-generation-2	5 head: FAIL stuck, seq 2 of 4, generation 2
+at-3	5 head: FAIL stuck, seq 3 of 4, generation 3
+at-4	5 head: pass, seq 4 of 4, generation 4
+generation-1-wrong-root	5 head: FAIL stuck, seq 1 of 4, generation 1
+other-tree	5 head: publication unknown

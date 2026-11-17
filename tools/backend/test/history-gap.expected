@@ -1,0 +1,26 @@
+first seen
+edge-late	healthy	0	4 chain: pass, root c7a9860a, base unverified (gap)	6 set: set unverified (gap), 2 loaded
+edge-quiet	healthy	0	4 chain: pass, root a042a582	6 set: pass, 0 loaded
+edge-turncoat	healthy	0	4 chain: pass, root c7a9860a, base unverified (gap)	6 set: set unverified (gap), 2 loaded
+anchored
+edge-late	healthy	0	4 chain: pass, root c7a9860a, base unverified (gap)	6 set: set unverified (gap), 2 loaded
+edge-quiet	healthy	0	4 chain: pass, root a042a582	6 set: pass, 0 loaded
+edge-turncoat	healthy	0	4 chain: pass, root c7a9860a, base unverified (gap)	6 set: set unverified (gap), 2 loaded
+next record
+edge-late	healthy	0	4 chain: pass, root 7abe8b4e	6 set: set unverified (gap), 1 loaded
+edge-quiet	healthy	0	4 chain: pass, root 7abe8b4e, base unverified (gap)	6 set: set unverified (gap), 1 loaded
+edge-turncoat	unhealthy	4	4 chain: FAIL, root 78b6a625, base differs from history	6 set: set unverified (gap), 1 loaded
+history
+edge-late	4	0	61fc83b3
+edge-late	5	2	61fc83b3
+edge-late	6	1	c7a9860a
+edge-late	7	2	c7a9860a
+edge-late	8	1	7abe8b4e
+edge-quiet	1	1	04f83540
+edge-quiet	2	1	a042a582
+edge-quiet	6	0	c7a9860a
+edge-quiet	7	2	c7a9860a
+edge-quiet	8	1	7abe8b4e
+edge-turncoat	4	0	61fc83b3
+edge-turncoat	5	2	61fc83b3
+edge-turncoat	6	1	c7a9860a

@@ -3,14 +3,14 @@
 # Copyright (c) 2026 Authors of shirudo
 #
 # t9107 -- the keepalive backend end to end. end2end/host.sh started the
-# backend that BACKEND_DIR names, with its schema, shirudo-quote-check as
+# backend of tools/backend, with its schema, shirudo-quote-check as
 # tpm_quote_check and its collector, and loaded the example tree of
 # fixtures/keepalive/ through the backend's tree ingest job and the real
 # `bpm tree show`. The target sends the example keepalives of node A and
 # node B with their recorded quotes through that collector, and the
-# backend's checks give the example's results. A body altered in
-# transit is refused, a replayed record collapses and an older record
-# does not become a node's latest.
+# backend's checks give the example's results. A body altered in transit
+# is refused, a replayed record collapses and an older record does not
+# become a node's latest.
 
 cd "$(dirname "$0")/.."
 . ./integration-lib.sh
@@ -24,7 +24,7 @@ H=$PWD/helper/test-otel-map
 COLLECTOR=https://10.0.2.2:14320
 CLICKHOUSE=http://10.0.2.2:18125/
 [ -s "$E2E/backend-tree.digest" ] ||
-	test_skip_all "no keepalive backend: set BACKEND_DIR for make -C testing end2end"
+	test_skip_all "no keepalive backend: end2end/host.sh started none"
 [ -x "$H" ] || test_skip_all "test-otel-map helper not built"
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT

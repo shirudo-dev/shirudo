@@ -1,0 +1,17 @@
+shirudo.boot_first
+shirudo.expected_builds
+shirudo.history_conflicts
+shirudo.history_contradictions
+shirudo.keepalive_latest
+shirudo.latest
+shirudo.node_ops
+shirudo.node_sets
+shirudo.node_status_mv
+shirudo.nodes
+shirudo.rejected
+shirudo.settings
+shirudo.tree_ops
+shirudo.tree_pubs
+reads shirudo.keepalive	0	1
+shirudo.node_ops_mv	1
+shirudo.node_status_mv	1

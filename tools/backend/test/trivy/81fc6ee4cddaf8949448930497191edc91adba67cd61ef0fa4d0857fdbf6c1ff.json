@@ -1,0 +1,19 @@
+{
+  "SchemaVersion": 2,
+  "ArtifactName": "10.sbom.cdx.json",
+  "ArtifactType": "cyclonedx",
+  "Results": [
+    {
+      "Target": "10.sbom.cdx.json (debian 13)",
+      "Class": "os-pkgs",
+      "Type": "debian",
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "EXAMPLE-0202",
+          "InstalledVersion": "3.5.1-1",
+          "Severity": "HIGH"
+        }
+      ]
+    }
+  ]
+}

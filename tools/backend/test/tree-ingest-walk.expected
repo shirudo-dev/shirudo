@@ -1,0 +1,32 @@
+tree-ingest: loaded fleet-segments generation 2 (operations: 2, fixes: 1)
+tree-ingest: loaded fleet-segments generation 4 (operations: 2, fixes: 1)
+2	4	2
+stub-shirudo: bpm tree show oci://registry.example.com/shirudo/fleet-segments --cert /certs/operator.pem --walk
+tree-ingest: fleet-segments: 2 segments up to generation 4 are loaded already
+tree-ingest: loaded fleet-segments generation 5 (operations: 1, fixes: 2)
+3	5	4
+published_at of the first two segments kept
+tree-ingest: fleet-segments: 3 segments up to generation 5 are loaded already
+3	5	4
+tree-ingest: loaded fleet-segments generation 2 (operations: 2, fixes: 1)
+tree-ingest: loaded fleet-segments generation 4 (operations: 2, fixes: 1)
+tree-ingest: loaded fleet-segments generation 5 (operations: 1, fixes: 2)
+3	5	4
+tree_pubs
+fleet-segments	2	2960661252c50e7232cd9781a0ccdbee045bfc40e2f081d89ba3c8fbe1c23495	dc330b2303d82c3839502fb9f36a217525efd5a842b474fcc1d70c66a3153e55	0	2		0000000000000000000000000000000000000000000000000000000000000000
+fleet-segments	4	e114111ddf285a40bff312f278926be5b38f2021a417adcf83d07aca76f4f440	2960661252c50e7232cd9781a0ccdbee045bfc40e2f081d89ba3c8fbe1c23495	2	4	2960661252c50e7232cd9781a0ccdbee045bfc40e2f081d89ba3c8fbe1c23495	889efeb27650c0111168d523c935f051addbcc049d079e440e518dd3939722f0
+fleet-segments	5	6d874c2a441593d937a66d27d58cca6543b135e2acf935d266549cb05560bcf9	e114111ddf285a40bff312f278926be5b38f2021a417adcf83d07aca76f4f440	4	5	e114111ddf285a40bff312f278926be5b38f2021a417adcf83d07aca76f4f440	993c483c8123b0c057a585d6a5eacb836f16ca98f4ec647cdfb2e65a13d72079
+tree_ops
+fleet-segments	1	add	xfs-fix	98f2c22f02ed3106f44cefae608868f529a38fada82d52a263f230cbda076144	13b248d4a85d91150717e3e96dc9c2d7a8a43633e3b58f8f6168d408aed26c43
+fleet-segments	2	delete	xfs-fix	4d4f3bf9f68bf0dcbd06bffe4aa9eaf83444430e60936b9b2d11ec6229130a1b	5ce215313f29f87bfb87aa0cc65c237bf21bdc7702606e9cc29be187f950074b
+fleet-segments	3	add	xfs-fix	b25c835b353ba101d51c4473d602764c2f8746a6e60342bcf49d510a868cb62a	bd98b27dd5cfc9deeb0e4f49a7d4bd0f991762ec784be9ea838a59966d9dd0dc
+fleet-segments	4	delete	xfs-fix	1e297eb36fb2c66fcbd60e2e4ff31631cb9a54bdf069bdbf5f7d20d3a48713f4	eea45dba39497ddd9bf2a50a9b2f76a438d94c42762297e05b2e860fabfe9cb6
+fleet-segments	5	add	xfs-fix	472e953ed22e9a0328b568dfc444598e2f8d0da1d89136787a55387fb54a1c7c	8370c6805f5bfd1ded51b6fc7afac60773da0d07f50ffce306f978700013b84f
+upatch_fixes
+fleet-segments	1	xfs-fix	EXAMPLE-0101	fixes
+fleet-segments	3	xfs-fix	EXAMPLE-0101	fixes
+fleet-segments	5	xfs-fix	EXAMPLE-0101	fixes
+fleet-segments	5	xfs-fix	EXAMPLE-0202	fixes
+chain
+4	2
+5	4

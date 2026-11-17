@@ -1,0 +1,14 @@
+rejected
+2026-11-11 10:00:00.000	bad_signature	n1		0	0	q1	{"schema":"shirudo.keepalive/1"}
+2026-11-11 10:00:01.000	body_mismatch	n2		0	0	q2	{"schema":"shirudo.keepalive/1"}
+2026-11-11 10:00:02.000	malformed	n3		0	0	q3	{"schema":"shirudo.keepalive/1"}
+2026-11-11 10:00:03.000	malformed	n4		0	0	q4	{"schema":"shirudo.keepalive/1"}
+2026-11-11 10:00:04.000	schema	n5	000b05	1	1	q5	{"schema":"shirudo.keepalive/2"}
+2026-11-11 10:00:05.000	schema	n6	000b06	1	1	q6	not json
+2026-11-11 10:00:06.000	clock_range	n7	000b07	16777216	1	q7	{"schema":"shirudo.keepalive/1"}
+2026-11-11 10:00:07.000	clock_range	n8	000b08	1	1099511627776	q8	{"schema":"shirudo.keepalive/1"}
+accepted
+000b09	16777215	1099511627775
+000b09	18446744073709551615
+000b09
+000b09	18446744073709551615

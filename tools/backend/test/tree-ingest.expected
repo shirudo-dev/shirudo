@@ -1,0 +1,16 @@
+tree-ingest: loaded fleet-base generation 3 (operations: 3, fixes: 2)
+rows inserted, before any merge:
+1	3	2
+tree-ingest: fleet-base generation 3 is loaded already
+1	3	2
+published_at kept
+tree-ingest: loaded fleet-base generation 3 (operations: 3, fixes: 2)
+tree_pubs
+fleet-base	3	4c1d7e6b0a9f38e2d5c4b3a2918f7e6d5c4b3a29180f7e6d5c4b3a2918f7e6d5	4ee49208ad87695d862c8cc976d1c910170a3de611cfcee2ce181efd8e0a2942	3	0		0000000000000000000000000000000000000000000000000000000000000000	1
+tree_ops
+fleet-base	1	add	xfs-fix	{"labels":{"role":["edge"]}}	oci://registry.example.com/shirudo/fleet-base	98f2c22f02ed3106f44cefae608868f529a38fada82d52a263f230cbda076144	9ecc7c28f423abab4de35c3dbcb2af66dd44df59c0dcd52f465f7bc6338772e6	59f8ad56dfc63ce2b91d4b2edd89218694bee7287eaafe06a8624869210cf885	13b248d4a85d91150717e3e96dc9c2d7a8a43633e3b58f8f6168d408aed26c43
+fleet-base	2	delete	xfs-fix	{"labels":{"role":["edge"]}}	oci://registry.example.com/shirudo/fleet-base	4d4f3bf9f68bf0dcbd06bffe4aa9eaf83444430e60936b9b2d11ec6229130a1b	e80b73d1bf9f8b4d50e5037f317e68bc4c8b15532187b1a3d73b5152a1596c55	f6a8fbb53b29691f47d8e9059a3796ecce2a48e693ec444da690209edef000f1	5ce215313f29f87bfb87aa0cc65c237bf21bdc7702606e9cc29be187f950074b
+fleet-base	3	add	xfs-fix	{"labels":{"role":["edge"]}}	oci://registry.example.com/shirudo/fleet-base	b25c835b353ba101d51c4473d602764c2f8746a6e60342bcf49d510a868cb62a	653919e8cd88d08fc0d7d3bee8ac27323fadac7ec0a8b8eb6e9dc5a68c36bc97	82db4a710ddb53f6e3e245e01001242cfb2d628e542e9ffefbb343b01c48a7bf	bd98b27dd5cfc9deeb0e4f49a7d4bd0f991762ec784be9ea838a59966d9dd0dc
+upatch_fixes
+fleet-base	1	xfs-fix	EXAMPLE-0101	fixes
+fleet-base	3	xfs-fix	EXAMPLE-0101	fixes

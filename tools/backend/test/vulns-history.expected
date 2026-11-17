@@ -1,0 +1,10 @@
+in the window
+core-01	EXAMPLE-0101	shield_excludes_node	xfs-fix	3	add	3	add	true	fixes
+edge-01	EXAMPLE-0101	shielded	xfs-fix	3	add	3	add	true	fixes
+below the window
+core-01	EXAMPLE-0101	shield_excludes_node	xfs-fix	3	add	3	add	true	fixes
+edge-01	EXAMPLE-0101	shielded	xfs-fix	3	add	3	add	true	fixes
+edge-late	EXAMPLE-0101	unknown	xfs-fix	3	add	3	add	true	fixes
+core-01	healthy	0	4 chain: pass, root 2b11a79d	6 set: pass, 0 loaded
+edge-01	healthy	0	4 chain: pass, root 7abe8b4e	6 set: pass, 1 loaded
+edge-late	healthy	0	4 chain: pass, root 7abe8b4e, base unverified (gap)	6 set: set unverified (gap), 1 loaded

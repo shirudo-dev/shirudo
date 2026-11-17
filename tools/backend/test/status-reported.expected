@@ -1,0 +1,18 @@
+busy	healthy	0	3 reported: pass, verdict ok, cond 0x1555, flags 32, tamper +0, build d6d918ad
+config-warn	unhealthy	3	3 reported: FAIL, verdict ok, cond 0x1955, flags 0, tamper +0, build d6d918ad
+degraded	unhealthy	3	3 reported: FAIL, verdict degraded, cond 0x1555, flags 0, tamper +0, build d6d918ad
+eighth-condition	healthy	0	3 reported: pass, verdict ok, cond 0x9555, flags 0, tamper +0, build d6d918ad
+no-counters	unhealthy	3	3 reported: FAIL, verdict ok, cond 0x1555, flags 8, tamper +0, build d6d918ad
+noisy-boot	healthy	0	3 reported: pass, verdict ok, cond 0x1555, flags 0, tamper +0, build d6d918ad
+other-build	unhealthy	3	3 reported: FAIL, verdict ok, cond 0x1555, flags 0, tamper +0, build 0badc0de (not expected)
+rebound	unhealthy	3	3 reported: FAIL, verdict ok, cond 0x1555, flags 1, tamper +0, build d6d918ad
+tampered-with	unhealthy	3	3 reported: FAIL, verdict ok, cond 0x1555, flags 0, tamper +2, build d6d918ad
+unreadable-again	unhealthy	3	3 reported: FAIL, verdict ok, cond 0x1555, flags 8, tamper +0, build d6d918ad
+unreadable-first	healthy	0	3 reported: pass, verdict ok, cond 0x1555, flags 0, tamper +0, build d6d918ad
+unreadable-then-rise	unhealthy	3	3 reported: FAIL, verdict ok, cond 0x1555, flags 0, tamper +2, build d6d918ad
+baselines
+no-counters	0
+noisy-boot	3
+unreadable-again	3
+unreadable-first	3
+unreadable-then-rise	3

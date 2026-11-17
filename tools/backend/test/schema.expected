@@ -1,0 +1,90 @@
+otel	otel_logs	Null	
+shirudo	boot_first	AggregatingMergeTree	ak_name, boot_id
+shirudo	boot_first_keep_mv	MaterializedView	
+shirudo	boot_first_mv	MaterializedView	
+shirudo	checked	Null	
+shirudo	checked_mv	MaterializedView	
+shirudo	expected_builds	ReplacingMergeTree	version_id
+shirudo	history_conflicts	View	
+shirudo	history_contradictions	MergeTree	ak_name, tree_id
+shirudo	history_contradictions_mv	MaterializedView	
+shirudo	keepalive	ReplacingMergeTree	ak_name, reset_count, clock
+shirudo	keepalive_latest	ReplacingMergeTree	ak_name
+shirudo	keepalive_latest_mv	MaterializedView	
+shirudo	keepalive_mv	MaterializedView	
+shirudo	kernel_vulns	ReplacingMergeTree	vuln_id, introduced
+shirudo	latest	View	
+shirudo	node_ops	ReplacingMergeTree	ak_name, tree_id, seq
+shirudo	node_ops_mv	MaterializedView	
+shirudo	node_sets	ReplacingMergeTree	ak_name, tree_id, id
+shirudo	node_sets_mv	MaterializedView	
+shirudo	node_status	MergeTree	node_id, ak_name
+shirudo	node_status_mv	MaterializedView	
+shirudo	node_vulns	MergeTree	node_id, ak_name, vuln_id, package
+shirudo	node_vulns_mv	MaterializedView	
+shirudo	nodes	AggregatingMergeTree	ak_name
+shirudo	nodes_mv	MaterializedView	
+shirudo	rejected	MergeTree	received
+shirudo	rejected_mv	MaterializedView	
+shirudo	sbom_images	ReplacingMergeTree	image_id, image_version, image_root
+shirudo	sbom_vulns	MergeTree	sbom_sha256, vuln_id, package
+shirudo	settings	ReplacingMergeTree	id
+shirudo	tree_ops	ReplacingMergeTree	tree_id, seq
+shirudo	tree_pubs	ReplacingMergeTree	tree_id, generation
+shirudo	upatch_fixes	ReplacingMergeTree	tree_id, seq, advisory, source
+boot_first	AggregatingMergeTree ORDER BY (ak_name, boot_id) TTL last_used + toIntervalSecond(2592000) SETTINGS index_granularity = 8192
+keepalive	ReplacingMergeTree ORDER BY (ak_name, reset_count, clock) TTL toDateTime(received) + toIntervalSecond(3600) SETTINGS index_granularity = 8192
+keepalive_latest	ReplacingMergeTree(order_key) ORDER BY ak_name SETTINGS index_granularity = 8192
+node_ops	ReplacingMergeTree ORDER BY (ak_name, tree_id, seq) SETTINGS deduplicate_merge_projection_mode = \'rebuild\', index_granularity = 8192
+node_sets	ReplacingMergeTree(last_seq) ORDER BY (ak_name, tree_id, id) SETTINGS index_granularity = 8192
+rejected	MergeTree ORDER BY received TTL toDateTime(received) + toIntervalDay(7) SETTINGS index_granularity = 8192
+sbom_images	ReplacingMergeTree(scanned_at) ORDER BY (image_id, image_version, image_root) SETTINGS index_granularity = 8192
+sbom_vulns	MergeTree ORDER BY (sbom_sha256, vuln_id, package) TTL scanned_at + toIntervalDay(7) SETTINGS index_granularity = 8192
+ak_name	String
+ak_public	SimpleAggregateFunction(max, String)
+node_id	AggregateFunction(argMin, String, DateTime64(3))
+first_seen	SimpleAggregateFunction(min, Nullable(DateTime64(3)))
+trust	SimpleAggregateFunction(max, Enum8(\'untrusted\' = 0))
+node_id	String
+ak_name	String
+host_name	String
+status	Enum8(\'healthy\' = 1, \'unhealthy\' = 2, \'stale\' = 3)
+trust	Enum8(\'untrusted\' = 0)
+failed_check	UInt8
+log	Array(String)
+last_seen	DateTime64(3)
+generation	Nullable(UInt64)
+last_seq	Nullable(UInt64)
+head_seq	Nullable(UInt64)
+loaded	UInt64
+set_sha256	String
+updated_at	DateTime
+node_id	String
+ak_name	String
+host_name	String
+status	Enum8(\'healthy\' = 1, \'unhealthy\' = 2, \'stale\' = 3)
+trust	Enum8(\'untrusted\' = 0)
+image_id	String
+image_version	String
+binding	Enum8(\'verified\' = 1, \'declared\' = 2, \'root_mismatch\' = 3, \'no_sbom\' = 4, \'no_image\' = 5)
+sbom_stale	Bool
+source	Enum8(\'sbom\' = 1, \'kernel\' = 2, \'none\' = 3)
+vuln_id	String
+severity	LowCardinality(String)
+package	String
+installed	String
+fixed	String
+exposure	Enum8(\'shielded\' = 1, \'shield_pending\' = 2, \'shield_module_absent\' = 3, \'shield_excludes_node\' = 4, \'shield_withdrawn\' = 5, \'exposed_no_shield\' = 6, \'none\' = 7, \'unknown\' = 8)
+upatch_id	String
+applied_seq	UInt64
+applied_op	Enum8(\'\' = 0, \'add\' = 1, \'delete\' = 2)
+next_seq	UInt64
+next_op	Enum8(\'\' = 0, \'add\' = 1, \'delete\' = 2)
+next_shields	Bool
+shield_link	Enum8(\'none\' = 0, \'fixes\' = 1, \'manual\' = 2)
+updated_at	DateTime
+kver
+mask_code
+tpm_quote_check
+1	600	3600	512	3600	2592000	172800
+1	3	6	4	7200	5184000	172800
