@@ -104,7 +104,8 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
-# Apply the carried patches to their upstream bpf-next base.
+# patches/ targets bpf-next, which also has the signed loader and the
+# fmod_ret scan the configuration asks for; no other tree is built.
 [ "$REF" = upstream/bpf-next ] ||
 	die "unsupported --ref $REF: patches/ targets upstream/bpf-next, the only tree supported for now"
 
@@ -197,10 +198,10 @@ ALLOW_DROP=(
 HOST="$(host_arch)"
 # One LLVM version throughout: the unversioned tools for suffix "", or
 # clang-20, ld.lld-20 and so on for "-20".  The newest complete versioned
-# install is the default because the fmodret candidates plugin in patches/
-# needs newer LLVM headers than the distribution default clang may have,
-# and the plugin must be built against the compiler that loads it
-# (Kbuild takes llvm-config with the same suffix).
+# install is the default because resolve_btfids's fmod_ret scan
+# (BPF_FMODRET_SCAN) needs the headers of LLVM 17 or later, which the
+# distribution default may lack, and Kbuild takes llvm-config with the
+# same suffix.
 llvm_complete() {
 	local t
 	for t in clang ld.lld llvm-objcopy llvm-ar llvm-nm; do have "$t$1" || return 1; done
