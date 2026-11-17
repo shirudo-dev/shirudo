@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 450" width="900" height="450" font-family="sans-serif" role="img" aria-labelledby="t">
+  <title id="t">Four comparisons in attest verify: the eventlog replay must equal the certified register value; the name computed from the init record must equal the certified name; pcr_before extended by the anchor must equal the quoted PCR 9; the init event must equal the one attest predict computes</title>
+  <style>@media (prefers-color-scheme: dark) { [fill="#5d6675"] { fill: #b4bcc7; } }</style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8a93a0"/>
+    </marker>
+  </defs>
+  <g fill="#8a93a0" fill-opacity="0.08" stroke="#8a93a0" stroke-width="1.5">
+    <rect x="20" y="40" width="280" height="60" rx="6"/>
+    <rect x="600" y="40" width="280" height="60" rx="6"/>
+    <rect x="20" y="140" width="280" height="60" rx="6"/>
+    <rect x="600" y="140" width="280" height="60" rx="6"/>
+    <rect x="20" y="240" width="280" height="60" rx="6"/>
+    <rect x="600" y="240" width="280" height="60" rx="6"/>
+    <rect x="20" y="340" width="280" height="60" rx="6"/>
+    <rect x="600" y="340" width="280" height="60" rx="6"/>
+  </g>
+  <g fill="none" stroke="#8a93a0" stroke-width="1.5">
+    <rect x="390" y="52" width="120" height="36" rx="18"/>
+    <rect x="390" y="152" width="120" height="36" rx="18"/>
+    <rect x="390" y="252" width="120" height="36" rx="18"/>
+    <rect x="390" y="352" width="120" height="36" rx="18"/>
+  </g>
+  <g fill="none" stroke="#8a93a0" stroke-width="1.5" marker-end="url(#arrow)">
+    <line x1="300" y1="70" x2="388" y2="70"/>
+    <line x1="600" y1="70" x2="512" y2="70"/>
+    <line x1="300" y1="170" x2="388" y2="170"/>
+    <line x1="600" y1="170" x2="512" y2="170"/>
+    <line x1="300" y1="270" x2="388" y2="270"/>
+    <line x1="600" y1="270" x2="512" y2="270"/>
+    <line x1="300" y1="370" x2="388" y2="370"/>
+    <line x1="600" y1="370" x2="512" y2="370"/>
+  </g>
+  <g fill="#5d6675" font-size="11">
+    <text x="20" y="24">Signed by the TPM or computed by the operator</text>
+    <text x="880" y="24" text-anchor="end">Written by the target</text>
+  </g>
+  <g fill="#5d6675" font-size="13" font-weight="bold">
+    <text x="34" y="64">NV_Certify: value</text>
+    <text x="614" y="64">This boot's eventlog</text>
+    <text x="34" y="164">NV_Certify: name</text>
+    <text x="614" y="164">init record</text>
+    <text x="34" y="264">Quote: PCR 9</text>
+    <text x="614" y="264">init record</text>
+    <text x="34" y="364">attest predict: init event</text>
+    <text x="614" y="364">init event</text>
+  </g>
+  <g fill="#5d6675" font-size="11">
+    <text x="34" y="86">the register's 32 bytes</text>
+    <text x="614" y="86">every digest folded from 32 zero bytes</text>
+    <text x="34" y="186">the index's attributes and write policy</text>
+    <text x="614" y="186">name from pcr_before, phase_before, writer key</text>
+    <text x="34" y="286">quoted with the nonce</text>
+    <text x="614" y="286">pcr_before extended by the anchor digest</text>
+    <text x="34" y="386">--cert, --upatch, --tree-root</text>
+    <text x="614" y="386">cert_sha256, set_digest, tree_root</text>
+    <text x="450" y="432" text-anchor="middle">A mismatch in any row fails verify. Events after init are judged by --expect-chain or --allow-runtime-events.</text>
+  </g>
+  <g fill="#5d6675" font-size="13" font-weight="bold" text-anchor="middle">
+    <text x="450" y="75">replay</text>
+    <text x="450" y="175">binding</text>
+    <text x="450" y="275">anchor</text>
+    <text x="450" y="375">expected</text>
+  </g>
+</svg>

@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" width="900" height="520" font-family="sans-serif" role="img" aria-labelledby="t">
+  <title id="t">Two ways to learn the attestation key's name: through credential activation, where the TPM releases the operator's credential only to that key under an endorsement key the operator trusts, or from a builder that created both keys in the TPM before handing it over; both end in the names every later verify pins</title>
+  <style>@media (prefers-color-scheme: dark) { [fill="#5d6675"] { fill: #b4bcc7; } }</style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8a93a0"/>
+    </marker>
+  </defs>
+  <line x1="450" y1="10" x2="450" y2="350" stroke="#8a93a0" stroke-width="1" stroke-dasharray="3 4"/>
+  <g fill="#8a93a0" fill-opacity="0.08" stroke="#8a93a0" stroke-width="1.5">
+    <rect x="60" y="52" width="330" height="50" rx="6"/>
+    <rect x="60" y="132" width="330" height="50" rx="6"/>
+    <rect x="60" y="212" width="330" height="50" rx="6"/>
+    <rect x="60" y="292" width="330" height="50" rx="6"/>
+    <rect x="510" y="52" width="330" height="50" rx="6"/>
+    <rect x="510" y="132" width="330" height="50" rx="6"/>
+    <rect x="510" y="212" width="330" height="50" rx="6"/>
+    <rect x="250" y="384" width="400" height="44" rx="6"/>
+    <rect x="230" y="458" width="440" height="50" rx="6"/>
+  </g>
+  <g fill="none" stroke="#8a93a0" stroke-width="1.5" marker-end="url(#arrow)">
+    <line x1="225" y1="102" x2="225" y2="130"/>
+    <line x1="225" y1="182" x2="225" y2="210"/>
+    <line x1="225" y1="262" x2="225" y2="290"/>
+    <line x1="675" y1="102" x2="675" y2="130"/>
+    <line x1="675" y1="182" x2="675" y2="210"/>
+    <polyline points="225,342 225,362 380,362 380,382"/>
+    <polyline points="675,262 675,362 520,362 520,382"/>
+    <line x1="450" y1="428" x2="450" y2="456"/>
+  </g>
+  <g fill="#5d6675" font-size="12" text-anchor="middle">
+    <text x="225" y="22" font-weight="bold" font-size="13">Credential activation</text>
+    <text x="225" y="40" font-size="11">trust rests on the endorsement key</text>
+    <text x="675" y="22" font-weight="bold" font-size="13">Builder-recorded names</text>
+    <text x="675" y="40" font-size="11">trust rests on the builder, and for a virtual TPM its host</text>
+
+    <text x="225" y="73" font-family="monospace">target: attest --nonce</text>
+    <text x="225" y="91" font-size="11">AK name, EK public area, EK certificate</text>
+    <text x="225" y="153" font-family="monospace">attest challenge</text>
+    <text x="225" y="171" font-size="11">EK vouched for by --ek-ca or --ek-name</text>
+    <text x="225" y="233" font-family="monospace">target: attest --challenge</text>
+    <text x="225" y="251" font-size="11">the TPM releases the credential only to that AK</text>
+    <text x="225" y="313" font-family="monospace">attest verify --expect-credential</text>
+    <text x="225" y="331" font-size="11">once, at enrollment</text>
+
+    <text x="675" y="73">The builder controls the TPM</text>
+    <text x="675" y="91" font-size="11">a hypervisor's virtual TPM, or provisioning before deployment</text>
+    <text x="675" y="153" font-family="monospace">CreatePrimary: AK, EK</text>
+    <text x="675" y="171" font-size="11">attest's templates, endorsement hierarchy</text>
+    <text x="675" y="233">The builder records the names</text>
+    <text x="675" y="251" font-size="11">before the TPM is handed to the target</text>
+
+    <text x="450" y="403" font-family="monospace">inventory: ak-name, ek-name</text>
+    <text x="450" y="420" font-size="11">on the operator host, one pair per target</text>
+    <text x="450" y="479" font-family="monospace">attest verify --ak-name --ek-name</text>
+    <text x="450" y="497" font-size="11">every later verification, the same on both paths</text>
+  </g>
+</svg>

@@ -15,9 +15,21 @@ PCRs for a nonce you chose, and you check the signature and the values
 on the operator host against what you installed.
 
 This page enrolls a target once, then collects and verifies evidence.
-The checks only mean something when you pin the values the target
-reports about itself, so the verification step lists the options you
-must pass.
+Enrollment records the names of the TPM's attestation key and
+endorsement key, and there are two ways to trust them:
+
+- `Enroll from a target activation`_: the target answers a credential
+  challenge, which the TPM can only answer when the attestation key is in
+  the TPM that holds an endorsement key you vouch for. Use it when the
+  TPM has a manufacturer's endorsement certificate or you hold its
+  endorsement key name.
+- `Enroll from a builder's records`_: the hypervisor or provisioning step
+  that created the TPM's keys records their names before handover, with
+  no exchange with the target. Use it when you trust that builder.
+
+Either way, every later verification pins those names. The checks only
+mean something when you pin the values the target reports about itself,
+so the verification step lists the options you must pass.
 
 Before you begin
 ----------------
@@ -90,12 +102,27 @@ document passes, as `A verify that pins nothing`_ shows.
      - Nothing was extended into PCR 9 after the register's anchor.
        Without it, verify notes further measurements and passes.
 
-Enroll a target
----------------
+Enroll from a target activation
+-------------------------------
 
 Enroll a target once per TPM. You record the name of its attestation
 key and prove that the key sits in the same TPM as an endorsement key
-you trust.
+you trust. When a builder you trust created the TPM's keys, its records
+can take the place of these steps (`Enroll from a builder's records`_).
+Figure 1 shows the steps: two runs of ``attest``, each with its own
+nonce, and a challenge in between.
+
+.. figure:: /images/operate-attest-activation.svg
+   :alt: The operator sends a nonce; the target has the TPM create the
+         attestation key and the endorsement key and returns enroll.json.
+         The operator makes a challenge for an endorsement key it vouches
+         for and sends it with a second nonce. The TPM releases the
+         credential only to that attestation key under that endorsement
+         key, and the target returns answer.json. The operator verifies
+         the credential and records both names in its inventory.
+
+   Figure 1. Enrolling through credential activation. The TPM proves to
+   the operator that the attestation key is in it.
 
 1. Choose a nonce on the operator host:
 
@@ -164,6 +191,145 @@ you trust.
 
 7. Record ``<ak-name>`` and ``<ek-name>`` for this target in your
    inventory. Every later verification pins them.
+
+8. If you run the keepalive backend, mark the key as enrolled, so that
+   the node reads ``enrolled`` rather than ``untrusted``
+   (:doc:`/operate/integrations/backend`):
+
+   .. code-block:: console
+
+      operator$ clickhouse-client --query "INSERT INTO shirudo.nodes \
+          (ak_name, trust) VALUES ('<ak-name>', 'enrolled')"
+
+Enroll from a builder's records
+-------------------------------
+
+Credential activation lets you learn from the target that its
+attestation key is in a TPM you trust. When a builder you trust controls
+the TPM before the target gets it, such as the hypervisor that creates a
+virtual TPM or a provisioning step before deployment, the builder can
+record the names itself, and enrollment needs no challenge.
+
+The builder then becomes part of what you trust, and for a virtual TPM
+so does the host that runs it. The attestation key's name is trusted
+because the builder saw the key created in that TPM, and the key is fixed
+to it, so no other TPM can sign with it. Nothing in the evidence ties the
+endorsement key to the attestation key on this path: ``--ek-name`` checks
+only the endorsement key the target reports.
+
+Figure 2 shows the path: the builder records the names once, before
+handover, and every attestation after that is a nonce, the evidence and a
+verify that pins them.
+
+.. figure:: /images/operate-attest-builder.svg
+   :alt: Before handover, the builder has the TPM create the attestation
+         key and the endorsement key from attest's templates and gives
+         their names to the operator's inventory. For every attestation,
+         the operator sends a nonce, the target has the TPM create the
+         same attestation key, quote the PCRs and certify the register
+         with the nonce, and returns the evidence document, which the
+         operator verifies with the recorded names. There is no
+         credential challenge.
+
+   Figure 2. Enrolling from a builder's records. The builder, not the
+   TPM, vouches for the names.
+
+The steps below are for a virtual TPM run by swtpm, before the guest's
+first boot. They need swtpm and tpm2-tools on the builder host.
+``<state-dir>`` is the directory that holds the guest's TPM state, the
+one QEMU's or libvirt's swtpm will use.
+
+1. Create the TPM state, unless the guest already has some:
+
+   .. code-block:: console
+
+      builder$ swtpm_setup --tpm2 --tpmstate <state-dir> --createek
+
+2. Run swtpm on that state, with the guest stopped:
+
+   .. code-block:: console
+
+      builder$ swtpm socket --tpm2 --tpmstate dir=<state-dir> \
+          --server type=tcp,port=2321 --ctrl type=tcp,port=2322 \
+          --flags not-need-init,startup-clear --pid file=swtpm.pid --daemon
+      builder$ export TPM2TOOLS_TCTI=swtpm:port=2321
+
+3. Create the attestation key from the template ``attest`` uses, and save
+   its public area:
+
+   .. code-block:: console
+
+      builder$ tpm2_createprimary -C e -g sha256 -G ecc256:ecdsa-sha256:null \
+          -a 'fixedtpm|fixedparent|sensitivedataorigin|userwithauth|restricted|sign' \
+          -c ak.ctx
+      builder$ tpm2_readpublic -c ak.ctx -o ak.pub
+      builder$ tpm2_flushcontext -t
+
+4. Create the endorsement key from the TCG default template, and save its
+   public area:
+
+   .. code-block:: console
+
+      builder$ tpm2_createek -c - -G ecc -u ek.pub
+
+   The evidence carries the ECC endorsement key unless the TPM's only
+   endorsement certificate is RSA; use ``-G rsa`` for such a TPM.
+
+5. Compute the two names, ``000b`` and the SHA-256 of each public area:
+
+   .. code-block:: console
+
+      builder$ echo 000b$(tail -c +3 ak.pub | sha256sum | cut -c1-64)
+      builder$ echo 000b$(tail -c +3 ek.pub | sha256sum | cut -c1-64)
+
+   The first line is ``<ak-name>``, the second ``<ek-name>``.
+
+6. Shut the TPM down in order and stop swtpm, which saves the state.
+   swtpm releases ``<state-dir>`` only when its process exits, so wait
+   for that before the guest's swtpm opens it, then start the guest:
+
+   .. code-block:: console
+
+      builder$ tpm2_shutdown
+      builder$ pid=$(cat swtpm.pid)
+      builder$ swtpm_ioctl --tcp :2322 -s
+      builder$ while kill -0 "$pid" 2>/dev/null; do sleep 0.1; done
+
+7. Record both names for this target in your inventory. Take them from
+   the builder, never from the target.
+
+8. If you run the keepalive backend, mark the key as enrolled. The row
+   can go in before the target first boots; its first keepalive joins
+   it:
+
+   .. code-block:: console
+
+      operator$ clickhouse-client --query "INSERT INTO shirudo.nodes \
+          (ak_name, trust) VALUES ('<ak-name>', 'enrolled')"
+
+9. Verify every evidence document with the recorded names, as
+   `Verify evidence`_ shows. There is no credential to expect:
+
+   .. code-block:: console
+
+      operator$ shirudo attest verify --evidence=ev.json --nonce=<nonce> \
+          --ak-name=<ak-name> --ek-name=<ek-name> \
+          --expect-bind-pcr=9=<pcr9> --expect-bind-pcr=11=<pcr11> \
+          --require-initrd --expect-chain=<register> \
+          --expect-config-root=<config-root> --expect-config-pcr=<config-pcr>
+
+For a physical TPM a provisioning step controls, skip steps 1, 2 and 6
+and leave ``TPM2TOOLS_TCTI`` unset, so that tpm2-tools uses the TPM
+device. The names are the TPM's own and stay with it.
+
+A virtual TPM cloned with its state presents the original's keys, so give
+each clone fresh state and record its own names. A migration that keeps
+the state keeps the names, and ``TPM2_Clear`` changes neither.
+
+A builder that records only the endorsement key's name still saves the
+endorsement certificate check: pass that name as ``--ek-name`` in step 4
+of `Enroll from a target activation`_, and the challenge proves that the
+attestation key is in that TPM.
 
 Predict the register
 --------------------

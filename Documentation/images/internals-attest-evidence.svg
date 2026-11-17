@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 580" width="900" height="580" font-family="sans-serif" role="img" aria-labelledby="t">
+  <title id="t">Collecting evidence: the operator predicts the register and sends a nonce, with a credential challenge at enrollment; the target has the TPM create the attestation key, activate the credential, quote the PCRs and certify the register with the nonce, and returns an evidence document that the operator verifies</title>
+  <style>@media (prefers-color-scheme: dark) { [fill="#5d6675"] { fill: #b4bcc7; } }</style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8a93a0"/>
+    </marker>
+  </defs>
+  <g stroke="#8a93a0" stroke-width="1" stroke-dasharray="3 4">
+    <line x1="130" y1="54" x2="130" y2="74"/>
+    <line x1="130" y1="118" x2="130" y2="534"/>
+    <line x1="450" y1="54" x2="450" y2="462"/>
+    <line x1="450" y1="498" x2="450" y2="570"/>
+    <line x1="770" y1="54" x2="770" y2="570"/>
+  </g>
+  <g fill="#8a93a0" fill-opacity="0.08" stroke="#8a93a0" stroke-width="1.5">
+    <rect x="50" y="10" width="160" height="44" rx="6"/>
+    <rect x="370" y="10" width="160" height="44" rx="6"/>
+    <rect x="690" y="10" width="160" height="44" rx="6"/>
+    <rect x="30" y="74" width="200" height="44" rx="6"/>
+    <rect x="320" y="462" width="260" height="36" rx="6"/>
+    <rect x="30" y="534" width="200" height="34" rx="6"/>
+  </g>
+  <g fill="none" stroke="#8a93a0" stroke-width="1.5" marker-end="url(#arrow)">
+    <line x1="130" y1="150" x2="448" y2="150"/>
+    <line x1="450" y1="205" x2="768" y2="205"/>
+    <line x1="450" y1="260" x2="768" y2="260"/>
+    <line x1="770" y1="280" x2="452" y2="280" stroke-dasharray="5 4"/>
+    <line x1="450" y1="335" x2="768" y2="335"/>
+    <line x1="770" y1="355" x2="452" y2="355" stroke-dasharray="5 4"/>
+    <line x1="450" y1="410" x2="768" y2="410"/>
+    <line x1="770" y1="430" x2="452" y2="430" stroke-dasharray="5 4"/>
+    <line x1="450" y1="522" x2="132" y2="522"/>
+  </g>
+  <g fill="#5d6675" font-size="12" text-anchor="middle">
+    <text x="130" y="30" font-weight="bold" font-size="13">Operator</text>
+    <text x="130" y="46" font-size="11">no TPM</text>
+    <text x="450" y="30" font-weight="bold" font-size="13">Target</text>
+    <text x="450" y="46" font-size="11" font-family="monospace">shirudo attest</text>
+    <text x="770" y="37" font-weight="bold" font-size="13">TPM</text>
+
+    <text x="130" y="93" font-family="monospace">attest predict</text>
+    <text x="130" y="109" font-size="11">certificates, artifacts, tree root</text>
+
+    <text x="290" y="142">nonce, and a challenge at enrollment</text>
+    <text x="290" y="168" font-size="11">attest challenge, bound to the AK name</text>
+
+    <text x="610" y="197">CreatePrimary: AK</text>
+    <text x="610" y="223" font-size="11">fixed template, endorsement hierarchy</text>
+
+    <text x="610" y="252">ActivateCredential, with a challenge</text>
+    <text x="610" y="296" font-size="11">the credential, only for that AK</text>
+
+    <text x="610" y="327" font-family="monospace">Quote(PCRs; nonce)</text>
+    <text x="610" y="371" font-size="11">signed PCR digest</text>
+
+    <text x="610" y="402" font-family="monospace">NV_Certify(register; nonce)</text>
+    <text x="610" y="446" font-size="11">signed register value and name</text>
+
+    <text x="450" y="485" font-size="11">with this boot's eventlog, the EK, logs</text>
+
+    <text x="290" y="514">evidence document</text>
+    <text x="130" y="556" font-family="monospace">attest verify</text>
+  </g>
+</svg>

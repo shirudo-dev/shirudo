@@ -50,6 +50,52 @@ hierarchy. With ``--challenge``, ``attest`` activates the credential the
 operator made for that key and includes it, which proves that the key
 lives in the same TPM as the endorsement key (:doc:`attest-challenge`).
 
+Both keys are primaries under the endorsement hierarchy, created from the
+templates below, so one TPM always yields the same keys and names. A
+builder that creates them from the same templates in the same TPM reads
+the names the evidence will carry. The endorsement key is the ECC one,
+or the RSA one when the TPM holds only an RSA endorsement certificate.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 36 44
+
+   * - Field
+     - Attestation key
+     - Endorsement key
+   * - Type
+     - ECC
+     - ECC, or RSA
+   * - Name algorithm
+     - SHA-256
+     - SHA-256
+   * - Attributes
+     - ``0x00050072``: ``fixedTPM``, ``fixedParent``,
+       ``sensitiveDataOrigin``, ``userWithAuth``, ``restricted``,
+       ``sign``
+     - ``0x000300B2``: ``fixedTPM``, ``fixedParent``,
+       ``sensitiveDataOrigin``, ``adminWithPolicy``, ``restricted``,
+       ``decrypt``
+   * - Authorization policy
+     - Empty
+     - ``837197674484b3f81a90cc8d46a5d724fd52d76e06520b64f2a1da1b331469aa``,
+       ``PolicySecret`` on the endorsement hierarchy
+   * - Symmetric
+     - Null
+     - AES-128 in CFB mode
+   * - Scheme
+     - ECDSA with SHA-256
+     - Null
+   * - Key
+     - NIST P-256, KDF null
+     - NIST P-256, KDF null; or RSA-2048, exponent 0 (65537)
+   * - ``unique``
+     - Empty
+     - 32 zero bytes each for x and y; 256 zero bytes for RSA
+
+The endorsement key templates are the TCG EK Credential Profile's
+default low-range templates, L-2 for ECC and L-1 for RSA.
+
 Without ``--nonce``, ``attest`` warns that the evidence proves no
 freshness.
 

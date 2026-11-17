@@ -139,7 +139,20 @@ Binding at boot
 ---------------
 
 ``init`` binds the register once per TPM boot, normally from the initrd,
-after it has restored the archived upatches (:doc:`boot-flow`):
+after it has restored the archived upatches (:doc:`boot-flow`). Figure 1
+shows the binding and the extensions that follow it.
+
+.. figure:: /images/internals-register-events.svg
+   :alt: In the initrd, init defines the NV index under a write policy
+         on PCRs 9 and 11, extends it with the init event, extends PCR 9
+         with the anchor digest and writes the init record to
+         eventlog.pending. Every later command extends the index with a
+         tagged event digest and then appends its record to the
+         eventlog, under eventlog.lock.
+
+   Figure 1. Binding the register at boot and extending it later.
+
+The binding takes these steps:
 
 #. Open a salted session using the EK whose name ``init`` froze in the
    identity map. The session authenticates the TPM's successful replies.
@@ -332,7 +345,20 @@ Evidence
 
 ``shirudo attest`` asks the TPM for two signed statements and collects
 what a verifier needs to check them. It needs no enrollment state on the
-target and leaves none.
+target and leaves none. Figure 2 shows one run, with the credential
+activation that enrollment adds.
+
+.. figure:: /images/internals-attest-evidence.svg
+   :alt: The operator runs attest predict and sends a nonce, with a
+         credential challenge at enrollment. The target has the TPM create
+         the attestation key from its fixed template, activate the
+         credential when there is a challenge, quote the PCRs and certify
+         the register with the nonce. It returns an evidence document with
+         this boot's eventlog, and the operator runs attest verify.
+
+   Figure 2. Collecting evidence. The operator holds no TPM; the nonce,
+   the challenge and the document travel by whatever channel the operator
+   uses to reach the target.
 
 The attestation key is a primary under the endorsement hierarchy with a
 fixed template: ECC NIST P-256, ECDSA with SHA-256, ``restricted`` and
@@ -376,12 +402,53 @@ the attestation key it loaded has the name the challenge was made for.
 with the signature checks, this shows that the key that signed is a
 restricted key in the TPM that holds the endorsement key.
 
+Builder-recorded names
+~~~~~~~~~~~~~~~~~~~~~~
+
+Activation is one way to learn the attestation key's name. The other is
+to take it from a builder that controlled the TPM before the target got
+it, a hypervisor creating a virtual TPM or a provisioning step: the
+builder creates both keys from the templates ``attest`` uses
+(:doc:`/reference/cli/attest`) and records their names. Figure 3 sets the
+two side by side. Both end in the same pinned names, and ``verify``
+checks evidence the same way after either.
+
+.. figure:: /images/internals-attest-names.svg
+   :alt: Credential activation: the target sends evidence, the operator
+         makes a challenge for an endorsement key it vouches for, the TPM
+         releases the credential only to that attestation key, and verify
+         checks it once. Builder-recorded names: the builder creates both
+         keys in the TPM before handover and records their names. Both
+         paths end in the inventory every later verify pins.
+
+   Figure 3. Two ways to learn the attestation key's name.
+
+On the builder path the name is trusted because the builder saw the key
+created, not because the TPM proved anything to the operator. The
+builder, and for a virtual TPM its host, joins the trusted base, and the
+endorsement key in the evidence is the target's word: no challenge ties
+it to the attestation key. The two paths combine. An endorsement key
+name the builder recorded can vouch for the endorsement key in
+``attest challenge --ek-name``, in place of a certificate chain.
+
 What verify and predict compute
 -------------------------------
 
 ``shirudo attest verify`` and ``shirudo attest predict`` run on the
 operator and touch no TPM. ``verify`` prints one line per check and a
-verdict. It checks, in this order:
+verdict. Figure 4 shows the four comparisons that tie what the target
+wrote about itself to what the TPM signed or the operator computed.
+
+.. figure:: /images/internals-attest-verify.svg
+   :alt: The eventlog replay must equal the certified register value; the
+         name computed from the init record must equal the certified name;
+         pcr_before extended by the anchor digest must equal the quoted
+         PCR 9; the init event must equal the one attest predict computes.
+
+   Figure 4. What ``verify`` compares. Once the replay matches, the
+   ``init`` record's fields are the ones the TPM measured.
+
+It checks, in this order:
 
 #. the nonce;
 #. the attestation key: a restricted signing key with the required
