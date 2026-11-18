@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+
+[package]
+name = "java-sql-inj"
+description = "A Java agent that blocks JDBC statements carrying structural SQL injection"
+license = "BSD-2-Clause"
+authors = ["Authors of shirudo"]
+
+[[upatches]]
+type = "java"
+source = "java-sql-inj.jar"
+
+[[files]]
+source = "vulnerable-app.jar"
+
+[[files]]
+source = "sql_inj_vuln"

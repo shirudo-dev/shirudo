@@ -1,0 +1,18 @@
+#!/bin/sh
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+#
+# Run the vulnerable H2 application of the example with the options the
+# loaded Java upatches set, as a JVM a user manager starts would get them.
+
+set -eu
+
+ENV_FILE=/run/environment.d/shirudo.conf
+APP_JAR=${APP_JAR:-$(dirname "$0")/vulnerable-app.jar}
+
+if [ -r "$ENV_FILE" ]; then
+	. "$ENV_FILE"
+	export JAVA_TOOL_OPTIONS
+fi
+
+exec java -jar "$APP_JAR" "$@"
