@@ -356,6 +356,7 @@ bool upatch_link_counts_misses(const struct bpf_link_info *info)
 {
 	switch (info->type) {
 	case BPF_LINK_TYPE_KPROBE_MULTI:
+	case BPF_LINK_TYPE_RAW_TRACEPOINT:
 		return true;
 	case BPF_LINK_TYPE_PERF_EVENT:
 		return link_is_kprobe(info);

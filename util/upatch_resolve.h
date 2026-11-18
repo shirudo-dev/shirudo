@@ -52,8 +52,8 @@ struct upatch_link_misses {
 
 /*
  * Whether the runs the kernel skips of the program behind this link are
- * reported: kprobe, kretprobe, their multi forms, fentry, fexit and
- * fmod_ret. The kernel skips no lsm, xdp, cgroup_skb or netfilter run,
+ * reported: kprobe, kretprobe, their multi forms, fentry, fexit, fmod_ret
+ * and tp_btf. The kernel skips no lsm, xdp, cgroup_skb or netfilter run,
  * and counts none it skips of the uprobe kinds.
  */
 bool upatch_link_counts_misses(const struct bpf_link_info *info);
