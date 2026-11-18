@@ -8,6 +8,7 @@
 #ifndef SHIRUDO_UTIL_UPATCH_RESOLVE_H
 #define SHIRUDO_UTIL_UPATCH_RESOLVE_H
 
+#include <stdbool.h>
 #include <stddef.h>
 
 #include <shirudo/types.h>
@@ -39,6 +40,33 @@ int upatch_first_prog_id(const char *name, __u32 *out);
 /* vbtf may be NULL; the location then degrades to the bare prefix. */
 int upatch_resolve_location(struct btf *vbtf, const char *name,
 			    char *out, size_t cap);
+
+/*
+ * The runs the kernel skipped of one program of an upatch: the program's
+ * recursion_misses and what its kprobe multi link counts itself.
+ */
+struct upatch_link_misses {
+	__u64	missed;
+};
+
+/*
+ * Whether the runs the kernel skips of the program behind this link are
+ * reported: kprobe.multi and kretprobe.multi. The kernel skips no lsm,
+ * xdp, cgroup_skb or netfilter run, and counts none it skips of the
+ * uprobe kinds.
+ */
+bool upatch_link_counts_misses(const struct bpf_link_info *info);
+
+/* What the link counts itself, beside its program's recursion_misses. */
+__u64 upatch_link_missed(const struct bpf_link_info *info);
+
+/*
+ * The sum over the links of name that upatch_link_counts_misses(), with
+ * the number of links it counted: 0 for an upatch of no kind the kernel
+ * counts, whose missed is then 0 without meaning that nothing was
+ * skipped. A link or program that cannot be read fails with its -errno.
+ */
+int upatch_missed_runs(const char *name, __u32 *nr_counted, __u64 *missed);
 
 void upatch_loaded_at(const char *name, char *out, size_t cap);
 

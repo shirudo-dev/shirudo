@@ -10,6 +10,7 @@
 #include <time.h>
 
 #include <shirudo/misc.h>
+#include <shirudo/string.h>
 
 #include "json.h"
 #include "timefmt.h"
@@ -26,6 +27,17 @@ __s64 upatch_age_sec(const char *ts)
 	return (__s64)(time(NULL) - timegm(&tm));
 }
 
+/* "?" when they could not be read, "-" for an upatch of no counted kind. */
+static const char *missed_text(const struct upatch_table_row *r, char *buf,
+			       size_t cap)
+{
+	if (r->missed_ret)
+		return "?";
+	if (!r->missed_counted)
+		return "-";
+	return strsprintf(buf, cap, "%llu", r->missed_runs) < 0 ? "?" : buf;
+}
+
 void upatch_table_print(const struct upatch_table_row *rows,
 			size_t n)
 {
@@ -36,18 +48,19 @@ void upatch_table_print(const struct upatch_table_row *rows,
 		printf("  none\n");
 		return;
 	}
-	printf("  %-24s  %-28s  %5s  %-28s  %s\n",
-	       "NAME", "LOCATION", "MAPS", "STATUS", "AGE");
+	printf("  %-24s  %-28s  %5s  %6s  %-28s  %s\n",
+	       "NAME", "LOCATION", "MAPS", "MISSED", "STATUS", "AGE");
 	for (i = 0; i < n; i++) {
 		const struct upatch_table_row *r = &rows[i];
-		char age[16] = "?";
+		char age[16] = "?", missed[24];
 
 		if (r->age_sec >= 0)
 			format_duration((long)r->age_sec,
 					age, sizeof(age));
-		printf("  %-24s  %-28s  %5u  %-28s  %s\n", r->name,
-		       r->location[0] ? r->location : "-",
-		       r->n_maps, r->status[0] ? r->status : "success", age);
+		printf("  %-24s  %-28s  %5u  %6s  %-28s  %s\n", r->name,
+		       r->location[0] ? r->location : "-", r->n_maps,
+		       missed_text(r, missed, sizeof(missed)),
+		       r->status[0] ? r->status : "success", age);
 	}
 }
 
@@ -67,6 +80,10 @@ void upatch_table_emit_json(struct json_emit *e,
 		json_kv_string(e, "status",
 			       r->status[0] ? r->status : "success");
 		json_kv_int(e, "n_maps", (__s64)r->n_maps);
+		if (!r->missed_ret && r->missed_counted)
+			json_kv_u64(e, "missed_runs", r->missed_runs);
+		else
+			json_kv_null(e, "missed_runs");
 		json_kv_string(e, "loaded_at", r->loaded_at);
 		if (r->age_sec >= 0)
 			json_kv_int(e, "age_sec", r->age_sec);

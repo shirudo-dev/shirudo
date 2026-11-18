@@ -340,6 +340,114 @@ int upatch_resolve_location(struct btf *vbtf, const char *name,
 	return ret;
 }
 
+bool upatch_link_counts_misses(const struct bpf_link_info *info)
+{
+	switch (info->type) {
+	case BPF_LINK_TYPE_KPROBE_MULTI:
+		return true;
+	default:
+		return false;
+	}
+}
+
+__u64 upatch_link_missed(const struct bpf_link_info *info)
+{
+	if (info->type == BPF_LINK_TYPE_KPROBE_MULTI)
+		return info->kprobe_multi.missed;
+	return 0;
+}
+
+/* 1 for a link of a kind whose skipped runs the kernel does not count. */
+static int link_misses(int fd, struct upatch_link_misses *m)
+{
+	struct bpf_link_info info = {};
+	struct bpf_prog_info prog = {};
+	__u32 len = sizeof(info);
+	int ret;
+
+	ret = bpf_link_get_info_by_fd(fd, &info, &len);
+	if (ret)
+		return ret;
+	if (!upatch_link_counts_misses(&info))
+		return 1;
+	ret = prog_info_by_id(info.prog_id, &prog);
+	if (ret)
+		return ret;
+	m->missed = prog.recursion_misses + upatch_link_missed(&info);
+	return 0;
+}
+
+struct misses_walk {
+	int	(*cb)(const struct upatch_link_misses *m, void *ctx);
+	void	*ctx;
+};
+
+static int read_link_misses(__u32 index, const char *pin, void *ctx)
+{
+	struct upatch_link_misses m = {};
+	struct misses_walk *w = ctx;
+	int fd, ret;
+
+	fd = bpf_obj_get(pin);
+	if (fd < 0)
+		return -errno;
+	ret = link_misses(fd, &m);
+	close(fd);
+	if (ret)
+		return min(ret, 0);
+	return w->cb(&m, w->ctx);
+}
+
+/* One link is pinned as "link", several as "link_<n>". */
+static int walk_link_misses(const char *name, struct misses_walk *w)
+{
+	struct upatch_pins pins;
+	char pin[PATH_MAX];
+	int ret;
+
+	ret = upatch_pins_read(name, &pins);
+	if (ret)
+		return ret;
+	if (pins.has_link) {
+		if (upatch_pin_path(pin, sizeof(pin), name, "link", NULL))
+			return -ENAMETOOLONG;
+		ret = read_link_misses(0, pin, w);
+		if (ret)
+			return ret;
+	}
+	return upatch_each_link(name, read_link_misses, w);
+}
+
+struct misses_sum {
+	__u32	nr_counted;
+	__u64	missed;
+};
+
+static int add_link_misses(const struct upatch_link_misses *m, void *ctx)
+{
+	struct misses_sum *sum = ctx;
+
+	sum->nr_counted++;
+	sum->missed += m->missed;
+	return 0;
+}
+
+int upatch_missed_runs(const char *name, __u32 *nr_counted, __u64 *missed)
+{
+	struct misses_sum sum = {};
+	struct misses_walk w = { .cb = add_link_misses, .ctx = &sum };
+	int ret;
+
+	*nr_counted = 0;
+	*missed = 0;
+	ret = walk_link_misses(name, &w);
+	if (ret)
+		return ret;
+	*nr_counted = sum.nr_counted;
+	*missed = sum.missed;
+	return 0;
+}
+
 void upatch_loaded_at(const char *name, char *out, size_t cap)
 {
 	struct upatch_pins pins;

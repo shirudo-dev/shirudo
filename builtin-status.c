@@ -1632,6 +1632,8 @@ static size_t build_upatches_table(const struct status_view *v,
 		upatch_maps_list_one(name, &list, &nm);
 		r->n_maps = (__u32)nm;
 		map_summary_free(list, nm);
+		r->missed_ret = upatch_missed_runs(name, &r->missed_counted,
+						   &r->missed_runs);
 		r->age_sec = upatch_age_sec(r->loaded_at);
 	}
 	btf__free(vbtf);

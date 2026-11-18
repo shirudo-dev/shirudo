@@ -23,6 +23,9 @@ struct upatch_table_row {
 	char		loaded_at[32];	/* ISO-8601 UTC, "" if unknown */
 	char		status[64];	/* success or a tree skip reason */
 	__u32		n_maps;
+	int		missed_ret;	/* of upatch_missed_runs() */
+	__u32		missed_counted;	/* links it counted, 0 for none */
+	__u64		missed_runs;
 	__s64		age_sec;	/* derived from loaded_at; -1 if unknown */
 	char		payload_sha256[65];	/* "" if unavailable; JSON only */
 };
