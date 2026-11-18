@@ -38,6 +38,26 @@ def package(readme=README):
     return package_bytes(entries)
 
 
+def staged_downloads():
+    return [name for name in os.listdir("/tmp")
+            if name.startswith("shirudo-bpm-")]
+
+
+def open_files(pid):
+    """None when the process is not dumpable and the runner is not root."""
+    try:
+        fds = os.listdir(f"/proc/{pid}/fd")
+    except PermissionError:
+        return None
+    links = []
+    for fd in fds:
+        try:
+            links.append(os.readlink(f"/proc/{pid}/fd/{fd}"))
+        except OSError:
+            pass
+    return links
+
+
 class BpmTestCase(unittest.TestCase):
     def setUp(self):
         self.work = tempfile.TemporaryDirectory(prefix="shirudo-bpm-info-test-")
@@ -319,20 +339,20 @@ class MemoryTests(BpmTestCase):
         blob = package(readme=README + b"x" * 300000)
         registry = Registry(blob, hold=True)
         self.addCleanup(registry.close)
+        before = set(staged_downloads())
         proc = subprocess.Popen([SHIRUDO, "bpm", "info", registry.reference],
                                 cwd=self.root, env=self.env(),
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.assertTrue(registry.halfway.wait(30))
-        links = []
-        for fd in os.listdir(f"/proc/{proc.pid}/fd"):
-            try:
-                links.append(os.readlink(f"/proc/{proc.pid}/fd/{fd}"))
-            except OSError:
-                pass
+        staged = set(staged_downloads()) - before
+        links = open_files(proc.pid)
         registry.release.set()
         out, err = proc.communicate(timeout=60)
         self.assertEqual(proc.returncode, 0, err)
         self.assertTrue(out.startswith(README), out[:80])
+        self.assertFalse(staged, staged)
+        if links is None:
+            return
         self.assertTrue(any(link.startswith("/memfd:shirudo-bpm-package")
                             for link in links), links)
         self.assertFalse([link for link in links if link.startswith("/tmp/")],
