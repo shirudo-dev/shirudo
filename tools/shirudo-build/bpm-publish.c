@@ -815,7 +815,10 @@ static int tree_upload_artifact(struct bpm_oci_client *c, const char *repository
 	return ret;
 }
 
-/* The classes of a load upatch, none for one without an XDP program. */
+/*
+ * The classes of a load upatch, none for one without an XDP program or
+ * one that is not BPF.
+ */
 static int upatch_xdp_classes(const void *body, size_t len, __u32 *classes)
 {
 	struct prog_spec *specs = NULL;
@@ -827,6 +830,11 @@ static int upatch_xdp_classes(const void *body, size_t len, __u32 *classes)
 	ret = upatch_open_memory(body, len, &u);
 	if (ret)
 		return ret;
+	if (upatch_signed_type(&u) != UPATCH_TYPE_BPF) {
+		*classes = 0;
+		upatch_close(&u);
+		return 0;
+	}
 	attach = upatch_signed_attach(&u, &attach_len);
 	ret = attach ? prog_specs_parse(attach, attach_len, u.hdr.nr_maps,
 					u.hdr.nr_progs, &specs) : -EINVAL;

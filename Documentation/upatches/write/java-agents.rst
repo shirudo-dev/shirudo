@@ -21,9 +21,10 @@ Build and ship
 ``shirudo build --unload agent`` signs its directive (see
 :doc:`/reference/cli/build`). In a package, a Beefile upatch with
 ``type = "java"`` and a ``.jar`` source does the same (see
-:doc:`/reference/formats/beefile`). The container carries no loader: its
-signed data holds the name, the payload type and the jar
-(:doc:`/reference/formats/upatch-format`).
+:doc:`/reference/formats/beefile`), and its ``[upatches.tree]`` entry
+publishes it through a tree as it does a BPF upatch. The container
+carries no loader: its signed data holds the name, the payload type and
+the jar (:doc:`/reference/formats/upatch-format`).
 
 The jar must name a ``Premain-Class`` in its manifest, and with its
 signature fit the 16 MiB a ``.upatch`` may have; ``build`` refuses one
@@ -32,8 +33,8 @@ that does not.
 On the target
 -------------
 
-``shirudo upatch load agent.upatch``, or a ``bpm install`` of the
-package:
+``shirudo upatch load agent.upatch``, a ``bpm install`` of the
+package, or a ``bpm tree sync`` that takes its ``add``:
 
 #. checks the signature over the signed data against the certificates
    of the authenticated runtime that the ``.bpf`` keyring holds, as the
@@ -46,15 +47,15 @@ package:
    upatch, in name order, appended to the ``JAVA_TOOL_OPTIONS`` that
    ``environment.d`` files sorting before it set.
 
-``shirudo upatch unload agent.unload.upatch`` measures a ``java_unload``
-event, replaces the jar with one whose agent does nothing, removes the
-archive, and rewrites the options without the agent. At boot ``init``
-verifies each archived Java upatch the eventlog records as loaded and
-writes its jar and the options, which ``/run`` carries to the root file
-system. A later run of ``init`` in the same boot leaves a jar that is
-the archived one in place, and refuses one that is missing or another as
-tampered, as it refuses a BPF upatch without its pins. ``upatch list``
-and ``status`` show a Java
+``shirudo upatch unload agent.unload.upatch``, or a tree ``delete``,
+measures a ``java_unload`` event, replaces the jar with one whose agent
+does nothing, removes the archive, and rewrites the options without the
+agent. At boot ``init`` verifies each archived Java upatch the eventlog
+records as loaded and writes its jar and the options, which ``/run``
+carries to the root file system. A later run of ``init`` in the same
+boot leaves a jar that is the archived one in place, and refuses one
+that is missing or another as tampered, as it refuses a BPF upatch
+without its pins. ``upatch list`` and ``status`` show a Java
 upatch loaded while its installed jar is the archived one; ``status``
 reports one whose jar is missing or another under ``UpatchesMeasured``,
 and a jar no archive backs, which a load stopped before its archive

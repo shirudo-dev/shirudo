@@ -323,7 +323,7 @@ selectors of the two operations do not exclude each other. A device runs
 one native XDP program, so the second upatch would fail its load on every
 node with such a device and ``tree sync`` would stop there. The message
 names both upatches, the sequence number of the earlier operation and the
-shared classes, and nothing is published.
+shared classes, and nothing is published. A Java upatch selects no class.
 
 - Only an ``add`` that no later ``delete`` withdrew counts. A ``delete``
   withdraws it when its selector reaches every node the ``add`` reaches:

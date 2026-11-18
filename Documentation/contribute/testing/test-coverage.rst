@@ -599,7 +599,8 @@ signed config image.
        refusal of a target below another member and of members a target
        could not unpack together, ``bpm push`` with a signed index,
        ``bpm tree append`` and its refusal of an XDP device class two
-       upatches of a tree select and of an entry no target would take,
+       upatches of a tree select, which a Java upatch beside them does
+       not trip, and of an entry no target would take,
        each before anything is uploaded, its refusal to extend a tree
        without ``--tree-id`` or with another tree's id, A-to-B tree
        signing-key rotation with explicit predecessor verification
@@ -713,6 +714,11 @@ signed config image.
      - The signed layers of a publication served under a manifest that
        is not the one ``bpm tree append`` writes are refused before the
        node records anything, and the publisher's form is taken again
+   * - ``t7112-bpm-tree-java``
+     - A Java upatch through the tree: an ``add`` installs its jar and
+       names it in ``JAVA_TOOL_OPTIONS`` under a ``java_load``, a
+       ``delete`` takes the agent and the options out under a
+       ``java_unload``
    * - Test
      - Covers
    * - ``t8001-otel-map``

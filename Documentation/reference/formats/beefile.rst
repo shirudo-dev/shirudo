@@ -215,8 +215,8 @@ from the artifact's payload digest, so a package always ships both.
      - no
      - ``bpf``, the default, or ``java``, in any case. A ``java`` upatch
        signs its ``.jar`` source as a Java agent (see
-       :doc:`/reference/cli/build`) and takes no ``[[upatches.rodata]]``,
-       ``[[upatches.policy]]`` or ``[upatches.tree]``.
+       :doc:`/reference/cli/build`) and takes no ``[[upatches.rodata]]``
+       or ``[[upatches.policy]]``.
    * - ``load_target``
      - string
      - no

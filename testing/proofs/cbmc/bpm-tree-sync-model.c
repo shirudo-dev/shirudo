@@ -589,6 +589,12 @@ bool upatch_loaded_pins(const char *name)
 	return pins_loaded;
 }
 
+/* The model's upatches are BPF ones. */
+bool java_agent_loaded(const char *name)
+{
+	return false;
+}
+
 int tree_pending_write(const struct tree_operation *op)
 {
 	struct write w = { .kind = W_PENDING, .op = op_of(op) };

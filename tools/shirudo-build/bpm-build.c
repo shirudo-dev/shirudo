@@ -389,7 +389,7 @@ static bool build_upatch_type_ok(const struct bpm_build_upatch *u)
 		return true;
 	return !strcmp(u->type, "java") &&
 	       name_has_suffix(u->source, strlen(u->source), ".jar") &&
-	       !u->n_rodata && !u->n_policies && !u->tree.present;
+	       !u->n_rodata && !u->n_policies;
 }
 
 static int build_default_targets(struct bpm_build_upatch *u)

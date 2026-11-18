@@ -46,6 +46,7 @@
 #include "util/hex.h"
 #include "util/io.h"
 #include "util/initrd.h"
+#include "util/java_agent.h"
 #include "util/image_config.h"
 #include "util/image_keys.h"
 #include "util/keys.h"
@@ -2158,7 +2159,8 @@ static int tree_recover_pending(const struct tree_publication *pub,
 				   history_root);
 	if (ret)
 		return ret;
-	absent = !strcmp(op->op, "add") && !upatch_loaded_pins(op->id);
+	absent = !strcmp(op->op, "add") && !upatch_loaded_pins(op->id) &&
+		 !java_agent_loaded(op->id);
 	ret = tree_outcome_record(op->seq, digest,
 				  absent ? TREE_OUTCOME_MODULE_ABSENT :
 					   TREE_OUTCOME_APPLIED,

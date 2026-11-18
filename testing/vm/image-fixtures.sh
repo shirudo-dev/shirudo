@@ -76,7 +76,8 @@ for name in config-boot-keys config-live-new-key config-live-revoke-a config-a c
 	config-tree-stable config-tree-updated config-tree-deleted config-tree-restored \
 	config-tree-kconfig config-tree-reloaded config-tree-outcomes \
 	config-tree-stopped config-tree-fetched config-tree-fixes \
-	config-tree-keepalive config-tree-unmatched config-tree-segments \
+	config-tree-keepalive config-tree-unmatched config-tree-java-added \
+	config-tree-java-deleted config-tree-segments \
 	config-otel config-jsonl config-jsonl-bad config-interrupted config-end2end \
 	config-edge config-core config-local-stack config-builtin config-untrusted; do
 	[ "$name" != config-builtin ] || [ -n "$builtin_key" ] || continue

@@ -197,7 +197,7 @@ build_tree_test_registry()
 	local payloads="$FIXTURE_WORK/tree-payload"
 	local reference
 
-	# One append-only tree that t7101 to t7107 and t7109 walk in order:
+	# One append-only tree that t7101 to t7107, t7109 and t7112 walk in order:
 	# the tree state a target writes is sealed, so no test can start
 	# over, and each generation extends the one before it.
 	python3 - "$registry_dir" \
@@ -208,7 +208,10 @@ build_tree_test_registry()
 		"$tree_match_unload_payload" "$TEST_VM_ARCH" \
 		"$TMP_DIR/fixtures/shirudo-test-tree-skip.unload.upatch" \
 		"$TMP_DIR/fixtures/shirudo-test-uprobe-multi.upatch" \
-		"$tree_skip_unload_payload" "$uprobe_payload" <<'PY'
+		"$tree_skip_unload_payload" "$uprobe_payload" \
+		"$TMP_DIR/fixtures/shirudo-test-java.upatch" \
+		"$TMP_DIR/fixtures/shirudo-test-java.unload.upatch" \
+		"$java_payload" "$java_unload_payload" <<'PY'
 import hashlib
 import json
 import pathlib
@@ -219,6 +222,8 @@ registry, match_path, skip_path, match_unload_path, payloads = \
 match_payload, skip_payload, match_unload_payload, node_arch = sys.argv[6:10]
 skip_unload_path, absent_path = map(pathlib.Path, sys.argv[10:12])
 skip_unload_payload, absent_payload = sys.argv[12:14]
+java_path, java_unload_path = map(pathlib.Path, sys.argv[14:16])
+java_payload, java_unload_payload = sys.argv[16:18]
 
 def digest(body):
     return "sha256:" + hashlib.sha256(body).hexdigest()
@@ -287,6 +292,11 @@ skip_unload_artifact = artifact("shirudo/tree-skip-unload", skip_unload_path,
 # Its uprobe target is a file the bpm family's VM does not have.
 absent_artifact = artifact("shirudo/tree-absent", absent_path,
                            "shirudo-test-uprobe-multi.upatch", absent_payload)
+java_artifact = artifact("shirudo/tree-java", java_path,
+                         "shirudo-test-java.upatch", java_payload)
+java_unload_artifact = artifact("shirudo/tree-java-unload", java_unload_path,
+                                "shirudo-test-java.unload.upatch",
+                                java_unload_payload)
 
 this_node = {"architecture": [node_arch], "labels": {"env": ["tree-test"]}}
 other_node = {"architecture": [node_arch],
@@ -333,10 +343,15 @@ operations = [
     operation(21, "shirudo-test-tree-skip", other_node,
               skip_unload_artifact, op="delete"),
     operation(22, "shirudo-test-tree-skip", other_node, skip_artifact),
+    # t7112: a Java upatch added and deleted.
+    operation(23, "shirudo-test-java", this_node, java_artifact),
+    operation(24, "shirudo-test-java", this_node, java_unload_artifact,
+              op="delete"),
 ]
 heads = {"stable": 2, "updated": 3, "deleted": 4, "restored": 5,
          "kconfig": 6, "reloaded": 7, "outcomes": 10, "stopped": 12,
-         "fetched": 13, "fixes": 16, "keepalive": 19, "unmatched": 22}
+         "fetched": 13, "fixes": 16, "keepalive": 19, "unmatched": 22,
+         "java-added": 23, "java-deleted": 24}
 for generation, (reference, head) in enumerate(heads.items(), start=1):
     publication = {
         "schema": 1,
@@ -352,7 +367,8 @@ for generation, (reference, head) in enumerate(heads.items(), start=1):
 PY
 
 	for reference in stable updated deleted restored kconfig reloaded \
-			 outcomes stopped fetched fixes keepalive unmatched; do
+			 outcomes stopped fetched fixes keepalive unmatched \
+			 java-added java-deleted; do
 		openssl cms -sign -binary -md sha512 \
 			-in "$payloads-$reference.json" \
 			-signer "$FIXTURE_WORK/trusted/cert.der" \
@@ -383,7 +399,7 @@ empty_config = b"{}"
 write(repo / "blobs" / digest(empty_config), empty_config)
 for reference in ("stable", "updated", "deleted", "restored", "kconfig",
                   "reloaded", "outcomes", "stopped", "fetched", "fixes",
-                  "keepalive", "unmatched"):
+                  "keepalive", "unmatched", "java-added", "java-deleted"):
     stem = payloads.name + "-" + reference
     payload = payloads.with_name(stem + ".json").read_bytes()
     signature = payloads.with_name(stem + ".sig").read_bytes()
@@ -914,6 +930,12 @@ tree_match_unload_payload="$($REPO_ROOT/shirudo upatch info \
 	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
 tree_skip_unload_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/shirudo-test-tree-skip.unload.upatch" --json |
+	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+java_payload="$($REPO_ROOT/shirudo upatch info \
+	"$TMP_DIR/fixtures/shirudo-test-java.upatch" --json |
+	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+java_unload_payload="$($REPO_ROOT/shirudo upatch info \
+	"$TMP_DIR/fixtures/shirudo-test-java.unload.upatch" --json |
 	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
 build_tree_test_registry
 build_tree_segments_registry

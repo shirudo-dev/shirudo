@@ -545,6 +545,26 @@ test_expect_success 'tree append takes a shared class on selectors that exclude 
 	xdp_refused t7005xf "t7005xb (seq 3)" 2
 '
 
+# A Java upatch has no XDP program: its add selects no class, and an XDP
+# add whose selector meets it reads it without refusing either.
+test_expect_success 'tree append takes a Java upatch beside the XDP upatches' '
+	mkdir -p "$WORK/t7005ja" &&
+	python3 -I -c "
+import sys, zipfile
+with zipfile.ZipFile(sys.argv[1], \"w\") as z:
+    z.writestr(\"META-INF/MANIFEST.MF\", \"Manifest-Version: 1.0\\nPremain-Class: A\\n\")
+" "$WORK/t7005ja/t7005ja.jar" &&
+	printf "[package]\nname = \"t7005ja\"\n\n[[upatches]]\nsource = \"t7005ja.jar\"\ntype = \"java\"\n\n[upatches.tree]\nid = \"t7005ja\"\n" \
+		>"$WORK/t7005ja/Beefile" &&
+	( cd "$WORK" && "$S" bpm build t7005ja --version 1.0.0 \
+		--keys-dir "$WORK/keys" ) >&2 &&
+	xdp_append t7005ja &&
+	ls "$REG/ns/xdp/manifests" | grep -q "^upatch-t7005ja-" &&
+	xdp_package t7005xj 1 "$(site \"z\")" &&
+	xdp_append t7005xj &&
+	xdp_append t7005ja --op=delete
+'
+
 test_expect_success 'tree append refuses two upatches of one package that select a class' '
 	xdp_package t7005xg 16 "" t7005xh &&
 	! "$S" bpm tree append "$WORK/t7005xg-1.0.0.bee" "oci://$REGISTRY/ns/xdp2" \
