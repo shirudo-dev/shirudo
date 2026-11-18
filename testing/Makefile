@@ -449,7 +449,7 @@ help:
 	  '  make -C testing clean'
 
 clean:
-	+$(Q)set -eu; \
+	$(Q)set -eu; \
 		bundle_dir="$(abspath $(TEST_VM_BUNDLE_DIR))"; \
 		mkdir -p "$$(dirname "$$bundle_dir")"; \
 		exec 9>"$$bundle_dir.lock"; \
