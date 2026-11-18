@@ -24,6 +24,43 @@ payload() {
 		python3 -c 'import json, sys; print(json.load(sys.stdin)["payload_sha256"])'
 }
 
+# The Java agent e2e-java, compiled here as an operator would, packaged,
+# pushed and appended to the tree after kernel-obs, for the same nodes.
+publish_java() {
+	java=$W/java
+	mkdir -p "$java/classes" "$W/pkg/e2e-java"
+	say "compile the Java agent e2e-java and sign it into a package"
+	javac --release 11 -d "$java/classes" \
+		"$REPO/testing/end2end/java-agent/Agent.java"
+	printf 'Premain-Class: shirudo.e2e.Agent\n' >"$java/manifest"
+	jar --create --file "$W/pkg/e2e-java/e2e-java.jar" \
+		--manifest "$java/manifest" -C "$java/classes" .
+	cat >"$W/pkg/e2e-java/Beefile" <<-'EOF'
+	[package]
+	name = "e2e-java"
+	description = "The Java agent of the end-to-end test"
+
+	[[upatches]]
+	source = "e2e-java.jar"
+	type = "java"
+
+	[upatches.tree]
+	id = "e2e-java"
+
+	[upatches.tree.selector.labels]
+	role = ["edge"]
+	EOF
+	(cd "$W/pkg" && shirudo bpm build e2e-java --version 1.0.0 --keys-dir "$KEYS")
+	bee=$W/pkg/e2e-java-1.0.0.bee
+	say "push it to oci://$REGISTRY and append it to the upatch tree"
+	shirudo bpm push "$bee" "oci://$REGISTRY/shirudo/e2e-java" \
+		--keys-dir "$KEYS"
+	shirudo bpm tree append "$bee" "oci://$REGISTRY/shirudo/end2end-tree" \
+		--keys-dir "$KEYS" --tree-id kernel-obs
+	tar --no-same-owner -xzf "$bee" -C "$W/pkg"
+	payload "$W/pkg/e2e-java-1.0.0/upatches/e2e-java.upatch" >"$W/java-payload"
+}
+
 publish() {
 	[ -s "$BPM_OCI_CA_FILE" ] || die "no CA of the registry: $BPM_OCI_CA_FILE"
 	[ -s "$POLICY_FIXTURE" ] || die "no policy exec graph fixture: $POLICY_FIXTURE"
@@ -47,6 +84,7 @@ role = ["edge"]' "$W/pkg/kernel-obs/Beefile"
 		--keys-dir "$KEYS"
 	tar --no-same-owner -xzf "$bee" -C "$W/pkg"
 	payload "$W/pkg/kernel-obs-1.0.0/upatches/kernel-obs.upatch" >"$W/payload"
+	publish_java
 	payload "$POLICY_FIXTURE" >"$W/policy-payload"
 	openssl rand -hex 16 >"$W/nonce"
 }
@@ -67,10 +105,11 @@ verify() {
 	# The records replay to the register the TPM certified, so the last load
 	# and tree operation they name are the target's.
 	python3 - "$W/evidence.json" "$(cat "$W/payload")" \
-		"$(cat "$W/policy-payload")" "$BPM_OCI_CA_FILE" "$REGISTRY" <<'PY' ||
+		"$(cat "$W/policy-payload")" "$BPM_OCI_CA_FILE" "$REGISTRY" \
+		"$(cat "$W/java-payload")" <<'PY' ||
 import json, ssl, sys, urllib.request
 
-evidence, payload, policy_payload, ca, registry = sys.argv[1:6]
+evidence, payload, policy_payload, ca, registry, java_payload = sys.argv[1:7]
 ctx = ssl.create_default_context(cafile=ca)
 
 
@@ -98,6 +137,9 @@ loads = [r["upatch"] for r in records if r["type"] == "upatch_load"]
 assert {"name": "kernel-obs", "payload_sha256": payload} in loads, loads
 assert loads[-1] == {"name": "policy-exec-graph",
                      "payload_sha256": policy_payload}, loads[-1]
+java_loads = [r["upatch"] for r in records if r["type"] == "java_load"]
+assert java_loads == [{"name": "e2e-java",
+                       "payload_sha256": java_payload}], java_loads
 ops = [r["tree"] for r in records if r["type"] == "tree_op"]
 assert ops[-1] == {key: published[key] for key in
                    ("seq", "op", "id", "operation_digest")}, (ops[-1], published)

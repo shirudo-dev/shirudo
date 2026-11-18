@@ -1,6 +1,7 @@
 build-essential
 cryptsetup-bin
 curl
+default-jdk-headless
 dpkg-dev
 e2fsprogs
 git

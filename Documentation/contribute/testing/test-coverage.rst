@@ -777,9 +777,12 @@ signed config image.
      - DNS over loopback in maps, OTLP and ClickHouse
    * - ``t9105-delivery``
      - The operator package built and installed in an operator VM
-       without a TPM, which publishes ``kernel-obs`` and verifies the
-       evidence; registry, tree sync, load, export and attestation on
-       the target
+       without a TPM, which publishes ``kernel-obs`` and the Java agent
+       ``e2e-java`` it compiles, and verifies the evidence, its
+       ``java_load`` included; registry, tree sync, load, export and
+       attestation on the target, and a JVM a user manager starts
+       picking up ``JAVA_TOOL_OPTIONS`` and running the agent from its
+       sealed jar
    * - ``t9106-policy-exec-graph``
      - A signed SHPL section labels five executables; its BPF policy
        allows unlabeled tasks to exec unlabeled files and 0x1, allows

@@ -49,7 +49,8 @@ Before you begin
   ``libtpms-dev``.
 - For the end-to-end tests: Docker on the host, and network access the
   first time, when the runner adds clang 23 from apt.llvm.org and the
-  operator's build dependencies to the image of the operator VM.
+  operator's build dependencies, a JDK among them, to the image of the
+  operator VM.
 
 The ``CI suite`` workflow uses the x86-64 CI kernel package from
 ``shirudo-dev/kernel`` for every trigger: the
@@ -786,17 +787,22 @@ shows the run in order.
    :src:`testing/end2end/operator.sh` over SSH: it builds ``kernel-obs``
    into a package with ``bpm build``, against the headers and
    ``vmlinux.h`` of the package, pushes it with ``bpm push``, appends it
-   to a signed upatch tree with ``bpm tree append`` and picks the nonce
-   the targets attest with. The host publishes the keepalive backend's
+   to a signed upatch tree with ``bpm tree append``, does the same with
+   ``e2e-java``, a Java agent it compiles from
+   :src:`testing/end2end/java-agent/Agent.java` with ``javac``, and
+   picks the nonce the targets attest with. The host publishes the keepalive backend's
    example tree and loads it with the tree ingest job.
 #. Node A boots, activates a signed config that points at the tree and
-   the collector, and its units pull, verify, load and export. Its
+   the collector, and its units pull, verify, load and export. A JVM
+   that a user manager of node A starts after the sync picks up
+   ``JAVA_TOOL_OPTIONS`` from ``environment.d`` and runs the agent from
+   its sealed jar; the runtime image carries a JRE for it. Its
    tests, ``t91??``, run over SSH from the host, which writes what they
    print to ``result/guest.log`` as a family's VM does. Node B boots
    beside it.
 #. The host hands node A's TPM evidence to the operator, which verifies
-   it with ``attest verify`` and checks that its records name the
-   package and the tree operation it published. The operator VM then
+   it with ``attest verify`` and checks that its records name both
+   packages and the last tree operation it published. The operator VM then
    stops.
 #. The fresh edge node boots in node A's place. Meanwhile the host
    checks that the collector holds the package's records, and checks
@@ -915,8 +921,8 @@ config image, as ``t9105`` configures node A:
    * - ``config-end2end``
      - ``role=edge``
      - The tree ``shirudo/end2end-tree`` and the test's collector. Node
-       A activates it in ``t9105``, and the ``kernel-obs`` operation
-       selects ``role=edge``.
+       A activates it in ``t9105``, and the ``kernel-obs`` and
+       ``e2e-java`` operations select ``role=edge``.
    * - ``config-edge``
      - ``role=edge``
      - The tree ``shirudo/pipeline-tree`` on the test's registry and the

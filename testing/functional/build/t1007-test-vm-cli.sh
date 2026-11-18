@@ -326,7 +326,7 @@ test_expect_success 'the runtime image gives the appliance the host resolvers in
 	! grep -qx -- "--install" "$WORK/dns-args" &&
 	grep -q "cat /root/shirudo-nameservers >>/etc/resolv.conf" "$WORK/dns-args" &&
 	grep -q "apt-get \$apt_opts update" "$WORK/dns-args" &&
-	grep -q "apt-get \$apt_opts install ca-certificates e2fsprogs keyutils" "$WORK/dns-args" &&
+	grep -q "apt-get \$apt_opts install ca-certificates default-jre-headless e2fsprogs keyutils" "$WORK/dns-args" &&
 	grep -q "ripgrep rsync" "$WORK/dns-args" &&
 	run_dns "$WORK/no-such-resolv.conf" &&
 	! test -s "$WORK/dns-ns" &&
