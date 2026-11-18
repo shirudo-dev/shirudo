@@ -252,8 +252,8 @@ checks it, and what the measurement register records.
 Limits
 ------
 
-A signature proves who built an upatch and that nobody changed it. It
-says nothing about whether the upatch is correct. The kernel's verifier
+A signature proves who built an upatch and that it was not tampered with.
+It says nothing about whether the upatch is correct. The kernel's verifier
 checks memory safety, and the rest is the author's responsibility.
 
 A signature does not expire. A target accepts any artifact that verifies

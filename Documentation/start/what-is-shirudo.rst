@@ -61,8 +61,8 @@ What shirudo does
 What shirudo does not do
 ------------------------
 
-- It does not judge what an upatch does. The signature proves who built
-  the code and that it was not changed. The kernel's BPF verifier still
+- It does not judge what an upatch does. The signature proves who built the
+  code and that it was not tampered with. The kernel's BPF verifier still
   checks memory safety, but whether the program is a correct mitigation is
   the author's responsibility.
 - It does not replace kernel updates. An upatch covers the time until the

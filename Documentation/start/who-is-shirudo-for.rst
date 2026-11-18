@@ -80,7 +80,7 @@ tracepoints, userspace functions, cgroup socket buffers and netfilter.
 
 The code is small and readable, so language models can help write and
 review it. The signature then proves who built it and that it was not
-changed.
+tampered with.
 
 Start with :doc:`/start/guides/first-upatch` and
 :doc:`/upatches/learn/kernel-fix-tutorial`.

@@ -9,8 +9,8 @@ BPF program signing
 ===================
 
 The kernel can check a signature over BPF code when it is loaded. The
-check establishes who produced the code and that nobody changed it on the
-way. It does not stop an unsigned load by itself: the kernel records a
+check establishes who produced the code and that it was not tampered with
+on the way. It does not stop an unsigned load by itself: the kernel records a
 verdict, and a security module decides what to do with it. This page
 explains the mechanism, then how shirudo builds on it and where it stops.
 
