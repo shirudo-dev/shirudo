@@ -3,8 +3,9 @@
 # Copyright (c) 2026 Authors of shirudo
 #
 # t3113 -- live kprobe.multi and kretprobe.multi: both links attach,
-# status names them, both programs run, an unload detaches them, and a
-# name the kernel does not know fails the whole link.
+# status names them, both programs run and report the runs the kernel
+# skipped of each, an unload detaches them, and a name the kernel does
+# not know fails the whole link.
 
 cd "$(dirname "$0")/../.."
 . ./integration-lib.sh
@@ -55,6 +56,25 @@ values = [entry["value"] for entry in hits["entries"]]
 assert len(values) == 2, doc
 for value in values:
     assert int(str(value), 0) > 0, doc
+PY
+'
+
+test_expect_success 'get and status report the runs the kernel skipped' '
+	"$SHIRUDO_BIN" upatch get "$NAME" --json >"$WORK/get.json" &&
+	"$SHIRUDO_BIN" status --json >"$WORK/status.json" &&
+	python3 - "$WORK/get.json" "$WORK/status.json" <<'PY'
+import json
+import sys
+upatch = json.load(open(sys.argv[1], encoding="utf-8"))["upatch"]
+loaded = json.load(open(sys.argv[2], encoding="utf-8"))["upatches_loaded"]
+programs = upatch["programs"]
+assert sorted(p["location"] for p in programs) == \
+    ["kprobe.multi (2 funcs)", "kretprobe.multi (2 funcs)"], upatch
+assert all(isinstance(p["missed_runs"], int) for p in programs), upatch
+assert upatch["missed_runs"] == sum(p["missed_runs"] for p in programs), upatch
+row = next(u for u in loaded if u["name"] == "shirudo-test-kprobe-multi")
+assert isinstance(row["missed_runs"], int), row
+assert row["missed_runs"] >= upatch["missed_runs"], (row, upatch)
 PY
 '
 

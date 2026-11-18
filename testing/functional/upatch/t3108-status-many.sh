@@ -43,8 +43,11 @@ test_expect_success 'status --json lists every loaded upatch' '
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as stream:
     loaded = json.load(stream)["upatches_loaded"]
-many = [u["name"] for u in loaded if u["name"].startswith("shirudo-test-many-")]
+many = [u for u in loaded if u["name"].startswith("shirudo-test-many-")]
 assert len(many) == 80, many
+# A tp_btf program, whose skipped runs the kernel counts.
+for row in many:
+    assert isinstance(row["missed_runs"], int) and row["missed_runs"] >= 0, row
 PY
 '
 

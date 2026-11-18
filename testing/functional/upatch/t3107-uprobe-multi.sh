@@ -77,6 +77,9 @@ import sys
 doc = json.load(open(sys.argv[1], encoding="utf-8"))
 assert doc["upatch"]["location"] == \
     "uprobe.multi//tmp/shirudo-test-uprobe-target (2 funcs)"
+# The kernel counts none of the runs it skips of a uprobe.
+assert doc["upatch"]["missed_runs"] is None, doc
+assert doc["upatch"]["programs"] == [], doc
 PY
 '
 
