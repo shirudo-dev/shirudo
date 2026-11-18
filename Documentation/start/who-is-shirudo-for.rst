@@ -89,9 +89,9 @@ Teams that contain workloads
 ----------------------------
 
 Teams that run containers, Kubernetes Pods or LLM agents and want
-confinement the workload cannot reach. For LLM agents this limits the
-blast radius, so an agent that misbehaves or is taken over can reach
-only what the rules allow. The rules ship as signed upatches:
+confinement. For LLM agents, this limits the blast radius so an agent
+that misbehaves or is taken over can reach only what the rules allow.
+The rules ship as signed upatches:
 
 - Which programs a workload may run
 - Which files it may write
