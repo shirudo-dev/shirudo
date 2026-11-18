@@ -379,6 +379,19 @@ static bool build_version_ok(const char *s)
 	return s && strlen(s) < 128 && bpm_semver_valid(s);
 }
 
+/*
+ * A BPF upatch, or a Java agent jar, which has no maps to rewrite or
+ * label and no programs for the tree's device classes.
+ */
+static bool build_upatch_type_ok(const struct bpm_build_upatch *u)
+{
+	if (!strcmp(u->type, "bpf"))
+		return true;
+	return !strcmp(u->type, "java") &&
+	       name_has_suffix(u->source, strlen(u->source), ".jar") &&
+	       !u->n_rodata && !u->n_policies && !u->tree.present;
+}
+
 static int build_default_targets(struct bpm_build_upatch *u)
 {
 	char base[PATH_MAX];
@@ -720,7 +733,7 @@ static int build_parse_spec(struct bpm_build_spec *spec, char *body)
 			strscpy(u->type, "bpf", sizeof(u->type));
 		for (p = u->type; *p; p++)
 			*p = (char)tolower((__u8)*p);
-		if (strcmp(u->type, "bpf") || build_default_targets(u))
+		if (!build_upatch_type_ok(u) || build_default_targets(u))
 			return -EINVAL;
 		for (size_t j = 0; j < u->n_rodata; j++) {
 			struct bpm_build_rodata *r = &u->rodata[j];
@@ -1221,6 +1234,8 @@ int build_upatch_name(const char *source, char *out, size_t cap)
 		out[n - 6] = '\0';
 	else if (name_has_suffix(out, n, ".o"))
 		out[n - 2] = '\0';
+	else if (name_has_suffix(out, n, ".jar"))
+		out[n - 4] = '\0';
 	return 0;
 }
 
@@ -1341,6 +1356,7 @@ static int build_upatch_unload(struct bpm_build_upatch *u, const char *load,
 {
 	__u8 payload[CRYPTO_SHA256_LEN];
 	struct upatch parsed = {};
+	bool java;
 	int ret;
 
 	if (upatch_open(load, &parsed))
@@ -1354,9 +1370,30 @@ static int build_upatch_unload(struct bpm_build_upatch *u, const char *load,
 		   u->payload_sha256);
 	memcpy(payload, parsed.hdr.payload_sha256, sizeof(payload));
 	strscpy(u->type, upatch_type_str(&parsed), sizeof(u->type));
+	java = parsed.hdr.type == UPATCH_TYPE_JAVA;
 	upatch_close(&parsed);
-	ret = build_package_unload(u->name, payload, unload, pkey, cert);
+	if (java)
+		ret = build_package_java_unload(u->name, payload, unload, pkey,
+						cert);
+	else
+		ret = build_package_unload(u->name, payload, unload, pkey,
+					   cert);
 	return ret < 0 ? ret : ret ? -EIO : 0;
+}
+
+static int build_java_upatch(struct bpm_build_upatch *u, const char *source,
+			     const char *load, const char *unload,
+			     const char *pkey, const char *cert)
+{
+	char name[UPATCH_NAME_MAX];
+	int ret;
+
+	if (build_upatch_name(source, name, sizeof(name)))
+		return -ENAMETOOLONG;
+	ret = build_package_java_load(source, load, name, pkey, cert);
+	if (ret)
+		return ret < 0 ? ret : -EIO;
+	return build_upatch_unload(u, load, unload, pkey, cert);
 }
 
 /*
@@ -1390,6 +1427,13 @@ static int build_upatches(struct bpm_build_spec *spec, const char *pkey,
 			return -ENAMETOOLONG;
 		strscpy(u->load_path, load, sizeof(u->load_path));
 		strscpy(u->unload_path, unload, sizeof(u->unload_path));
+		if (!strcmp(u->type, "java")) {
+			ret = build_java_upatch(u, source, load, unload, pkey,
+						cert);
+			if (ret)
+				return ret;
+			continue;
+		}
 		if (name_has_suffix(source, strlen(source), ".bpf.c")) {
 			if (!vmlinux_h) {
 				vmlinux_h = build_locate_vmlinux(NULL);
@@ -2369,7 +2413,6 @@ static int __build_bpm_config_update(int argc, const char **argv,
 		char load[PATH_MAX], unload[PATH_MAX];
 		char expected_name[UPATCH_NAME_MAX];
 		struct upatch parsed = {};
-		__u8 payload[CRYPTO_SHA256_LEN];
 
 		if (strsprintf(load, sizeof(load), "%s/update-%zu.upatch",
 			       spec->stage, i) < 0 ||
@@ -2404,24 +2447,10 @@ static int __build_bpm_config_update(int argc, const char **argv,
 					 overrides, n_overrides, true);
 		if (ret)
 			break;
-		ret = upatch_open(load, &parsed);
-		if (ret)
-			break;
-		if (upatch_is_unload(&parsed)) {
-			ret = -EINVAL;
-			upatch_close(&parsed);
-			break;
-		}
-		upatch_header_name(&parsed, upatch->name);
-		memcpy(payload, parsed.hdr.payload_sha256, sizeof(payload));
-		hex_encode(payload, sizeof(payload), upatch->payload_sha256);
-		strscpy(upatch->type, upatch_type_str(&parsed),
-			sizeof(upatch->type));
-		upatch_close(&parsed);
 		strscpy(upatch->load_path, load, sizeof(upatch->load_path));
 		strscpy(upatch->unload_path, unload, sizeof(upatch->unload_path));
-		ret = build_package_unload(upatch->name, payload, unload,
-					   pkey, cert_path);
+		ret = build_upatch_unload(upatch, load, unload, pkey,
+					  cert_path);
 	}
 	if (!ret)
 		ret = build_archive("bpm config update", spec, version,

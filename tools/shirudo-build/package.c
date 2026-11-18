@@ -31,6 +31,7 @@
 #include "bpm_package.h"
 #include "elf_target.h"
 #include "io.h"
+#include "jar.h"
 #include "loader.h"
 #include "help.h"
 #include "log.h"
@@ -2368,4 +2369,142 @@ int build_package_unload(const char *upatch_name,
 	return finalize_object(obj, out_upatch, upatch_name,
 			       DIRECTIVE_UNLOAD, payload_sha256,
 			       NULL, NULL, 0, pkey_path, cert_path);
+}
+
+/*
+ * A Java upatch has no loader: its data is the signed sections alone,
+ * NAME and PTYP, then the jar of a load or the digest an unload expects.
+ * The target verifies the signature over that data in userspace.
+ */
+static int finalize_java(const char *out_path, const char *upatch_name,
+			 __u32 flags, const struct signed_section *payload,
+			 const char *pkey_path, const char *cert_path)
+{
+	__le32 type = cpu_to_le32(UPATCH_TYPE_JAVA);
+	char signed_name[UPATCH_NAME_MAX] = {};
+	__u32 signed_data_len = 0, data_off;
+	struct signed_section sections[3];
+	struct upatch_header hdr;
+	void *signed_data = NULL;
+	struct sign_io sio = {};
+	void *sig_buf = NULL;
+	int err;
+
+	if (strscpy(signed_name, upatch_name, sizeof(signed_name)) < 0)
+		return -ENAMETOOLONG;
+	sections[0] = (struct signed_section){
+		UPATCH_SECTION_NAME, signed_name, sizeof(signed_name),
+	};
+	sections[1] = (struct signed_section){
+		UPATCH_SECTION_TYPE, &type, sizeof(type),
+	};
+	sections[2] = *payload;
+	err = compose_signed_data(NULL, 0, sections, ARRAY_SIZE(sections),
+				  &signed_data, &signed_data_len);
+	if (err)
+		return err;
+	sig_buf = xmalloc(MAX_SIG_SIZE);
+	if (!sig_buf) {
+		err = -ENOMEM;
+		goto out;
+	}
+	sio.insns	 = signed_data;
+	sio.insns_sz	 = 0;
+	sio.data	 = signed_data;
+	sio.data_sz	 = signed_data_len;
+	sio.signature	 = sig_buf;
+	sio.signature_sz = MAX_SIG_SIZE;
+	err = cms_sign(&sio, pkey_path, cert_path);
+	if (err) {
+		pr_err("cms_sign: %d", err);
+		goto out;
+	}
+	if (check_add_overflow(sizeof(hdr), sio.signature_sz, &data_off) ||
+	    data_off > UPATCH_FILE_MAX ||
+	    signed_data_len > UPATCH_FILE_MAX - data_off) {
+		pr_err("%s: the jar and its signature do not fit a upatch of %u bytes",
+		       upatch_name, UPATCH_FILE_MAX);
+		err = -E2BIG;
+		goto out;
+	}
+	pack_header(&hdr, upatch_name, UPATCH_TYPE_JAVA, flags,
+		    sio.payload_sha256, 0, 0,
+		    (__u32)sizeof(hdr), (__u32)sio.signature_sz, 0, 0,
+		    data_off, signed_data_len, 0, 0, 0, 0);
+	err = write_artifact(out_path, &hdr, NULL, 0, sig_buf,
+			     sio.signature_sz, signed_data, signed_data_len);
+	if (!err)
+		pr_info("wrote %s (java sig=%zu data=%u name=%s%s)", out_path,
+			sio.signature_sz, signed_data_len, upatch_name,
+			(flags & DIRECTIVE_UNLOAD) ? " UNLOAD" : "");
+out:
+	xfree(sig_buf, MAX_SIG_SIZE);
+	xfree(signed_data, signed_data_len);
+	return err;
+}
+
+/*
+ * Refused here, where the operator sees it: on the target a jar a JVM
+ * does not take as an agent stops every JVM the options reach.
+ */
+static int check_agent_jar(const char *path, const __u8 *buf, size_t len)
+{
+	int err = jar_premain_class(buf, len);
+
+	if (err == -ENOENT)
+		pr_err("%s has no Premain-Class in its manifest: a JVM does not start with it as -javaagent",
+		       path);
+	else if (err == -ENOTSUP)
+		pr_err("%s: a zip64 jar or a manifest neither stored nor deflated is not supported",
+		       path);
+	else if (err == -EFBIG)
+		pr_err("%s: the manifest is too large", path);
+	else if (err)
+		pr_err("%s is not a jar", path);
+	return err;
+}
+
+int build_package_java_load(const char *jar_path, const char *out_path,
+			    const char *upatch_name,
+			    const char *pkey_path, const char *cert_path)
+{
+	struct signed_section jar;
+	size_t len = 0;
+	__u8 *buf;
+	int err;
+
+	err = check_upatch_name(upatch_name);
+	if (err)
+		return err;
+	err = read_file(jar_path, UPATCH_FILE_MAX, &buf, &len);
+	if (err) {
+		pr_err("read %s: %s", jar_path, strerror(-err));
+		return err;
+	}
+	err = check_agent_jar(jar_path, buf, len);
+	if (err)
+		goto out;
+	jar = (struct signed_section){ UPATCH_SECTION_JAR, buf, (__u32)len };
+	err = finalize_java(out_path, upatch_name, 0, &jar, pkey_path,
+			    cert_path);
+out:
+	xfree(buf, len + 1);
+	return err;
+}
+
+int build_package_java_unload(const char *upatch_name,
+			      const __u8 payload_sha256[32],
+			      const char *out_path,
+			      const char *pkey_path, const char *cert_path)
+{
+	struct signed_section unload = {
+		UPATCH_SECTION_UNLOAD, payload_sha256, UPATCH_PAYLOAD_HASH_LEN,
+	};
+	int err;
+
+	err = check_upatch_name(upatch_name);
+	if (err)
+		return err;
+	return finalize_java(out_path, upatch_name, DIRECTIVE_UNLOAD, &unload,
+			     pkey_path, cert_path);
 }

@@ -1370,6 +1370,11 @@ a proof covers.
        through the emitters the proofs cover
    * - :src:`util/loader.c`
      - Data only: the embedded BPF objects
+   * - :src:`tools/shirudo-build/jar.c`
+     - The builder's check of a jar the operator hands it, which reads
+       the zip directory and has zlib inflate the manifest. The ``jar``
+       unit cases run it on every truncation and every byte flip of a
+       jar; no harness is written for it yet
    * - :src:`builtin-attest.c`, :src:`builtin-build.c`,
        :src:`builtin-config.c`, :src:`builtin-genkey.c`,
        :src:`builtin-image.c`, :src:`builtin-init.c`,
@@ -1407,7 +1412,10 @@ those parts has no proof. So it is with the package state:
 and neither that nor reading back what ``bpm_state_emit()`` writes has a
 proof, as a string of any contents moves all that follows it in the
 document, which costs CBMC more memory than it has. The ``bpm_state``
-unit cases check both on fixed entries.
+unit cases check both on fixed entries. The zip directory walk of
+``jar_premain_class()`` in :src:`tools/shirudo-build/jar.c` has neither
+a fuzz target nor a proof; its unit cases cut and flip a jar byte by
+byte.
 
 Of :src:`util/paths.c` and :src:`util/serializer.c` the proofs cover the
 functions the table names. ``key_paths()``, which calls

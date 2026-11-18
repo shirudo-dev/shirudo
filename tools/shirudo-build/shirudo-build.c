@@ -45,6 +45,7 @@ enum build_opt {
 	BUILD_EXTRA_CFLAGS,
 	BUILD_UNLOAD,
 	BUILD_PAYLOAD_SHA256,
+	BUILD_JAVA,
 	BUILD_EMIT_ARTIFACTS,
 };
 
@@ -72,6 +73,9 @@ static const struct opt_spec build_opts[] = {
 	[BUILD_PAYLOAD_SHA256] = { "--payload-sha256", 0, 0, "<64-hex>",
 		"with --unload, the payload digest, which the archive "
 		"/var/lib/shirudo/upatches/<name>.upatch gives otherwise" },
+	[BUILD_JAVA] = { "--java", 0, 0, NULL,
+		"with --unload and --payload-sha256, sign the directive of a "
+		"Java upatch, which the archive tells otherwise" },
 	[BUILD_EMIT_ARTIFACTS] = { "--emit-artifacts", 0, 0, NULL,
 		"keep the compiled .bpf.o beside the .upatch and print each "
 		"path written" },
@@ -82,13 +86,14 @@ static const struct help_section build_sections[] = {
 };
 
 static const struct help build_help = {
-	.usage	    = "shirudo build <input.bpf.c|.bpf.o> [-o <output.upatch>] "
-		      "[options]\n"
+	.usage	    = "shirudo build <input.bpf.c|.bpf.o|.jar> "
+		      "[-o <output.upatch>] [options]\n"
 		      "       shirudo build --unload <upatch-name> "
 		      "[-o <output.upatch>] [options]",
-	.summary    = "Compile a .bpf.c, or take a .bpf.o, and sign it into a "
-		      ".upatch, or sign\nthe UNLOAD directive of a loaded "
-		      "upatch. foo/bar.bpf.c becomes\nfoo/bar.bpf.upatch.",
+	.summary    = "Compile a .bpf.c, or take a .bpf.o or a Java agent "
+		      ".jar, and sign it into a\n.upatch, or sign the UNLOAD "
+		      "directive of a loaded upatch.\nfoo/bar.bpf.c becomes "
+		      "foo/bar.bpf.upatch, foo/agent.jar foo/agent.upatch.",
 	.sections   = build_sections,
 	.n_sections = ARRAY_SIZE(build_sections),
 	.footer	    = "The helper also serves shirudo image build and verify, "
@@ -104,6 +109,8 @@ static int derive_output(const char *input, char *buf, size_t buf_sz)
 	if (name_has_suffix(input, stem, ".c") ||
 	    name_has_suffix(input, stem, ".o"))
 		stem -= 2;
+	else if (name_has_suffix(input, stem, ".jar"))
+		stem -= 4;
 
 	if (strsprintf(buf, buf_sz, "%.*s.upatch", (int)stem, input) < 0)
 		return -ENAMETOOLONG;
@@ -193,6 +200,7 @@ int main(int argc, char **argv)
 	char name_buf[256];
 	const char *bpf_o;
 	int emit_artifacts = 0;
+	bool java = false;
 	int pkey_explicit = 0;
 	int cert_explicit = 0;
 	struct opt_parser p;
@@ -245,6 +253,9 @@ int main(int argc, char **argv)
 		case BUILD_PAYLOAD_SHA256:
 			payload_sha256_hex = p.value;
 			break;
+		case BUILD_JAVA:
+			java = true;
+			break;
 		case BUILD_EMIT_ARTIFACTS:
 			emit_artifacts = 1;
 			break;
@@ -267,7 +278,11 @@ int main(int argc, char **argv)
 		return EXIT_USAGE;
 	}
 	if (!unload_name && !input) {
-		opt_usage(&p, "takes <input.bpf.c|.bpf.o> or --unload <upatch-name>");
+		opt_usage(&p, "takes <input.bpf.c|.bpf.o|.jar> or --unload <upatch-name>");
+		return EXIT_USAGE;
+	}
+	if (java && (!unload_name || !payload_sha256_hex)) {
+		opt_usage(&p, "--java takes --unload and --payload-sha256");
 		return EXIT_USAGE;
 	}
 
@@ -325,6 +340,7 @@ int main(int argc, char **argv)
 			if (upatch_open(archive, &u) == 0) {
 				memcpy(payload_sha256, u.hdr.payload_sha256,
 				       sizeof(payload_sha256));
+				java = u.hdr.type == UPATCH_TYPE_JAVA;
 				upatch_close(&u);
 				pr_info("--payload-sha256 derived from archive %s",
 					archive);
@@ -346,8 +362,13 @@ int main(int argc, char **argv)
 			pr_info("writing %s (no -o given)", output);
 		}
 
-		ret = build_package_unload(unload_name, payload_sha256,
-					   output, pkey, cert);
+		if (java)
+			ret = build_package_java_unload(unload_name,
+							payload_sha256, output,
+							pkey, cert);
+		else
+			ret = build_package_unload(unload_name, payload_sha256,
+						   output, pkey, cert);
 		if (ret == 0 && emit_artifacts) {
 			printf("emitted:\n");
 			printf("  upatch: %s\n", output);
@@ -372,6 +393,21 @@ int main(int argc, char **argv)
 		}
 		output = output_buf;
 		pr_info("writing %s (no -o given)", output);
+	}
+
+	if (!name) {
+		if (build_upatch_name(input, name_buf, sizeof(name_buf))) {
+			pr_err("upatch name from %s too long", input);
+			return 2;
+		}
+		name = name_buf;
+	}
+
+	if (name_has_suffix(input, strlen(input), ".jar")) {
+		ret = build_package_java_load(input, output, name, pkey, cert);
+		if (ret == 0 && emit_artifacts)
+			printf("emitted:\n  upatch: %s\n", output);
+		return ret ? 1 : 0;
 	}
 
 	if (name_has_suffix(input, strlen(input), ".bpf.c")) {
@@ -413,16 +449,8 @@ int main(int argc, char **argv)
 	} else if (name_has_suffix(input, strlen(input), ".o")) {
 		bpf_o = input;		/* decoder paths resolve from the cwd */
 	} else {
-		pr_err("input must be .bpf.c or .bpf.o");
+		pr_err("input must be .bpf.c, .bpf.o or .jar");
 		return 2;
-	}
-
-	if (!name) {
-		if (build_upatch_name(input, name_buf, sizeof(name_buf))) {
-			pr_err("upatch name from %s too long", input);
-			return 2;
-		}
-		name = name_buf;
 	}
 
 	ret = build_package_load(bpf_o, src_path, output, name,

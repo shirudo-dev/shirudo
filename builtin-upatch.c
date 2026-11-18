@@ -463,7 +463,7 @@ static int cmd_upatch_info(int argc, const char **argv)
 	struct opt_parser p;
 	int opt, err, ret = 1;
 	bool json = false;
-	__u32 attach_len;
+	__u32 attach_len, jar_len;
 
 	OPT_INIT(&p, "upatch info", upatch_info_opts, &upatch_info_help, argc,
 		 argv, 1);
@@ -499,6 +499,7 @@ static int cmd_upatch_info(int argc, const char **argv)
 
 	upatch_header_name(&u, name);
 	upatch_signed_attach(&u, &attach_len);
+	upatch_signed_jar(&u, &jar_len);
 	unload_payload = upatch_signed_unload_payload(&u);
 
 	if (json) {
@@ -531,6 +532,7 @@ static int cmd_upatch_info(int argc, const char **argv)
 			json_kv_null(&e, "signed_name");
 		}
 		json_kv_int(&e, "attach_metadata_len", attach_len);
+		json_kv_int(&e, "jar_len", jar_len);
 		if (unload_payload) {
 			hex_encode(unload_payload, 32, payload_hex);
 			json_kv_string(&e, "unload_payload_sha256", payload_hex);
@@ -611,6 +613,8 @@ static int cmd_upatch_info(int argc, const char **argv)
 		printf("  %-22s %u bytes\n", "Attach metadata:", attach_len);
 	else
 		printf("  %-22s (none)\n", "Attach metadata:");
+	if (jar_len)
+		printf("  %-22s %u bytes\n", "Java agent jar:", jar_len);
 	if (unload_payload) {
 		printf("  %-22s ", "Unload payload:");
 		print_sha256_hex(unload_payload);

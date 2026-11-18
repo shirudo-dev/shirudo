@@ -344,6 +344,7 @@ BUILD_SRCS := \
     tools/shirudo-build/shirudo-build.c \
     tools/shirudo-build/compile.c \
     tools/shirudo-build/package.c \
+    tools/shirudo-build/jar.c \
     tools/shirudo-build/vmlinux.c \
     tools/shirudo-build/bpm-build.c \
     tools/shirudo-build/bpm-publish.c \
@@ -1109,6 +1110,10 @@ $(UNIT_LIB): $(UTIL_OBJS) $(VERSION_OBJ)
 # object the program is built from.
 build/unit/quote_check: UNIT_OBJS := tools/quote-check/row.o
 build/unit/quote_check: tools/quote-check/row.o
+
+# The same for the builder's jar check.
+build/unit/jar: UNIT_OBJS := tools/shirudo-build/jar.o
+build/unit/jar: tools/shirudo-build/jar.o
 
 build/unit/%: testing/unit/%.c testing/unit/unit.c testing/unit/unit.h \
 		$(UNIT_LIB) $(LIBBPF_A)

@@ -110,6 +110,9 @@ shirudo build --unload <name> --keys-dir <keys> -o <name>.unload.upatch \
   or the installed one, unless `--vmlinux` names it. Run it from the
   checkout, or link `vendor/` and `bpf/` into the package directory as
   the publishing guide does.
+- A Java agent `.jar` signs the same way, `shirudo build <agent>.jar`,
+  with no compiler, and its directive takes `--java` beside
+  `--payload-sha256`; in a Beefile it is `type = "java"`.
 
 ## Build a package
 

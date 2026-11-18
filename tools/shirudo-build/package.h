@@ -24,6 +24,15 @@ int build_package_unload(const char *name,
 			 const char *pkey_path,
 			 const char *cert_path);
 
+/* A Java agent jar, and the unload directive of a Java upatch. */
+int build_package_java_load(const char *jar_path, const char *out_upatch,
+			    const char *upatch_name,
+			    const char *pkey_path, const char *cert_path);
+int build_package_java_unload(const char *name,
+			      const __u8 payload_sha256[32],
+			      const char *out_upatch,
+			      const char *pkey_path, const char *cert_path);
+
 int build_package_patch_rodata(const char *input, const char *output,
 			       const char *symbol, const __u8 *value,
 				      size_t value_len, const char *pkey_path,

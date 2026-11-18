@@ -36,8 +36,9 @@ The human output has these parts:
 - the loader: offset and length of its instructions, the log buffer
   size, its metadata and its data
 - the signature: offset and length
-- the signed sections: the name, the length of the attach metadata and,
-  for a directive, the expected payload digest
+- the signed sections: the name, the length of the attach metadata, for
+  a Java load the length of its agent jar and, for a directive, the
+  expected payload digest
 - the decoders: target upatch and map, language and API version, input
   format, export signal (``log`` or ``metric``) and source
 
@@ -66,8 +67,8 @@ Options
        ``payload_type``, ``version``, ``payload_sha256``,
        ``loader_insns_len``, ``signature_len``, ``metadata_len``,
        ``data_len``, ``log_buf_sz``, ``file_size``, ``signed_name``,
-       ``attach_metadata_len``, ``unload_payload_sha256`` and
-       ``decoders``.
+       ``attach_metadata_len``, ``jar_len`` (0 but for a Java load),
+       ``unload_payload_sha256`` and ``decoders``.
 
 Exit status
 -----------
@@ -132,7 +133,7 @@ The JSON form of another artifact:
 .. code-block:: console
 
    target# shirudo upatch info --json shirudo-test-basic.upatch
-   {"schema":1,"path":"shirudo-test-basic.upatch","name":"shirudo-test-basic","type":"load","payload_type":"bpf","version":1,"payload_sha256":"8aee7072a1a15e4dddc93ad6b253a0e2e70ad6cdf767442aa8a1c1997bc3069f","loader_insns_len":992,"signature_len":4853,"metadata_len":0,"data_len":2400,"log_buf_sz":1048576,"file_size":8605,"signed_name":"shirudo-test-basic","attach_metadata_len":176,"unload_payload_sha256":null,"decoders":[]}
+   {"schema":1,"path":"shirudo-test-basic.upatch","name":"shirudo-test-basic","type":"load","payload_type":"bpf","version":1,"payload_sha256":"8aee7072a1a15e4dddc93ad6b253a0e2e70ad6cdf767442aa8a1c1997bc3069f","loader_insns_len":992,"signature_len":4853,"metadata_len":0,"data_len":2400,"log_buf_sz":1048576,"file_size":8605,"signed_name":"shirudo-test-basic","attach_metadata_len":176,"jar_len":0,"unload_payload_sha256":null,"decoders":[]}
 
 Related
 -------

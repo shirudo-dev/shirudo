@@ -206,6 +206,12 @@ signed config image.
        section without a list, a glob, a name given twice, an empty
        element, a name of ``KSYM_NAME_LEN`` bytes and ``kprobe.session``
        are refused
+   * - ``t3014-java-build``
+     - A jar signs into a Java load whose signature covers its data, and
+       an unload directive of it, by ``build`` and by ``bpm build``; a file
+       that is no jar, a jar without a ``Premain-Class``, ``--java``
+       alone, rodata on a Java upatch and a header relabelled BPF are
+       refused
    * - ``t3101-target-fixtures``
      - Prebuilt fixtures load and unload, foreign and own-keyring
        fixtures are refused, a map fixture exports
@@ -820,7 +826,11 @@ The unit suites in :src:`testing/unit/` cover 32 of the modules in
 ``paths``, ``string``, ``sysinfo``, ``upatch``, ``upatch_decode``,
 ``upatch_pins``, ``upatch_resolve``, ``upatch_verify`` and ``xdp``, and
 ``overflow`` the arithmetic of
-:src:`include/shirudo/overflow.h`. ``quote_check`` covers the rows of
+:src:`include/shirudo/overflow.h`. ``jar`` covers the
+``shirudo-build`` checks of a Java agent's jar in
+:src:`tools/shirudo-build/jar.c`: stored and deflated manifests, a
+missing or empty ``Premain-Class``, one outside the main section, and
+every truncation and byte flip of a jar. ``quote_check`` covers the rows of
 ``shirudo-quote-check`` in :src:`tools/quote-check/row.c`, on quotes a
 software P-256 key signs: every reject reason, the signer's qualified
 name, the empty PCR selection and the base64 of each field. The other

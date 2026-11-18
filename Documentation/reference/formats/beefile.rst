@@ -32,7 +32,7 @@ a package may have:
        source, target                 a file shipped as it is
    [[upatches]]                       up to 128
        source                         the BPF program, names the upatch
-       type                           bpf
+       type                           bpf or java
        load_target, unload_target     where the artifacts go
      [[upatches.rodata]]              up to 16 per upatch
        symbol, input, generator,      generated .rodata
@@ -206,13 +206,17 @@ from the artifact's payload digest, so a package always ships both.
      - string
      - yes
      - A ``.bpf.c``, ``.bpf.o`` or ``.o`` file inside the package
-       directory, under the same rules as a file ``source``. The upatch
-       name is its base name without ``.bpf.c``, ``.bpf.o`` or ``.o``.
-       There is no key to set another name.
+       directory, or a ``.jar`` for a Java upatch, under the same rules as
+       a file ``source``. The upatch name is its base name without
+       ``.bpf.c``, ``.bpf.o``, ``.o`` or ``.jar``. There is no key to set
+       another name.
    * - ``type``
      - string
      - no
-     - ``bpf``, the default and the only value, in any case.
+     - ``bpf``, the default, or ``java``, in any case. A ``java`` upatch
+       signs its ``.jar`` source as a Java agent (see
+       :doc:`/reference/cli/build`) and takes no ``[[upatches.rodata]]``,
+       ``[[upatches.policy]]`` or ``[upatches.tree]``.
    * - ``load_target``
      - string
      - no

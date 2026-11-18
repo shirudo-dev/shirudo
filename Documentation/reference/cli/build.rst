@@ -8,8 +8,8 @@
 shirudo build
 =============
 
-Compile and sign a BPF program into a ``.upatch`` artifact, or sign an
-unload directive for a loaded upatch.
+Compile and sign a BPF program, or sign a Java agent ``.jar``, into a
+``.upatch`` artifact, or sign an unload directive for a loaded upatch.
 
 Runs on: operator host, without the image gate. Requires: the
 ``shirudo-build`` helper, the signing key and certificate, and for a
@@ -27,7 +27,7 @@ Usage
                  [--vmlinux <vmlinux-h>] [--extra-cflags <flags>]
                  [--emit-artifacts]
    shirudo build --unload <name> [-o <output> | --output <output>]
-                 [--payload-sha256 <digest>]
+                 [--payload-sha256 <digest> [--java]]
                  [--keys-dir <dir> | --keys-dir=<dir>]
                  [--key <signing-key>] [--cert <certificate>]
    shirudo build --help
@@ -56,8 +56,9 @@ Building a upatch
    ``/var/lib/shirudo/keys``. The key must be a regular file with mode
    0600 and the certificate readable.
 #. It selects the output: ``-o``, else the input path with a trailing
-   ``.c`` or ``.o`` replaced by ``.upatch``, beside the input
-   (``fix.bpf.c`` becomes ``fix.bpf.upatch``).
+   ``.c``, ``.o`` or ``.jar`` replaced by ``.upatch``, beside the input
+   (``fix.bpf.c`` becomes ``fix.bpf.upatch``, ``agent.jar``
+   ``agent.upatch``).
 #. For a ``.bpf.c`` input, it finds ``vmlinux.h``: ``--vmlinux``, else
    ``./vmlinux.h``, else ``./vendor/linux/vmlinux.h``, else the installed
    ``vmlinux.h`` (``/usr/share/shirudo/vmlinux.h`` in the operator
@@ -74,10 +75,11 @@ Building a upatch
    ``/usr/lib/llvm-23/bin/clang`` in the Debian package, and ``PATH`` is
    not searched. The object goes to a temporary file in
    ``/tmp``, or with ``--emit-artifacts`` beside the output.
-#. A ``.bpf.o`` or ``.o`` input is packaged as it is. Any other input is
+#. A ``.bpf.o`` or ``.o`` input is packaged as it is. A ``.jar`` input is
+   a Java agent, see `Building a Java upatch`_. Any other input is
    refused.
 #. It names the upatch: ``--name``, else the input file name without
-   ``.bpf.c``, ``.bpf.o`` or ``.o``.
+   ``.bpf.c``, ``.bpf.o``, ``.o`` or ``.jar``.
 #. It generates the loader for the object, signs it with the key and
    writes the artifact. The detached CMS signature covers the loader
    instructions and the loader's data, which hold the payload and the
@@ -86,6 +88,20 @@ Building a upatch
 
 The helper prints ``wrote <output> (insns=<n> sig=<n> data=<n>
 sections=<n> maps=<n> progs=<n> decoders=<n> name=<name>)``.
+
+Building a Java upatch
+~~~~~~~~~~~~~~~~~~~~~~
+
+A ``.jar`` input is signed as it is, with no compiler. The helper refuses
+a file that is no zip archive, and a jar whose manifest names no
+``Premain-Class``: a JVM given such a jar as ``-javaagent`` does not
+start. It also refuses a zip64 archive and a manifest that is neither
+stored nor deflated. The jar and its signature must fit the 16 MiB a
+``.upatch`` may have. The
+artifact carries no loader: its data holds the signed name, the payload
+type and the jar, and the detached CMS signature covers that data alone
+(see the Java payloads of :doc:`/reference/formats/upatch-format`).
+The helper prints ``wrote <output> (java sig=<n> data=<n> name=<name>)``.
 
 Signing an unload directive
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -99,7 +115,11 @@ digest:
    ``payload_sha256``).
 #. Without ``--payload-sha256``, the helper reads the digest from
    ``/var/lib/shirudo/upatches/<name>.upatch`` on the host it runs on,
-   and refuses with exit status 2 when that file is absent.
+   and refuses with exit status 2 when that file is absent. It signs a
+   Java directive when that upatch is a Java one.
+#. With ``--payload-sha256``, ``--java`` signs the directive of a Java
+   upatch: no unload program, the name, the payload type and the digest
+   in the signed data.
 #. The output is ``-o``, else ``<name>.unload.upatch`` in the current
    directory.
 
@@ -180,6 +200,11 @@ Options
      - ``<digest>``, 64 hex characters
      - see above
      - Payload digest the directive expects. Only with ``--unload``.
+   * - ``--java``
+     - none
+     - off
+     - Sign the directive of a Java upatch. Only with ``--unload`` and
+       ``--payload-sha256``.
    * - ``-h``, ``--help``
      - none
      -
@@ -198,13 +223,15 @@ Exit status
      - The artifact or directive was written.
    * - 1
      - The key or certificate is unusable, ``vmlinux.h`` or clang is
-       missing, compilation failed, or packaging and signing failed.
+       missing, compilation failed, a ``.jar`` input is no zip archive,
+       or packaging and signing failed.
    * - 2
      - A usage error: an unknown option or one given twice, a value
        missing or empty, a second input, an input that is not
-       ``.bpf.c``, ``.bpf.o`` or ``.o``, no input, an input together with
-       ``--unload``, or a ``--payload-sha256`` that is not 64 hexadecimal
-       characters. Also a usage error of ``image sign-root`` or ``upatch
+       ``.bpf.c``, ``.bpf.o``, ``.o`` or ``.jar``, no input, an input
+       together with ``--unload``, ``--java`` without ``--unload`` and
+       ``--payload-sha256``, or a ``--payload-sha256`` that is not 64
+       hexadecimal characters. Also a usage error of ``image sign-root`` or ``upatch
        rewrite-rodata``.
    * - 127
      - ``shirudo`` cannot execute the helper.
