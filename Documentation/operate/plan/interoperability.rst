@@ -297,7 +297,7 @@ Module loading and kernel live patching
    check. Unloading a
    module that a kprobe upatch targets leaves the upatch loaded and
    measured but without effect, a reading of the kernel source (R21).
-   shirudo's tests do not cover a livepatch and an upatch on the same
+   shirudo's tests do not cover a livepatch and a upatch on the same
    function.
 
 Other LSMs

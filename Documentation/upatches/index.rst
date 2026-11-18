@@ -17,7 +17,7 @@ published package. :doc:`/upatches/write/attach-kinds` and
   packages
 - :doc:`write/index`: attach kinds, maps, arenas and serializers, Lua
   decoders, and memory consistency
-- :doc:`test/index`: test an upatch on a target and debug a failed load
+- :doc:`test/index`: test a upatch on a target and debug a failed load
 - :doc:`publish/index`: the Beefile and publishing a package
 
 .. toctree::

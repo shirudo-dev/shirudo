@@ -9,7 +9,7 @@ Troubleshoot by symptom
 =======================
 
 This page starts from what you see: a message a command prints, the
-failure category of an upatch load or unload, or a status verdict. Each
+failure category of a upatch load or unload, or a status verdict. Each
 entry says what the symptom means, what causes it and what to do. The
 output shown was captured from the test VM.
 

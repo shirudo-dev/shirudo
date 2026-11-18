@@ -32,7 +32,7 @@ What it does
   refused. A node is known by the name of its attestation key, never by
   the host name it claims, and its records are ordered by the quote's
   clock.
-- A tree ingest job that loads every publication of an upatch tree
+- A tree ingest job that loads every publication of a upatch tree
   through ``shirudo bpm tree show``, which verifies it as a target does,
   and the ``fixes`` its operations carry.
 - A table, ``node_status``, refreshed every minute, that says for every
@@ -77,7 +77,7 @@ Files
        ``apply-retention.sh``, which sets how long ``shirudo.keepalive``
        keeps a record and ``shirudo.boot_first`` a boot.
    * - :src:`tools/backend/jobs/tree-ingest`
-     - Loads every segment of an upatch tree into the reference tables.
+     - Loads every segment of a upatch tree into the reference tables.
    * - :src:`tools/backend/jobs/sbom-scan`
      - Scans the SBOM of every image in the SBOM store and loads the
        outcome into ``sbom_images`` and ``sbom_vulns``.

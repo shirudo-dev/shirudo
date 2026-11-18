@@ -10,7 +10,7 @@ Beefile
 
 A Beefile describes a package: its name, the files it ships, the upatches
 ``shirudo bpm build`` compiles and signs into it, and the entries
-``shirudo bpm tree append`` publishes to an upatch tree. ``bpm build``
+``shirudo bpm tree append`` publishes to a upatch tree. ``bpm build``
 reads ``<context>/Beefile``, or the file given with ``--file``, and treats
 the directory that holds it as the package directory. Every path in the
 Beefile is relative to that directory. The package archives the Beefile

@@ -10,7 +10,7 @@
 upatch tree
 ===========
 
-An upatch tree is a signed, append-only list of ``add`` and ``delete``
+A upatch tree is a signed, append-only list of ``add`` and ``delete``
 operations in one OCI repository, ``oci://<registry>/<repository>``. The
 operator publishes it with ``bpm tree append``, one operation per
 ``[upatches.tree]`` entry of a package. Every node reads it with ``bpm

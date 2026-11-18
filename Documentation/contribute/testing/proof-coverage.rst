@@ -365,7 +365,7 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
        ``tree_operation_validate()`` takes, ids up to 8 bytes; the
        emitter, the directory or the write failing. ``util/json.c`` is a
        stub that passes keys and values
-     - Takes exactly a whole record of schema 1 with a positive seq, an
+     - Takes exactly a whole record of schema 1 with a positive seq, a
        upatch name and a sha256 digest; writes schema 1 and the
        operation's seq, id and digest once, which reads back as the
        operation's
@@ -466,7 +466,7 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
    * - ``bpm-beefile-tables``
      - ``build_parse_spec()``, ``build_add_target()``
      - One table header after every count of its kind up to the limit;
-       ``[upatches.tree]`` and the sub-tables without an upatch; four
+       ``[upatches.tree]`` and the sub-tables without a upatch; four
        fixed targets
      - ``[[files]]``, ``[[upatches]]``, ``[[upatches.rodata]]`` and
        ``[[upatches.policy]]`` are counted below 128, 128, 16 and 64 and

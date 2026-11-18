@@ -13,11 +13,11 @@ test, the notation of the kernel's memory model for a pattern of
 concurrent accesses, into BPF programs. It runs each process of the test
 on a CPU of its own through ``BPF_PROG_TEST_RUN`` and counts how often
 the outcome the test asks about occurs. The accesses go through the same
-BPF JIT as an upatch's, on real hardware, so a run on each architecture
-an upatch targets shows whether the ordering its programs rely on holds
+BPF JIT as a upatch's, on real hardware, so a run on each architecture
+a upatch targets shows whether the ordering its programs rely on holds
 there.
 
-Use it for an upatch whose programs share state across CPUs: a table
+Use it for a upatch whose programs share state across CPUs: a table
 that hooks fill while the serializer drains it, a record published
 through an index, or a lock or a lock-free list built from atomics. This
 page writes the insert path of the :src:`upatches/kernel-obs/obs_table.h`
@@ -278,6 +278,6 @@ Next steps
 
 - :doc:`/upatches/write/maps-arenas-serializers` for the arena table and
   its serializer
-- :doc:`/contribute/arch-support` for the architectures an upatch runs on
+- :doc:`/contribute/arch-support` for the architectures a upatch runs on
 - The `blitmus README <https://github.com/puranjaymohan/blitmus#readme>`_
   for the annotations that test arena page reuse

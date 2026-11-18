@@ -761,7 +761,7 @@ signed config image.
    * - ``t9109-pipeline``
      - The whole keepalive pipeline on a fresh edge node and node B, run
        by ``host.sh`` on the host: ``bpm build`` and ``bpm tree append``
-       of an upatch with ``fixes``, tree sync on both nodes, quoted
+       of a upatch with ``fixes``, tree sync on both nodes, quoted
        keepalives through the backend's collector and checker, its tree
        ingest and sbom-scan jobs, node B enrolled from its vTPM
        builder's names and the edge node left untrusted,
@@ -880,7 +880,7 @@ the functional tests run.
    * - ``tpm-wire``
      - TPM structures in evidence
    * - ``tree``
-     - An upatch tree publication
+     - A upatch tree publication
    * - ``tree-state``
      - The tree's ``state.json``, eventlog and outcome lines
    * - ``upatch``

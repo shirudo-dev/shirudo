@@ -133,7 +133,7 @@ attaches each program to its hook and pins every link under
 these pins are what keep enforcement attached after init exits. See
 :doc:`/internals/enforcement` and :doc:`/internals/seal`.
 
-An upatch carries a signed loader that gen_loader produced on the
+A upatch carries a signed loader that gen_loader produced on the
 operator host. ``shirudo upatch load`` loads the loader with its
 signature, runs it with ``BPF_PROG_TEST_RUN``, attaches the payload
 programs the loader created and pins their links under
@@ -151,8 +151,8 @@ Limits
 ------
 
 The verifier bounds what a program can do to the kernel, not what it
-decides. An upatch that passes the verifier can still break a workload by
+decides. A upatch that passes the verifier can still break a workload by
 denying the wrong operation. shirudo signs and measures upatches so that
 an operator knows which programs run; it does not judge whether they are
-correct. See :doc:`/upatches/test/testing` for testing an upatch before it
+correct. See :doc:`/upatches/test/testing` for testing a upatch before it
 ships.

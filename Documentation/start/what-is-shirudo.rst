@@ -61,11 +61,11 @@ What shirudo does
 What shirudo does not do
 ------------------------
 
-- It does not judge what an upatch does. The signature proves who built the
+- It does not judge what a upatch does. The signature proves who built the
   code and that it was not tampered with. The kernel's BPF verifier still
   checks memory safety, but whether the program is a correct mitigation is
   the author's responsibility.
-- It does not replace kernel updates. An upatch covers the time until the
+- It does not replace kernel updates. A upatch covers the time until the
   machine runs a fixed kernel.
 - It has no daemon, no listening socket, no push channel, no SSH
   integration and no fleet inventory. Every target operation is a one-shot
@@ -106,6 +106,6 @@ Next steps
 
 - :doc:`how-it-works` follows one upatch from a kernel fix to a measured
   load and back.
-- :doc:`quickstart` takes an upatch through its whole life on a test VM.
+- :doc:`quickstart` takes a upatch through its whole life on a test VM.
 - :doc:`/security/security-model` summarizes what shirudo protects and
   where each mechanism stops.

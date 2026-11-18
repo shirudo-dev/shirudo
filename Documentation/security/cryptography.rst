@@ -130,7 +130,7 @@ Digests
    * - Use
      - Algorithm
      - Input
-   * - Payload digest of an upatch (``payload_sha256``)
+   * - Payload digest of a upatch (``payload_sha256``)
      - SHA-256
      - The signed bytes: loader instructions followed by the map data
    * - ``excl_prog_hash`` of the metadata map

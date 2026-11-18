@@ -1,6 +1,6 @@
 ---
 name: bpf-concurrency
-description: Write or review BPF code in a shirudo upatch whose runs share state, across CPUs at once or interleaved on one. Covers shared map values, per-CPU scratch, inserting and deleting entries, compare-and-swap, publishing records, double buffers, user memory, and the runs the kernel skips. Use when an upatch program updates state other runs read, when a lock, atomic, acquire or release is involved, or to check such code with the Coccinelle rules and blitmus.
+description: Write or review BPF code in a shirudo upatch whose runs share state, across CPUs at once or interleaved on one. Covers shared map values, per-CPU scratch, inserting and deleting entries, compare-and-swap, publishing records, double buffers, user memory, and the runs the kernel skips. Use when a upatch program updates state other runs read, when a lock, atomic, acquire or release is involved, or to check such code with the Coccinelle rules and blitmus.
 ---
 
 # Concurrent BPF code in upatches

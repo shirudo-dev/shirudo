@@ -5,7 +5,7 @@
 Test and debug
 ==============
 
-Load an upatch on a test target before you ship it, and find out why a
+Load a upatch on a test target before you ship it, and find out why a
 load failed.
 
 .. toctree::

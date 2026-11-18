@@ -1,36 +1,5 @@
-<svg xmlns='http://www.w3.org/2000/svg' width='760.0' height='380.0' viewBox='-72 -72 569.996 284.998' class='fig fig-f-ink' role='img'><!-- Documentation/figures/start-how-it-works.tex, sha256 f8d855c0d6eac0173e8b5e6e64c6bc1395d363f0a1f8981ac12a6b722c950360 --><style>.fig-f-ink{fill:var(--fig-ink,#171b22)}.fig-s-ink{stroke:var(--fig-ink,#171b22)}.fig-f-muted{fill:var(--fig-muted,#5d6675)}.fig-s-muted{stroke:var(--fig-muted,#5d6675)}.fig-f-line{fill:var(--fig-line,#8a93a0)}.fig-s-line{stroke:var(--fig-line,#8a93a0)}.fig-f-grid{fill:var(--fig-grid,#e2e6eb)}.fig-s-grid{stroke:var(--fig-grid,#e2e6eb)}.fig-f-axis{fill:var(--fig-axis,#c3c9d1)}.fig-s-axis{stroke:var(--fig-axis,#c3c9d1)}.fig-f-accent{fill:var(--fig-accent,#8b1e3f)}.fig-s-accent{stroke:var(--fig-accent,#8b1e3f)}.fig-f-s1{fill:var(--fig-s1,#2a78d6)}.fig-s-s1{stroke:var(--fig-s1,#2a78d6)}.fig-f-s2{fill:var(--fig-s2,#eb6834)}.fig-s-s2{stroke:var(--fig-s2,#eb6834)}.fig-f-s3{fill:var(--fig-s3,#1baf7a)}.fig-s-s3{stroke:var(--fig-s3,#1baf7a)}.fig-f-s4{fill:var(--fig-s4,#eda100)}.fig-s-s4{stroke:var(--fig-s4,#eda100)}.fig-f-free{fill:var(--fig-free,#dde2e8)}.fig-s-free{stroke:var(--fig-free,#dde2e8)}.fig-f-on{fill:var(--fig-on,#ffffff)}.fig-s-on{stroke:var(--fig-on,#ffffff)}@media (prefers-color-scheme:dark){.fig-f-ink{fill:var(--fig-ink,#e4e8ee)}.fig-s-ink{stroke:var(--fig-ink,#e4e8ee)}.fig-f-muted{fill:var(--fig-muted,#9ba5b3)}.fig-s-muted{stroke:var(--fig-muted,#9ba5b3)}.fig-f-line{fill:var(--fig-line,#8a93a0)}.fig-s-line{stroke:var(--fig-line,#8a93a0)}.fig-f-grid{fill:var(--fig-grid,#262d37)}.fig-s-grid{stroke:var(--fig-grid,#262d37)}.fig-f-axis{fill:var(--fig-axis,#39414c)}.fig-s-axis{stroke:var(--fig-axis,#39414c)}.fig-f-accent{fill:var(--fig-accent,#e8899f)}.fig-s-accent{stroke:var(--fig-accent,#e8899f)}.fig-f-s1{fill:var(--fig-s1,#3987e5)}.fig-s-s1{stroke:var(--fig-s1,#3987e5)}.fig-f-s2{fill:var(--fig-s2,#d95926)}.fig-s-s2{stroke:var(--fig-s2,#d95926)}.fig-f-s3{fill:var(--fig-s3,#199e70)}.fig-s-s3{stroke:var(--fig-s3,#199e70)}.fig-f-s4{fill:var(--fig-s4,#c98500)}.fig-s-s4{stroke:var(--fig-s4,#c98500)}.fig-f-free{fill:var(--fig-free,#2f3640)}.fig-s-free{stroke:var(--fig-free,#2f3640)}.fig-f-on{fill:var(--fig-on,#ffffff)}.fig-s-on{stroke:var(--fig-on,#ffffff)}}</style>
+<svg xmlns='http://www.w3.org/2000/svg' width='760.0' height='380.0' viewBox='-72 -72 569.996 284.998' class='fig fig-f-ink' role='img'><!-- Documentation/figures/start-how-it-works.tex, sha256 fa582cda089dad5b5417618bfa11e17fb713c94302c5174bae93f691f7d3fbcf --><style>.fig-f-ink{fill:var(--fig-ink,#171b22)}.fig-s-ink{stroke:var(--fig-ink,#171b22)}.fig-f-muted{fill:var(--fig-muted,#5d6675)}.fig-s-muted{stroke:var(--fig-muted,#5d6675)}.fig-f-line{fill:var(--fig-line,#8a93a0)}.fig-s-line{stroke:var(--fig-line,#8a93a0)}.fig-f-grid{fill:var(--fig-grid,#e2e6eb)}.fig-s-grid{stroke:var(--fig-grid,#e2e6eb)}.fig-f-axis{fill:var(--fig-axis,#c3c9d1)}.fig-s-axis{stroke:var(--fig-axis,#c3c9d1)}.fig-f-accent{fill:var(--fig-accent,#8b1e3f)}.fig-s-accent{stroke:var(--fig-accent,#8b1e3f)}.fig-f-s1{fill:var(--fig-s1,#2a78d6)}.fig-s-s1{stroke:var(--fig-s1,#2a78d6)}.fig-f-s2{fill:var(--fig-s2,#eb6834)}.fig-s-s2{stroke:var(--fig-s2,#eb6834)}.fig-f-s3{fill:var(--fig-s3,#1baf7a)}.fig-s-s3{stroke:var(--fig-s3,#1baf7a)}.fig-f-s4{fill:var(--fig-s4,#eda100)}.fig-s-s4{stroke:var(--fig-s4,#eda100)}.fig-f-free{fill:var(--fig-free,#dde2e8)}.fig-s-free{stroke:var(--fig-free,#dde2e8)}.fig-f-on{fill:var(--fig-on,#ffffff)}.fig-s-on{stroke:var(--fig-on,#ffffff)}@media (prefers-color-scheme:dark){.fig-f-ink{fill:var(--fig-ink,#e4e8ee)}.fig-s-ink{stroke:var(--fig-ink,#e4e8ee)}.fig-f-muted{fill:var(--fig-muted,#9ba5b3)}.fig-s-muted{stroke:var(--fig-muted,#9ba5b3)}.fig-f-line{fill:var(--fig-line,#8a93a0)}.fig-s-line{stroke:var(--fig-line,#8a93a0)}.fig-f-grid{fill:var(--fig-grid,#262d37)}.fig-s-grid{stroke:var(--fig-grid,#262d37)}.fig-f-axis{fill:var(--fig-axis,#39414c)}.fig-s-axis{stroke:var(--fig-axis,#39414c)}.fig-f-accent{fill:var(--fig-accent,#e8899f)}.fig-s-accent{stroke:var(--fig-accent,#e8899f)}.fig-f-s1{fill:var(--fig-s1,#3987e5)}.fig-s-s1{stroke:var(--fig-s1,#3987e5)}.fig-f-s2{fill:var(--fig-s2,#d95926)}.fig-s-s2{stroke:var(--fig-s2,#d95926)}.fig-f-s3{fill:var(--fig-s3,#199e70)}.fig-s-s3{stroke:var(--fig-s3,#199e70)}.fig-f-s4{fill:var(--fig-s4,#c98500)}.fig-s-s4{stroke:var(--fig-s4,#c98500)}.fig-f-free{fill:var(--fig-free,#2f3640)}.fig-s-free{stroke:var(--fig-free,#2f3640)}.fig-f-on{fill:var(--fig-on,#ffffff)}.fig-s-on{stroke:var(--fig-on,#ffffff)}}</style>
 <defs>
-<use id='start-how-it-works-g5-97' href='#start-how-it-works-g1-97' transform='scale(1.081)'/>
-<use id='start-how-it-works-g5-101' href='#start-how-it-works-g1-101' transform='scale(1.081)'/>
-<use id='start-how-it-works-g5-103' href='#start-how-it-works-g1-103' transform='scale(1.081)'/>
-<use id='start-how-it-works-g5-114' href='#start-how-it-works-g1-114' transform='scale(1.081)'/>
-<use id='start-how-it-works-g5-116' href='#start-how-it-works-g1-116' transform='scale(1.081)'/>
-<use id='start-how-it-works-g3-44' href='#start-how-it-works-g1-44' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-45' href='#start-how-it-works-g1-45' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-67' href='#start-how-it-works-g1-67' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-73' href='#start-how-it-works-g1-73' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-75' href='#start-how-it-works-g1-75' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-77' href='#start-how-it-works-g1-77' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-79' href='#start-how-it-works-g1-79' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-80' href='#start-how-it-works-g1-80' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-84' href='#start-how-it-works-g1-84' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-97' href='#start-how-it-works-g1-97' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-99' href='#start-how-it-works-g1-99' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-100' href='#start-how-it-works-g1-100' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-101' href='#start-how-it-works-g1-101' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-103' href='#start-how-it-works-g1-103' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-104' href='#start-how-it-works-g1-104' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-105' href='#start-how-it-works-g1-105' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-108' href='#start-how-it-works-g1-108' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-109' href='#start-how-it-works-g1-109' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-110' href='#start-how-it-works-g1-110' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-111' href='#start-how-it-works-g1-111' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-112' href='#start-how-it-works-g1-112' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-114' href='#start-how-it-works-g1-114' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-115' href='#start-how-it-works-g1-115' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-116' href='#start-how-it-works-g1-116' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-117' href='#start-how-it-works-g1-117' transform='scale(1.162)'/>
-<use id='start-how-it-works-g3-121' href='#start-how-it-works-g1-121' transform='scale(1.162)'/>
 <path id='start-how-it-works-g1-39' d='M1.299-6.912C.912-6.912 .737-6.69 .737-6.368V-6.239C.737-5.99 .848-5.806 1.097-5.75C.995-5.317 .774-4.995 .405-4.608H1.023C1.548-5.059 1.862-5.741 1.862-6.239V-6.368C1.862-6.69 1.686-6.912 1.299-6.912Z'/>
 <path id='start-how-it-works-g1-40' d='M.765-2.875C.765-1.078 1.521 .488 2.433 1.263H3.133C2.138 .378 1.456-1.18 1.456-2.47V-3.262C1.456-4.552 2.11-6.082 3.133-7.004H2.433C1.493-6.202 .765-4.654 .765-2.875Z'/>
 <path id='start-how-it-works-g1-41' d='M2.322-2.875C2.322-4.654 1.594-6.202 .654-7.004H-.046C.977-6.082 1.631-4.552 1.631-3.262V-2.47C1.631-1.18 .949 .378-.046 1.263H.654C1.567 .488 2.322-1.078 2.322-2.875Z'/>
@@ -75,6 +44,37 @@
 <path id='start-how-it-works-g1-118' d='M2.691 0L4.368-4.755H3.659L2.811-2.396L2.295-.774H2.249L1.733-2.396L.903-4.755H.166L1.834 0H2.691Z'/>
 <path id='start-how-it-works-g1-120' d='M.194 0H1.014L2.35-1.862H2.378L3.612 0H4.479L2.765-2.451L4.442-4.755H3.622L2.368-2.986H2.341L1.133-4.755H.267L1.954-2.396L.194 0Z'/>
 <path id='start-how-it-works-g1-121' d='M2.562-1.521L2.304-.746H2.258L2.037-1.521L.894-4.755H.157L1.935 .184L1.576 1.198H.829V1.843H1.207C1.908 1.843 2.101 1.677 2.313 1.106L4.442-4.755H3.714L2.562-1.521Z'/>
+<use id='start-how-it-works-g3-44' href='#start-how-it-works-g1-44' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-45' href='#start-how-it-works-g1-45' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-67' href='#start-how-it-works-g1-67' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-73' href='#start-how-it-works-g1-73' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-75' href='#start-how-it-works-g1-75' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-77' href='#start-how-it-works-g1-77' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-79' href='#start-how-it-works-g1-79' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-80' href='#start-how-it-works-g1-80' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-84' href='#start-how-it-works-g1-84' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-97' href='#start-how-it-works-g1-97' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-99' href='#start-how-it-works-g1-99' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-100' href='#start-how-it-works-g1-100' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-101' href='#start-how-it-works-g1-101' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-103' href='#start-how-it-works-g1-103' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-104' href='#start-how-it-works-g1-104' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-105' href='#start-how-it-works-g1-105' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-108' href='#start-how-it-works-g1-108' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-109' href='#start-how-it-works-g1-109' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-110' href='#start-how-it-works-g1-110' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-111' href='#start-how-it-works-g1-111' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-112' href='#start-how-it-works-g1-112' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-114' href='#start-how-it-works-g1-114' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-115' href='#start-how-it-works-g1-115' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-116' href='#start-how-it-works-g1-116' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-117' href='#start-how-it-works-g1-117' transform='scale(1.162)'/>
+<use id='start-how-it-works-g3-121' href='#start-how-it-works-g1-121' transform='scale(1.162)'/>
+<use id='start-how-it-works-g5-97' href='#start-how-it-works-g1-97' transform='scale(1.081)'/>
+<use id='start-how-it-works-g5-101' href='#start-how-it-works-g1-101' transform='scale(1.081)'/>
+<use id='start-how-it-works-g5-103' href='#start-how-it-works-g1-103' transform='scale(1.081)'/>
+<use id='start-how-it-works-g5-114' href='#start-how-it-works-g1-114' transform='scale(1.081)'/>
+<use id='start-how-it-works-g5-116' href='#start-how-it-works-g1-116' transform='scale(1.081)'/>
 </defs>
 <g id='start-how-it-works-page1'>
 <g stroke-miterlimit='10' transform='matrix(.996 0 0 -.996 -72 -72)' stroke-width='1.12921' class='fig-f-ink fig-s-ink'>

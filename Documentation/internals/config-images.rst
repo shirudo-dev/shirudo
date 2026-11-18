@@ -224,7 +224,7 @@ It then activates it:
    ``.bpf`` keyring, extend the register with a ``key_revoke`` event,
    and purge the archived upatches the certificate signed, unloading
    those that are loaded. Each purge checks the signer again under the
-   register lock, so an upatch an upgrade replaced in the meantime with
+   register lock, so a upatch an upgrade replaced in the meantime with
    one another key signed stays.
 #. Mount the candidate at ``/run/shirudo/config``.
 #. Record the selection as complete.

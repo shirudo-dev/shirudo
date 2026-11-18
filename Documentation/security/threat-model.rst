@@ -116,7 +116,7 @@ Security goals
      - T13
 
 The goals hold only together with the assumptions below. None of them
-says that an upatch is correct: shirudo establishes provenance, not
+says that a upatch is correct: shirudo establishes provenance, not
 correctness.
 
 .. _tm-assumptions:
@@ -438,7 +438,7 @@ pinned, and nothing the target says about itself.
 
 Outside both are the OCI registries, the network, the collectors, their
 TLS certificates, and whatever remote access an administrator uses. A
-registry can withhold and replay signed content. It cannot forge an
+registry can withhold and replay signed content. It cannot forge a
 upatch, because the kernel verifies every loader (T1). What a registry
 can do to indexes, tree publications and the transport is described in
 T7 and U3 to U4.
@@ -505,7 +505,7 @@ ADV-F, holder of a compromised or revoked signing key
    knows (R1). Its loaders run ``bpf()`` calls from kernel context,
    which both gates admit, so it can open shirudo's maps and attach
    programs that write them: the maps are frozen against ``bpf()``
-   writes, not against programs. An upatch does what its author wrote,
+   writes, not against programs. A upatch does what its author wrote,
    disabling enforcement included. Keys it vouched for stay admitted
    where a config lists them (U13). Tree publications require a
    non-revoked member of the active config's BPF signer set.
@@ -956,7 +956,7 @@ T4 Substituting artifacts
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A signed artifact is only as useful to root as the parts it can change.
-If the name an upatch loads under, the sites it attaches at, or the
+If the name a upatch loads under, the sites it attaches at, or the
 upatch an unload directive removes sat outside the signature, root
 could aim a signed program elsewhere or turn one directive against
 another upatch.
@@ -1692,7 +1692,7 @@ R14 Configs roll back
 R16 Any artifact ever signed loads at any time
    There is no version floor, no expiry and no per-target
    authorization. Neither shirudo nor the kernel checks a certificate's
-   validity period. Root can roll an upatch back to an older vulnerable
+   validity period. Root can roll a upatch back to an older vulnerable
    version or load a signed debug upatch. Detection: the load is
    measured, and a verifier with an expected state sees it. The only
    way to retire one artifact is to revoke the key that signed it.
@@ -1749,7 +1749,7 @@ R20 The TPM owner password is not a secret on the target
    An image shared across a fleet shares the password.
 
 R21 upatches can be neutralized by changing their targets
-   An upatch stays loaded and measured while root makes it ineffective:
+   A upatch stays loaded and measured while root makes it ineffective:
    by unloading the module a kprobe targets, by replacing the binary a
    ``uprobe``, ``uretprobe``, ``uprobe.multi`` or ``uretprobe.multi``
    target names with a new inode. Disabling kprobes through debugfs is
@@ -1766,12 +1766,12 @@ R21 upatches can be neutralized by changing their targets
    device under ``XdpCovered`` with the reason the device reports and
    gives the verdict ``degraded``, which the keepalive carries; root
    can stop the keepalive as well, which its collector sees as silence.
-   At boot restore a device whose driver refuses, or that an upatch
+   At boot restore a device whose driver refuses, or that a upatch
    restored before holds, fails ``init``: the register stays unbound, so
    attestation fails, and that upatch and every archive after it in name
    order stay unloaded that boot. Neither a setting that survives a
    reboot, in the NIC's firmware or the hypervisor, nor a second upatch
-   that selects the device can therefore take it out of an upatch
+   that selects the device can therefore take it out of a upatch
    unseen, at the price of a host that boots without those upatches. A
    device whose driver name or devlink port cannot be read is the
    exception: no class can be given to it, and any device's failing
@@ -1802,7 +1802,7 @@ R21 upatches can be neutralized by changing their targets
    authority, and an attempt without it is refused and counted as
    ``PinUnlink`` or ``PinRename``. A task that has that authority, or gets
    past the guards, can detach an XDP link unreported until the next pass.
-   Every other pin an upatch must hold is checked.
+   Every other pin a upatch must hold is checked.
 
 R22 Labeled inodes are interchangeable
    The label carries no identity. Any labeled inode passes shirudo's
@@ -2013,7 +2013,7 @@ U19 A decoder cannot name a long upatch
    :Affects: Lua decoders and map export (T13).
    :Consequence: A decoder names its upatch in a 64-byte field, and
       ``shirudo build`` and map export compare it with the whole upatch
-      name, which can have up to 255 characters. An upatch whose name has
+      name, which can have up to 255 characters. A upatch whose name has
       64 characters or more cannot carry a decoder, and map export sends
       its maps as raw entries, not as the records a decoder would make of
       them.
@@ -2092,7 +2092,7 @@ Out of scope
 - Denial of service: removing the binary, cutting the network, filling
   the disk, holding a lock file, stopping a process. shirudo refuses
   rather than fail over, and several such refusals are listed above.
-- The correctness or safety of an upatch an authorized signer built.
+- The correctness or safety of a upatch an authorized signer built.
 - Fleet inventory, rollout order, retries, scheduling and consistency
   across targets. shirudo reports one machine.
 - Remote access and audit retention, which belong to the infrastructure

@@ -241,7 +241,7 @@ state that shirudo's commands established since boot.
 What attestation does not prove
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- It does not show that an upatch is correct, only which upatches were
+- It does not show that a upatch is correct, only which upatches were
   loaded.
 - It covers what shirudo measured. A compromised kernel, or code running
   in a task with runtime authority, can change BPF state or extend the

@@ -92,7 +92,7 @@ For XDP, the signed device-class mask selects interfaces present in the
 initial network namespace at load time, with one endpoint per veth pair.
 Each program can produce several ``link_<n>`` pins. Native XDP is
 required: a device without it is logged and skipped. A device that has
-native XDP but refuses it in its current settings is an error. An upatch with no
+native XDP but refuses it in its current settings is an error. A upatch with no
 attachable device yet still loads, and
 :doc:`/reference/cli/upatch-reconcile` attaches it when one appears. A
 device that is occupied or does not report multi-buffer XDP, and any other

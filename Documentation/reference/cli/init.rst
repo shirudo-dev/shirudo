@@ -56,7 +56,7 @@ Description
    whose load the eventlog records without a later unload, all or
    nothing. An archive without such a record, one root brought back
    after its unload or one a load stopped before its extend left, is
-   ignored with a warning. An upatch already loaded with the archived
+   ignored with a warning. A upatch already loaded with the archived
    payload and every link its signed metadata implies is kept; one
    missing a link is refused as tampered. An archived upatch that is not
    loaded after this boot's register was bound is refused as tampered.

@@ -8,12 +8,12 @@
 upatch concepts
 ===============
 
-An upatch is the unit of BPF code that shirudo installs on a target. The
+A upatch is the unit of BPF code that shirudo installs on a target. The
 author writes an ordinary BPF object in C. ``shirudo build`` turns it into
 a signed ``.upatch`` file, and the target loads that file through the one
 path the kernel accepts from userspace: a signed loader. This page explains
 what the author writes, what the build adds around it, what the target does
-with it, and what an upatch cannot do.
+with it, and what a upatch cannot do.
 
 We use the name "upatch" as an easier-to-type representation of "µpatch" or
 "micropatch". 
@@ -21,7 +21,7 @@ We use the name "upatch" as an easier-to-type representation of "µpatch" or
 BPF program
 -----------
 
-The author's side of an upatch is libbpf-style BPF C: programs in
+The author's side of a upatch is libbpf-style BPF C: programs in
 ``SEC()`` sections, maps in ``SEC(".maps")``, types from ``vmlinux.h``.
 The smallest upatch the test suite builds is one ``fentry`` program:
 
@@ -48,7 +48,7 @@ of every file that is compiled into a BPF object.
 The program reads kernel structures through CO-RE: clang records each
 field access as a relocation against the types in ``vmlinux.h``, and the
 target kernel resolves the relocations against its own BTF when the
-program loads. CO-RE carries an upatch across builds of the same kernel
+program loads. CO-RE carries a upatch across builds of the same kernel
 generation, not across kernels that removed or renamed what it reads. A
 hard-coded offset signs as well as a CO-RE access and fails on the wrong
 kernel in the same way. :doc:`/concepts/background/co-re-btf` explains the
@@ -202,7 +202,7 @@ carries an all-zero digest, so such a directive fails with
 Names
 -----
 
-One name follows an upatch everywhere: the pin directory, the archive
+One name follows a upatch everywhere: the pin directory, the archive
 file, the eventlog record and the target of its unload directive.
 
 .. list-table::
@@ -249,17 +249,17 @@ A program has one of three roles, all recorded in the signed attach
 metadata. An attach program is linked to the site its section names. A
 serializer renders one map into records when the map is exported. A
 test-run program runs once at load, right after the attachments, which is
-how an upatch initializes state such as an arena before its first export.
+how a upatch initializes state such as an arena before its first export.
 A negative return from the test-run program fails the load.
 
-An upatch that accumulates records keeps them in one BPF arena and ships a
+A upatch that accumulates records keeps them in one BPF arena and ships a
 serializer that walks them. :doc:`/upatches/write/maps-arenas-serializers`
 explains why.
 A map becomes a log record or a metric through a decoder, a Lua function
 that the source declares in ``.rodata`` and the build signs into the
 upatch. :doc:`/upatches/write/decoders` shows how to write one.
 
-What an upatch cannot do
+What a upatch cannot do
 ------------------------
 
 It cannot run code the operator did not sign. The kernel checks the

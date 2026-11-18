@@ -199,7 +199,7 @@ Unload it
         none
 
 The count was lost with the unload: the map lived only as long as the
-upatch. A single counter fits an array map. An upatch that accumulates
+upatch. A single counter fits an array map. A upatch that accumulates
 records keeps them in a BPF arena, with a serializer program that exports
 them in one consistent snapshot.
 
@@ -212,6 +212,6 @@ Next steps
   ``fentry``.
 - :doc:`/upatches/write/maps-arenas-serializers` explains arenas and
   serializers.
-- :doc:`publish-package` ships an upatch through an OCI registry.
+- :doc:`publish-package` ships a upatch through an OCI registry.
 - :doc:`/reference/cli/upatch-map` describes every option of
   ``shirudo upatch map``.

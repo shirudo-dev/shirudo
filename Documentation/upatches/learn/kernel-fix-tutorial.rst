@@ -5,7 +5,7 @@
 :page-type: Tutorial
 :audience: upatch authors
 
-From a kernel fix to an upatch
+From a kernel fix to a upatch
 ==============================
 
 This tutorial takes one kernel fix to a signed upatch, loads it on a test
@@ -66,7 +66,7 @@ interface's ``rpl_seg_enabled`` are both set.
 Choose the attach point
 -----------------------
 
-An upatch can refuse the dangerous input or record it. Refusing needs a
+A upatch can refuse the dangerous input or record it. Refusing needs a
 hook that can change the outcome:
 
 - ``fmod_ret`` would return early from ``ipv6_rpl_srh_rcv()`` or its
@@ -434,4 +434,4 @@ Next steps
 - :doc:`/operate/run/deliver-packages` for what a target does with them
 - :doc:`/upatches/write/maps-arenas-serializers` and
   :doc:`/upatches/write/decoders` to export what the upatch records
-- :doc:`/upatches/write/attach-kinds` for the other places an upatch can attach
+- :doc:`/upatches/write/attach-kinds` for the other places a upatch can attach

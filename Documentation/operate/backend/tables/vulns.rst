@@ -9,7 +9,7 @@ Exposure
 ========
 
 Every five minutes: which nodes run a vulnerable package or kernel, and
-whether an upatch from their tree shields them. Packages come from the SBOM
+whether a upatch from their tree shields them. Packages come from the SBOM
 of the booted image, the kernel from kernel_release, the shield from the
 mask and node_ops.
 

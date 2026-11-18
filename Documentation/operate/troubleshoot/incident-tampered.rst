@@ -201,12 +201,12 @@ After the investigation
    new register and runs init from the initrd again.
 
 2. Verify the new boot with every value pinned, as in
-   `Verify with the TPM`_. An upatch that someone loaded with an
+   `Verify with the TPM`_. A upatch that someone loaded with an
    enrolled key is in the archive, and init restores it at boot. The init
    event then covers it, and the verification fails on
    ``state: init event covers the expected certificate, set and tree root``.
 
-3. Remove what you did not authorize: unload an upatch with a signed
+3. Remove what you did not authorize: unload a upatch with a signed
    unload directive, or revoke its signer through a signed config as
    :doc:`/operate/maintain/keys` describes.
 

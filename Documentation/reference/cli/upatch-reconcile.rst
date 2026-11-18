@@ -59,7 +59,7 @@ Every upatch is checked before any is attached. An archive that differs
 from what the records say was loaded stops the pass with ``tampered``,
 and no upatch gets a new link until that is resolved. Pins of a load
 still in progress, or of one that stopped before its record, are skipped,
-as is an upatch unloaded or replaced during the pass; ``status`` reports
+as is a upatch unloaded or replaced during the pass; ``status`` reports
 a load that stopped under ``UpatchesMeasured``.
 
 Options

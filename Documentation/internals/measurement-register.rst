@@ -317,14 +317,14 @@ The register and the eventlog advance together only while one process at
 a time extends and appends. Two measuring commands that each held a lock
 of their own could interleave extend, extend, append, append, and leave a
 log that replays the events in the other order. Every measuring command,
-an upatch load or unload, a live revocation and a tree operation,
+a upatch load or unload, a live revocation and a tree operation,
 therefore holds ``/var/lib/shirudo/eventlog.lock`` at least from its
 extension to its append. Figure 3 shows the three that change the
 loaded set, which hold it longer, the order of their steps and what a
 failure or a stop between two of them leaves.
 
 .. figure:: /images/internals-register-lock.svg
-   :alt: Three lanes. An upatch load takes the lock, undoes what the
+   :alt: Three lanes. A upatch load takes the lock, undoes what the
          records do not cover, loads and attaches, pins, archives,
          extends the register and appends to the eventlog, then lets
          the lock go. An unload undoes, verifies its directive, compares

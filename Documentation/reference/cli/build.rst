@@ -103,7 +103,7 @@ digest:
 #. The output is ``-o``, else ``<name>.unload.upatch`` in the current
    directory.
 
-A target applies a directive only to an upatch whose loaded payload
+A target applies a directive only to a upatch whose loaded payload
 digest equals the signed one (:doc:`upatch-unload`); a directive with
 any other digest is refused with ``payload_mismatch``.
 

@@ -8,7 +8,7 @@
 Exposure
 ========
 
-Which nodes run a vulnerable package or kernel, and whether an upatch
+Which nodes run a vulnerable package or kernel, and whether a upatch
 shields them. A node carries no scanner and sends no package list: its
 keepalive names the image it booted (``image_id``, ``image_version``,
 ``image_root``) and the kernel it runs (``kernel_release``), and the
@@ -110,7 +110,7 @@ Packages of the kernel in an SBOM (``linux-image-*``, ``kernel``,
 ``kernel-core``) are left out: the SBOM shows the kernel installed in
 the image, and the node may run another.
 
-To link an upatch to an advisory by hand, for one published without
+To link a upatch to an advisory by hand, for one published without
 ``fixes``, add a row with source ``manual`` for the upatch's newest
 ``add``:
 
@@ -119,7 +119,7 @@ To link an upatch to an advisory by hand, for one published without
    INSERT INTO shirudo.upatch_fixes (tree_id, seq, id, advisory, source)
    VALUES ('fleet-base', 3, 'xfs-fix', 'EXAMPLE-0303', 'manual');
 
-A link belongs to an operation, not to an upatch's name: a later ``add``
+A link belongs to an operation, not to a upatch's name: a later ``add``
 of the same upatch shields against what its own rows say.
 
 node_vulns
@@ -182,7 +182,7 @@ When several builds share an id and a version, a node gets the one with
 its own root, else the newest by ``built_at``.
 
 ``exposure`` says what stands between the node and the vulnerability
-now. It is read from the newest operation the node has applied of an
+now. It is read from the newest operation the node has applied of a
 upatch linked to the advisory in ``upatch_fixes``, and from the node's
 mask, or from its history in ``node_ops`` when that operation is below
 the record's window, so that a shield older than the window keeps its
@@ -276,7 +276,7 @@ first, then ``exposed_no_shield`` and ``shield_withdrawn``, ahead of
 every outcome of a published shield.
 
 A row does not run ahead of its node. A node that has applied the
-``add`` of an upatch whose ``delete`` is published stays ``shielded``
+``add`` of a upatch whose ``delete`` is published stays ``shielded``
 until it applies the ``delete``, with ``next_op`` ``delete`` saying that
 it will; a node with an older build loaded is ``shielded`` by that build
 while the newer ``add`` is still coming. When that newer ``add`` no

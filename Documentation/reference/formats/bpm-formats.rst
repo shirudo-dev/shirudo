@@ -28,7 +28,7 @@ What is signed
 --------------
 
 Figure 1 shows the objects of one registry namespace, the packages, the
-index and an upatch tree, and which of them are signed and which are
+index and a upatch tree, and which of them are signed and which are
 pinned by a digest in a signed one. The table gives each object's
 protection.
 

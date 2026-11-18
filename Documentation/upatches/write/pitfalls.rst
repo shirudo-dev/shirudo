@@ -11,7 +11,7 @@ Pitfalls
 A program that loads and runs can still miss the events it is meant to
 see, decide on data that is not what it looks like, or let through what
 it is meant to refuse. Neither the verifier nor a test in a quiet VM
-shows any of it. This page lists what the kernel does that an upatch has
+shows any of it. This page lists what the kernel does that a upatch has
 to plan for, for the attach kinds ``shirudo build`` accepts.
 :doc:`memory-consistency/hazards` covers the runs that interleave.
 
@@ -24,7 +24,7 @@ program's ``recursion_misses``, which ``struct bpf_prog_info`` reports:
 - A ``kprobe`` or ``kretprobe`` run, while another ``kprobe`` or
   ``kretprobe`` program runs on the CPU, and while the CPU is in a
   ``bpf()`` call that looks up, updates or deletes a map element from
-  userspace, as shirudo makes when it reads an upatch's maps. A
+  userspace, as shirudo makes when it reads a upatch's maps. A
   ``kprobe`` hit inside the handler of another ``kprobe`` is missed by
   the kprobe itself.
 - An ``fentry``, ``fexit``, ``fmod_ret`` or ``tp_btf`` run of a program
@@ -162,4 +162,4 @@ Related
 
 - :doc:`attach-kinds` for each attach kind and what the kernel needs for it
 - :doc:`memory-consistency/hazards` for runs that interleave
-- :doc:`maps-arenas-serializers` for the maps an upatch keeps state in
+- :doc:`maps-arenas-serializers` for the maps a upatch keeps state in

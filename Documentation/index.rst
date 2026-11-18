@@ -17,7 +17,7 @@ that targets pull from OCI registries.
 Use cases
 ---------
 
-shirudo is a platform. It does not understand what an upatch does; it
+shirudo is a platform. It does not understand what a upatch does; it
 makes sure that only signed upatches run and that every change is on
 record. Custom functionality ships as upatches that users and
 developers write on top of shirudo.
@@ -120,7 +120,7 @@ Specifications
 - :doc:`/reference/formats/upatch-format`: the signed ``.upatch``
   container
 - :doc:`/reference/formats/upatch-tree`: the operations, segments and
-  publication document of an upatch tree
+  publication document of a upatch tree
 - :doc:`/reference/formats/keepalive`: the record a target sends its
   collector, its :ref:`body <keepalive-body-format>` and its TPM quote
 

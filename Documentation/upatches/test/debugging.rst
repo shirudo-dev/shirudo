@@ -44,7 +44,7 @@ Get the report
    :doc:`/reference/failure-categories` defines every category and the
    exit status of each command.
 
-   For an upatch that a package or the tree delivered, the same failure
+   For a upatch that a package or the tree delivered, the same failure
    is in the journal:
 
    .. code-block:: console
@@ -150,7 +150,7 @@ Find the cause
           or the uprobe binary changed.
       * - ``link_create``
         - ``unknown``
-        - Any other error. ``EEXIST``: an upatch of the same name is
+        - Any other error. ``EEXIST``: a upatch of the same name is
           loaded. Unload it first. ``EINVAL``: the kernel refused the
           attachment, such as ``bpf_override_return()`` outside an
           error-injection function. ``EADDRNOTAVAIL``: kallsyms lists the

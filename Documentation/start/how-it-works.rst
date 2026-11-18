@@ -22,7 +22,7 @@ mechanisms in depth.
          its TPM extends the register and signs evidence, which the
          operator verifies.
 
-   Figure 1. The life of an upatch. Only the operator host holds the
+   Figure 1. The life of a upatch. Only the operator host holds the
    signing key, and only the target's TPM signs evidence.
 
 Before the first upatch
@@ -48,7 +48,7 @@ rely on.
 Build and sign
 --------------
 
-1. An upatch starts as BPF C source, often a few lines that refuse the
+1. A upatch starts as BPF C source, often a few lines that refuse the
    call a kernel fix closes. It reads kernel structures through CO-RE, so
    the target kernel adjusts field offsets to its own layout when the
    program loads (:doc:`/concepts/background/co-re-btf`).
@@ -82,7 +82,7 @@ Package and publish
 
    The registry stores and serves bytes, and the design does not trust it.
    It can withhold or replay what the operator published, but it cannot
-   produce an index, a tree or an upatch that passes the target's signature
+   produce an index, a tree or a upatch that passes the target's signature
    checks. :doc:`/concepts/upatches-and-packages` describes the objects, and
    :doc:`/concepts/background/oci` the registry protocol.
 
@@ -181,7 +181,7 @@ is the check. :doc:`/operate/run/telemetry` covers the export settings.
 Unload
 ------
 
-An upatch leaves the target through its unload directive. ``shirudo
+A upatch leaves the target through its unload directive. ``shirudo
 upatch unload`` loads the directive's loader through the same signature
 check, and that check is what authorizes the unload. The loader itself
 never runs. shirudo compares the payload digest the directive names with

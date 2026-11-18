@@ -8,7 +8,7 @@
 Concurrency hazards
 ===================
 
-Runs of an upatch's programs overlap on different CPUs, and on one CPU
+Runs of a upatch's programs overlap on different CPUs, and on one CPU
 a run can stop halfway while another one runs. Code that looks right
 for one run at a time loses updates, mixes up records or decides on
 data that changed under it. This page lists the hazards that recur in
@@ -148,7 +148,7 @@ halfway`_ says. Those of runs on different CPUs at once depend on
 neither and apply on every kernel. Fix a hazard where it applies and not
 elsewhere: a busy flag or an atomic that no interleaving needs costs
 time on every run and hides the reasoning behind the code that does need
-one. An upatch whose correctness depends on the preemption model says in
+one. A upatch whose correctness depends on the preemption model says in
 its ``README.md`` which model it is written for, as ``kernel-obs`` does
 for the test VM's kernel.
 

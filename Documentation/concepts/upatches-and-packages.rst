@@ -20,7 +20,7 @@ at the end summarize them.
 upatches
 --------
 
-An upatch is one BPF object, built and signed as a unit: one or more
+A upatch is one BPF object, built and signed as a unit: one or more
 programs, their maps, and the metadata that says where each program
 attaches. The target loads, pins, archives and measures it as a whole.
 
@@ -35,7 +35,7 @@ and the events in the measurement register.
 Load artifacts
 ~~~~~~~~~~~~~~
 
-A load artifact is the ``.upatch`` file that installs an upatch. It holds
+A load artifact is the ``.upatch`` file that installs a upatch. It holds
 a fixed header, the instructions of a signed loader, the loader's data,
 and a CMS signature over the instructions followed by the data. The data
 carries what the loader installs: the payload programs and the map
@@ -118,7 +118,7 @@ A package groups upatches that belong together into one versioned file.
 Its definition is a Beefile, a file in a subset of TOML in the package
 directory. The Beefile names the package and lists its upatch sources,
 optional generators for read-only data, extra files to ship and, per
-upatch, the selector it gets when published to an upatch tree.
+upatch, the selector it gets when published to a upatch tree.
 :doc:`/reference/formats/beefile` describes every key.
 
 ``shirudo bpm build`` builds and signs every upatch the Beefile lists,
@@ -252,7 +252,7 @@ checks it, and what the measurement register records.
 Limits
 ------
 
-A signature proves who built an upatch and that it was not tampered with.
+A signature proves who built a upatch and that it was not tampered with.
 It says nothing about whether the upatch is correct. The kernel's verifier
 checks memory safety, and the rest is the author's responsibility.
 

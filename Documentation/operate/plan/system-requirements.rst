@@ -72,7 +72,7 @@ Kernel source
        7.4. Without it, detaching one BPF program from a hook that others
        share can crash tasks that run the hook during the update, on
        kernels where an ftrace callback starts at an odd address (seen
-       with gcc 13 and ``CONFIG_CC_OPTIMIZE_FOR_SIZE=y``). Unloading an
+       with gcc 13 and ``CONFIG_CC_OPTIMIZE_FOR_SIZE=y``). Unloading a
        upatch detaches its programs from hooks that other programs
        share. Apply it to an x86-64 tree that predates it.
    * - :src:`kernel/0001 <kernel/0001-tpm-Let-LSMs-inspect-userspace-commands.patch>`
@@ -244,7 +244,7 @@ Attach points for upatches
 
 shirudo runs without these options. They decide where the upatches a
 fleet runs can attach. ``fentry``, ``fexit``, ``lsm`` and ``tp_btf``
-upatches need nothing beyond the table above. An upatch whose attach
+upatches need nothing beyond the table above. A upatch whose attach
 point is missing fails to load.
 
 .. list-table::

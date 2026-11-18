@@ -8,7 +8,7 @@
 Maps, arenas and serializers
 ============================
 
-An upatch that observes builds up records in the kernel, and the operator
+A upatch that observes builds up records in the kernel, and the operator
 wants them out of the target at a steady rate, in complete and bounded
 snapshots. This page explains why such state lives in a BPF arena, how a
 serializer program turns it into records, what draining and peeking mean,
@@ -51,7 +51,7 @@ report the count with the snapshot.
 Userspace cannot iterate an arena through ``bpf()``: the kernel has no
 key walk for it, and ``shirudo upatch map`` reports such a map as one
 whose contents require a serializer. A program uses at most one arena, so
-an upatch keeps all its tables in one. The arena needs a 64-bit kernel
+a upatch keeps all its tables in one. The arena needs a 64-bit kernel
 with an MMU and a BPF JIT that supports arenas: x86-64, arm64, and
 riscv64 on CPUs with the Zacas extension. :doc:`/contribute/arch-support`
 lists the conditions.
@@ -111,7 +111,7 @@ with a ``__u32`` key and ``struct serial_chunk`` values that the
 upatch defines with 1 to 256 entries. :src:`bpf/lib/serializer.h`
 holds the definitions. The builder refuses a serializer that is not in
 ``SEC("syscall")``, targets a map that does not exist or is
-``shirudo_ser`` itself, or duplicates another one, and refuses an upatch
+``shirudo_ser`` itself, or duplicates another one, and refuses a upatch
 with a serializer and without a valid ``shirudo_ser``.
 
 ``shirudo upatch map`` runs the serializer with ``BPF_PROG_TEST_RUN``,

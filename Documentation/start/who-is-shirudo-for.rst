@@ -73,8 +73,8 @@ upatch authors
 --------------
 
 Kernel and BPF engineers who write mitigations, hardening, containment
-and observability. An upatch is plain BPF C, compiled with clang and
-checked by the BPF verifier, and CO-RE lets one artifact load on more
+and observability. A upatch is plain BPF C, compiled with clang and
+checked by the BPF verifier. CO-RE lets one artifact load on more
 than one kernel build. Authors attach to LSM hooks, kernel functions,
 tracepoints, userspace functions, cgroup socket buffers and netfilter.
 
@@ -134,7 +134,7 @@ Next steps
 ----------
 
 - :doc:`what-is-shirudo` for what shirudo does and does not do
-- :doc:`quickstart` to take an upatch through its whole life on a test
+- :doc:`quickstart` to take a upatch through its whole life on a test
   VM
 - :doc:`/operate/plan/interoperability` for what enforcement refuses on
   a target

@@ -103,7 +103,7 @@ Every attached program becomes one link pinned at
 ``/run/shirudo/bpffs/upatches/<name>/link`` when the upatch has one attach
 program, and at ``link_0``, ``link_1`` and so on, in the order of the
 object, when it has several. ``<name>`` has every ``.`` written as ``~d``.
-An upatch containing XDP always uses ``link_0``, ``link_1`` and so on,
+A upatch containing XDP always uses ``link_0``, ``link_1`` and so on,
 because one program can attach to several interfaces.
 
 fentry and fexit
@@ -392,7 +392,7 @@ shared class is checked at these places:
        the artifact.
      - ``parser_rejected``
    * - ``bpm tree append``
-     - An upatch selects a class another upatch of the tree selects on
+     - A upatch selects a class another upatch of the tree selects on
        the same nodes.
      - The append is refused and nothing is published.
    * - ``upatch load``
@@ -462,7 +462,7 @@ driver's own errno.
 An XDP program with no device to attach to still loads: a pin of its
 own, ``xdp_prog_<i>``, keeps it. Boot restore attaches the same way:
 it skips what a load skips and fails where a load fails, and ``init``
-then stops with the register unbound. A device that an upatch restored
+then stops with the register unbound. A device that a upatch restored
 before this one holds fails the restore like any other, also one that
 reconcile only warned about before the reboot.
 A setting root makes after boot is the reconcile pass's to meet, which
@@ -528,7 +528,7 @@ Reconcile
 ~~~~~~~~~
 
 The signed artifact and the TPM measurement cover the class policy, not
-a fixed device inventory, so the devices an upatch runs on change after
+a fixed device inventory, so the devices a upatch runs on change after
 its load. :doc:`/reference/cli/upatch-reconcile` repeats the discovery
 of load and restore later: it attaches a loaded upatch to any selected
 device it does not run on yet and removes the pin of a link whose device

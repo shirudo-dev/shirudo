@@ -5,7 +5,7 @@
 Memory consistency
 ==================
 
-An upatch's programs run on every CPU at once. A hook on one CPU fills a
+A upatch's programs run on every CPU at once. A hook on one CPU fills a
 record in an arena while a hook on another CPU looks up the same key, and
 the serializer reads a table that hooks may still write to. Each of them
 sees the others' stores in an order the CPU chooses, which need not be
@@ -15,7 +15,7 @@ x86-64 keeps stores in program order and lets only a later load pass an
 earlier store, so code that lacks a barrier mostly works there. arm64 and
 riscv64 reorder far more. On them the same code can let a reader see a
 published index before the record it points to. A test on an x86-64
-build host therefore says little about the targets that run an upatch on
+build host therefore says little about the targets that run a upatch on
 arm64 or riscv64.
 
 BPF gives a program three ways to order its accesses. The atomics that

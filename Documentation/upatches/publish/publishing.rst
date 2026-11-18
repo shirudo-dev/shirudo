@@ -11,7 +11,7 @@ Publish a package
 Publishing makes a package reachable for targets in two ways. ``bpm
 push`` puts it into an OCI repository and adds it to the registry's
 signed index, for targets that install packages by name. ``bpm tree
-append`` adds its tree entries to an upatch tree, for targets that follow
+append`` adds its tree entries to a upatch tree, for targets that follow
 the tree without naming anything. The registry only transports: targets
 verify the operator's signatures on the index, the tree and every upatch.
 

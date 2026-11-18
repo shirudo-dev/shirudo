@@ -108,7 +108,7 @@ Options
    * - ``--expect``
      - ``<name>=<digest>``
      - An archived upatch by name and payload digest. Repeatable. The
-       name is one an upatch can have, see
+       name is one a upatch can have, see
        :doc:`/concepts/upatches-and-packages`, and comes once. Needs
        ``--cert``.
    * - ``--tree-root``

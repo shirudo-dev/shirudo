@@ -11,7 +11,7 @@ FAQ
 Short answers to the questions newcomers ask most, each with the page
 that explains it.
 
-What is an upatch?
+What is a upatch?
 ------------------
 
 A signed BPF program that shirudo loads into the running kernel without a
@@ -27,7 +27,7 @@ See :doc:`/reference/versions` and :doc:`/contribute/arch-support`.
 Does shirudo replace kernel updates?
 ------------------------------------
 
-No. An upatch covers the time until the machine runs a kernel with the
+No. A upatch covers the time until the machine runs a kernel with the
 fix. :doc:`/start/what-is-shirudo` describes what shirudo does and does
 not do.
 
@@ -100,10 +100,10 @@ No. shirudo signs with ML-DSA-87 only, a post-quantum algorithm, and
 the signing code refuses any other key. Create the key with
 ``shirudo genkey``, as :doc:`/operate/maintain/keys` describes.
 
-Do I need to know BPF to write an upatch?
+Do I need to know BPF to write a upatch?
 -----------------------------------------
 
-An upatch is plain BPF C. :doc:`/start/guides/first-upatch` writes one
+A upatch is plain BPF C. :doc:`/start/guides/first-upatch` writes one
 from scratch, and :doc:`/upatches/learn/kernel-fix-tutorial` takes a real
 kernel fix to a published package.
 
@@ -119,7 +119,7 @@ How much does shirudo cost on a target, and how far does it scale?
 
 :doc:`/operate/plan/overhead` gives the files, memory, CPU time and
 network traffic of one target, and :doc:`/operate/plan/scalability` how
-the registry load grows with a fleet and where a target and an upatch
+the registry load grows with a fleet and where a target and a upatch
 reach their limits.
 
 Is there a talk that introduces shirudo?

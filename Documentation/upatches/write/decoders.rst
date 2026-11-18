@@ -17,7 +17,7 @@ This page shows how to declare one, write it, check it and run it.
 Before you begin
 ----------------
 
-- An upatch source with the map to export, and the layout of that map:
+- A upatch source with the map to export, and the layout of that map:
   the records its serializer writes, or its key and value types.
   :doc:`/upatches/write/maps-arenas-serializers` covers serializers.
 - The test VM or another target to run the decoder on, as

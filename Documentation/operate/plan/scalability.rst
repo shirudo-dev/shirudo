@@ -40,7 +40,7 @@ Registry requests
        and signature, in full. A target that is behind the segment the
        reference names also fetches each sealed segment back to the one
        its last applied operation lies in, twice: once on the walk back,
-       once to apply it. An upatch the tree adds is fetched once,
+       once to apply it. A upatch the tree adds is fetched once,
        manifest and blob, and cached by its layer digest.
    * - ``bpm upgrade``
      - Nothing until the cached index lists a newer version of an

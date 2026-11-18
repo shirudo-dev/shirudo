@@ -1,6 +1,6 @@
 ---
 name: upatch
-description: Write, build, sign, inspect and package a shirudo upatch. Covers the BPF C program written for the target kernels' preemption model and at a low cost on machines large and small, `shirudo build` for a .upatch and its unload directive, the Beefile and `shirudo bpm build` for a .bee package, `bpm info` to inspect one, `bpm push` and `bpm tree append` to publish, `bpm tree show` to read a publication back, and loading it on a test target. Use when asked to create, change or ship an upatch or a bpm package, or to reproduce a failed upatch build or load.
+description: Write, build, sign, inspect and package a shirudo upatch. Covers the BPF C program written for the target kernels' preemption model and at a low cost on machines large and small, `shirudo build` for a .upatch and its unload directive, the Beefile and `shirudo bpm build` for a .bee package, `bpm info` to inspect one, `bpm push` and `bpm tree append` to publish, `bpm tree show` to read a publication back, and loading it on a test target. Use when asked to create, change or ship a upatch or a bpm package, or to reproduce a failed upatch build or load.
 ---
 
 # Upatch
@@ -56,7 +56,7 @@ it before writing code that shares state:
 
 ## Keep its cost low
 
-An upatch runs on every event of its hooks, on servers with hundreds of
+A upatch runs on every event of its hooks, on servers with hundreds of
 CPUs and on embedded devices with little memory, and shirudo bounds
 neither how often its programs run nor how large its maps are
 (`Documentation/operate/plan/overhead.rst`). Make each run cheap:

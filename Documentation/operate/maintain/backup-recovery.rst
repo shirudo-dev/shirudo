@@ -273,7 +273,7 @@ same way. These do not work:
   it.
 
 For an XDP device, undo the setting or remove the device, and reboot. A
-device that cannot take XDP needs an upatch signed with a class mask
+device that cannot take XDP needs a upatch signed with a class mask
 that leaves it out. Otherwise remove the upatch from a boot on which it
 loads:
 
@@ -293,7 +293,7 @@ loads:
 
 #. Remove the upatch. Uninstall its package with
    ``shirudo bpm uninstall <package>``, unload it with its unload
-   directive (:doc:`/reference/cli/upatch-unload`), or, for an upatch
+   directive (:doc:`/reference/cli/upatch-unload`), or, for a upatch
    from the tree, publish a ``delete`` operation and let the tree sync
    apply it.
 
@@ -420,6 +420,6 @@ Next steps
 - :doc:`/operate/troubleshoot/troubleshooting` for messages by symptom
 - :doc:`/operate/troubleshoot/incident-tampered` when ``status`` reports
   ``tampered``
-- :doc:`/operate/maintain/upgrade` to change the kernel without stranding an
+- :doc:`/operate/maintain/upgrade` to change the kernel without stranding a
   upatch
 - :doc:`/reference/files` for every file shirudo keeps

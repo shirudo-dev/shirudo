@@ -255,7 +255,7 @@ Check enforcement
    Root without runtime authority cannot open shirudo's maps and links.
    The next status report counts the attempt under ``ObjGet``.
 
-Build and sign an upatch
+Build and sign a upatch
 ------------------------
 
 The test VM's bundle generated an ML-DSA-87 key pair for this VM, and the
@@ -575,8 +575,8 @@ them.
 Next steps
 ----------
 
-- :doc:`guides/first-upatch` writes an upatch of your own.
-- :doc:`guides/publish-package` ships an upatch through an OCI registry.
+- :doc:`guides/first-upatch` writes a upatch of your own.
+- :doc:`guides/publish-package` ships a upatch through an OCI registry.
 - :doc:`guides/attest-target` enrolls the target's TPM and verifies its
   evidence.
 - :doc:`how-it-works` explains each step of this page.

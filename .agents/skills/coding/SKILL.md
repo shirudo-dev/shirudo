@@ -314,7 +314,7 @@ already, or should. The basics:
 |---|---|
 | Parse a number | `parse_u64()`, `parse_s64()`, `parse_x64()`, `digits()` (`<shirudo/string.h>`) |
 | Copy or format a string | `strscpy()`, `strsprintf()`, `vstrsprintf()`, and check `-E2BIG` |
-| An upatch's pin directory or a pin in it | `upatch_pin_path()` (`util/paths.h`) |
+| A upatch's pin directory or a pin in it | `upatch_pin_path()` (`util/paths.h`) |
 | A string's prefix, or a span that must be one literal | `str_has_prefix()` to test a prefix, `str_skip_prefix()` to step past it, `span_equals()` for a span of known length (`<shirudo/string.h>`); never `strncmp()` with a length counted by hand |
 | A file name's extension | `name_has_suffix()` (`<shirudo/string.h>`), `upatch_select()` for a scandir of upatches |
 | Text from outside on a terminal | `text_sanitize()`; UTF-8 with `utf8_width()` |

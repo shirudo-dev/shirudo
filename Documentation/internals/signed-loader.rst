@@ -270,7 +270,7 @@ as a light skeleton in a module. shirudo admits those as it admits a
 loader's calls. A signed loader can issue every command
 ``bpf_sys_bpf()`` allows, ``BPF_MAP_GET_FD_BY_ID`` and
 ``BPF_LINK_CREATE`` among them, and the guards do not limit what it does
-with them: an upatch does what its signer wrote.
+with them: a upatch does what its signer wrote.
 
 The two enforcement objects are loaded without a signature from the
 authenticated initrd; their trust comes from the boot chain. Pins keep

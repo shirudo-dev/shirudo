@@ -8,7 +8,7 @@
 Publish and install a package
 =============================
 
-In this tutorial you put an upatch into a package, publish the package to
+In this tutorial you put a upatch into a package, publish the package to
 an OCI registry on your host and install it on the test target from
 there. Targets always pull: the operator publishes to a registry, and the
 target fetches, checks and loads.
@@ -49,7 +49,7 @@ Start a registry
 Build the package
 -----------------
 
-1. Make a package directory with an upatch in it:
+1. Make a package directory with a upatch in it:
 
    .. code-block:: console
 

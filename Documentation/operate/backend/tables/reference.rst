@@ -91,7 +91,7 @@ shirudo.tree_pubs
    :reference: hundreds of rows, negligible
    :bytes: 100000
 
-   One row per publication of an upatch tree. A publication is a segment of
+   One row per publication of a upatch tree. A publication is a segment of
    the tree holding the operations past segment_base_seq. Gives each tree's
    head for check 5 and the time a node's stuck clock starts.
 
@@ -133,7 +133,7 @@ shirudo.tree_ops
 
    :tree_id: Tree name.
    :seq: Position in the tree, from 1.
-   :op: Load or remove an upatch.
+   :op: Load or remove a upatch.
    :id: Upatch id the operation acts on.
    :selector: Which nodes it targets, as JSON. Read with JSONExtract for display.
    :repository: OCI repository of the payload.

@@ -5,7 +5,7 @@
 Learn
 =====
 
-What an upatch is and how it reaches a target, one upatch taken from a
+What a upatch is and how it reaches a target, one upatch taken from a
 real kernel fix to a published package, and the example packages in the
 tree.
 

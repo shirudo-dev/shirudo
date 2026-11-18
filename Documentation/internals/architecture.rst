@@ -178,7 +178,7 @@ shirudo has no push transport and no fleet state.
 Where to read more
 ------------------
 
-- :doc:`signed-loader` explains how a signed loader installs an upatch,
+- :doc:`signed-loader` explains how a signed loader installs a upatch,
   and why a userspace check could not.
 - :doc:`enforcement` lists every LSM hook, what it refuses and in which
   order ``init`` attaches them.

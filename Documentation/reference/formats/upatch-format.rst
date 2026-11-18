@@ -858,7 +858,7 @@ Limits
      - 16 KiB (writer), 64 KiB (kernel)
    * - Signed sections
      - 1 to 8
-   * - Name of an upatch
+   * - Name of a upatch
      - 255 characters of ``[A-Za-z0-9._-]``, each ``.`` counting as two,
        not starting with ``.``
    * - ``kprobe``, ``kretprobe``, ``uprobe``, ``uretprobe``,

@@ -210,7 +210,7 @@ upatch name, the tree ``seq`` and ``operation_digest``, or the
 certificate's ``cert_sha256``. A tree operation's ``op`` and ``id`` and
 a key's ``fingerprint`` are not shown, as verify cannot tie them to the
 digest. Evidence with a record ``type`` other than lowercase letters and
-``_``, or an upatch record without a valid upatch name, is no evidence
+``_``, or a upatch record without a valid upatch name, is no evidence
 document.
 
 .. list-table::
@@ -280,7 +280,7 @@ A refusal is ``tampered`` for a load or an unload and an ``ALERT`` of
 ``UpatchesMeasured`` in ``status``. An ``init`` record starts the set
 over with its ``set``, and an ``upatch_load`` or ``upatch_unload``
 record adds or removes its upatch.
-Only an ``init`` record's ``set`` counts. Lean 4 proves the fold holds an
+Only an ``init`` record's ``set`` counts. Lean 4 proves the fold holds a
 upatch exactly when the last record that bears on it, an ``init`` record
 or a load or unload of it, leaves it loaded: its load, or an ``init``
 record whose ``set`` lists it, with that payload.

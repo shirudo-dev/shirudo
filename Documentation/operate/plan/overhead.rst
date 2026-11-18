@@ -436,11 +436,11 @@ Disk writes
 upatches
 --------
 
-An upatch costs the target in two ways: a fixed cost that shirudo adds
+A upatch costs the target in two ways: a fixed cost that shirudo adds
 for every upatch, whatever it does, and the cost of its own programs and
-maps. shirudo limits neither how many programs and maps an upatch brings
+maps. shirudo limits neither how many programs and maps a upatch brings
 nor how often the kernel runs them. The verifier bounds a single program
-run, not the work an upatch does on a hook that fires for every open or
+run, not the work a upatch does on a hook that fires for every open or
 exec, nor the size of its maps. A badly written upatch can slow the
 target down or use much of its memory.
 
@@ -454,10 +454,10 @@ Per-upatch baseline
    * - Item
      - Cost
    * - Signed file
-     - 8.4 KiB for an upatch with one small program, 4,627 B of it the
+     - 8.4 KiB for a upatch with one small program, 4,627 B of it the
        ML-DSA-87 signature. An unload directive is 9.1 KiB.
    * - Copies on disk
-     - One in ``/var/lib/shirudo/upatches``. An upatch from a package also
+     - One in ``/var/lib/shirudo/upatches``. A upatch from a package also
        stays in the package archive and its unpacked directory, and an
        upgrade keeps those of the previous version until
        ``bpm uninstall``.
@@ -478,7 +478,7 @@ Per-upatch baseline
        endpoint configured, sends one request per map. ``status`` reports
        the upatch.
 
-Programs and maps of an upatch
+Programs and maps of a upatch
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - Its programs run on every event of their hooks. Their time adds to the
@@ -492,7 +492,7 @@ Programs and maps of an upatch
 - Serializer programs and Lua decoders run at every export, every 5 s.
   The Lua limits above bound a decoder.
 
-:doc:`/upatches/write/maps-arenas-serializers` explains how an upatch keeps
+:doc:`/upatches/write/maps-arenas-serializers` explains how a upatch keeps
 records in an arena.
 
 kernel-obs example

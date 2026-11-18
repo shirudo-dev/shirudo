@@ -181,7 +181,7 @@ a layout difference into a load failure.
 State in BPF arenas
 -------------------
 
-An upatch that accumulates records keeps them in one
+A upatch that accumulates records keeps them in one
 ``BPF_MAP_TYPE_ARENA`` map and ships a ``shirudo_serialize__<map>``
 program that walks them. Hash and array maps hold only what cannot live
 in an arena: task, socket and per-CPU scratch state, keys the kernel

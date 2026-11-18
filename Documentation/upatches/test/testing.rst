@@ -5,10 +5,10 @@
 :page-type: How-to
 :audience: upatch authors
 
-Test an upatch on a target
+Test a upatch on a target
 ==========================
 
-Load an upatch on a real target before it ships, read what it records,
+Load a upatch on a real target before it ships, read what it records,
 and unload it again. The test VM in a shirudo checkout is such a target:
 it boots the dm-verity runtime image and a signed config image from a
 dracut initrd, with a software TPM, and runs ``shirudo init`` there as a
@@ -21,7 +21,7 @@ Before you begin
 - A shirudo checkout built with ``make`` and ``make shirudo-build``
 - A Linux host with KVM, root, and the host packages the test VM needs,
   listed in :doc:`/contribute/testing/testing`
-- An upatch and its unload directive, built as in
+- A upatch and its unload directive, built as in
   :doc:`/upatches/learn/kernel-fix-tutorial`, or one of the signed fixtures
   below
 

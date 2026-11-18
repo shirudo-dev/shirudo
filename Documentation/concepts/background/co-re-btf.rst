@@ -138,7 +138,7 @@ kernel with BPF signing.
 What a mismatch looks like
 --------------------------
 
-An upatch that touches a field the target kernel lacks fails when the
+A upatch that touches a field the target kernel lacks fails when the
 loader loads the payload. ``shirudo upatch load`` reports category
 ``verifier_rejected`` in phase ``payload_load`` and includes the loader's
 log, where the verifier's message for the payload appears. See
@@ -156,5 +156,5 @@ Limits
 CO-RE matches types and fields by name and layout, not by meaning. A
 field that keeps its name but changes what it holds relocates without
 complaint, and a renamed field fails to relocate even if its meaning is
-unchanged. An upatch built for one kernel release still needs testing on
+unchanged. A upatch built for one kernel release still needs testing on
 every kernel it ships to; see :doc:`/upatches/test/testing`.

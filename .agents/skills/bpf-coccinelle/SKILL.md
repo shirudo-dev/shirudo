@@ -1,6 +1,6 @@
 ---
 name: bpf-coccinelle
-description: Check upatch BPF code with shirudo's Coccinelle rules for concurrency hazards, run them on one file or package outside the tree, read a match, and add a rule for a pattern worth refusing for good. Use while writing or reviewing an upatch's BPF C, when check-coccinelle.sh reports a bpf_ rule, or when a hazard keeps coming back and should get a rule.
+description: Check upatch BPF code with shirudo's Coccinelle rules for concurrency hazards, run them on one file or package outside the tree, read a match, and add a rule for a pattern worth refusing for good. Use while writing or reviewing a upatch's BPF C, when check-coccinelle.sh reports a bpf_ rule, or when a hazard keeps coming back and should get a rule.
 ---
 
 # Coccinelle for upatch BPF code
@@ -29,7 +29,7 @@ On the tree, from the checkout root, by rule name:
 	bpf_cas_unchecked bpf_publish bpf_user_double_fetch bpf_map_use_after_delete
 ```
 
-On a file the tree does not track, such as an upatch under development,
+On a file the tree does not track, such as a upatch under development,
 run spatch from the checkout root, where the `#spatch` line of each rule
 finds `testing/coccinelle/bpf.macros`:
 

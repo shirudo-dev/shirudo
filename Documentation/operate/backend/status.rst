@@ -336,7 +336,7 @@ what each node's records said while it could: ``shirudo.node_ops`` has a
 row for every node, tree and operation the backend has seen the node
 reach, and ``shirudo.node_sets`` what that leaves loaded. Check 4 holds
 every record against them, check 6 a record whose ``base_seq`` is above
-0, and ``node_vulns`` an upatch whose newest operation is below the
+0, and ``node_vulns`` a upatch whose newest operation is below the
 window.
 
 ``shirudo.node_ops``:
