@@ -83,7 +83,7 @@ stops.
 Defense in depth
 ----------------
 
-shirudo is one layer of a target's defense, not all of it. It decides
+shirudo is only one layer of a target's defense. It decides
 which BPF runs and records every change, and it trusts the kernel it
 runs on for everything else. A kernel bug that gives an attacker code
 execution or arbitrary writes in the kernel potentially bypasses every
