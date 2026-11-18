@@ -329,4 +329,10 @@ cd "$packer_dir"
 packer init .
 packer build \
 	-var "iam_instance_profile=$profile_name" \
-	"${packer_args[@]}"
+	"${packer_args[@]}" |
+	awk '
+		/^--> .*: AMIs were created:$/ { skip_artifact=1; next }
+		skip_artifact && NF == 0 { skip_artifact=0; next }
+		skip_artifact { next }
+		{ print }
+	'

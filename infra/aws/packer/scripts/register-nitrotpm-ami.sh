@@ -38,6 +38,19 @@ image_field() {
     --output text
 }
 
+verify_and_print_nitrotpm_ami() {
+  local image_id="$1"
+  local tpm_support
+
+  tpm_support="$(image_field "$image_id" 'Images[0].TpmSupport')"
+  if [[ "$tpm_support" != v2.0 ]]; then
+    echo "Registered AMI ${image_id} has TpmSupport=${tpm_support}, expected v2.0" >&2
+    return 1
+  fi
+
+  printf 'Deployable target AMI for Terraform: %s\n' "$image_id"
+}
+
 require_command aws
 
 if [[ ! -r "$PACKER_MANIFEST_PATH" ]]; then
@@ -95,6 +108,7 @@ if [[ -n "$existing_tpm_ami_id" && "$existing_tpm_ami_id" != "None" ]]; then
     --resources "$existing_tpm_ami_id" \
     --tags "Key=ShirudoRole,Value=${SHIRUDO_IMAGE_ROLE}"
   echo "NitroTPM AMI already exists: ${existing_tpm_ami_id} (${tpm_ami_name})"
+  verify_and_print_nitrotpm_ami "$existing_tpm_ami_id"
   exit 0
 fi
 
@@ -147,3 +161,4 @@ aws ec2 describe-images \
   --image-ids "$tpm_ami_id" \
   --query 'Images[0].{ImageId:ImageId,Name:Name,BootMode:BootMode,TpmSupport:TpmSupport}' \
   --output table
+verify_and_print_nitrotpm_ami "$tpm_ami_id"
