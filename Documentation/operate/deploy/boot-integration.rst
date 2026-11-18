@@ -519,8 +519,8 @@ Boot and verify
         none
 
       Loaded upatches (1):
-        NAME                      LOCATION                       MAPS  STATUS                        AGE
-        shirudo-test-basic        fentry/do_nanosleep               0  success                       1s
+        NAME                      LOCATION                       MAPS  MISSED  STATUS                        AGE
+        shirudo-test-basic        fentry/do_nanosleep               0       0  success                       1s
 
       Folded: keyrings, TPM measurement, assets (--show-full)
 

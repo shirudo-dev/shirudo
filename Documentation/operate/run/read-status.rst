@@ -62,8 +62,8 @@ Print the report
         none
 
       Loaded upatches (1):
-        NAME                      LOCATION                       MAPS  STATUS                        AGE
-        shirudo-test-basic        fentry/do_nanosleep               0  success                       1s
+        NAME                      LOCATION                       MAPS  MISSED  STATUS                        AGE
+        shirudo-test-basic        fentry/do_nanosleep               0       0  success                       1s
 
       Folded: keyrings, TPM measurement, assets (--show-full)
 
@@ -117,8 +117,8 @@ line; a section unfolds on its own when its condition is not ``OK``.
      none
 
    Loaded upatches (1):
-     NAME                      LOCATION                       MAPS  STATUS                        AGE
-     shirudo-test-basic        fentry/do_nanosleep               0  success                       1s
+     NAME                      LOCATION                       MAPS  MISSED  STATUS                        AGE
+     shirudo-test-basic        fentry/do_nanosleep               0       0  success                       1s
 
    Keyring (.bpf):
      Serial:                272801410
@@ -421,9 +421,15 @@ Loaded upatches
 ~~~~~~~~~~~~~~~
 
 One row per upatch pinned in the private bpffs: its name, the attach
-location resolved from kernel BTF, its number of maps, ``success`` and
-the time since it was loaded. A loaded Java agent follows them with the
-location ``java`` and no maps. ``Loaded upatches (0):`` followed by
+location resolved from kernel BTF, its number of maps, the runs of its
+programs the kernel skipped, ``success`` and the time since it was
+loaded. ``MISSED`` is ``-`` for an upatch of no attach kind the kernel
+counts skipped runs of, such as ``lsm``, ``xdp`` or a uprobe, and ``?``
+when they cannot be read. A count that grows means the upatch misses
+events it is meant to see; :ref:`runs-the-kernel-skips` says when that
+happens, and ``shirudo upatch get`` splits the count by program. A
+loaded Java agent follows them with the location ``java``, no maps and
+``-`` for ``MISSED``. ``Loaded upatches (0):`` followed by
 ``none`` means nothing is loaded.
 
 TPM measurement

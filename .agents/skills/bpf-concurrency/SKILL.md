@@ -57,7 +57,10 @@ The kernel skips `kprobe` and `kretprobe` runs while another runs on the
 CPU or the CPU is in a `bpf()` map call, nested `fentry`, `fexit`,
 `fmod_ret` and `tp_btf` runs, `kretprobe` returns beyond its
 instances and `uretprobe` and `uretprobe.multi` returns beyond the
-task's 64, so a detector can miss what it looks for. Refuse an
+task's 64, so a detector can miss what it looks for; on a target,
+`shirudo status` (`MISSED`, `missed_runs`) and `shirudo upatch get`
+show the skips the kernel counts, and `-` or `null` for the uprobe
+kinds, whose skips it does not count. Refuse an
 operation in an `lsm` program, never in `fmod_ret`: a skipped
 `fmod_ret` run lets the call through, and a task can arrange the skip.
 An `lsm` program does not see what an LSM before it refused, and its

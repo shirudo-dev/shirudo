@@ -15,18 +15,22 @@ shows any of it. This page lists what the kernel does that a upatch has
 to plan for, for the attach kinds ``shirudo build`` accepts.
 :doc:`memory-consistency/hazards` covers the runs that interleave.
 
+.. _runs-the-kernel-skips:
+
 Runs the kernel skips
 ---------------------
 
-The kernel skips some runs of a program and counts them only in the
-program's ``recursion_misses``, which ``struct bpf_prog_info`` reports:
+The kernel skips some runs of a program. It counts most in the program's
+``recursion_misses``, which ``struct bpf_prog_info`` reports, and some in
+the link, which ``struct bpf_link_info`` reports:
 
 - A ``kprobe``, ``kretprobe``, ``kprobe.multi`` or ``kretprobe.multi``
   run, while another program of these four kinds runs on the CPU, and
   while the CPU is in a ``bpf()`` call that looks up, updates or deletes
   a map element from userspace, as shirudo makes when it reads a
   upatch's maps. A ``kprobe`` hit inside the handler of another
-  ``kprobe`` is missed by the kprobe itself.
+  ``kprobe`` is missed by the kprobe itself, and counted in the link's
+  ``perf_event.kprobe.missed``.
 - A ``kprobe.multi`` or ``kretprobe.multi`` hit while ftrace already
   traces a function in the same context on the CPU, such as a watched
   function the program calls itself, and the return of a function a
@@ -39,7 +43,8 @@ program's ``recursion_misses``, which ``struct bpf_prog_info`` reports:
   with preemptible RCU, or one an NMI interrupted.
 - The return of a function a ``kretprobe`` watches, when more calls of
   it are in flight than the probe has instances for: the larger of 10
-  and twice the number of CPUs.
+  and twice the number of CPUs. The link's ``perf_event.kprobe.missed``
+  counts it.
 - The return of a function a ``uretprobe``, a ``uretprobe.multi`` or
   their ``.s`` forms watch, when the task already waits on the returns of
   64 calls that return probes watch, and the return of a function that
@@ -47,8 +52,15 @@ program's ``recursion_misses``, which ``struct bpf_prog_info`` reports:
   case, rate-limited, and counts neither.
 
 A detector built on these kinds can therefore miss the event it looks
-for, and a count it keeps is a lower bound. ``lsm`` and ``xdp`` programs
-are never skipped.
+for, and a count it keeps is a lower bound. ``lsm``, ``xdp``,
+``cgroup_skb`` and ``netfilter`` programs are never skipped.
+
+``shirudo status`` shows, in its ``MISSED`` column and ``missed_runs``,
+the sum of what the kernel counts for each upatch: every program's
+``recursion_misses`` and every kprobe link's own counter, and ``shirudo
+upatch get`` shows it per program. For a uprobe kind it shows ``-`` and
+``null``, as the kernel counts none of the runs it skips, and the sum
+leaves out what the kernel does not count for the others either.
 
 Enforce in lsm programs
 -----------------------

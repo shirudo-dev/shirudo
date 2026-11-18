@@ -30,6 +30,12 @@ Description
   ``fentry/do_nanosleep``.
 - the program ID, the load time and the payload digest recorded on the
   pin.
+- ``Missed runs``: the runs of its programs the kernel skipped since the
+  load, summed over every link of a kind that counts them, with one line
+  per program when more than one does. ``not counted for this attach
+  kind`` for an upatch of none of them, ``unavailable`` when a link or
+  program cannot be read. :ref:`runs-the-kernel-skips` says which kinds
+  count and what.
 - the source lines from the program's BTF line info, which the signed
   loader installed. They are exact but cover only the lines the compiler
   kept.
@@ -55,7 +61,10 @@ Options
      - off
      - Print one JSON object: ``schema`` and ``upatch`` with ``name``,
        ``location``, ``prog_id``, ``loaded_at``, ``age``,
-       ``payload_sha256``, ``source`` and ``maps``.
+       ``payload_sha256``, ``missed_runs`` (the total, or ``null`` when
+       no program counts them or they cannot be read), ``programs`` (one
+       object per counted program, with its ``location`` and
+       ``missed_runs``), ``source`` and ``maps``.
    * - ``--show-full``
      - none
      - off
@@ -94,6 +103,7 @@ Describe a loaded upatch:
    Program ID:            72
    Loaded at:             2026-11-03T14:54:33Z  (1s ago)
    Payload sha256:        8aee7072a1a15e4dddc93ad6b253a0e2e70ad6cdf767442aa8a1c1997bc3069f  (signature-bound)
+   Missed runs:           0
    Maps:                  none
 
    Source (kernel BTF line_info):

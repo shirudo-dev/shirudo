@@ -481,6 +481,11 @@ upatches_loaded
    * - ``n_maps``
      - integer
      - Maps pinned for the upatch.
+   * - ``missed_runs``
+     - integer or ``null``
+     - Runs of the upatch's programs the kernel skipped since the load,
+       a lower bound. ``null`` for an upatch of no attach kind that
+       counts them, or when they cannot be read.
    * - ``loaded_at``
      - string
      - Change time of the upatch's pin directory, or of a Java agent's
@@ -917,6 +922,7 @@ indented here:
          "location": "fentry/do_nanosleep",
          "status": "success",
          "n_maps": 0,
+         "missed_runs": 0,
          "loaded_at": "2026-11-03T14:54:33Z",
          "age_sec": 1,
          "payload_sha256": "8aee7072a1a15e4dddc93ad6b253a0e2e70ad6cdf767442aa8a1c1997bc3069f"
