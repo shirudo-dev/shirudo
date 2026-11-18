@@ -56,7 +56,7 @@ Start with :doc:`/operate/integrations/index` and
 Embedded and edge device makers
 -------------------------------
 
-Devices that stay in the field for years, are hard to patch and reboot
+Devices that stay in the field for years are hard to patch and reboot
 rarely. A device gets upatches the same way a server does, pulled on a
 timer from a registry.
 
