@@ -359,6 +359,11 @@ bool upatch_link_counts_misses(const struct bpf_link_info *info)
 		return true;
 	case BPF_LINK_TYPE_PERF_EVENT:
 		return link_is_kprobe(info);
+	case BPF_LINK_TYPE_TRACING:
+		/* The kernel runs an lsm program without its recursion check. */
+		return info->tracing.attach_type == BPF_TRACE_FENTRY ||
+		       info->tracing.attach_type == BPF_TRACE_FEXIT ||
+		       info->tracing.attach_type == BPF_MODIFY_RETURN;
 	default:
 		return false;
 	}
