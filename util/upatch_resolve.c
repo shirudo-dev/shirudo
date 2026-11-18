@@ -345,11 +345,20 @@ int upatch_resolve_location(struct btf *vbtf, const char *name,
 	return ret;
 }
 
+static bool link_is_kprobe(const struct bpf_link_info *info)
+{
+	return info->type == BPF_LINK_TYPE_PERF_EVENT &&
+	       (info->perf_event.type == BPF_PERF_EVENT_KPROBE ||
+		info->perf_event.type == BPF_PERF_EVENT_KRETPROBE);
+}
+
 bool upatch_link_counts_misses(const struct bpf_link_info *info)
 {
 	switch (info->type) {
 	case BPF_LINK_TYPE_KPROBE_MULTI:
 		return true;
+	case BPF_LINK_TYPE_PERF_EVENT:
+		return link_is_kprobe(info);
 	default:
 		return false;
 	}
@@ -359,6 +368,8 @@ __u64 upatch_link_missed(const struct bpf_link_info *info)
 {
 	if (info->type == BPF_LINK_TYPE_KPROBE_MULTI)
 		return info->kprobe_multi.missed;
+	if (link_is_kprobe(info))
+		return info->perf_event.kprobe.missed;
 	return 0;
 }
 

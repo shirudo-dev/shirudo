@@ -43,7 +43,7 @@ int upatch_resolve_location(struct btf *vbtf, const char *name,
 
 /*
  * The runs the kernel skipped of one program of an upatch: the program's
- * recursion_misses and what its kprobe multi link counts itself.
+ * recursion_misses and what its kprobe or kprobe multi link counts itself.
  */
 struct upatch_link_misses {
 	char	location[UPATCH_LOCATION_MAX];	/* "" when it cannot be named */
@@ -52,8 +52,8 @@ struct upatch_link_misses {
 
 /*
  * Whether the runs the kernel skips of the program behind this link are
- * reported: kprobe.multi and kretprobe.multi. The kernel skips no lsm,
- * xdp, cgroup_skb or netfilter run, and counts none it skips of the
+ * reported: kprobe, kretprobe and their multi forms. The kernel skips no
+ * lsm, xdp, cgroup_skb or netfilter run, and counts none it skips of the
  * uprobe kinds.
  */
 bool upatch_link_counts_misses(const struct bpf_link_info *info);
