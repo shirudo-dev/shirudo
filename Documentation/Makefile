@@ -38,7 +38,7 @@ RUN_AS_USER = $(if $(filter true,$(if $(findstring podman,$(notdir $(CONTAINER))
 RUN_BUILD = $(CONTAINER) run --rm --network=none --read-only --tmpfs /tmp \
 	$(RUN_AS_USER) -e DOCS_LASTCHANGE=/out/lastchange.txt \
 	-v "$(ROOT):/src:ro" -v "$(OUT):/out" $(IMAGE)
-RUN_SERVE = $(CONTAINER) run --rm --init --read-only --cap-drop=ALL \
+RUN_SERVE = $(CONTAINER) run --rm --read-only --cap-drop=ALL \
 	--security-opt=no-new-privileges --user 65534:65534 \
 	-p "$(DOCS_BIND):$(DOCS_PORT):8000" -v "$(OUT)/html:/srv:ro" $(IMAGE)
 
