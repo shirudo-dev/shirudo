@@ -259,8 +259,10 @@ static int prog_info_by_id(__u32 prog_id, struct bpf_prog_info *info)
 	return ret;
 }
 
-static int link_location(struct btf *vbtf, int link_fd, const struct bpf_link_info *linfo,
-			 char *out, size_t cap)
+/* pinfo is the program's info when the caller has read it already. */
+static int link_location(struct btf *vbtf, int link_fd,
+			 const struct bpf_link_info *linfo,
+			 const struct bpf_prog_info *pinfo, char *out, size_t cap)
 {
 	struct bpf_prog_info info = {};
 	const char *attach_name = NULL;
@@ -287,27 +289,30 @@ static int link_location(struct btf *vbtf, int link_fd, const struct bpf_link_in
 		return 0;
 	}
 
-	ret = prog_info_by_id(linfo->prog_id, &info);
-	if (ret)
-		return ret;
+	if (!pinfo) {
+		ret = prog_info_by_id(linfo->prog_id, &info);
+		if (ret)
+			return ret;
+		pinfo = &info;
+	}
 
-	if (vbtf && info.attach_btf_id &&
-	    info.attach_btf_id < btf__type_cnt(vbtf)) {
+	if (vbtf && pinfo->attach_btf_id &&
+	    pinfo->attach_btf_id < btf__type_cnt(vbtf)) {
 		const struct btf_type *t = btf__type_by_id(vbtf,
-							   info.attach_btf_id);
+							   pinfo->attach_btf_id);
 
 		if (t)
 			attach_name = btf__name_by_offset(vbtf, t->name_off);
 	}
 
-	prefix = loc_prefix(info.type, attach_type);
+	prefix = loc_prefix(pinfo->type, attach_type);
 	if (!prefix)
-		prefix = libbpf_bpf_prog_type_str(info.type);
+		prefix = libbpf_bpf_prog_type_str(pinfo->type);
 	if (!prefix)
 		prefix = "?";
 
 	/* Strip the bpf_lsm_ prefix the kernel mangles LSM hooks with. */
-	if (info.type == BPF_PROG_TYPE_LSM && attach_name)
+	if (pinfo->type == BPF_PROG_TYPE_LSM && attach_name)
 		attach_name += str_has_prefix(attach_name, "bpf_lsm_");
 
 	if (attach_name && *attach_name)
@@ -335,7 +340,7 @@ int upatch_resolve_location(struct btf *vbtf, const char *name,
 	if (!ret && !linfo.prog_id)
 		ret = -EINVAL;
 	if (!ret)
-		ret = link_location(vbtf, link_fd, &linfo, out, cap);
+		ret = link_location(vbtf, link_fd, &linfo, NULL, out, cap);
 	close(link_fd);
 	return ret;
 }
