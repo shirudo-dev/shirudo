@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       kernel_run_id:
-        description: Optional override; defaults to kernel run 44204524366
+        description: Optional override; defaults to kernel run 44265283830
         required: false
         type: string
 
@@ -55,7 +55,7 @@ jobs:
             esac
             run_id="$REQUESTED_RUN_ID"
           else
-            run_id=44204524366
+            run_id=44265283830
           fi
           echo "Using kernel package run $run_id"
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
