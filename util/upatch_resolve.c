@@ -363,7 +363,8 @@ __u64 upatch_link_missed(const struct bpf_link_info *info)
 }
 
 /* 1 for a link of a kind whose skipped runs the kernel does not count. */
-static int link_misses(int fd, struct upatch_link_misses *m)
+static int link_misses(struct btf *vbtf, int fd, bool with_location,
+		       struct upatch_link_misses *m)
 {
 	struct bpf_link_info info = {};
 	struct bpf_prog_info prog = {};
@@ -379,12 +380,17 @@ static int link_misses(int fd, struct upatch_link_misses *m)
 	if (ret)
 		return ret;
 	m->missed = prog.recursion_misses + upatch_link_missed(&info);
+	if (with_location &&
+	    link_location(vbtf, fd, &info, &prog, m->location, sizeof(m->location)))
+		m->location[0] = '\0';
 	return 0;
 }
 
 struct misses_walk {
-	int	(*cb)(const struct upatch_link_misses *m, void *ctx);
-	void	*ctx;
+	struct btf	*vbtf;
+	bool		with_location;
+	int		(*cb)(const struct upatch_link_misses *m, void *ctx);
+	void		*ctx;
 };
 
 static int read_link_misses(__u32 index, const char *pin, void *ctx)
@@ -396,7 +402,7 @@ static int read_link_misses(__u32 index, const char *pin, void *ctx)
 	fd = bpf_obj_get(pin);
 	if (fd < 0)
 		return -errno;
-	ret = link_misses(fd, &m);
+	ret = link_misses(w->vbtf, fd, w->with_location, &m);
 	close(fd);
 	if (ret)
 		return min(ret, 0);
@@ -421,6 +427,17 @@ static int walk_link_misses(const char *name, struct misses_walk *w)
 			return ret;
 	}
 	return upatch_each_link(name, read_link_misses, w);
+}
+
+int upatch_each_link_misses(struct btf *vbtf, const char *name,
+			    int (*cb)(const struct upatch_link_misses *m, void *ctx),
+			    void *ctx)
+{
+	struct misses_walk w = {
+		.vbtf = vbtf, .with_location = true, .cb = cb, .ctx = ctx,
+	};
+
+	return walk_link_misses(name, &w);
 }
 
 struct misses_sum {

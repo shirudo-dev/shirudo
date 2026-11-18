@@ -4325,6 +4325,10 @@ struct upatch_get_ctx {
 	char		location[160];
 	char		loaded_at[32];
 	char		payload[65];
+	int		missed_ret;	/* of upatch_each_link_misses() */
+	struct upatch_link_misses *progs;	/* the links it counted */
+	__u32		nr_progs;
+	__u32		progs_cap;
 	struct li_entry	*ents;	/* sorted unique source lines */
 	__u32		n_ents;
 	__u32		n_recs;	/* raw line_info record count, for free() */
@@ -4333,10 +4337,32 @@ struct upatch_get_ctx {
 
 static void upatch_get_ctx_free(struct upatch_get_ctx *c)
 {
+	xfree(c->progs, (size_t)c->progs_cap * sizeof(*c->progs));
+	c->progs = NULL;
+	c->nr_progs = 0;
+	c->progs_cap = 0;
 	xfree(c->ents, (size_t)c->n_recs * sizeof(*c->ents));
 	btf__free(c->btf);
 	c->ents = NULL;
 	c->btf = NULL;
+}
+
+static int keep_link_misses(const struct upatch_link_misses *m, void *ctx)
+{
+	struct upatch_get_ctx *c = ctx;
+	struct upatch_link_misses *grown;
+	__u32 cap;
+
+	if (c->nr_progs == c->progs_cap) {
+		cap = c->progs_cap ? 2 * c->progs_cap : 4;
+		grown = xreallocarray(c->progs, c->progs_cap, cap, sizeof(*grown));
+		if (!grown)
+			return -ENOMEM;
+		c->progs = grown;
+		c->progs_cap = cap;
+	}
+	c->progs[c->nr_progs++] = *m;
+	return 0;
 }
 
 /* Missing line_info is not a failure: the rest of the get still renders. */
@@ -4358,6 +4384,10 @@ static int upatch_get_collect(const char *want, struct upatch_get_ctx *c)
 	c->loaded_at[0] = '\0';
 	c->payload[0] = '\0';
 	c->prog_id = 0;
+	c->missed_ret = 0;
+	c->progs = NULL;
+	c->nr_progs = 0;
+	c->progs_cap = 0;
 
 	ret = upatch_first_prog_id(want, &c->prog_id);
 	if (ret)
@@ -4368,6 +4398,7 @@ static int upatch_get_collect(const char *want, struct upatch_get_ctx *c)
 	vbtf = btf__load_vmlinux_btf();
 	upatch_resolve_location(vbtf, want, c->location,
 				sizeof(c->location));
+	c->missed_ret = upatch_each_link_misses(vbtf, want, keep_link_misses, c);
 	btf__free(vbtf);
 
 	prog_fd = bpf_prog_get_fd_by_id(c->prog_id);
@@ -4441,6 +4472,54 @@ static void render_one_map_text(const char *upatch, const char *map,
 	map_view_free(&v);
 }
 
+static __u64 missed_total(const struct upatch_get_ctx *c)
+{
+	__u64 total = 0;
+	__u32 i;
+
+	for (i = 0; i < c->nr_progs; i++)
+		total += c->progs[i].missed;
+	return total;
+}
+
+/* The total, and each program's share where more than one counts. */
+static void render_missed_text(const struct upatch_get_ctx *c)
+{
+	__u32 i;
+
+	if (c->missed_ret) {
+		printf("%-22s unavailable\n", "Missed runs:");
+		return;
+	}
+	if (!c->nr_progs) {
+		printf("%-22s not counted for this attach kind\n", "Missed runs:");
+		return;
+	}
+	printf("%-22s %llu\n", "Missed runs:", missed_total(c));
+	for (i = 0; c->nr_progs > 1 && i < c->nr_progs; i++)
+		printf("%-22s %s: %llu\n", "",
+		       c->progs[i].location[0] ? c->progs[i].location : "?",
+		       c->progs[i].missed);
+}
+
+static void emit_missed_json(struct json_emit *e, const struct upatch_get_ctx *c)
+{
+	__u32 i;
+
+	if (!c->missed_ret && c->nr_progs)
+		json_kv_u64(e, "missed_runs", missed_total(c));
+	else
+		json_kv_null(e, "missed_runs");
+	json_arr_open(e, "programs");
+	for (i = 0; !c->missed_ret && i < c->nr_progs; i++) {
+		json_obj_open(e);
+		json_kv_string(e, "location", c->progs[i].location);
+		json_kv_u64(e, "missed_runs", c->progs[i].missed);
+		json_obj_close(e);
+	}
+	json_arr_close(e);
+}
+
 static void render_get_text(const struct upatch_get_ctx *c,
 			    const struct map_summary *maps, size_t nm,
 			    __u32 map_cap)
@@ -4462,6 +4541,7 @@ static void render_get_text(const struct upatch_get_ctx *c,
 		       c->payload);
 	else
 		printf("%-22s unavailable\n", "Payload sha256:");
+	render_missed_text(c);
 	printf("%-22s ", "Maps:");
 	if (nm == 0)
 		printf("none");
@@ -4512,6 +4592,7 @@ static int render_get_json(const struct upatch_get_ctx *c,
 		json_kv_string(&e, "payload_sha256", c->payload);
 	else
 		json_kv_null(&e, "payload_sha256");
+	emit_missed_json(&e, c);
 	json_obj_open_key(&e, "source");
 	emit_line_info_json(&e, c->ents, c->n_ents);
 	json_obj_close(&e);

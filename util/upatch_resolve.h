@@ -46,6 +46,7 @@ int upatch_resolve_location(struct btf *vbtf, const char *name,
  * recursion_misses and what its kprobe multi link counts itself.
  */
 struct upatch_link_misses {
+	char	location[UPATCH_LOCATION_MAX];	/* "" when it cannot be named */
 	__u64	missed;
 };
 
@@ -61,10 +62,19 @@ bool upatch_link_counts_misses(const struct bpf_link_info *info);
 __u64 upatch_link_missed(const struct bpf_link_info *info);
 
 /*
- * The sum over the links of name that upatch_link_counts_misses(), with
- * the number of links it counted: 0 for an upatch of no kind the kernel
- * counts, whose missed is then 0 without meaning that nothing was
- * skipped. A link or program that cannot be read fails with its -errno.
+ * Calls cb for each link of name that upatch_link_counts_misses(), and
+ * skips the others; a link or program that cannot be read ends the walk
+ * with its -errno, as does a non-zero return of cb. vbtf names the
+ * location as for upatch_resolve_location().
+ */
+int upatch_each_link_misses(struct btf *vbtf, const char *name,
+			    int (*cb)(const struct upatch_link_misses *m, void *ctx),
+			    void *ctx);
+
+/*
+ * The sum over upatch_each_link_misses(), with the number of links it
+ * counted: 0 for an upatch of no kind the kernel counts, whose missed is
+ * then 0 without meaning that nothing was skipped.
  */
 int upatch_missed_runs(const char *name, __u32 *nr_counted, __u64 *missed);
 
