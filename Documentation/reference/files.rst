@@ -80,7 +80,7 @@ Operator host
      - administrator
      - none
      - Operator settings, such as ``tls.classical_hosts``. See
-       :doc:`/reference/formats/configuration`.
+       :doc:`/reference/configuration`.
 
 Output files the caller names: ``.upatch`` artifacts and ``.vouch``
 files with mode ``0644``, ``.bee`` packages with mode ``0600``.
@@ -132,7 +132,7 @@ the label as foreign. In the initrd, ``init`` binds
      - measuring commands
      - ``0600``
      - Append-only eventlog, one JSON record per line. See
-       :doc:`/reference/formats/eventlog`.
+       :doc:`/reference/eventlog`.
    * - ``eventlog.lock``
      - measuring commands
      - ``0600``
@@ -314,7 +314,7 @@ name under ``/etc/shirudo``.
    * - ``keys/revoked/``
      - Revoked certificates.
 
-See :doc:`/reference/formats/configuration` for the keys of each file.
+See :doc:`/reference/configuration` for the keys of each file.
 
 Private bpffs pins
 ------------------
@@ -456,7 +456,7 @@ Host configuration
    * - ``/etc/shirudo/shirudo.conf``
      - On the root file system: the source of the initrd's bootstrap
        file and the settings of a host without images. In the initrd:
-       the bootstrap file. See :doc:`/reference/formats/configuration`.
+       the bootstrap file. See :doc:`/reference/configuration`.
    * - ``/etc/shirudo/keys/cert.der``, ``/etc/shirudo/keys/trusted/``
      - In the initrd only: the certificates the dracut module copies in.
    * - ``/etc/shirudo/bpm/registries.d/<source>.conf``

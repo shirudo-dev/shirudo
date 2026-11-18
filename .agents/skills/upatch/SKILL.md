@@ -113,7 +113,7 @@ shirudo build --unload <name> --keys-dir <keys> -o <name>.unload.upatch \
 
 ## Build a package
 
-The Beefile (`publish/beefile.rst`) names the package and its upatches,
+The Beefile (`reference/formats/beefile.rst`) names the package and its upatches,
 and optionally generated `.rodata` (`[[upatches.rodata]]`), tree
 metadata (`[upatches.tree]`) and extra files. A `README.md` beside it
 is what `bpm info` prints.

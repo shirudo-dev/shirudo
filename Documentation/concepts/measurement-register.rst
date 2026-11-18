@@ -132,7 +132,7 @@ reports it under the ``UpatchesMeasured`` condition, the next load or
 unload undoes it before it acts, and ``init`` at the next boot restores
 no archive whose load the eventlog does not record. An unload is
 measured before the pins go, so an interrupted unload leaves a register
-that records more than happened. :doc:`/reference/formats/eventlog`
+that records more than happened. :doc:`/reference/eventlog`
 lists the fields of each event.
 
 Eventlog

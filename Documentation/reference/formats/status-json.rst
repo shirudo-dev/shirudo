@@ -10,8 +10,8 @@ status JSON
 
 ``shirudo status --json`` prints one JSON object on one line. The
 status keepalive that ``status --otel`` sends carries a smaller record,
-the keepalive body that ``status --keepalive`` prints, see :doc:`otlp`.
-Options, exit status and the keys of the keepalive body are in
+the keepalive body that ``status --keepalive`` prints, see
+:ref:`keepalive-body-format`. Options and exit status are in
 :doc:`/reference/cli/status`. How to read a report is in
 :doc:`/operate/run/read-status`.
 
@@ -645,7 +645,7 @@ tpm
        ``/var/lib/shirudo/eventlog``, all boots), ``bytes``, and
        ``events`` with ``--include-eventlog``.
 
-:doc:`eventlog` defines the records and the replay.
+:doc:`/reference/eventlog` defines the records and the replay.
 
 upatch_tree
 -----------
@@ -682,7 +682,7 @@ upatch_tree
        state cannot be read, as the keepalive's ``tree_log_mismatch``
        has it, and ``null`` when the log cannot be replayed.
 
-:doc:`bpm-formats` defines the tree state.
+:doc:`upatch-tree` defines the tree state.
 
 Optional blocks
 ---------------
@@ -787,7 +787,7 @@ Fields to alert on
      - A different shirudo build runs on the target.
 
 A collector that stops receiving the keepalive from a target has lost
-the target or its export, see :doc:`otlp`.
+the target or its export, see :doc:`keepalive`.
 
 Example
 -------
@@ -1048,5 +1048,6 @@ Related
 - :doc:`/reference/cli/status`
 - :doc:`/operate/run/read-status`
 - :doc:`/security/tamper-counters`
-- :doc:`eventlog`
+- :doc:`/reference/eventlog`
 - :doc:`otlp`
+- :doc:`keepalive`

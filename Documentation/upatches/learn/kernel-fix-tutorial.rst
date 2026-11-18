@@ -375,7 +375,7 @@ tree ``id`` must equal it. The selector limits the tree entry to kernels
 built with IPv6. A target evaluates it against ``/proc/config.gz`` or
 ``/boot/config-<release>``. A target that has neither does not match, and
 a target that does not match an entry passes over it for good.
-:doc:`/upatches/publish/beefile` lists every key.
+:doc:`/reference/formats/beefile` lists every key.
 
 Build the package:
 

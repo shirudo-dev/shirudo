@@ -10,7 +10,7 @@ an observation into a signed upatch and ship it as a package. Start with
 :doc:`/upatches/learn/concepts`, then follow
 :doc:`/upatches/learn/kernel-fix-tutorial` from a real kernel fix to a
 published package. :doc:`/upatches/write/attach-kinds` and
-:doc:`/upatches/publish/beefile` are the references to keep at hand, and
+:doc:`/reference/formats/beefile` are the references to keep at hand, and
 :doc:`/upatches/test/debugging` explains each way a load can fail.
 
 - :doc:`learn/index`: concepts, the kernel-fix tutorial and the example

@@ -412,7 +412,7 @@ Watch the data
    The body is what the decoder returned, shortened here. It counts
    every execution on the guest, the target's own timers included, so
    your counts differ. The attributes name the upatch, its attach point
-   and the map, see :doc:`/reference/formats/otlp`.
+   and the map, see :doc:`/reference/formats/map-export`.
 
 3. While you work on a decoder, run it by hand against the live map:
 

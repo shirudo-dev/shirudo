@@ -113,6 +113,17 @@ By role
   :doc:`/security/threat-model`
 - Contributors: :doc:`/contribute/code/develop-locally`
 
+Specifications
+--------------
+
+- :doc:`/reference/formats/beefile`: the Beefile that describes a package
+- :doc:`/reference/formats/upatch-format`: the signed ``.upatch``
+  container
+- :doc:`/reference/formats/upatch-tree`: the operations, segments and
+  publication document of an upatch tree
+- :doc:`/reference/formats/keepalive`: the record a target sends its
+  collector, its :ref:`body <keepalive-body-format>` and its TPM quote
+
 Documentation
 -------------
 

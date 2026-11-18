@@ -194,7 +194,7 @@ The keepalive is sent only when ``map_export.otel_endpoint``,
 ``OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`` or ``OTEL_EXPORTER_OTLP_ENDPOINT``
 names an endpoint, and only with its TPM quote: a run whose TPM does not
 answer or does not quote fails and sends nothing. See
-:doc:`/reference/formats/otlp`.
+:doc:`/reference/formats/keepalive`.
 
 A keepalive and a ``bpm tree sync`` do not run at once. Every target
 command holds the config operation lock for its whole run, and a sync
@@ -261,7 +261,7 @@ shirudo-map-export.service
      - ``infinity``
 
 The destinations come from the ``map_export.*`` settings, see
-:doc:`/reference/formats/configuration`.
+:doc:`/reference/configuration`.
 
 shirudo-bpm-repo-update.service
 -------------------------------
@@ -382,7 +382,7 @@ Related
 
 - :doc:`/reference/environment` for the variables the
   ``EnvironmentFile=`` files set
-- :doc:`/reference/formats/configuration` for the settings the services
+- :doc:`/reference/configuration` for the settings the services
   read
 - :doc:`/reference/cli/init`, :doc:`/reference/cli/status`,
   :doc:`/reference/cli/upatch-map` and :doc:`/reference/cli/bpm` for the

@@ -296,7 +296,7 @@ Related
 
 - :doc:`/reference/systemd-units` for the units that read the
   environment files
-- :doc:`/reference/formats/configuration` for the settings these
+- :doc:`/reference/configuration` for the settings these
   variables complement
 - :doc:`/operate/run/telemetry` and :doc:`/operate/run/deliver-packages` for
   setting up export and registry access

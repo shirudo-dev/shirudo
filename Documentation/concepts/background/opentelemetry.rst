@@ -162,7 +162,7 @@ settings in ``etc/shirudo/shirudo.conf`` of the signed config image. Both
 units also read ``/etc/shirudo/map-export.env``, which carries the
 ``OTEL_EXPORTER_OTLP_*`` headers, CA certificate, client certificate and
 key, compression and timeout, and the ``AWS_*`` credentials for S3.
-:doc:`/reference/formats/configuration` lists the settings, and
+:doc:`/reference/configuration` lists the settings, and
 :doc:`/reference/formats/otlp` the documents on the wire.
 
 The connection uses TLS 1.3 with a hybrid ML-KEM key exchange, the same

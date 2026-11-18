@@ -210,7 +210,7 @@ reading its options.
 A failure names its phase as :doc:`/reference/failure-categories`
 lists them, and the sync applies nothing past it. The walk, its limits
 and the time a joining node takes, which grows linearly with the tree,
-are in :doc:`/reference/formats/bpm-formats`; both limits are to be
+are in :doc:`/reference/formats/upatch-tree`; both limits are to be
 revisited on live clusters.
 
 With ``--dry-run``, it reports which operations would apply and applies
@@ -273,7 +273,7 @@ append: the publication at <repository>:<reference> does not verify``
 and nothing is published.
 
 A tree is a chain of segments, each one publication document of at most
-512 operations; :doc:`/reference/formats/bpm-formats` has the ``base``
+512 operations; :doc:`/reference/formats/upatch-tree` has the ``base``
 keys that link them. An append never splits its operations
 across segments. Before it adds its ``n`` operations to the current
 segment, which holds ``c``, it seals that segment when ``c`` is at least
@@ -478,7 +478,7 @@ build
 -----
 
 ``build`` builds and signs a package from a Beefile
-(:doc:`/upatches/publish/beefile`):
+(:doc:`/reference/formats/beefile`):
 
 - The Beefile is ``--file``, else ``<context>/Beefile``, with
   ``<context>`` defaulting to the current directory.
@@ -634,6 +634,6 @@ Related
 
 - :doc:`/operate/run/deliver-packages`
 - :doc:`/upatches/publish/publishing`
-- :doc:`/upatches/publish/beefile`
+- :doc:`/reference/formats/beefile`
 - :doc:`/reference/formats/bpm-formats`
 - :doc:`/reference/systemd-units`

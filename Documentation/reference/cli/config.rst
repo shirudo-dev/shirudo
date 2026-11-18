@@ -57,7 +57,7 @@ The comments in the output are not a reference. The ``map_export``
 comment is wrong: it says that empty destinations leave the export timer
 idle, while the timer runs ``upatch map --all``, which reads every map
 and prints it (see :doc:`upatch-map`).
-:doc:`/reference/formats/configuration` describes every setting.
+:doc:`/reference/configuration` describes every setting.
 
 Options
 -------
@@ -150,6 +150,6 @@ The command prints:
 Related
 -------
 
-- :doc:`/reference/formats/configuration`
+- :doc:`/reference/configuration`
 - :doc:`/internals/config-images`
 - :doc:`image`

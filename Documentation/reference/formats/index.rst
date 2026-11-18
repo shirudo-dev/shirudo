@@ -2,20 +2,23 @@
    SPDX-License-Identifier: BSD-2-Clause
    Copyright (c) 2026 Authors of shirudo
 
-Formats and settings
-====================
+Formats
+=======
 
-The formats shirudo reads and writes: the signed ``.upatch`` container,
-packages, signed indexes and upatch trees, the configuration files and
-their keys, the eventlog, the ``shirudo status --json`` document and the
-OTLP documents shirudo exports.
+The formats shirudo reads and writes, in the order a upatch meets them:
+the Beefile that describes a package, the signed ``.upatch`` container,
+the package and the signed index that lists it, the upatch tree, the
+``shirudo status --json`` document a target reports, and the OTLP
+documents it exports, its keepalive and its map logs and metrics.
 
 .. toctree::
    :titlesonly:
 
+   beefile
    upatch-format
    bpm-formats
-   configuration
-   eventlog
+   upatch-tree
    status-json
    otlp
+   keepalive
+   map-export

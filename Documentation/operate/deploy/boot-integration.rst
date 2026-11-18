@@ -78,7 +78,7 @@ A target reads two different bootstrap files. Both are called
 You write the runtime bootstrap file first, because it goes into the
 runtime image. The UKI bootstrap file names the root hash of that image,
 so you can write it only after the runtime image exists.
-:doc:`/reference/formats/configuration` describes every key.
+:doc:`/reference/configuration` describes every key.
 
 When the TPM owner hierarchy has a password, set ``tpm.owner_auth`` in
 both files. Init reads it from the UKI file when it creates the TPM

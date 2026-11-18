@@ -6,7 +6,7 @@ Reference
 =========
 
 Facts to look up: every command and its options, the formats shirudo
-reads and writes, its settings, the failure categories and exit status,
+reads and writes, its settings and its eventlog, the failure categories and exit status,
 the files and extended attributes it keeps, its systemd units and the
 environment variables it reads. Each fact has one home here, and the
 other sections link to it.
@@ -17,6 +17,8 @@ other sections link to it.
    cheat-sheet
    cli/index
    formats/index
+   configuration
+   eventlog
    failure-categories
    files
    systemd-units

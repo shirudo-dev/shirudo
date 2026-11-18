@@ -99,10 +99,10 @@ checked against an exploit.
 :doc:`/upatches/learn/kernel-fix-tutorial` takes the third detector from its fix
 to a package, as an ``fentry`` program. ``kernel-cve.bee`` itself does not
 build, and its tree entries do not match its upatch names.
-:doc:`/upatches/publish/beefile` lists what is wrong with it.
+:doc:`/reference/formats/beefile` lists what is wrong with it.
 
 Related
 -------
 
 - :doc:`/upatches/learn/kernel-fix-tutorial` to write a detector of your own
-- :doc:`/upatches/publish/beefile` for the keys both Beefiles use
+- :doc:`/reference/formats/beefile` for the keys both Beefiles use

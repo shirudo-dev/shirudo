@@ -71,7 +71,7 @@ Events
      - a key revocation. ``<certificate-sha256>`` is the SHA-256 of the
        revoked certificate. ``<label>`` is required and not used.
 
-The eventlog entry of each event (:doc:`/reference/formats/eventlog`)
+The eventlog entry of each event (:doc:`/reference/eventlog`)
 carries the values.
 
 Output
@@ -190,4 +190,4 @@ Related
 - :doc:`attest-verify`
 - :doc:`upatch-load`
 - :doc:`/internals/measurement-register`
-- :doc:`/reference/formats/eventlog`
+- :doc:`/reference/eventlog`

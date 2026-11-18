@@ -271,5 +271,5 @@ Related
 - :doc:`/internals/config-images`
 - :doc:`/concepts/background/dm-verity`
 - :doc:`gen-tools`
-- :doc:`/reference/formats/configuration`
+- :doc:`/reference/configuration`
 - :doc:`/operate/maintain/keys`

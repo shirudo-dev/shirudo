@@ -451,5 +451,7 @@ Next steps
   operator side
 - :doc:`/operate/run/telemetry` to export what the installed upatches collect
 - :doc:`/reference/cli/bpm` for every ``bpm`` option
-- :doc:`/reference/formats/bpm-formats` for the index, package and tree
+- :doc:`/reference/formats/bpm-formats` for the index and package
+  formats
+- :doc:`/reference/formats/upatch-tree` for the tree format
   formats

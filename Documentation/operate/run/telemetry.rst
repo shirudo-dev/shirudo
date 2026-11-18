@@ -181,7 +181,7 @@ The config image accepts these keys:
        Default: 4194304.
 
 The only other key the config image's ``shirudo.conf`` accepts is
-``eventlog.max_bytes``. :doc:`/reference/formats/configuration` lists
+``eventlog.max_bytes``. :doc:`/reference/configuration` lists
 every key, including those of the runtime image.
 
 Set credentials and TLS material

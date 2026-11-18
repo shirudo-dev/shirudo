@@ -234,4 +234,4 @@ Related
 - :doc:`tpm`
 - :doc:`oci`
 - :doc:`/operate/maintain/keys`
-- :doc:`/reference/formats/configuration`
+- :doc:`/reference/configuration`

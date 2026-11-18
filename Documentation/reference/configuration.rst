@@ -253,7 +253,7 @@ On a target, the effective settings combine the files as follows:
   ``SHIRUDO_TPM_OWNER_AUTH`` override the file. A target refuses both,
   see :doc:`/reference/environment`.
 
-See :doc:`/reference/formats/otlp` for what the ``map_export.*``
+See :doc:`/reference/formats/map-export` for what the ``map_export.*``
 destinations receive.
 
 Syntax and validation
@@ -488,7 +488,7 @@ file, ``bpm tree sync`` does nothing.
 
 Either value may be enclosed in double quotes. An opening quote without
 a closing one is refused with ``EINVAL``. Lines without ``=`` and other
-keys are ignored. See :doc:`/reference/formats/bpm-formats` for the
+keys are ignored. See :doc:`/reference/formats/upatch-tree` for the
 publication.
 
 Node labels

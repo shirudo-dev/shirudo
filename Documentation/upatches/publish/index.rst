@@ -5,11 +5,10 @@
 Package and publish
 ===================
 
-Describe a package in its Beefile, build it, and publish it to a
-repository index or the upatch tree.
+Describe a package in its Beefile (:doc:`/reference/formats/beefile`),
+build it, and publish it to a repository index or the upatch tree.
 
 .. toctree::
    :titlesonly:
 
-   beefile
    publishing

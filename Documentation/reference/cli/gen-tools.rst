@@ -136,7 +136,7 @@ trusted binaries. Requires ``readelf``, ``ldd`` and ``llvm-strip``.
    * - ``--bootstrap-conf``
      - required
      - The bootstrap ``shirudo.conf``
-       (:doc:`/reference/formats/configuration`).
+       (:doc:`/reference/configuration`).
    * - ``--cert``
      - required
      - The initial BPF signing certificate.
@@ -327,7 +327,7 @@ needs:
    bpf.keyring_unsealed=1 dm_verity.keyring_unsealed=1
 
 ``<bootstrap-conf>`` is the bootstrap ``shirudo.conf`` that names the
-runtime image (:doc:`/reference/formats/configuration`).
+runtime image (:doc:`/reference/configuration`).
 
 Related
 -------
@@ -336,4 +336,4 @@ Related
 - :doc:`/operate/deploy/boot-integration`
 - :doc:`/internals/boot-flow`
 - :doc:`/internals/config-images`
-- :doc:`/reference/formats/configuration`
+- :doc:`/reference/configuration`

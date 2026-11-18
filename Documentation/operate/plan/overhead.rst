@@ -99,7 +99,7 @@ Files and images
    * - Eventlog growth
      - 1.9 KiB per boot, 350 B per upatch load or unload
      - shirudo never shortens the eventlog. See the size limits in
-       :doc:`/reference/formats/eventlog`.
+       :doc:`/reference/eventlog`.
 
 .. figure:: /images/operate-runtime-image.svg
    :alt: Of the 15 MiB runtime image, the stripped target binary takes
@@ -551,6 +551,6 @@ Related
 - :doc:`/operate/plan/scalability`
 - :doc:`/reference/systemd-units`
 - :doc:`/reference/files`
-- :doc:`/reference/formats/eventlog`
+- :doc:`/reference/eventlog`
 - :doc:`/internals/enforcement`
 - :doc:`/concepts/background/tpm`

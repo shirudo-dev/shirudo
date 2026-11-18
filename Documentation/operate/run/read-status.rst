@@ -451,7 +451,7 @@ unload:
    ...
 
 The ``init`` record comes from the initrd run. Every later record is a
-state change that extended the register. :doc:`/reference/formats/eventlog`
+state change that extended the register. :doc:`/reference/eventlog`
 describes the records.
 
 .. _status-verdicts:

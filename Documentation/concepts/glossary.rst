@@ -56,7 +56,7 @@ it.
       package directory, that names the package and lists its upatch
       sources, read-only data generators, extra files and tree selectors.
       ``shirudo bpm build`` reads ``Beefile`` in the package directory, or
-      the file that ``--file`` names. See :doc:`/upatches/publish/beefile`.
+      the file that ``--file`` names. See :doc:`/reference/formats/beefile`.
 
    BPF keyring
       The kernel's ``.bpf`` keyring, which the kernel uses for a signed
@@ -140,7 +140,7 @@ it.
       boot ID and the fields the digest covers. shirudo only appends to it
       and keeps the records of every boot. A verifier trusts it only as
       far as this boot's records replay to the value the TPM certifies.
-      See :doc:`/reference/formats/eventlog`.
+      See :doc:`/reference/eventlog`.
 
    evidence
       The JSON document, of kind ``shirudo-attestation``, that ``shirudo

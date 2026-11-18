@@ -459,7 +459,7 @@ Causes
 
 Action
    Raise ``eventlog.max_bytes`` in a signed config and activate it, see
-   :doc:`/reference/formats/configuration`. Keep the cap below 8 MiB:
+   :doc:`/reference/configuration`. Keep the cap below 8 MiB:
    every reader of the eventlog fails on a larger log.
    :doc:`/operate/maintain/backup-recovery` covers the eventlog's lifetime.
 

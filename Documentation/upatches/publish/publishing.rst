@@ -23,7 +23,7 @@ Before you begin
   describes.
 - The signing key whose certificate your targets trust, in a key
   directory. The same key signs the upatches, the index and the tree.
-- A package directory with a Beefile, as :doc:`/upatches/publish/beefile`
+- A package directory with a Beefile, as :doc:`/reference/formats/beefile`
   describes, whose
   upatches you have tested, as :doc:`/upatches/test/testing` describes.
 - Push access to an OCI registry. shirudo reads credentials from
@@ -210,7 +210,8 @@ whatever the registry served.
 Next steps
 ----------
 
-- :doc:`/reference/formats/bpm-formats` for the index and the tree
+- :doc:`/reference/formats/bpm-formats` for the index
+- :doc:`/reference/formats/upatch-tree` for the tree
   documents
 - :doc:`/operate/run/deliver-packages` to configure targets
 - :doc:`/operate/run/attest` to verify what targets loaded

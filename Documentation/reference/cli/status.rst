@@ -86,7 +86,7 @@ is configured: ``map_export.otel_endpoint``, else
 below, has the TPM's attestation key quote the SHA-256 of the body, and
 sends one OTLP log record named ``shirudo.keepalive`` with the body as a
 string and the quote as its one attribute, ``shirudo.quote``
-(:doc:`/reference/formats/otlp`). The attestation key is the one
+(:doc:`/reference/formats/keepalive`). The attestation key is the one
 :doc:`attest` uses, created for the quote and flushed after it. When no
 TPM answers or the quote fails, ``status`` sends nothing, says why on
 standard error and exits 1: a keepalive without a quote is worth nothing
@@ -100,90 +100,25 @@ the full document, not the keepalive body, and ``--include-system`` and
 With ``--keepalive``, ``status`` prints the keepalive body, the compact
 status record a node's TPM quotes, as one line on standard output. It
 neither quotes nor sends it and needs no TPM, so an operator can see
-what a node reports. The body has 23 keys in a fixed order: ``schema``
-(``shirudo.keepalive/1``), ``boot_id``, ``version_id``, ``config_root``,
-``kernel_release``, ``image_id``, ``image_version``, ``image_root``,
-``verdict``, ``cond``, ``flags``, ``tamper``, ``integrity``,
-``tree_id``, ``generation``, ``base_seq``, ``last_seq``, ``base_root``,
-``projection_root``, ``mask``, ``set_sha256``, ``count`` and ``not_ok``.
-A key that does not apply is ``null``:
-
-- ``config_root`` unless the selected config is active;
-- the seven tree keys, ``tree_id`` to ``mask``, when the node follows no
-  tree or its tree state cannot be read.
-
-``cond`` holds two bits per condition, condition *i* of the order above
-at bits ``2i`` and ``2i+1``, ``LsmAttached`` first and ``XdpCovered``
-last: ``00`` not evaluated, ``01`` ``OK``, ``10`` ``WARN``, ``11``
-``ALERT``. All seven ``OK`` is ``5461``. ``tamper`` lists every counter
-of :doc:`/security/tamper-counters`, zeros included, in the order of
-that page, and ``integrity`` every counter of
-:doc:`/security/integrity-counters` the same way. A collector reads a
-counter by its place: a new one is appended, never put between two.
-
-The tree keys report a window of the last 512 operations up to the head
-of the recorded publication, whatever segments hold them: ``base_seq``
-is the head less 512, or 0 for a tree of 512 operations or fewer, and
-``base_root`` the node's projection root after ``base_seq``, 64 zeros
-at 0. ``mask`` holds two bits per operation from ``base_seq + 1`` to the
-head: ``01`` applied, ``10`` passed over, ``11`` module absent, ``00``
-not reached. Both come from the outcomes record of
-:doc:`/reference/formats/bpm-formats`, which keeps every operation the
-node processed, those of sealed segments included. ``set_sha256`` is
-SHA-256 over a ``<payload_sha256> <name>`` line for every loaded upatch,
-sorted by name, the ``set_digest`` form of the ``init`` event.
-``not_ok`` counts the loaded upatches the tree holds a status file for.
-The bits of ``flags``:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 8 24 68
-
-   * - Bit
-     - Name
-     - Set when
-   * - 0
-     - ``register_rebound``
-     - The register was bound more than once for this TPM reset.
-   * - 1
-     - ``bound_late``
-     - This boot's ``init`` record says the register was bound from the
-       root file system, not from the initrd.
-   * - 2
-     - ``tree_log_mismatch``
-     - The tree eventlog does not replay to the ``projection_root`` of
-       ``state.json``, or the outcomes record lacks a line the window
-       needs; ``base_root`` and ``mask`` are then ``null``.
-   * - 3
-     - ``tamper_unavailable``
-     - The tamper counters cannot be read; ``tamper`` is ``null``.
-   * - 4
-     - ``tree_op_pending``
-     - A tree operation was left in flight: ``pending.json`` existed
-       before or after the read, after a sync stopped mid-operation.
-   * - 5
-     - ``snapshot_unsettled``
-     - ``state.json`` kept changing while the body was read, which the
-       config operation lock leaves to a writer outside it.
-   * - 6
-     - ``integrity_unavailable``
-     - The integrity counters cannot be read; ``integrity`` is ``null``.
+what a node reports. Its keys, their order and their encoding are in
+:ref:`keepalive-body-format`.
 
 ``status`` holds the config operation lock for its whole run, as every
 target command does, a ``bpm tree sync`` included. It therefore never
 reads a tree a sync is changing: while one runs, ``status`` waits up to
-30 seconds for the lock and then fails, and no body is printed or sent. A sync
-writes ``pending.json`` before it loads or unloads anything and removes
-it only after ``state.json`` has the new ``last_seq``, so bit 4 says a
-sync stopped in the middle of an operation and the next sync completes
-it. ``status`` still reads ``state.json``, looks for ``pending.json``,
-reads the outcomes up to that ``last_seq`` and the loaded upatches, then
-looks for ``pending.json`` and reads ``state.json`` again, and starts
-over when the second ``state.json`` differs from the first, three times
-in all, printing the last read with bit 5 set; under the lock that
-happens only if something writes the tree without it. With bits 4 and 5
-clear the tree keys and the loaded set describe one point. The two bits
-say the node is busy, not that it is unhealthy.
+30 seconds for the lock and then fails, and no body is printed or
+sent. A sync writes ``pending.json`` before it loads or unloads anything
+and removes it only after ``state.json`` has the new ``last_seq``, so
+``tree_op_pending`` says a sync stopped in the middle of an operation
+and the next sync completes it. ``status`` still reads ``state.json``,
+looks for ``pending.json``, reads the outcomes up to that ``last_seq``
+and the loaded upatches, then looks for ``pending.json`` and reads
+``state.json`` again, and starts over when the second ``state.json``
+differs from the first, three times in all, printing the last read with
+``snapshot_unsettled`` set; under the lock that happens only if
+something writes the tree without it. With both flags clear the tree
+keys and the loaded set describe one point. The two flags say the node
+is busy, not that it is unhealthy.
 
 Options
 -------

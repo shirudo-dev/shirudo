@@ -44,7 +44,7 @@ refuses both, see :doc:`/reference/environment`.
 
 The upatch tree keeps its own projection log in
 ``/var/lib/shirudo/bpm/upatch-tree/tree-eventlog``, described in
-:doc:`bpm-formats`. Config image activations extend the config PCR
+:doc:`formats/upatch-tree`. Config image activations extend the config PCR
 instead of the register and keep their records under
 ``/var/lib/shirudo/config-update``, see :doc:`/internals/config-images`.
 Neither is part of the eventlog.
@@ -287,7 +287,7 @@ record whose ``set`` lists it, with that payload.
 
 ``status`` compares the replay with the live register (condition
 ``ChainIntact``, field ``tpm.chain_matches_eventlog`` in
-:doc:`status-json`). It also reports a mismatch when the register's
+:doc:`formats/status-json`). It also reports a mismatch when the register's
 name differs from the recorded ``nv_name``, when the recorded PCR values
 and writer key do not give that name, and when two ``init`` records
 name the same TPM reset count. ``shirudo attest`` puts the selected
@@ -401,5 +401,5 @@ Related
 
 - :doc:`/internals/measurement-register`
 - :doc:`/operate/run/attest`
-- :doc:`status-json`
+- :doc:`formats/status-json`
 - :doc:`/reference/cli/status`

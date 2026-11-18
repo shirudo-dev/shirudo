@@ -119,7 +119,7 @@ Its definition is a Beefile, a file in a subset of TOML in the package
 directory. The Beefile names the package and lists its upatch sources,
 optional generators for read-only data, extra files to ship and, per
 upatch, the selector it gets when published to an upatch tree.
-:doc:`/upatches/publish/beefile` describes every key.
+:doc:`/reference/formats/beefile` describes every key.
 
 ``shirudo bpm build`` builds and signs every upatch the Beefile lists,
 together with its unload directive, and writes ``<name>-<version>.bee``.
@@ -188,7 +188,7 @@ The target keeps a projection root, a hash chain over the operations it
 applied, and the next boot's init event includes it. The register value
 an operator predicts therefore covers the tree as well as the archived
 upatches. :doc:`/upatches/publish/publishing` shows how to publish to a tree,
-and :doc:`/reference/formats/bpm-formats` gives the document formats.
+and :doc:`/reference/formats/upatch-tree` gives the document formats.
 
 How the objects relate
 ----------------------

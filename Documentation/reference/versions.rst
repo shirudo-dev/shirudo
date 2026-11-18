@@ -149,8 +149,8 @@ target reads:
      - 1
      - Not checked.
 
-:doc:`/reference/formats/bpm-formats` describes the package, index and
-tree documents.
+:doc:`/reference/formats/bpm-formats` describes the package and index
+documents, :doc:`/reference/formats/upatch-tree` the tree documents.
 
 Documents the target writes for operators, collectors and scripts:
 
@@ -164,7 +164,7 @@ Documents the target writes for operators, collectors and scripts:
    * - Eventlog record ``schema``
      - 1
      - Not checked by ``status``, ``init``, ``attest`` or ``attest
-       verify``. See :doc:`/reference/formats/eventlog`.
+       verify``. See :doc:`/reference/eventlog`.
    * - Evidence document ``schema``, with ``kind``
        ``shirudo-attestation``
      - 1
@@ -211,7 +211,7 @@ State the target keeps for itself:
 Configuration and bootstrap files carry no version. Unknown keys in the
 two bootstrap files and the host file draw a warning, and a config image
 whose ``shirudo.conf`` holds a key other than ``eventlog.max_bytes`` or
-``map_export.*`` is refused (:doc:`/reference/formats/configuration`).
+``map_export.*`` is refused (:doc:`/reference/configuration`).
 The config image's hash tree must carry the standard ``veritysetup``
 superblock, version 1, with hash type 1, SHA-256, 4096-byte blocks and a
 32-byte salt.

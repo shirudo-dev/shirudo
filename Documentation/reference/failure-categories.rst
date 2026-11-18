@@ -127,7 +127,7 @@ Categories
      - The eventlog would exceed ``eventlog.max_bytes``. Nothing was
        loaded or measured.
      - Raise ``eventlog.max_bytes`` in the signed config, see
-       :doc:`/reference/formats/configuration`. The eventlog is sealed
+       :doc:`/reference/configuration`. The eventlog is sealed
        and cannot be rotated.
    * - ``parser_rejected``
      - ``parse``, ``target_verify``

@@ -61,13 +61,13 @@ With ``<upatch> <map>``, ``map`` reads the map:
 - ``--otel`` sends the map to an OTLP collector. A map with a signed Lua
   decoder is sent as the log or metric the decoder declares. A map
   without one is classified by shirudo (see
-  :doc:`/reference/formats/otlp`).
+  :doc:`/reference/formats/map-export`).
 
 Every map
 ~~~~~~~~~
 
 ``--all`` handles every map of every loaded upatch as above and loads the
-``map_export`` settings (:doc:`/reference/formats/configuration`):
+``map_export`` settings (:doc:`/reference/configuration`):
 ``map_export.json_path`` turns on JSON output to that file and
 ``map_export.otel_endpoint`` turns on OTLP, together with the tenant,
 TLS, retry, size and S3 settings. Options on the command line take
@@ -198,6 +198,7 @@ Related
 
 - :doc:`/operate/run/telemetry`
 - :doc:`/reference/formats/otlp`
+- :doc:`/reference/formats/map-export`
 - :doc:`/upatches/write/maps-arenas-serializers`
 - :doc:`/upatches/write/decoders`
 - :doc:`upatch-get`

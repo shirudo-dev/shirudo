@@ -202,7 +202,7 @@ Remove it
 Next steps
 ----------
 
-- :doc:`/upatches/publish/beefile` describes every key of a ``Beefile``.
+- :doc:`/reference/formats/beefile` describes every key of a ``Beefile``.
 - :doc:`/upatches/publish/publishing` publishes to a registry and to the signed
   upatch tree.
 - :doc:`/operate/run/deliver-packages` registers repositories in the signed

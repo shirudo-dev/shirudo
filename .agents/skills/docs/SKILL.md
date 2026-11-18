@@ -31,9 +31,10 @@ Then go through the pages each kind of change has:
 | File or directory | `reference/files.rst` |
 | systemd unit | `reference/systemd-units.rst` |
 | Environment variable | `reference/environment.rst` |
-| Setting | `reference/formats/configuration.rst` |
-| `.upatch`, bpm, eventlog, OTLP or status JSON format | `reference/formats/<format>.rst` |
-| Beefile key | `upatches/publish/beefile.rst` |
+| Setting | `reference/configuration.rst` |
+| Eventlog event | `reference/eventlog.rst` |
+| `.upatch`, Beefile, upatch tree, package and index, status JSON, OTLP, keepalive or map export format | `reference/formats/<format>.rst` |
+| Beefile key | `reference/formats/beefile.rst` |
 | Threat closed or opened, residual risk | `security/threat-model.rst` |
 | Test or fuzz target | `contribute/testing/test-coverage.rst` |
 | Carried kernel patch | `internals/kernel-patches.rst` |

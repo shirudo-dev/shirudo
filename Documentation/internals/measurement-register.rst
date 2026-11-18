@@ -261,7 +261,7 @@ followed by ``fsync``. A partial append is truncated away, and one that
 was killed before it could be is skipped by every reader and dropped by
 the next append, so that it cannot join the next record on its line.
 The file is sealed like the rest of the state tree.
-:doc:`/reference/formats/eventlog` gives the format.
+:doc:`/reference/eventlog` gives the format.
 
 The ``init`` run in the initrd writes its record to
 ``/run/shirudo/eventlog.pending``, which crosses the switch to the root
@@ -571,4 +571,4 @@ Related
   sessions
 - :doc:`/concepts/measurement-register` for the concept
 - :doc:`/operate/run/attest` for attesting a target
-- :doc:`/reference/formats/eventlog` for the eventlog format
+- :doc:`/reference/eventlog` for the eventlog format

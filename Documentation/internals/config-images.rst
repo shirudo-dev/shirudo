@@ -90,7 +90,7 @@ initrd's file, and later commands use the runtime image's. The initrd's
 file must then not be readable by group or others. The initial BPF
 certificate is not a setting: it is ``keys/cert.der`` on the runtime
 image.
-:doc:`/reference/formats/configuration` lists every key.
+:doc:`/reference/configuration` lists every key.
 
 Image files
 -----------
@@ -354,4 +354,4 @@ Related
 - :doc:`/operate/deploy/boot-integration` for building the images and the
   initrd
 - :doc:`/reference/cli/image` for the ``shirudo image`` commands
-- :doc:`/reference/formats/configuration` for the settings
+- :doc:`/reference/configuration` for the settings

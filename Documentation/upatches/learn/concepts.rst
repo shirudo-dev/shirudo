@@ -202,7 +202,7 @@ file, the eventlog record and the target of its unload directive.
        ``--name`` sets another.
    * - name in a package
      - The base name of the ``source`` in the Beefile, the same rule
-       without an override. :doc:`/upatches/publish/beefile` has the details.
+       without an override. :doc:`/reference/formats/beefile` has the details.
    * - tree id
      - Equal to the upatch name. :doc:`/upatches/publish/publishing` explains
        why.

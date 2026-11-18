@@ -303,7 +303,7 @@ TPM
        empty authorization.
    * - Owner hierarchy authorization, if set, in ``tpm.owner_auth``
      - shirudo defines the NV index and the writer key under the owner
-       hierarchy. See :doc:`/reference/formats/configuration`.
+       hierarchy. See :doc:`/reference/configuration`.
 
 Target userspace
 ----------------
