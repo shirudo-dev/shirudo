@@ -68,6 +68,18 @@ print("000b" + hashlib.sha256(base64.b64decode(sys.argv[1])).hexdigest())' \
 		"$(quote_field "$1" 4)"
 }
 
+# The TPM clock the quote of fixture body $1 was taken at: the u64 of
+# TPMS_ATTEST's clockInfo, after the magic, the type, qualifiedSigner and
+# extraData. Each capture of the quotes takes another.
+clock_of() {
+	python3 -c 'import base64, struct, sys
+a = base64.b64decode(sys.argv[1])
+o = 6
+for _ in range(2):
+    o += 2 + struct.unpack_from(">H", a, o)[0]
+print(struct.unpack_from(">Q", a, o)[0])' "$(quote_field "$1" 2)"
+}
+
 # Send the body file $2 with the quote of fixture body $3 through the
 # collector, as the host named $1: the record's host.name is the
 # sender's, so the sender runs in a UTS namespace of its own.
@@ -87,6 +99,8 @@ refresh() {
 
 AK_A=$(ak_of node-a-1.1.0.json)
 AK_B=$(ak_of node-b-1.1.0.json)
+CLOCK_A=$(clock_of node-a-1.1.0.json)
+CLOCK_B=$(clock_of node-b-1.1.0.json)
 DIGEST=$(cat "$E2E/backend-tree.digest")
 PARENT=4ee49208ad87695d862c8cc976d1c910170a3de611cfcee2ce181efd8e0a2942
 VERSION_ID=d6d918ad22ff597579e6678bef75adca84d30f9661e0b7bbdbf534eebc138c1f
@@ -150,9 +164,10 @@ test_expect_success 'the checker accepts the keepalives of node A and node B' '
 	send edge-01 "$FIX/node-a-1.1.0.json" node-a-1.1.0.json &&
 	send core-01 "$FIX/node-b-1.1.0.json" node-b-1.1.0.json &&
 	ch_wait "$Q_RECORDS" 2 &&
-	printf "core-01\t%s\t0\t42\t%s\nedge-01\t%s\t0\t41\t%s\n" \
-		"$AK_B" "$(quote_field node-b-1.1.0.json 5)" \
-		"$AK_A" "$(quote_field node-a-1.1.0.json 5)" >"$W/keepalive" &&
+	printf "core-01\t%s\t0\t%s\t%s\nedge-01\t%s\t0\t%s\t%s\n" \
+		"$AK_B" "$CLOCK_B" "$(quote_field node-b-1.1.0.json 5)" \
+		"$AK_A" "$CLOCK_A" "$(quote_field node-a-1.1.0.json 5)" \
+		>"$W/keepalive" &&
 	ch_cmp "$Q_KEEPALIVE" "$W/keepalive" &&
 	test "$(ch "SELECT count() FROM shirudo.rejected")" = 0
 '
@@ -191,7 +206,7 @@ test_expect_success 'a body altered in transit is rejected as body_mismatch' '
 		"$(sha256sum "$W/altered.json" | cut -d " " -f 1)" >"$W/rejected" &&
 	ch_cmp "$Q_REJECTED" "$W/rejected" &&
 	test "$(ch "$Q_RECORDS")" = 2 &&
-	test "$(ch "$Q_LATEST_A")" = "$(printf "41\t3\t3")" &&
+	test "$(ch "$Q_LATEST_A")" = "$(printf "%s\t3\t3" "$CLOCK_A")" &&
 	refresh &&
 	test "$(ch "$Q_STATUS_A")" = "$(printf "healthy\t0")"
 '
@@ -210,7 +225,7 @@ test_expect_success 'a replayed record collapses into the one it repeats' '
 test_expect_success 'an older record is kept and does not become the latest' '
 	send edge-01 "$FIX/node-a-1.0.0.json" node-a-1.0.0.json &&
 	ch_wait "$Q_RECORDS_A" 2 &&
-	test "$(ch "$Q_LATEST_A")" = "$(printf "41\t3\t3")" &&
+	test "$(ch "$Q_LATEST_A")" = "$(printf "%s\t3\t3" "$CLOCK_A")" &&
 	refresh &&
 	test "$(ch "$Q_STATUS_A")" = "$(printf "healthy\t0")"
 '
