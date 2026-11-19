@@ -94,7 +94,7 @@ The properties above hold only on a deployment that provides the
 :ref:`assumptions <tm-assumptions>`. In brief:
 
 - A trusted kernel with the BPF LSM, the signed-loader ABI and the
-  carried kernel patches
+  kernel project patches
 - Module signatures, no 32-bit compatibility, no resume device in the
   UKI and no writes under mounted file systems
 - Secure Boot with a signed, measured UKI and an authenticated kernel

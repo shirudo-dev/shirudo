@@ -54,8 +54,8 @@ Kernel baseline
      - 7.4 cycle
 
 bpf-next contains the signed-loader ABI at merge ``0867b7bfa9de``.
-:src:`testing/vm/build-kernel.sh` accepts bpf-next or a release of v7.4 or
-later. shirudo defines ``KEY_SPEC_DM_VERITY_KEYRING`` (-10) itself when
+The test suite uses the pinned artifact built by ``shirudo-dev/kernel``.
+shirudo defines ``KEY_SPEC_DM_VERITY_KEYRING`` (-10) itself when
 the UAPI headers lack it. The ``tpm_command`` LSM hook, the label reads
 without the calling task's permission, the sleepable form of six inode
 hooks, the trusted ``d_parent`` and the ``mm_read_access`` LSM hook are
@@ -386,7 +386,7 @@ Kfuncs and helpers
      - Read ``security.bpf.shirudo``, ``security.bpf.shirudo.policy``
        and ``security.bpf.shirudo.ancestor``.
        Sleepable; upstream they check ``MAY_READ`` for the calling task
-       first, which the carried patch 0002 skips for ``security.bpf.``
+       first, which kernel project patch 0002 skips for ``security.bpf.``
        names.
    * - ``bpf_inode_init_xattr()``
      - Add the label in ``inode_init_security``.
@@ -571,9 +571,8 @@ that verify a config; see :doc:`config-images`. ``CONFIG_SECCOMP=n``
 is handled: the seal then sees no seccomp state. The attach kinds of
 upatches can need further options; see :doc:`/upatches/write/attach-kinds`.
 
-:src:`testing/vm/build-kernel.sh` enforces its own list with
-``require_config``, which also covers what the test fixtures and the test
-VM need.
+The kernel project configures the test kernel with these options and the
+additional options the test fixtures and VM need.
 
 Kernel command line
 -------------------

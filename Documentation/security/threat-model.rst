@@ -159,12 +159,9 @@ without the protection.
        ``inode_remove_acl``, ``inode_file_setattr`` and
        ``inode_copy_up``, a ``dentry->d_parent`` the verifier trusts,
        and the ``mm_read_access`` LSM hook. Upstream has none of these,
-       and shirudo carries them as
-       :src:`kernel/0001-tpm-Let-LSMs-inspect-userspace-commands.patch`,
-       :src:`kernel/0002-bpf-Read-security.bpf-xattrs-for-LSM-programs-without-the-caller-s-permission.patch`,
-       :src:`kernel/0003-bpf-Let-sleepable-LSM-programs-attach-to-the-remaining-inode-hooks.patch`,
-       :src:`kernel/0004-bpf-Treat-dentry-d_parent-as-a-trusted-pointer.patch`
-       and :src:`kernel/0005-mm-Let-LSMs-check-read-only-remote-mm-access-under-CAP_PERFMON.patch`.
+       and the `shirudo-dev/kernel project
+       <https://github.com/shirudo-dev/kernel>`_ carries them in the
+       target kernel build.
      - T1 needs the ABI, T5 the hook, T3 the label read, the sleepable
        hooks, the trusted parent and the read-only mm access hook.
      - Partly. The pre-flight checks ``signed_loader_kernel_abi`` and
@@ -416,7 +413,7 @@ Figure 1 shows the parties and where trust ends.
    Figure 1. Trust boundaries and the evidence boundary.
 
 The target TCB is the kernel with its configuration and command line
-(A1, A4, A11) and the carried kernel patches (A3); the firmware, boot loader
+(A1, A4, A11) and the kernel project patches (A3); the firmware, boot loader
 and UKI (A6); the TPM (A15); the initrd and every unit it runs before
 ``shirudo-initrd.service`` completes; and the runtime image. The
 runtime image holds the shirudo binary with its two embedded BPF
@@ -793,7 +790,7 @@ receive no binding to these maps.
 A labeled directory takes new entries, by create, mkdir, symlink,
 mknod, hard link or rename, only from authorized tasks (``SealEntry``):
 each entry hook reads the directory's label from the new entry's parent
-dentry, which the carried patches 0003 and 0004 (A3) make possible by
+dentry, which the kernel project patches 0003 and 0004 (A3) make possible by
 letting a sleepable program attach to ``inode_mkdir`` and ``inode_link``
 and by trusting ``dentry->d_parent``, and refreshes the directory's
 mark on the way, from which ``lsm/inode_init_security`` gives the new
@@ -872,7 +869,7 @@ An authorized process is protected against being taken over:
   ``/proc/<pid>/exe``, ``environ``, ``maps`` and the ``fd`` links,
   without a counter. ``lsm/mm_read_access`` refuses the read-only
   access ``mm_access()`` would otherwise grant ``CAP_PERFMON`` past that
-  refusal (carried patch 0005, A3).
+  refusal (kernel project patch 0005, A3).
 - ``lsm/perf_event_alloc`` refuses a perf event bound to a marked task
   (``SealPerf``). Events on all tasks of a CPU, and events opened on a
   task before the exec that marks it, are not checked (D9).
@@ -2206,8 +2203,8 @@ the procedures.
 
 The deployer:
 
-- Builds the kernel with the signed-loader ABI and the carried kernel
-  patches (A3), ``CONFIG_MODULE_SIG`` (A4),
+- Builds the kernel with the signed-loader ABI and the kernel project
+  patch set (A3), ``CONFIG_MODULE_SIG`` (A4),
   ``CONFIG_COMPAT=n`` (A5), both
   dm-verity keyring options off and no foreign built-in certificate
   (A7), the TPM driver without ``i2c-dev`` or ``spidev`` on its bus

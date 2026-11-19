@@ -4,13 +4,14 @@
 #
 # .github/scripts/tests.sh -- run every test as make tests does on a
 # developer's host. setup makes the runner the VM host: KVM, the VM's
-# packages, a compatible LVH kernel or the shirudo test kernel cache, and
+# packages, the kernel CI artifact, and
 # the OpenSSL 3.5 toolchain from vm-toolchain.sh. run builds and runs the
 # unit, ci-checks, functional and end2end tests, each family of target tests
 # in a VM of its own, or one part of them: unit runs the unit and
 # ci-checks tests, functional and end2end the tier of that name.
 # With VM=0, setup installs only host test dependencies using the kernel
-# CI artifact's BTF, and run leaves out target VMs.
+# CI artifact's BTF, and run leaves out target VMs. CI supplies this artifact
+# from github.com/shirudo-dev/kernel.
 #
 #   .github/scripts/tests.sh setup|run [unit|functional|end2end]
 #
@@ -44,7 +45,7 @@ restore_workspace_ownership() {
 	sudo chown -R "$(id -u):$(id -g)" .
 }
 
-# The LVH build and production run leave root's files behind.
+# Setup and production runs leave root's files behind.
 finish() {
 	status=$?
 	restore_workspace_ownership || status=$?
@@ -52,18 +53,8 @@ finish() {
 	exit "$status"
 }
 
-require_kernel_config() {
-	config="$1"
-	setting="$2"
-	if ! grep -qx "$setting" "$config"; then
-		printf 'LVH kernel config lacks %s\n' "$setting" >&2
-		return 1
-	fi
-}
-
-# The programs of bpf/ attach to LSM hooks that carried patches of kernel/
-# add. A kernel built without one passes every other check here and then
-# fails init in the initrd of every VM.
+# The kernel CI build carries the LSM hooks the programs of bpf/ attach to.
+# A kernel built without one passes every other check and then fails init.
 require_lsm_hooks() {
 	btf="$1"
 	names=$(mktemp) || return 1
@@ -74,21 +65,21 @@ require_lsm_hooks() {
 		done)
 	rm -f "$names"
 	[ -z "$missing" ] && return 0
-	printf 'kernel BTF lacks the LSM hooks%s: build it with kernel/*.patch\n' \
+	printf 'kernel BTF lacks the LSM hooks%s: use a shirudo-dev/kernel build\n' \
 		"$missing" >&2
 	return 1
 }
 
-validate_lvh_kernel() {
+validate_kernel_install() {
 	source_dir="$1"
 	[ -d "$source_dir/boot" ] || {
-		echo "LVH kernel artifacts are missing: $source_dir/boot" >&2
+		echo "kernel artifacts are missing: $source_dir/boot" >&2
 		return 1
 	}
 
 	set -- "$source_dir"/boot/vmlinuz-*
 	[ "$#" -eq 1 ] && [ -s "$1" ] || {
-		echo "expected one LVH vmlinuz in $source_dir/boot" >&2
+		echo "expected one kernel image in $source_dir/boot" >&2
 		return 1
 	}
 	image="$1"
@@ -98,108 +89,28 @@ validate_lvh_kernel() {
 	modules="$source_dir/lib/modules/$release"
 
 	[ -s "$btf" ] || {
-		echo "LVH kernel BTF is missing: $btf" >&2
+		echo "kernel BTF is missing: $btf" >&2
 		return 1
 	}
 	[ -s "$config" ] || {
-		echo "LVH kernel config is missing: $config" >&2
+		echo "kernel config is missing: $config" >&2
 		return 1
 	}
 	[ -d "$modules" ] || {
-		echo "LVH kernel modules are missing: $modules" >&2
+		echo "kernel modules are missing: $modules" >&2
 		return 1
 	}
 	grep -aq 'signature_size' "$btf" || {
-		echo "LVH kernel BTF lacks bpf_attr.signature_size" >&2
+		echo "kernel BTF lacks bpf_attr.signature_size" >&2
 		return 1
 	}
 	require_lsm_hooks "$btf" || return 1
 
-	for setting in \
-		CONFIG_BPF_EVENTS=y \
-		CONFIG_BPF_LSM=y \
-		CONFIG_BPF_SYSCALL=y \
-		CONFIG_BPF_JIT=y \
-		CONFIG_CGROUP_BPF=y \
-		CONFIG_FUNCTION_TRACER=y \
-		CONFIG_DYNAMIC_FTRACE=y \
-		CONFIG_DYNAMIC_FTRACE_WITH_DIRECT_CALLS=y \
-		CONFIG_FPROBE=y \
-		CONFIG_DEBUG_INFO_BTF=y \
-		CONFIG_KEYS=y \
-		CONFIG_ASYMMETRIC_KEY_TYPE=y \
-		CONFIG_ASYMMETRIC_PUBLIC_KEY_SUBTYPE=y \
-		CONFIG_X509_CERTIFICATE_PARSER=y \
-		CONFIG_PKCS7_MESSAGE_PARSER=y \
-		CONFIG_TCG_TPM=y \
-		CONFIG_TCG_TIS_CORE=y \
-		CONFIG_TCG_TIS=y \
-		CONFIG_TCG_CRB=y \
-		CONFIG_SYSTEM_DATA_VERIFICATION=y \
-		CONFIG_CRYPTO_MLDSA=y \
-		CONFIG_CRYPTO_SHA512=y \
-		CONFIG_CRYPTO_SHA256=y \
-		CONFIG_MODULE_SIG=y \
-		CONFIG_MODULE_SIG_ALL=y \
-		CONFIG_UPROBES=y \
-		CONFIG_SECURITY=y \
-		CONFIG_SECURITY_NETWORK=y \
-		CONFIG_SECURITYFS=y \
-		CONFIG_MODULES=y \
-		CONFIG_PCI=y \
-		CONFIG_PCI_MSI=y \
-		CONFIG_PCIEPORTBUS=y \
-		CONFIG_NETDEVICES=y \
-		CONFIG_ETHERNET=y \
-		CONFIG_IPV6=y \
-		CONFIG_PACKET=y \
-		CONFIG_ISO9660_FS=y \
-		CONFIG_DEVTMPFS=y \
-		CONFIG_DEVTMPFS_MOUNT=y \
-		CONFIG_VIRTIO=y \
-		CONFIG_VIRTIO_PCI=y \
-		CONFIG_VIRTIO_BLK=y \
-		CONFIG_VIRTIO_NET=y \
-		CONFIG_NET_9P=y \
-		CONFIG_NET_9P_VIRTIO=y \
-		CONFIG_9P_FS=y \
-		CONFIG_OVERLAY_FS=y \
-		CONFIG_EXT4_FS=y \
-		CONFIG_EXT4_FS_SECURITY=y \
-		CONFIG_TMPFS=y \
-		CONFIG_EFI_PARTITION=y \
-		CONFIG_ACPI=y \
-		CONFIG_PNP=y \
-		CONFIG_PNPACPI=y \
-		CONFIG_NETFILTER=y \
-		CONFIG_NETFILTER_INGRESS=y \
-		CONFIG_NET_NS=y \
-		CONFIG_NF_CONNTRACK=y \
-		CONFIG_NF_TABLES=m \
-		CONFIG_VETH=m \
-		CONFIG_BRIDGE=m \
-		CONFIG_VLAN_8021Q=m \
-		CONFIG_NF_FLOW_TABLE=m \
-		CONFIG_NF_FLOW_TABLE_INET=m \
-		CONFIG_NF_FLOW_TABLE_PROCFS=y \
-		CONFIG_BLK_DEV_INITRD=y \
-		CONFIG_RD_GZIP=y \
-		CONFIG_RD_XZ=y \
-		CONFIG_RD_ZSTD=y \
-		CONFIG_BLK_DEV_LOOP=y \
-		CONFIG_BLK_DEV_NVME=y \
-		CONFIG_EFI=y \
-		CONFIG_EFI_STUB=y \
-		CONFIG_SERIAL_8250=y \
-		CONFIG_SERIAL_8250_CONSOLE=y \
-		CONFIG_PROC_FS=y
-	do
-		require_kernel_config "$config" "$setting" || return 1
-	done
 	return 0
 }
 
-stage_lvh_kernel() {
+stage_kernel_install() {
+	rm -rf "$kernel/lib/modules" || return 1
 	mkdir -p "$kernel/lib/modules" || return 1
 	cp "$image" "$kernel/bzImage" || return 1
 	cp "$btf" "$kernel/vmlinux.btf" || return 1
@@ -255,17 +166,8 @@ stage_kernel_ci_artifact() {
 		echo "kernel packages did not contain image and modules for $release" >&2
 		return 1
 	}
-	validate_lvh_kernel "$install_root" || return 1
-	stage_lvh_kernel
-}
-
-build_test_kernel() {
-	# A restored kernel is older than the checkout of the script that
-	# built it.
-	if [ -s "$kernel/bzImage.sha256sum" ]; then
-		touch "$kernel/bzImage.sha256sum"
-	fi
-	make -C testing kernel
+	validate_kernel_install "$install_root" || return 1
+	stage_kernel_install
 }
 
 setup() {
@@ -273,18 +175,11 @@ setup() {
 		sudo rm -rf /opt/ghc /usr/local/lib/android /usr/share/dotnet
 	fi
 
-	if [ -n "${KERNEL_CI_ARTIFACT_DIR:-}" ]; then
-		stage_kernel_ci_artifact "$KERNEL_CI_ARTIFACT_DIR" || exit 1
-	elif [ -n "${LVH_KERNEL_ARTIFACT_DIR:-}" ] &&
-		validate_lvh_kernel "$LVH_KERNEL_ARTIFACT_DIR"; then
-		stage_lvh_kernel || exit 1
-	else
-		if [ -n "${LVH_KERNEL_ARTIFACT_DIR:-}" ]; then
-			printf '%s\n' \
-				'::warning::LVH kernel is incompatible; using the target kernel cache or building it on a cache miss.'
-		fi
-		build_test_kernel
+	if [ -z "${KERNEL_CI_ARTIFACT_DIR:-}" ]; then
+		echo 'KERNEL_CI_ARTIFACT_DIR must name the downloaded artifact from github.com/shirudo-dev/kernel' >&2
+		exit 1
 	fi
+	stage_kernel_ci_artifact "$KERNEL_CI_ARTIFACT_DIR" || exit 1
 
 	# spatch opens libpython3.X.so by that name for the Python of its
 	# rules, and only the -dev package installs it.
@@ -368,12 +263,6 @@ export BPF_VMLINUX_BTF="$PWD/$kernel/vmlinux.btf"
 # A guest that boots runs the suite in minutes; one that hangs, in
 # emergency mode for instance, would otherwise hold the job for an hour.
 export TEST_VM_TIMEOUT=900
-
-# The kernel restored from the cache is older than this checkout of the
-# script that built it.
-if [ -s "$kernel/bzImage.sha256sum" ]; then
-	touch "$kernel/bzImage.sha256sum"
-fi
 
 sudo prlimit --pid "$$" --memlock=unlimited:unlimited
 

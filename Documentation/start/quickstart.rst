@@ -25,8 +25,9 @@ Before you begin
   binaries lock their memory and refuse to run without it. Root is not
   needed; the test VM builds its initrd with dracut as you, without
   changing the host's dracut.
-- Network access. The first boot clones the bpf-next kernel tree and
-  downloads an Ubuntu cloud image.
+- Network access. The first boot downloads an Ubuntu cloud image. Get
+  the test kernel package artifact from the pinned run in
+  ``.github/workflows/tests.yml`` before building the target binary.
 - To build shirudo: a C toolchain with ``make`` and ``pkg-config``, a
   clang and LLVM 23 with the BPF target, ``clang`` installed as
   ``/usr/bin/clang``, and the development files of OpenSSL 3.5 or later,
@@ -41,25 +42,24 @@ Before you begin
   ``isc-dhcp-client``, ``curl``, ``kmod`` and ``file``, and the static
   archives the target binary links: libelf, zlib, zstd, LuaJIT and a static
   glibc. The VM scripts stop at the first missing command and print the
-  command that installs it. The kernel build installs its own build
-  dependencies.
+  command that installs it.
 - ``jq`` and the ``openssl`` command, for the attestation step.
 
 :doc:`/operate/plan/system-requirements` lists the requirements in full.
 
-Build a target kernel
-----------------------
+Use the test kernel artifact
+----------------------------
 
-Before we build shirudo, we need a kernel for it to build against:
-shirudo's embedded BPF objects compile against a kernel's BTF and use
-the signed-loader ABI that only a bpf-next kernel patched under
-:src:`kernel/` has. Without one, the build falls back to the BTF of the
-kernel you are running, which lacks that ABI and fails to build. Build
-one first:
+Download the ``kernel-packages-x86-64-ci`` artifact from the run pinned
+in ``.github/workflows/tests.yml``. Stage it and prepare the test host:
 
 .. code-block:: console
 
-   operator$ make -C testing kernel
+   operator$ KERNEL_CI_ARTIFACT_DIR=$HOME/Downloads/kernel-packages-x86-64-ci \
+      .github/scripts/tests.sh setup
+
+The artifact includes the kernel, its BTF, configuration and modules.
+shirudo compiles its embedded BPF objects against that BTF.
 
 Build shirudo
 -------------
@@ -105,10 +105,9 @@ Boot a test target
       [test-vm] console: make -C testing vm-console VM_NAME=quickstart
       [test-vm] ssh: make -C testing vm-ssh
 
-   The first run takes a while. It builds a bpf-next kernel with the
-   patches under :src:`kernel/`, an Ubuntu disk image and a bundle: the static
-   target binary, a dm-verity runtime image, signed config images and a
-   throwaway signing key. Later runs reuse them.
+   The first run takes a while. It builds an Ubuntu disk image and a
+   bundle: the static target binary, a dm-verity runtime image, signed
+   config images and a throwaway signing key. Later runs reuse them.
 
    The VM boots the way a production target does. The kernel starts with
    the BPF LSM and with the ``.bpf`` and ``.dm-verity`` keyrings open for

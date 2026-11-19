@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 #
-# Test, VM and kernel targets. make -C testing runs every test, make -C
+# Test and VM targets. make -C testing runs every test, make -C
 # testing <tier>[/<name>] one tier or part of it; make -C testing help
 # lists the rest.
 
@@ -29,12 +29,9 @@ test-vm-arch = $(shell TEST_VM_ARCH='$(TEST_VM_ARCH)'; \
 .DEFAULT_GOAL := all
 .PHONY: all help clean unit ci-checks functional end2end build-operator build-unit \
 	test-helpers \
-	fuzz afl bundle test-vm-bundle kernel bpf-next vm vm-console vm-ssh vm-stop vm-clean \
+	fuzz afl bundle test-vm-bundle require-vm-kernel vm vm-console vm-ssh vm-stop vm-clean \
 	vm-operator-end2end
 
-KERNEL_PATCHES ?= $(if $(wildcard $(ROOT)/kernel/*.patch),$(ROOT)/kernel/,)
-override KERNEL_PATCHES := $(if $(strip $(KERNEL_PATCHES)),$(call root-path,$(KERNEL_PATCHES)),)
-KERNEL_PATCH_FILES := $(foreach patch,$(KERNEL_PATCHES),$(if $(wildcard $(patch)/*.patch),$(wildcard $(patch)/*.patch),$(wildcard $(patch))))
 PACKAGE_FORMAT ?= $(call test-vm-arch,TEST_VM_HOST_PKG_FORMAT)
 
 TEST_VM_MODE ?= verity
@@ -66,9 +63,7 @@ TEST_VM_MEMORY ?= 4G
 TEST_VM_DISK_SIZE ?= 30G
 TEST_VM_UBUNTU_CODENAME ?= resolute
 TEST_VM_VERBOSE ?= 0
-# `make -C testing vm` keeps bpf-next as its default, but can boot a kernel
-# built from an upstream release tag, Linux v7.4 or newer being what a
-# target runs.
+# Test VMs use kernel artifacts built by github.com/shirudo-dev/kernel.
 VM_KERNEL ?= $(if $(strip $(KERNEL)),$(KERNEL),bpf-next)
 VM_KERNEL_VERSION := $(patsubst v%,%,$(VM_KERNEL))
 VM_KERNEL_MIN := 7.4
@@ -97,29 +92,6 @@ override TEST_VM_BUNDLE_DIR := $(call root-path,$(TEST_VM_BUNDLE_DIR))
 VM_KERNEL_IMAGE_NAME := $(call test-vm-arch,TEST_VM_ARCH_KIMAGE)
 VM_KERNEL_IMAGE := $(VM_KERNEL_ARTIFACT_DIR)/$(VM_KERNEL_IMAGE_NAME)
 VM_KERNEL_STAMP := $(VM_KERNEL_ARTIFACT_DIR)/$(VM_KERNEL_IMAGE_NAME).sha256sum
-VM_KERNEL_DEP := $(VM_KERNEL_STAMP)
-
-KERNEL_TAG ?= $(if $(strip $(TAG)),$(TAG),bpf-next)
-KERNEL_TAG_VERSION := $(patsubst v%,%,$(KERNEL_TAG))
-KERNEL_REPOSITORY ?= https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
-KERNEL_SOURCE_DIR ?=
-override KERNEL_SOURCE_DIR := $(if $(strip $(KERNEL_SOURCE_DIR)),$(call root-path,$(KERNEL_SOURCE_DIR)),)
-KERNEL_CONFIG ?=
-override KERNEL_CONFIG := $(if $(strip $(KERNEL_CONFIG)),$(call root-path,$(KERNEL_CONFIG)),)
-KERNEL_BUILD_JOBS ?= $(shell nproc)
-ifeq ($(KERNEL_TAG),bpf-next)
-ifneq ($(filter kernel bpf-next,$(MAKECMDGOALS)),)
-ifneq ($(strip $(KERNEL_COMMIT)),)
-  $(error KERNEL_COMMIT is supported only for release kernel tags)
-endif
-endif
-  KERNEL_TAG_NORMALIZED := bpf-next
-  KERNEL_BUILD_ARTIFACT_DIR := $(ROOT)/artifacts/bpf-next-kernel-debs
-else
-  KERNEL_TAG_NORMALIZED := v$(KERNEL_TAG_VERSION)
-  KERNEL_BUILD_ARTIFACT_DIR := $(ROOT)/artifacts/linux-$(KERNEL_TAG_NORMALIZED)$(KERNEL_COMMIT_SUFFIX)-kernel-debs
-endif
-KERNEL_BUILD_STAMP := $(KERNEL_BUILD_ARTIFACT_DIR)/$(VM_KERNEL_IMAGE_NAME).sha256sum
 
 TEST_VM_BUNDLE_STAMP := $(TEST_VM_BUNDLE_DIR)/.stamp
 TEST_VM_BUNDLE_SOURCES := $(sort $(wildcard \
@@ -150,8 +122,9 @@ TEST_VM_BUNDLE_SOURCES := $(sort $(wildcard \
 # The host's util/version_id.c is no input: every build of the host's
 # writes it, and the bundle's build writes its own.
 TEST_VM_BUNDLE_SOURCES := $(filter-out $(ROOT)/util/version_id.c,$(TEST_VM_BUNDLE_SOURCES))
-# The kernel build replaces versioned package files; depend on its stable stamp.
-TEST_VM_BUNDLE_ARTIFACTS := $(VM_KERNEL_STAMP)
+# The external kernel build replaces versioned package files. Track its stamp
+# when present so a new artifact invalidates the bundle.
+TEST_VM_BUNDLE_ARTIFACTS := $(wildcard $(VM_KERNEL_STAMP))
 # The bundle builds in the build container unless BUILD_CONTAINER=0, so it
 # depends on the image's inputs rather than on the host's configuration.
 BUILD_CONTAINER ?= 1
@@ -177,7 +150,7 @@ TEST_VM_BUNDLE_INPUTS := $(sort \
 $(ROOT)/config.mk: $(ROOT)/Makefile.config
 	+$(Q)$(MAKE) -C $(ROOT) config
 
-test-vm-bundle: $(VM_KERNEL_DEP) $(TEST_VM_BUNDLE_STAMP)
+test-vm-bundle: require-vm-kernel $(TEST_VM_BUNDLE_STAMP)
 
 $(TEST_VM_BUNDLE_STAMP): $(TEST_VM_BUNDLE_INPUTS)
 	$(Q)mkdir -p $(dir $(BUILD_LOCK))
@@ -196,39 +169,18 @@ $(TEST_VM_BUNDLE_STAMP): $(TEST_VM_BUNDLE_INPUTS)
 		BPF_VMLINUX_BTF="$(abspath $(VM_KERNEL_ARTIFACT_DIR)/vmlinux.btf)" \
 		flock $(BUILD_LOCK) $(ROOT)/testing/vm/build-bundle.sh
 
-kernel: $(KERNEL_BUILD_STAMP)
-
-bpf-next:
-	$(Q)PACKAGE_FORMAT='$(PACKAGE_FORMAT)' \
-		KERNEL_PATCHES='$(KERNEL_PATCHES)' \
-		KERNEL_CONFIG='$(KERNEL_CONFIG)' \
-		KERNEL_BUILD_JOBS='$(KERNEL_BUILD_JOBS)' \
-		$(ROOT)/testing/vm/build-kernel.sh
-
-$(KERNEL_BUILD_STAMP): $(ROOT)/testing/vm/build-kernel.sh $(KERNEL_PATCH_FILES)
-	$(Q)KERNEL_TAG='$(KERNEL_TAG_NORMALIZED)' \
-		KERNEL_COMMIT='$(KERNEL_COMMIT)' \
-		KERNEL_PATCHES='$(KERNEL_PATCHES)' \
-		KERNEL_REPOSITORY='$(KERNEL_REPOSITORY)' \
-		KERNEL_SOURCE_DIR='$(KERNEL_SOURCE_DIR)' \
-		KERNEL_CONFIG='$(KERNEL_CONFIG)' \
-		PACKAGE_FORMAT='$(PACKAGE_FORMAT)' \
-		KERNEL_BUILD_JOBS='$(KERNEL_BUILD_JOBS)' \
-		OUTPUT_DIR="$(abspath $(KERNEL_BUILD_ARTIFACT_DIR))" \
-		$(ROOT)/testing/vm/build-kernel.sh
-
-# A VM selection owns its kernel artifact independently of the generic
-# KERNEL_TAG selection used by `make -C testing kernel`.
-ifneq ($(VM_KERNEL_DEP),)
-ifneq ($(VM_KERNEL_TAG),$(KERNEL_TAG_NORMALIZED))
-$(VM_KERNEL_STAMP):
-	+$(Q)$(MAKE) -C $(ROOT) -f testing/Makefile kernel KERNEL_TAG='$(VM_KERNEL_TAG)' KERNEL_COMMIT='$(KERNEL_COMMIT)' KERNEL_CONFIG='$(KERNEL_CONFIG)'
-endif
-endif
+require-vm-kernel:
+	$(Q)test -s "$(VM_KERNEL_IMAGE)" -a -s "$(VM_KERNEL_STAMP)" -a \
+		-s "$(VM_KERNEL_ARTIFACT_DIR)/vmlinux.btf" -a \
+		-s "$(VM_KERNEL_ARTIFACT_DIR)/kernel.config" -a \
+		-d "$(VM_KERNEL_ARTIFACT_DIR)/lib/modules" || { \
+		echo "kernel artifact is missing; use github.com/shirudo-dev/kernel packages in $(VM_KERNEL_ARTIFACT_DIR)" >&2; \
+		exit 1; \
+	}
 
 LOCAL_STACK ?= 1
 
-vm: $(VM_KERNEL_DEP) test-vm-bundle
+vm: require-vm-kernel test-vm-bundle
 	$(Q)VM_MODE=interactive VM_NAME="$(VM_NAME)" VM_TENANT="$(VM_TENANT)" \
 		TEST_VM_KERNEL="$(abspath $(VM_KERNEL_IMAGE))" \
 		TEST_VM_KERNEL_ARTIFACT_DIR="$(abspath $(VM_KERNEL_ARTIFACT_DIR))" \
@@ -369,7 +321,7 @@ vm-node-end2end:
 vm-test-tpm: vm-test-register
 
 $(addprefix vm-test-,register $(filter-out end2end,$(VM_SUITES))): \
-		vm-test-%: $(VM_KERNEL_DEP) test-vm-bundle
+		vm-test-%: require-vm-kernel test-vm-bundle
 	$(Q)$(call run-target-vm,$*,$(if $(VM_NAME),$(VM_NAME)-$*),$(if $(filter register,$*),0,1))
 
 vm-stop:
@@ -442,9 +394,8 @@ help:
 	  '  make -C testing fuzz [FUZZ_SECONDS=60] [FUZZ_CORPUS=<dir>] [FUZZERS=<target>...]' \
 	  '  make -C testing afl [AFL_SECONDS=600] [FUZZ_CORPUS=<dir>] [FUZZERS=<target>...]' \
 	  '  make -C testing vm, vm-console, vm-ssh, vm-stop, or vm-clean' \
-	  '  make -C testing vm KERNEL=7.4' \
-	  '  make -C testing kernel KERNEL_TAG=v7.4' \
-	  '  make -C testing bpf-next, bundle or test-helpers' \
+	  '  VM_KERNEL=bpf-next (default) selects the shirudo-dev/kernel artifact' \
+	  '  make -C testing bundle or test-helpers' \
 	  '  make -C testing stack-up, oci, telemetry or stack-down' \
 	  '  make -C testing clean'
 

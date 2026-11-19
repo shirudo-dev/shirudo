@@ -466,7 +466,7 @@ validate_kernel_selection()
 			die "kernel image not found: $KERNEL_OVERRIDE"
 	else
 		[[ -s "$DEFAULT_KERNEL" ]] ||
-			die "kernel image not found: $DEFAULT_KERNEL; run 'make -C testing bpf-next' first"
+			die "kernel image not found: $DEFAULT_KERNEL; place a shirudo-dev/kernel build artifact there"
 	fi
 }
 
@@ -1382,12 +1382,12 @@ resolve_kernel()
 	fi
 
 	[[ -s "$DEFAULT_KERNEL" ]] ||
-		die "kernel image not found: $DEFAULT_KERNEL; run 'make -C testing bpf-next' first"
+		die "kernel image not found: $DEFAULT_KERNEL; place a shirudo-dev/kernel build artifact there"
 	if [[ -s "${DEFAULT_KERNEL}.sha256sum" ]]; then
 		(cd "$(dirname "$DEFAULT_KERNEL")" &&
 			sha256sum -c "${DEFAULT_KERNEL##*/}.sha256sum" >/dev/null)
 	else
-		die "kernel checksum not found: ${DEFAULT_KERNEL}.sha256sum; run 'make -C testing bpf-next'"
+		die "kernel checksum not found: ${DEFAULT_KERNEL}.sha256sum"
 	fi
 	printf '%s\n' "$DEFAULT_KERNEL"
 }

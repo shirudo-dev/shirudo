@@ -134,28 +134,20 @@ The build takes the first of these sources:
      - Generates the header from a BTF file or an ELF file with a
        ``.BTF`` section.
    * - ``artifacts/bpf-next-kernel-debs/vmlinux.btf``
-     - The BTF of the test kernel, when ``make -C testing kernel`` has
-       built it.
+     - The BTF staged from the pinned kernel project artifact.
    * - ``/sys/kernel/btf/vmlinux``
      - The running kernel.
 
 ``vendor/linux/.vmlinux-btf-source`` records the source used. When you
 select another one, the next build regenerates the header.
 
-1. Build the test kernel, which also writes its BTF.
-   :doc:`/contribute/testing/testing` describes the kernel build:
-
-   .. code-block:: console
-
-      $ make -C testing kernel
-
-2. Or name the BTF of the kernel you build for:
+1. Name the BTF of the kernel you build for:
 
    .. code-block:: console
 
       $ make BPF_VMLINUX_BTF=<path-to-btf>
 
-3. Verify which source the header came from:
+2. Verify which source the header came from:
 
    .. code-block:: console
 
@@ -423,9 +415,9 @@ Project layout
      - Vendored libbpf and BPF UAPI headers.
    * - ``vendor/linux/``
      - The generated ``vmlinux.h``. Not tracked.
-   * - :src:`kernel/`
-     - Kernel patches the test kernel build applies. See
-       :doc:`/internals/kernel-patches`.
+   * - ``shirudo-dev/kernel``
+     - Kernel source, configuration, patches and built artifacts used
+       by CI. See :doc:`/internals/kernel-patches`.
    * - :src:`upatches/`
      - The shipped packages, ``kernel-obs`` and ``kernel-cve``, each
        with its Beefile.

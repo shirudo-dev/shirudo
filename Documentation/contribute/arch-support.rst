@@ -48,10 +48,10 @@ Comparison
      - Stack-clash protection, call-used register zeroing,
        ``-mbranch-protection=standard``
      - None
-   * - Carried kernel patches
-     - ``kernel/0001`` to ``kernel/0005``
-     - ``kernel/0001`` to ``kernel/0005``
-     - ``kernel/0001`` to ``kernel/0005``
+   * - Kernel project patch set
+     - Included in the external kernel build
+     - Included in the external kernel build
+     - Included in the external kernel build
    * - BPF trampolines (``lsm``, ``fentry``, ``fexit``, ``fmod_ret``)
      - 36 programs per function
      - 37 programs per function
@@ -137,9 +137,8 @@ shirudo
 
 - Run the CI tiers on arm64, with the test VM booting on an arm64
   runner.
-- Add riscv64 to the test VM in :src:`testing/vm/arch.sh` and
-  :src:`testing/vm/build-kernel.sh`, and boot a first riscv64 target with a
-  TPM.
+- Add riscv64 to the test VM in :src:`testing/vm/arch.sh`, and boot a
+  first riscv64 target with a TPM.
 - Build the target binary and the packages for arm64 and riscv64 in CI.
 - Check that every library the target links builds and runs on
   riscv64, LuaJIT included.
@@ -152,8 +151,8 @@ shirudo
 Linux kernel
 ~~~~~~~~~~~~
 
-- Get ``kernel/0001`` to ``kernel/0005`` upstream. None of them is in
-  bpf-next; :doc:`/internals/kernel-patches` describes each.
+- Get the remaining kernel changes upstream. The kernel project
+  maintains them; :doc:`/internals/kernel-patches` describes each.
 - riscv64: BPF trampolines on a kernel built with ``CONFIG_CFI``.
 - riscv64: arenas on CPUs without Zacas.
 - riscv64: large stacks, exceptions and private stacks in the BPF JIT.

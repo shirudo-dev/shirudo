@@ -174,7 +174,7 @@ task. It counts one whose mode includes ``PTRACE_MODE_ATTACH``
 ``pidfd_getfd()`` and ``process_vm_readv()``, and refuses a read-mode
 one uncounted, because journald reads ``/proc/<pid>/exe`` of every
 process it logs for and a counted read would rise on an honest node.
-``lsm/mm_read_access``, a hook of carried patch 0005, refuses the
+``lsm/mm_read_access``, a hook of kernel project patch 0005, refuses the
 read-only access ``mm_access()`` grants ``CAP_PERFMON`` after that
 refusal, to ``environ``, ``maps`` and the other memory files. ``lsm/perf_event_alloc``
 refuses a perf event bound to a marked task (``SealPerf``).
@@ -265,7 +265,7 @@ Reading the label
 ~~~~~~~~~~~~~~~~~
 
 The seal reads the label with the ``bpf_get_file_xattr()`` and
-``bpf_get_dentry_xattr()`` kfuncs. With the carried kernel patch they
+``bpf_get_dentry_xattr()`` kfuncs. With the kernel project patch they
 return a ``security.bpf.`` label as the in-kernel LSMs read theirs,
 without the calling task's permission. Upstream they first check that
 the calling task may read the inode, against its raw ids, and root can
@@ -397,11 +397,11 @@ Marks are a cache
     entry's parent dentry and refresh its mark on the way, which
     ``inode_init_security``, the one hook without a dentry, labels the
     new inode from in the same operation. On a kernel without the
-    carried patches 0003 and 0004, the seal's entry hooks do not load
+    kernel project patches 0003 and 0004, the seal's entry hooks do not load
     and ``init`` fails.
 
 Label reads on an upstream kernel
-    Without the carried xattr patch, the kfuncs check that the calling
+    Without kernel project patch 0002, the kfuncs check that the calling
     task may read the inode, and every LSM's ``inode_permission`` hook
     takes part. A read that fails for the caller, through an idmapped
     mount, an ACL or another LSM's policy, makes a labeled inode

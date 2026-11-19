@@ -40,7 +40,7 @@ Measurement setup
      - A test VM: ``q35`` machine, 4 vCPUs (``-cpu host``), 4 GiB of
        memory, Ubuntu 26.04 with systemd 259.
    * - Kernel
-     - bpf-next, built by ``make -C testing kernel``.
+     - The pinned bpf-next artifact from ``shirudo-dev/kernel``.
    * - TPM
      - swtpm 0.7.3, a software TPM, through ``/dev/tpmrm0``.
    * - Method

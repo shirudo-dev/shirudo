@@ -500,7 +500,7 @@ Meaning
 Causes
    The check names the requirement that is missing: root, the BPF LSM
    in the kernel's active LSM list, bpffs, the signed-loader ABI, an
-   LSM hook only the carried kernel patches add, the certificate and
+   LSM hook only the kernel project patches add, the certificate and
    its algorithm, the kernel keyring, the embedded loader or the TPM.
 
 Action

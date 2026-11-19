@@ -101,8 +101,7 @@ Kernel configuration
        count, including the module signing key of the kernel build, so
        keep that key in the same custody as the config key.
      - no
-   * - The ``tpm_command`` LSM hook from ``kernel/0001`` in the shirudo
-       tree
+   * - The ``tpm_command`` LSM hook carried by the shirudo kernel build
      - The hook lets shirudo refuse extensions of its register by
        other processes.
      - init fails: ``lsm/tpm_command`` cannot attach

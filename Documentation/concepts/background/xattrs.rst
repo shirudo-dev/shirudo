@@ -74,7 +74,7 @@ kfuncs:
     Read an xattr whose name starts with ``user.`` or ``security.bpf.``.
     They first check that the current task may read the inode
     (``inode_permission()`` with ``MAY_READ``) and return its error if
-    not; a kernel patch shirudo carries skips that check for
+    not; kernel project patch 0002 skips that check for
     ``security.bpf.`` names (:doc:`/internals/kernel-patches`). Both
     may sleep, so only sleepable programs call them.
 
@@ -188,7 +188,7 @@ on the hooks the kernel lists as sleepable, and the read kfuncs need a
 dentry or a file. The hooks that decide a new entry receive the
 directory they change as a ``struct inode``; its dentry is only the new
 entry's ``d_parent``, a pointer the verifier does not trust. Two kernel
-patches shirudo carries change that (:doc:`/internals/kernel-patches`):
+project patches change that (:doc:`/internals/kernel-patches`):
 0003 adds ``inode_mkdir``, ``inode_link``, ``inode_copy_up`` and the ACL
 and inode flag hooks to the sleepable set, and 0004 lets a program pass
 ``dentry->d_parent`` to the read kfuncs. Whether a hook can read the
@@ -298,8 +298,8 @@ Limits
 ------
 
 Upstream, the read kfuncs check the calling task's read permission even
-for ``security.bpf.`` names; the kernel patch shirudo carries drops that
-check for them. On a kernel without the patch, when another LSM, an ACL
+for ``security.bpf.`` names; kernel project patch 0002 drops that check
+for them. On a kernel without the patch, when another LSM, an ACL
 or an idmapped mount denies that task read access, the seal decides by
 the record of the inode, or of the directory the operation changes, and
 a labeled inode without a record looks unlabeled. :doc:`/internals/seal`

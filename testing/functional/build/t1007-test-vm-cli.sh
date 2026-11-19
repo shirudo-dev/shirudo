@@ -472,8 +472,7 @@ test_expect_success 'test-vm imports the host-built payload' '
 	grep -Fq "LIBBPF_VENDOR    := vendor/libbpf" ../Makefile.shirudo &&
 	grep -Fq "\$(LIBBPF_A)" ../Makefile.shirudo &&
 	grep -Fq "VMLINUX_GEN      := tools/gen-vmlinux-h/gen-vmlinux-h" \
-		../Makefile.shirudo &&
-	! grep -q "shirudo-bpf-deps" vm/build-kernel.sh
+		../Makefile.shirudo
 '
 	test_expect_success 'test-vm bundle stamp controls incremental rebuilds' '
 	grep -q "TEST_VM_BUNDLE_STAMP" ../testing/Makefile &&
@@ -629,132 +628,11 @@ test_expect_success 'an operator VM serves without a TPM and alone gets the key'
 	grep -q "the operator VM has a TPM" vm/guest.sh &&
 	grep -q "bindeb-pkg PKG_ROLES=operator" vm/guest.sh
 '
-test_expect_success 'make -C testing vm boots a release kernel at or above the floor' '
-	grep -q "VM_KERNEL_MIN := 7.4" ../testing/Makefile &&
-	grep -q "make -C testing vm KERNEL=7.4" ../testing/Makefile &&
-	grep -Fq "VM_KERNEL_ARTIFACT_DIR := \$(ROOT)/artifacts/linux-\$(VM_KERNEL_TAG)\$(KERNEL_COMMIT_SUFFIX)-kernel-debs" ../testing/Makefile &&
-	grep -q "TEST_VM_KERNEL=\"\$(abspath \$(VM_KERNEL_IMAGE))\"" ../testing/Makefile &&
-	make -n -C .. -f testing/Makefile vm KERNEL=7.4 TEST_VM_ARCH=x86_64 \
-		TEST_VM_WORK_DIR="$WORK/release-vm" \
-		>"$WORK/release-vm-make.out" 2>&1 &&
-	grep -q "artifacts/linux-v7.4-kernel-debs/bzImage" \
-		"$WORK/release-vm-make.out" &&
-	make -n -C .. -f testing/Makefile vm KERNEL=7.10 TEST_VM_ARCH=x86_64 \
-		TEST_VM_WORK_DIR="$WORK/newer-vm" \
-		>"$WORK/newer-vm-make.out" 2>&1 &&
-	grep -q "artifacts/linux-v7.10-kernel-debs/bzImage" \
-		"$WORK/newer-vm-make.out" &&
-	! make -n -C .. -f testing/Makefile vm KERNEL=6.18 TEST_VM_ARCH=x86_64 \
-		TEST_VM_WORK_DIR="$WORK/old-vm" \
-		>"$WORK/old-vm-make.out" 2>&1 &&
-	grep -q "requires Linux v7.4 or newer" "$WORK/old-vm-make.out"
-'
-
-test_expect_success 'the VM kernel image is named for the host architecture' '
-	for spec in x86_64:bzImage amd64:bzImage aarch64:Image arm64:Image \
-		riscv64:bzImage
-	do
-		arch=${spec%%:*} image=${spec#*:} &&
-		make -n -C .. -f testing/Makefile vm KERNEL=7.4 \
-			TEST_VM_ARCH=$arch TEST_VM_WORK_DIR="$WORK/arch-$arch" \
-			>"$WORK/arch-$arch.out" 2>&1 &&
-		grep -q "artifacts/linux-v7.4-kernel-debs/$image" \
-			"$WORK/arch-$arch.out" || return 1
-	done
-'
-
-test_expect_success 'the VM kernel is not built on an unsupported architecture' '
-	! TEST_VM_ARCH=riscv64 vm/build-kernel.sh \
-		>"$WORK/riscv64-kernel.out" 2>&1 &&
-	grep -q "x86_64 and aarch64 hosts only, not riscv64" \
-		"$WORK/riscv64-kernel.out"
-'
-
-test_expect_success 'the kernel builder requires the NV writer parser and RSA support' '
-	for symbol in PKCS8_PRIVATE_KEY_PARSER CRYPTO_RSA; do
-		grep -qx "CONFIG_$symbol=y" vm/build-kernel.sh &&
-		grep -qx "require_config CONFIG_$symbol y" vm/build-kernel.sh ||
-			exit 1
-	done
-'
-
-test_expect_success 'all kernel and VM builds use the slim profile' '
-	! grep -Eq "^(kernel-small|vm-small|test-vm-small-bundle):" ../testing/Makefile &&
-	! grep -q "KERNEL_PROFILE" ../testing/Makefile vm/build-kernel.sh &&
-	grep -q "kernel-slim.config" vm/build-kernel.sh &&
-	grep -q "config_profile=slim" vm/build-kernel.sh &&
-	grep -q "CONFIG_CC_OPTIMIZE_FOR_SIZE=y" vm/build-kernel.sh &&
-	grep -q "make -C testing vm KERNEL=7.4" ../testing/Makefile &&
-	make -n -C .. -f testing/Makefile vm VM_NAME=slim-cli-vm \
-		TEST_VM_ARCH=x86_64 TEST_VM_WORK_DIR="$WORK/slim-vm" \
-		>"$WORK/slim-vm-make.out" 2>&1 &&
-	grep -q "artifacts/bpf-next-kernel-debs/bzImage" \
-		"$WORK/slim-vm-make.out" &&
-	grep -q "BPF_VMLINUX_BTF=.*artifacts/bpf-next-kernel-debs/vmlinux.btf" \
-		"$WORK/slim-vm-make.out"
-'
-
-test_expect_success 'VM reports guest and host memory usage' '
-	grep -q "report_boot_memory" vm/guest.sh &&
-	grep -q "guest_mem_total_kb" vm/guest.sh &&
-	grep -q "guest_mem_available_kb" vm/guest.sh &&
-	grep -q "guest_mem_used_percent" vm/guest.sh &&
-	grep -q "capture_host_memory_report" vm/run.sh &&
-	grep -q "qemu_vmrss_kb" vm/run.sh &&
-	grep -q "qemu_pss_kb" vm/run.sh &&
-	grep -q "print_memory_summary" vm/run.sh
-'
-
-test_expect_success 'make -C testing kernel builds a tagged third-party Linux source' '
-	grep -q "^kernel: \$(KERNEL_BUILD_STAMP)" ../testing/Makefile &&
-	grep -q "KERNEL_TAG=\"\${KERNEL_TAG:-bpf-next}\"" \
-		vm/build-kernel.sh &&
-	grep -q "KERNEL_REPOSITORY=\"\${KERNEL_REPOSITORY:-https://git.kernel.org" \
-		vm/build-kernel.sh &&
-	grep -q "git clone --depth 1 --branch" vm/build-kernel.sh &&
-	grep -q "make -C testing kernel KERNEL_TAG=v7.4" ../testing/Makefile &&
-	! KERNEL_TAG=not-a-kernel-tag vm/build-kernel.sh \
-		>"$WORK/invalid-kernel-tag.out" 2>&1 &&
-	grep -q "KERNEL_TAG must be bpf-next or a Linux release tag" \
-		"$WORK/invalid-kernel-tag.out" &&
-	! KERNEL_TAG=v6.18 vm/build-kernel.sh \
-		>"$WORK/old-kernel-tag.out" 2>&1 &&
-	grep -q "requires Linux v7.4 or newer" "$WORK/old-kernel-tag.out"
-'
-test_expect_success 'make -C testing vm and kernel select an exact release commit' '
-	make -n -C .. -f testing/Makefile vm KERNEL=7.4 KERNEL_COMMIT=abcdef1234567 \
-		TEST_VM_ARCH=x86_64 TEST_VM_WORK_DIR="$WORK/commit-vm" \
-		>"$WORK/commit-vm-make.out" 2>&1 &&
-	grep -q "artifacts/linux-v7.4-abcdef1234567-kernel-debs/bzImage" \
-		"$WORK/commit-vm-make.out" &&
-	grep -q "KERNEL_COMMIT=" "$WORK/commit-vm-make.out" &&
-	grep -q "KERNEL_COMMIT is supported only for release VM kernels" ../testing/Makefile &&
-	! make -n -C .. -f testing/Makefile vm KERNEL=bpf-next KERNEL_COMMIT=abcdef1234567 \
-		>"$WORK/commit-bpf-next.out" 2>&1 &&
-	grep -q "KERNEL_COMMIT is supported only for release VM kernels" \
-		"$WORK/commit-bpf-next.out" &&
-	! KERNEL_TAG=v7.4 KERNEL_COMMIT=not-a-sha \
-		vm/build-kernel.sh >"$WORK/invalid-kernel-commit.out" 2>&1 &&
-	grep -q "KERNEL_COMMIT must contain 7 to 40 hexadecimal characters" \
-		"$WORK/invalid-kernel-commit.out"
-'
-test_expect_success 'kernel VM artifacts provide networking modules' '
-	grep -q "CONFIG_VETH=m" vm/build-kernel.sh &&
-	grep -q "CONFIG_BRIDGE=m" vm/build-kernel.sh &&
-	grep -q "CONFIG_VLAN_8021Q=m" vm/build-kernel.sh &&
-	grep -q "CONFIG_NF_FLOW_TABLE=m" vm/build-kernel.sh &&
-	grep -q "CONFIG_NF_FLOW_TABLE_INET=m" vm/build-kernel.sh &&
-	grep -q "CONFIG_NF_FLOW_TABLE_PROCFS=y" vm/build-kernel.sh &&
-	grep -q "CONFIG_PROC_FS=y" vm/build-kernel.sh &&
-	grep -q "require_config CONFIG_VETH m" vm/build-kernel.sh &&
-	grep -q "dpkg-deb -x" vm/build-kernel.sh &&
-	grep -q "depmod -b" vm/build-kernel.sh &&
-	grep -q "TEST_VM_KERNEL_ARTIFACT_DIR" ../testing/Makefile &&
-	grep -q "mount_tag=shirudo-kernel" vm/run.sh &&
-	grep -q "TEST_VM_KERNEL_MODULES" vm/run.sh &&
-	grep -q "install_kernel_modules" vm/guest.sh &&
-	grep -q "modprobe \"\$module\"" vm/guest.sh &&
-	grep -q "nf_flow_table_procfs" vm/guest.sh
+test_expect_success 'test VMs require a kernel project artifact' '
+	grep -q "github.com/shirudo-dev/kernel" ../testing/Makefile &&
+	grep -q "^require-vm-kernel:" ../testing/Makefile &&
+	! grep -q "build-kernel.sh\|KERNEL_CONFIG\|KERNEL_PATCHES" ../testing/Makefile &&
+	grep -q "KERNEL_CI_ARTIFACT_DIR" ../.github/scripts/tests.sh
 '
 test_expect_success 'prepared VM runtime includes ripgrep' '
 	grep -qx "ripgrep" vm/runtime-packages &&

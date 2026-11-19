@@ -52,7 +52,7 @@ Which kernel does a target need?
 --------------------------------
 
 A kernel with the signed-loader ABI of bpf-next and the ``tpm_command``
-patch that shirudo carries, plus a second patch on x86-64.
+patch in the shirudo kernel build, plus a second patch on x86-64.
 :doc:`/operate/plan/system-requirements` lists the kernel options and
 :doc:`/internals/kernel-patches` the patches.
 

@@ -119,7 +119,7 @@ When shirudo is not a fit yet
 - shirudo has no release. ``main`` is the development branch, and no
   format carries a compatibility promise yet.
 - A target needs a bpf-next kernel with the signed-loader interface and
-  the patches shirudo carries, a TPM 2.0, and a unified kernel image
+  the patches in the shirudo kernel build, a TPM 2.0, and a unified kernel image
   booted through ``systemd-stub`` with a systemd initrd built by dracut.
   There is no fallback for an older kernel.
 - On an enforcing target, only signed upatches run BPF. BPF-based

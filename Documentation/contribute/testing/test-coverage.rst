@@ -106,13 +106,11 @@ signed config image.
      - Initrd generator and installer options, the installer's
        ``--dry-run`` plan
    * - ``t1007-test-vm-cli``
-     - Test VM scripts: kernel selection, host dependencies, arm64
+     - Test VM scripts: kernel artifact selection, host dependencies, arm64
        boot settings, the bundle stamp, the build container, serve mode,
        node mode only for a core or edge node of the end-to-end tier,
        whose vTPM keys the builder helper creates before boot, the
        operator VM's role and its signing key
-   * - ``t1008-kernel-ami-config``
-     - The slim kernel configuration for NitroTPM CRB, EC2, EFI and SSM
    * - ``t1009-upatch-isa``
      - The upatch build compiles for BPF instruction set v4, and a
        ``-mcpu`` in ``--extra-cflags`` replaces it; a dense ``switch``
@@ -1055,7 +1053,7 @@ Coverage by area
        ``t7001``, ``t8001``
    * - Build and packaging
      - ``t0005``, ``t0007``, ``t1003``, ``t1004``, ``t1005``,
-       ``t1008``, ``t7004``, ``t8003``
+       ``t7004``, ``t8003``
    * - CI scripts
      - ``t0001`` to ``t0008``
    * - Parsers
@@ -1283,8 +1281,7 @@ Platforms
 ~~~~~~~~~
 
 - Real TPMs. Every TPM test uses ``swtpm`` in the VM or the libtpms
-  simulator helper. ``t1008`` checks only the kernel configuration for
-  NitroTPM.
+  simulator helper.
 - Architectures. CI builds and runs the unit tests on arm64 and on
   riscv64, under QEMU user emulation, with the BPF objects built from
   the BTF of the x86-64 bpf-next kernel. The CI suite also runs unit,

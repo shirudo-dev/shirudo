@@ -8,8 +8,10 @@
 Carried kernel patches
 ======================
 
-The kernel patches in :src:`kernel/` of the shirudo tree. The test kernel
-build applies them; a production kernel needs the same changes.
+The kernel changes shirudo needs and the external project that builds
+them. The ``shirudo-dev/kernel`` repository carries these changes and
+publishes the kernel artifacts used by the test suite. A production
+kernel needs the same changes.
 
 Summary
 -------
@@ -59,14 +61,13 @@ which bpf-next and the bpf fixes tree for 7.4 contain and which the
 tree does not carry; :doc:`/operate/plan/system-requirements` says
 why.
 
-How the test kernel applies them
---------------------------------
+How the test kernel includes them
+---------------------------------
 
-``make -C testing kernel`` passes ``KERNEL_PATCHES``, which defaults to
-:src:`kernel/` when that directory holds patches.
-:src:`testing/vm/build-kernel.sh` applies each patch in name order with
-``git apply --index`` and commits it, and skips a patch whose reverse
-already applies. A patch that applies neither way fails the build.
+The kernel project maintains and builds the patches. CI downloads its
+kernel package artifact and checks the BTF ABI and LSM hooks before it
+stages the image for the test VM. The kernel configuration and patch
+application are owned by that project.
 
 TPM command LSM hook
 --------------------

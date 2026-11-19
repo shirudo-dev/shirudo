@@ -94,12 +94,11 @@ parser of input from outside the host gets a target in `testing/fuzz/`.
 
 ## Before a VM goal
 
-- `vm`, `test-vm-bundle` and every family with target tests build the
-  kernel first when `testing/vm/build-kernel.sh` or a kernel patch is
-  newer than the artifact's `bzImage.sha256sum`. The build deletes the
-  artifact directory, needs gigabytes of disk and takes long, and a
-  checkout or rebase that touches the script triggers it. Compare the
-  times before starting and tell the user when a rebuild is due.
+- `vm`, `test-vm-bundle` and every family with target tests require the
+  kernel artifact from `shirudo-dev/kernel` under
+  `artifacts/bpf-next-kernel-debs/`. The CI workflow pins a kernel run
+  and its setup script stages that artifact. Local runs need the same
+  artifact; they do not build a kernel from this checkout.
 - The bundle builds in the build container (`testing/container/`) from
   a copy of the files git sees in the checkout, tracked and untracked but
   not ignored, so uncommitted changes are tested; edit nothing until the
@@ -156,15 +155,10 @@ systemd-run --user --pipe --same-dir --wait --collect \
 
 ## Kernel
 
-The optional argument is passed as `KERNEL=`. Leave it out for
-`bpf-next`, the kernel the test suite runs. A release such as `7.4`
-boots that tag instead. `testing/Makefile` refuses one older than
-`VM_KERNEL_MIN`. Either kernel is built on first use, which takes a
-while; say so before starting. A build that fails because the host's
-kernel BTF lacks the signed-loader ABI needs the kernel, not a VM: after
-`make -C testing kernel` the build reads
-`artifacts/bpf-next-kernel-debs/vmlinux.btf` in place of
-`/sys/kernel/btf/vmlinux` (`Makefile.shirudo`).
+The optional argument is passed as `KERNEL=` to select an already staged
+artifact. Leave it out for `bpf-next`, the kernel the test suite runs.
+The BPF build reads `artifacts/bpf-next-kernel-debs/vmlinux.btf` in
+place of `/sys/kernel/btf/vmlinux` (`Makefile.shirudo`).
 
 ## Reuse a running VM
 
@@ -184,8 +178,7 @@ hold:
 1. It runs. `qemu.pid` holds a live PID, and `/proc/<pid>/cmdline`
    names the state directory.
 2. It booted the requested kernel. The `-kernel` path in that command
-   line lies in `artifacts/bpf-next-kernel-debs/` for bpf-next, or in
-   `artifacts/linux-v<version>-kernel-debs/` for a release.
+   line lies in the selected staged kernel artifact directory.
 3. It runs the current build. The command line names the bundle it
    booted, `shirudo-bundle,path=<bundle>`. The VM is stale when
    `<bundle>/.stamp` is newer than `created-at` (nanoseconds since the

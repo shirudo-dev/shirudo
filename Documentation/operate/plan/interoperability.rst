@@ -314,7 +314,7 @@ Other LSMs
    shirudo's programs and moves no counter. With ``bpf`` before them,
    shirudo's refusal ends the walk and the other LSM does not see or log
    the attempt.
-:Seal labels: With the carried kernel patch, the seal reads a file's
+:Seal labels: With the kernel project patch, the seal reads a file's
    label as the in-kernel LSMs read theirs, without the caller's read
    permission, and no other LSM's ``inode_permission`` policy can hide
    it. On an upstream kernel the kfunc checks that permission, every

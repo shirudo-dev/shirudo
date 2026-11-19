@@ -60,12 +60,11 @@ kernel does not change what a series is tested on. For a manual run,
 set ``kernel_run_id`` to select another run. The run must contain that
 artifact. The ``KERNEL_REPO_READ_TOKEN`` secret needs Actions read
 access to the kernel repository. Setup extracts the image and headers
-packages, checks the kernel config and BTF, and stages the result for
-the test VM. It refuses a kernel whose BTF lacks an LSM hook a program
-of ``bpf/`` attaches to, or whose config does not sign every module.
-A change to ``kernel/`` or to :src:`testing/vm/build-kernel.sh`
-therefore needs a new run of the kernel repository and the pin moved to
-it before CI can boot the series.
+packages, checks BTF for the signed-loader ABI and every LSM hook a
+program of ``bpf/`` attaches to, and stages the result for the test VM.
+The kernel project owns the kernel source, configuration and patch
+application. Changes to those inputs need a successful kernel project
+run and an updated pin before CI can boot the series.
 
 Test tiers
 ----------
@@ -149,8 +148,8 @@ A shell test is named ``t<F><K><NN>-<what>.sh``:
    * - 1
      - ``functional/build/``
      - Helper dispatch, the command surface, the static target, rpm
-       packaging, the initrd generator and installer, the test VM
-       scripts and the slim kernel configuration
+       packaging, the initrd generator and installer, and the test VM
+       scripts
    * - 2
      - ``functional/signing/``
      - Keys, signatures, vouching, revocation and the trusted set
@@ -444,63 +443,21 @@ end-to-end test has no TPM and no shirudo kernel arguments; it builds
 and installs the operator package and serves the end-to-end run. The
 interactive VM stays up until you stop it.
 
-Build the test kernel
-~~~~~~~~~~~~~~~~~~~~~
+Use a kernel project artifact
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``make -C testing kernel`` builds bpf-next with the slim configuration
-in :src:`testing/vm/build-kernel.sh` and the patches under :src:`kernel/`. It
-writes the kernel image, ``vmlinux.btf``, ``kernel.config``, packages
-and a record of the commit it built to
-``artifacts/bpf-next-kernel-debs/``. Every target that boots a VM
-builds the kernel first when it is missing.
+The kernel project publishes the kernel image, BTF, configuration and
+modules together. Download the ``kernel-packages-x86-64-ci`` artifact
+from the run pinned in :src:`.github/workflows/tests.yml` and pass its
+directory to the setup script:
 
-1. Build the kernel:
+.. code-block:: console
 
-   .. code-block:: console
+   $ KERNEL_CI_ARTIFACT_DIR=$HOME/Downloads/kernel-packages-x86-64-ci .github/scripts/tests.sh setup
 
-      $ make -C testing kernel
-
-2. Verify the commit it built:
-
-   .. code-block:: console
-
-      $ grep '^commit=' artifacts/bpf-next-kernel-debs/bpf-next-kernel-build
-
-The stamp is ``artifacts/bpf-next-kernel-debs/bzImage.sha256sum``
-(``Image.sha256sum`` on arm64). Make rebuilds the kernel when
-:src:`testing/vm/build-kernel.sh` or a patch under :src:`kernel/` is newer
-than the stamp, so a checkout or rebase that touches either rebuilds
-it on the next VM run. When you know the kernel is current, touch the
-stamp, as :src:`.github/scripts/tests.sh` does. The build removes the
-artifact directory first, so do not run it while a VM run or a build
-reads ``vmlinux.btf``.
-
-.. list-table::
-   :header-rows: 1
-   :widths: 34 66
-
-   * - Variable
-     - Effect
-   * - ``KERNEL_TAG=v<version>``
-     - Builds a release instead of bpf-next, v7.4 or newer, into
-       ``artifacts/linux-v<version>-kernel-debs/``.
-   * - ``KERNEL_COMMIT=<sha>``
-     - Builds an exact commit of a release tag. Not for bpf-next.
-   * - ``KERNEL_SOURCE_DIR=<dir>``
-     - Builds from a clean git checkout instead of a fresh clone.
-   * - ``KERNEL_CONFIG=<file>``
-     - Starts from a full configuration instead of the slim fragment.
-   * - ``KERNEL_PATCHES=<dir>``
-     - Applies these patches instead of :src:`kernel/`.
-   * - ``KERNEL_BUILD_JOBS=<n>``
-     - Parallel jobs, ``nproc`` by default.
-   * - ``WORK_DIR=<dir>``
-     - The build directory, read from the environment.
-       ``/tmp/<name>-kernel-build`` by default.
-
-``make -C testing bpf-next`` rebuilds bpf-next without looking at the
-stamp. The kernel build installs missing build dependencies with
-``apt-get`` or ``dnf``, through ``sudo`` when it does not run as root.
+Setup stages the kernel under ``artifacts/bpf-next-kernel-debs/``.
+Target VM goals require this artifact; they do not build a kernel from
+this checkout.
 
 Build the bundle
 ~~~~~~~~~~~~~~~~

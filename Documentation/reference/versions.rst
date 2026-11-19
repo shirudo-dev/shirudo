@@ -227,7 +227,7 @@ kernel. The pre-flight checks ``signed_loader_kernel_abi`` and
 kernel without the ABI fails with ``kernel_abi_unsupported``.
 :doc:`/operate/plan/system-requirements` lists the kernel requirements and how
 to identify a kernel, :doc:`/internals/kernel-interfaces` every interface
-shirudo uses, and :doc:`/internals/kernel-patches` the carried patches.
+shirudo uses, and :doc:`/internals/kernel-patches` the kernel project patches.
 
 Mixing builds
 -------------
