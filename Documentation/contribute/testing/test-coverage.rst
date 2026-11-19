@@ -955,8 +955,9 @@ image, and a tree with one upatch deployed and one still rolling out
 (``test/xtop-nodes``, ``test/xtop-shields``).
 
 The unit tests of :src:`tools/xtop/test/` cover how xtop turns the rows
-of that query into nodes, the health percent, the roll-up by image and
-its ClickHouse client; ``make -C tools/xtop tests`` type-checks the
+of those queries into nodes and shields, the health percent, the
+roll-up by image, the status and severity of a shield and its
+ClickHouse client; ``make -C tools/xtop tests`` type-checks the
 program and runs them (:ref:`testing-xtop`).
 
 Coverage by area

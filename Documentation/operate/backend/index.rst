@@ -85,8 +85,9 @@ Files
      - The SQL tests and their runner, ``test/run.sh``
        (:ref:`testing-backend`).
    * - :src:`tools/xtop/`
-     - A terminal view of the nodes over ``node_status``,
-       ``latest`` and ``node_vulns`` (:doc:`xtop`).
+     - A terminal view of the nodes, over ``node_status``,
+       ``latest`` and ``node_vulns``, and of the upatches of the trees
+       and their rollout (:doc:`xtop`).
 
 .. toctree::
    :titlesonly:

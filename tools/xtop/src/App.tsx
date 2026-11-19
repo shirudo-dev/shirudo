@@ -10,20 +10,23 @@ import { useMouse } from "./lib/useMouse.ts";
 import { Panel } from "./components/Panel.tsx";
 import { Sidebar, type MenuItem } from "./components/Sidebar.tsx";
 import { NodesView, type NodesMode } from "./components/NodesView.tsx";
+import { ShieldsView } from "./components/ShieldsView.tsx";
 
-type ViewId = "nodes";
+type ViewId = "nodes" | "shields";
 
 const MENU: readonly (MenuItem & { id: ViewId; title: string })[] = [
   { id: "nodes", label: "Nodes", title: "nodes · status from shirudo.node_status" },
+  { id: "shields", label: "Shields", title: "shields · upatches of the trees in shirudo.tree_ops" },
 ];
 const SIDEBAR_WIDTH = 16;
 
-type Focus = "menu" | "menu-open" | "view" | "detail" | "search";
+type Focus = "menu" | "menu-open" | ViewId | "detail" | "search";
 
 const HINTS: Record<Focus, string> = {
-  menu: "j/k menu · l/enter open · 1 nodes · q quit",
+  menu: "j/k menu · l/enter open · 1 nodes · 2 shields · q quit",
   "menu-open": "j/k menu · l/enter open · tab back to view · esc close view · q quit",
-  view: "j/k scroll · k past top → sort, then tabs · / search · enter node checks, image → nodes · t by image · r refresh · tab menu · esc close · q quit",
+  nodes: "j/k scroll · k past top → sort, then tabs · / search · enter node checks, image → nodes · t by image · r refresh · tab menu · esc close · q quit",
+  shields: "j/k scroll · k past top → sort · / search · enter details · r refresh · tab menu · esc close · q quit",
   detail: "esc back · q quit",
   search: "type to filter · enter keep · esc clear",
 };
@@ -43,10 +46,12 @@ export function App({ backend }: { backend: Backend }) {
     setMenuCursor(MENU.findIndex((m) => m.id === view));
     setOpenView(view);
     setMenuFocused(false);
+    setDetail(false);
   };
   const close = () => {
     setOpenView(null);
     setMenuFocused(true);
+    setDetail(false);
   };
 
   const focus: Focus = searching
@@ -57,7 +62,7 @@ export function App({ backend }: { backend: Backend }) {
         ? "menu-open"
         : detail
           ? "detail"
-          : "view";
+          : openView;
   const navActive = focus !== "search";
 
   useInput(
@@ -116,16 +121,27 @@ export function App({ backend }: { backend: Backend }) {
             height={viewHeight}
             overflow="hidden"
           >
-            <NodesView
-              backend={backend}
-              mode={nodesMode}
-              onModeChange={setNodesMode}
-              height={viewLines}
-              active={!menuFocused}
-              onClose={close}
-              onSearchingChange={setSearching}
-              onDetailChange={setDetail}
-            />
+            {view.id === "nodes" ? (
+              <NodesView
+                backend={backend}
+                mode={nodesMode}
+                onModeChange={setNodesMode}
+                height={viewLines}
+                active={!menuFocused}
+                onClose={close}
+                onSearchingChange={setSearching}
+                onDetailChange={setDetail}
+              />
+            ) : (
+              <ShieldsView
+                backend={backend}
+                height={viewLines}
+                active={!menuFocused}
+                onClose={close}
+                onSearchingChange={setSearching}
+                onDetailChange={setDetail}
+              />
+            )}
           </Panel>
         )}
       </Box>

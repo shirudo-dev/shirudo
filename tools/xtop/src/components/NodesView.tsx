@@ -4,7 +4,7 @@
 // The fleet from shirudo.node_status: one row per node, or one per image
 // with its members rolled up. Enter on a node shows its check lines.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import type { Backend } from "../lib/backend.ts";
 import {
@@ -22,12 +22,12 @@ import {
 } from "../lib/fleet.ts";
 import { DataTable, Tabs, type Column } from "./DataTable.tsx";
 import { NodeDetail } from "./NodeDetail.tsx";
-import { STATUS_STYLE } from "./style.ts";
+import { HealthCell } from "./MiniBar.tsx";
+import { ago } from "../lib/format.ts";
+import { useRefreshing } from "../lib/useRefreshing.ts";
+import { STATUS_STYLE } from "./style.tsx";
 
 export type NodesMode = "nodes" | "images";
-
-/** node_status is recomputed once a minute; asking more often shows nothing new. */
-const REFRESH_MS = 60_000;
 
 type Props = {
   backend: Backend;
@@ -40,35 +40,6 @@ type Props = {
   onSearchingChange: (searching: boolean) => void;
   /** The check lines of a node are open. */
   onDetailChange?: (open: boolean) => void;
-};
-
-const healthColor = (h: number) => (h >= 80 ? "green" : h >= 50 ? "yellow" : "red");
-const EIGHTHS = ["", "▏", "▎", "▍", "▌", "▋", "▊", "▉"];
-
-function MiniBar({ value, width }: { value: number; width: number }) {
-  const eighths = Math.round((Math.max(0, Math.min(100, value)) / 100) * width * 8);
-  const full = Math.floor(eighths / 8);
-  const partial = EIGHTHS[eighths % 8]!;
-  return (
-    <>
-      <Text color={healthColor(value)}>{"█".repeat(full) + partial}</Text>
-      <Text dimColor>{"░".repeat(width - full - (partial ? 1 : 0))}</Text>
-    </>
-  );
-}
-
-function HealthCell({ health, bar }: { health: number; bar: number }) {
-  return (
-    <>
-      <MiniBar value={health} width={bar} />
-      <Text color={healthColor(health)}> {String(health).padStart(3)}%</Text>
-    </>
-  );
-}
-
-const ago = (d: Date) => {
-  const s = Math.max(0, Math.round((Date.now() - d.getTime()) / 1000));
-  return s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : s < 172800 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 86400)}d`;
 };
 
 function StatusCell({ status }: { status: NodeStatus }) {
@@ -246,37 +217,6 @@ const imageMatches = (g: ImageGroup, q: string) =>
   [g.key, g.status, g.kernel ?? "mixed"].some((s) => s.toLowerCase().includes(q));
 
 // ---- view ------------------------------------------------------------------
-
-type Query<T> = { data: T | null; error: string | null; loading: boolean };
-
-/**
- * Loads when enabled, again on every `reload` change and every REFRESH_MS.
- * A failed refresh keeps the rows it had and reports the error beside them.
- */
-function useRefreshing<T>(enabled: boolean, reload: number, load: () => Promise<T>): Query<T> {
-  const [state, setState] = useState<Query<T>>({ data: null, error: null, loading: false });
-  const loadRef = useRef(load);
-  loadRef.current = load;
-  useEffect(() => {
-    if (!enabled) return;
-    let alive = true;
-    const run = () => {
-      setState((s) => ({ ...s, loading: true }));
-      loadRef.current().then(
-        (data) => alive && setState({ data, error: null, loading: false }),
-        (e: unknown) =>
-          alive && setState((s) => ({ ...s, error: e instanceof Error ? e.message : String(e), loading: false })),
-      );
-    };
-    run();
-    const id = setInterval(run, REFRESH_MS);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, [enabled, reload]);
-  return state;
-}
 
 function HealthSummary({ health }: { health: number | null }) {
   if (health === null) return <Text dimColor>health —</Text>;

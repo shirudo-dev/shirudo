@@ -1224,17 +1224,20 @@ Run the xtop tests
 
 :src:`tools/xtop/` is a Bun program. Its tests need ``bun`` on the host
 and no ClickHouse: they feed its row mapping, roll-up and client rows
-shaped as ``tools/backend/test/xtop-nodes.expected`` has them.
+shaped as ``tools/backend/test/xtop-nodes.expected`` and
+``xtop-shields.expected`` have them.
 
 .. code-block:: console
 
    $ make -C tools/xtop tests
 
 The target installs the locked packages, type-checks the program with
-``tsc`` and runs ``bun test``. The query itself is checked against the
-schema by the backend test ``xtop-nodes``, which runs
-:src:`tools/xtop/sql/nodes.sql` from ``test/xtop-nodes.sh`` over the
-rows of ``test/xtop-nodes.setup.sql``.
+``tsc`` and runs ``bun test``. The queries themselves are checked against
+the schema by the backend tests ``xtop-nodes`` and ``xtop-shields``,
+which run :src:`tools/xtop/sql/nodes.sql` and
+:src:`tools/xtop/sql/shields.sql` from their ``.sh`` scripts over the
+rows of ``test/xtop-nodes.setup.sql``, which ``xtop-shields.setup.sql``
+links to.
 
 Write a test
 ------------

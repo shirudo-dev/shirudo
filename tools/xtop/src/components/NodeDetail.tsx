@@ -6,7 +6,7 @@
 import type { ReactNode } from "react";
 import { Box, Text, useInput } from "ink";
 import { imageLabel, type FleetNode } from "../lib/fleet.ts";
-import { STATUS_STYLE } from "./style.ts";
+import { STATUS_STYLE } from "./style.tsx";
 
 type Props = {
   /** null when the node left node_status since it was opened. */

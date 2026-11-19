@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: BSD-2-Clause
 // Copyright (c) 2026 Authors of shirudo
 //
-// The rows of sql/nodes.sql as tools/backend/test/xtop-nodes.expected has
-// them, turned into nodes and rolled up by image.
+// Rows shaped like those of sql/nodes.sql in
+// tools/backend/test/xtop-nodes.expected, turned into nodes and rolled up
+// by image.
 
 import { describe, expect, test } from "bun:test";
 import { toFleetNode, toFleetReport, type NodeRow } from "../src/lib/backend.ts";

@@ -5,15 +5,17 @@
 :page-type: How-to
 :audience: Operators, SecOps
 
-Watch the nodes with xtop
-=========================
+Watch nodes and shields with xtop
+=================================
 
-:src:`tools/xtop/` is a terminal view of the backend. Its Nodes view
-reads ``shirudo.node_status``, ``shirudo.latest`` and
-``shirudo.node_vulns`` over the HTTP interface of the backend's
-ClickHouse with one query, :src:`tools/xtop/sql/nodes.sql`, and shows
-one row per node, or one per image. It only reads: every query is sent
-with ``readonly=1``. It is a `Bun <https://bun.sh>`_ program built on
+:src:`tools/xtop/` is a terminal view of the backend. It reads the
+backend's ClickHouse over its HTTP interface, one query per view: Nodes
+sends :src:`tools/xtop/sql/nodes.sql`, over ``shirudo.node_status``,
+``shirudo.latest`` and ``shirudo.node_vulns``, and shows one row per
+node, or one per image; Shields sends :src:`tools/xtop/sql/shields.sql`,
+over the tree tables, ``shirudo.node_ops`` and ``shirudo.node_vulns``,
+and shows one row per upatch. It only reads: every query is sent with
+``readonly=1``. It is a `Bun <https://bun.sh>`_ program built on
 Ink and React, and runs on an operator's host, never on a target.
 
 Build and run
@@ -52,8 +54,8 @@ is enough.
        ``X-ClickHouse-User`` and ``X-ClickHouse-Key`` headers. Without
        them the server's default user answers.
 
-The view queries when it opens, every minute after that, as often as
-``node_status_mv`` recomputes the table, and when you press ``r``. A
+A view queries when it opens, every minute after that, as often as
+``node_status_mv`` recomputes its table, and when you press ``r``. A
 query that fails leaves the rows of the last one in place and says why
 at the start of the summary line.
 
@@ -119,3 +121,51 @@ nodes.
 Labels and detector hits are not shown: the keepalive carries no labels,
 and the collector of :src:`tools/backend/otelcol.yaml` takes in no map
 snapshot metrics.
+
+Read the shields
+----------------
+
+Shields has one row per upatch of every tree the tree ingest job loaded
+(:doc:`tree-ingest`), from its newest operation in ``shirudo.tree_ops``.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Column
+     - Value
+   * - ``STATUS``
+     - ``pending`` while a node following the tree has not reached the
+       newest operation, ``deployed`` once every one has, ``withdrawn``
+       when that operation is a ``delete``.
+   * - ``SHIELD``
+     - The upatch id and the first eight digits of the manifest digest
+       of its newest operation.
+   * - ``SEVERITY``
+     - The worst severity of the advisories in ``upatch_fixes`` for its
+       newest ``add``, as ``kernel_vulns`` or ``sbom_vulns`` give it;
+       ``—`` when neither knows them.
+   * - ``TARGET``
+     - What those advisories are in: ``kernel``, or the packages of an
+       image's SBOM.
+   * - ``IMAGES``
+     - The first image, as id and version, of a node an advisory affects
+       in ``node_vulns``, and ``+N`` for the others.
+   * - ``ROLLOUT``
+     - From the history of each node following the tree in ``node_ops``:
+       the nodes that applied the newest operation over those it can
+       apply on, all but the nodes its selector left out; ``…`` the nodes
+       that have not reached it, ``✗`` those it reached whose module is
+       not loaded.
+   * - ``TREE``
+     - The ``seq`` of the newest operation.
+
+Enter on a shield shows its tree, its newest operation and how many it
+has, when the backend loaded that operation's publication, the
+repository, manifest digest and selector, the rollout in full, the
+images, and per advisory its severity and how many affected nodes the
+upatch shields. ``/`` searches the id, tree, status, severity, digest,
+repository, advisories, packages and images.
+
+The rollout counts the nodes whose newest record names the tree; a node
+that moved to another tree leaves it. Detector hits are not shown,
+because the backend takes in no metrics.
