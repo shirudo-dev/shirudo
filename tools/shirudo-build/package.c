@@ -1935,6 +1935,36 @@ static void unregister_target_attach_types(int handler_ids[3])
 	handler_ids[2] = -1;
 }
 
+/* Header, loader, signature and data, in the order the header names them. */
+static int write_artifact(const char *out_path, const struct upatch_header *hdr,
+			  const void *insns, size_t insns_sz,
+			  const void *sig, size_t sig_sz,
+			  const void *data, size_t data_len)
+{
+	int fd, err;
+
+	fd = open(out_path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+	if (fd < 0) {
+		err = -errno;
+		pr_err("open %s: %s", out_path, strerror(errno));
+		return err;
+	}
+	err = write_complete(fd, hdr, sizeof(*hdr));
+	if (!err && insns_sz)
+		err = write_complete(fd, insns, insns_sz);
+	if (!err)
+		err = write_complete(fd, sig, sig_sz);
+	if (!err)
+		err = write_complete(fd, data, data_len);
+	if (!err && fsync(fd) != 0)
+		err = -errno;
+	if (close(fd) && !err)
+		err = -errno;
+	if (err)
+		unlink(out_path);
+	return err;
+}
+
 /*
  * Takes ownership of obj. src_path anchors relative decoder paths;
  * NULL for a .bpf.o input or an unload directive.
@@ -1966,7 +1996,6 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 	void *sig_buf = NULL;
 	struct bpf_map *m;
 	int err = 0;
-	int fd;
 
 	/*
 	 * The loader writes map_fd/prog_fd back into descriptor arrays
@@ -2129,27 +2158,10 @@ static int finalize_object(struct bpf_object *obj, const char *out_path,
 		    1u * 1024u * 1024u,
 		    rodata_data_off, nr_maps, nr_progs);
 
-	fd = open(out_path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
-	if (fd < 0) {
-		err = -errno;
-		pr_err("open %s: %s", out_path, strerror(errno));
+	err = write_artifact(out_path, &hdr, opts.insns, opts.insns_sz,
+			     sig_buf, sio.signature_sz, signed_data, data_len);
+	if (err)
 		goto out;
-	}
-	err = write_complete(fd, &hdr, sizeof(hdr));
-	if (!err)
-		err = write_complete(fd, opts.insns, opts.insns_sz);
-	if (!err)
-		err = write_complete(fd, sig_buf, sio.signature_sz);
-	if (!err)
-		err = write_complete(fd, signed_data, data_len);
-	if (!err && fsync(fd) != 0)
-		err = -errno;
-	if (close(fd) && !err)
-		err = -errno;
-	if (err) {
-		unlink(out_path);
-		goto out;
-	}
 
 	pr_info("wrote %s (insns=%u sig=%zu data=%u sections=%u maps=%u "
 		"progs=%u decoders=%u name=%s%s)",
