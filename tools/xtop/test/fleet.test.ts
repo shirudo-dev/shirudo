@@ -46,7 +46,8 @@ function row(over: Partial<NodeRow>): NodeRow {
     exposed: 1,
     unknown: 0,
     labels: { role: "edge", site: "fra" },
-    labels_by: "node_id",
+    label_sources: { role: "node_id", site: "node_id" },
+    label_conflicts: [],
     ...over,
   };
 }
@@ -62,7 +63,7 @@ const ROWS: NodeRow[] = [
     shields_idle: 1,
     exposed: 2,
     labels: { role: "core" },
-    labels_by: "ak_name",
+    label_sources: { role: "ak_name" },
   }),
   row({
     node_id: "node-c",
@@ -79,7 +80,7 @@ const ROWS: NodeRow[] = [
     exposed: 0,
     unknown: 1,
     labels: {},
-    labels_by: "none",
+    label_sources: {},
   }),
   row({
     node_id: "node-d",
@@ -89,7 +90,7 @@ const ROWS: NodeRow[] = [
     failed_check: 3,
     log: LOG.map((l, i) => (i === 2 ? "3 reported: FAIL, verdict degraded, cond 0x1555, flags 0, tamper +0, build d6d918ad" : l)),
   }),
-  row({ labels: {}, labels_by: "none", node_id: "node-e", ak_name: "000b0e", host_name: "core-02", status: "stale", failed_check: 2, last_seq: 2, loaded: 0, shields_applied: 0, shields_idle: 1, exposed: 2 }),
+  row({ labels: {}, label_sources: {}, node_id: "node-e", ak_name: "000b0e", host_name: "core-02", status: "stale", failed_check: 2, last_seq: 2, loaded: 0, shields_applied: 0, shields_idle: 1, exposed: 2 }),
 ];
 
 describe("toFleetNode", () => {
@@ -118,11 +119,40 @@ describe("toFleetNode", () => {
 
   test("keeps the labels the operator put", () => {
     expect(toFleetNode(ROWS[0]!).labels).toEqual({ role: "edge", site: "fra" });
-    expect(toFleetNode(ROWS[0]!).labelsBy).toBe("node_id");
+    expect(toFleetNode(ROWS[0]!).labelSources).toEqual({ role: "node_id", site: "node_id" });
     expect(toFleetNode(ROWS[2]!).labels).toEqual({});
-    expect(toFleetNode(ROWS[2]!).labelsBy).toBe("none");
-    expect(toFleetNode(row({ labels_by: "config_root" })).labelsBy).toBe("config_root");
-    expect(() => toFleetNode(row({ labels_by: "host_name" }))).toThrow(/unknown labels source/);
+    expect(() => toFleetNode(row({ label_sources: { role: "host_name" } }))).toThrow(/unknown label source/);
+  });
+
+  test("keeps the keys whose sets disagree", () => {
+    const n = toFleetNode(
+      row({
+        labels: { image: "base", role: "edge", site: "fra" },
+        label_sources: { image: "config_root", role: "node_id", site: "node_id" },
+        label_conflicts: [
+          [
+            "role",
+            "edge",
+            "node_id",
+            [
+              [2, "node_id", "edge"],
+              [1, "config_root", "lab"],
+            ],
+          ],
+        ],
+      }),
+    );
+    expect(n.labelConflicts).toEqual([
+      {
+        key: "role",
+        value: "edge",
+        by: "node_id",
+        given: [
+          { by: "node_id", value: "edge" },
+          { by: "config_root", value: "lab" },
+        ],
+      },
+    ]);
   });
 
   test("refuses a status the view does not know", () => {

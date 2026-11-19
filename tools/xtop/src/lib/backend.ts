@@ -9,12 +9,13 @@ import SBOM_SQL from "../../sql/sbom.sql" with { type: "text" };
 import SBOM_IMAGES_SQL from "../../sql/sbom-images.sql" with { type: "text" };
 import { queryRows, type ClickHouseConfig } from "./clickhouse.ts";
 import {
-  LABELS_BY,
+  LABEL_SOURCES,
   STATUSES,
   TRUSTS,
   type FleetNode,
   type FleetReport,
-  type LabelsBy,
+  type LabelConflict,
+  type LabelSource,
   type NodeStatus,
   type Trust,
 } from "./fleet.ts";
@@ -67,8 +68,21 @@ export type NodeRow = {
   exposed: number;
   unknown: number;
   labels: Record<string, string>;
-  labels_by: string;
+  label_sources: Record<string, string>;
+  /** (key, value, by, [(rank, by, value)]) */
+  label_conflicts: [string, string, string, [number, string, string][]][];
 };
+
+const labelSource = (by: string) => oneOf<LabelSource>(LABEL_SOURCES, by, "label source");
+
+function toLabelConflict([key, value, by, given]: NodeRow["label_conflicts"][number]): LabelConflict {
+  return {
+    key,
+    value,
+    by: labelSource(by),
+    given: given.map(([, from, v]) => ({ by: labelSource(from), value: v })),
+  };
+}
 
 function oneOf<T extends string>(allowed: readonly T[], value: string, what: string): T {
   if (!(allowed as readonly string[]).includes(value)) throw new Error(`unknown ${what} "${value}"`);
@@ -96,7 +110,10 @@ export function toFleetNode(r: NodeRow): FleetNode {
     exposed: r.exposed,
     unknown: r.unknown,
     labels: r.labels,
-    labelsBy: oneOf<LabelsBy>(LABELS_BY, r.labels_by, "labels source"),
+    labelSources: Object.fromEntries(
+      Object.entries(r.label_sources).map(([key, by]) => [key, labelSource(by)]),
+    ),
+    labelConflicts: r.label_conflicts.map(toLabelConflict),
   };
 }
 

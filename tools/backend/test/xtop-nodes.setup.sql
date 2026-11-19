@@ -8,8 +8,9 @@
 -- B's record an hour ago and turns stale. Generation 4 of the tree adds
 -- ssl-fix for the openssl finding at operation 4, which no node has
 -- reached yet: a rollout under way, for the shields view. The operator
--- labels node A and node D by node_id and node B by its key, as
--- jobs/labels-put loads them. The tests xtop-shields and xtop-sbom read
+-- labels node A and node D by node_id, node B by its key and the config
+-- image node A and node D booted by its root, as jobs/labels-put loads
+-- them; that image's role=lab loses to their role=edge. The tests xtop-shields and xtop-sbom read
 -- the same rows.
 
 -- The publication of testing/fixtures/keepalive/tree-1.1.0.json, as the
@@ -77,7 +78,8 @@ INSERT INTO shirudo.upatch_fixes (tree_id, seq, id, advisory, source) VALUES
 INSERT INTO shirudo.label_sets (by, node, labels) VALUES
 ('node_id', 'node-a', {'role': 'edge', 'site': 'fra'}),
 ('node_id', 'node-d', {'role': 'edge', 'site': 'ams'}),
-('ak_name', '000b9d72e08380a1', {'role': 'core'});
+('ak_name', '000b9d72e08380a1', {'role': 'core'}),
+('config_root', '1d8465c5b17838303fee92b3905420d294d2c22c576a0bdef0f69f190ed22807', {'role': 'lab', 'image': 'base'});
 
 -- The operator's labels, as the page has them.
 INSERT INTO shirudo.nodes (ak_name, node_id)

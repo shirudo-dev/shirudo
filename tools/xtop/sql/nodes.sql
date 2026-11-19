@@ -3,11 +3,19 @@
 --
 -- One row per node for the nodes view of tools/xtop: the outcome of the
 -- checks from node_status, what the newest record says it runs from
--- latest, the labels the operator gave it from node_labels, and per node
--- the counts of node_vulns. Times are epoch milliseconds, so that no
+-- latest, the labels the operator gave it from node_labels with the keys
+-- whose sets disagree from label_conflicts, and per node the counts of
+-- node_vulns. Times are epoch milliseconds, so that no
 -- client reads them in the server's time zone.
 
-WITH vulns AS
+WITH
+conflicts AS
+(
+    SELECT c.ak_name AS ak_name, arraySort(groupArray(tuple(c.key, c.value, c.by, c.given))) AS conflicts
+    FROM shirudo.label_conflicts AS c
+    GROUP BY c.ak_name
+),
+vulns AS
 (
     SELECT
         ak_name,
@@ -43,9 +51,11 @@ SELECT
     v.exposed AS exposed,
     v.unknown AS unknown,
     lb.labels AS labels,
-    ifNull(lb.by, 'none') AS labels_by
+    lb.sources AS label_sources,
+    lc.conflicts AS label_conflicts
 FROM shirudo.node_status AS s
 LEFT JOIN shirudo.latest AS l ON l.ak_name = s.ak_name
 LEFT JOIN vulns AS v ON v.ak_name = s.ak_name
 LEFT JOIN shirudo.node_labels AS lb ON lb.ak_name = s.ak_name
+LEFT JOIN conflicts AS lc ON lc.ak_name = s.ak_name
 ORDER BY node_id, ak_name

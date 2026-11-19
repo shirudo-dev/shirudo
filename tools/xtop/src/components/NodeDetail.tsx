@@ -5,7 +5,7 @@
 
 import type { ReactNode } from "react";
 import { Box, Text, useInput } from "ink";
-import { imageLabel, labelPairs, type FleetNode } from "../lib/fleet.ts";
+import { imageLabel, type FleetNode } from "../lib/fleet.ts";
 import { STATUS_STYLE } from "./style.tsx";
 
 type Props = {
@@ -62,9 +62,28 @@ export function NodeDetail({ node, height, active, onClose }: Props) {
         <Field name="host">{node.hostName}</Field>
         <Field name="key">{node.akName}</Field>
         <Field name="labels">
-          {labelPairs(node.labels).join(" ") || "none put"}
-          {node.labelsBy !== "none" && <Text dimColor>  put by {node.labelsBy}</Text>}
+          {Object.keys(node.labels).length === 0 && "none put"}
+          {Object.keys(node.labels)
+            .sort()
+            .map((k, i) => (
+              <Text key={k}>
+                {i ? " " : ""}
+                {k}={node.labels[k]}
+                <Text dimColor> ({node.labelSources[k]})</Text>
+              </Text>
+            ))}
         </Field>
+        {node.labelConflicts.map((c) => (
+          <Field key={c.key} name="conflict">
+            <Text color="yellow">
+              {c.key}={c.value} from {c.by} over{" "}
+              {c.given
+                .filter((g) => g.value !== c.value)
+                .map((g) => `${g.value} from ${g.by}`)
+                .join(", ")}
+            </Text>
+          </Field>
+        ))}
         <Field name="image">{imageLabel(node.imageId, node.imageVersion)}</Field>
         <Field name="kernel">{node.kernel}</Field>
         <Field name="build">{node.version}</Field>

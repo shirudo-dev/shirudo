@@ -7,12 +7,22 @@
 /** node_status.status, worst first in STATUS_RANK. */
 export type NodeStatus = "unhealthy" | "stale" | "healthy";
 export type Trust = "untrusted" | "enrolled";
-export type LabelsBy = "ak_name" | "node_id" | "config_root" | "none";
+/** The name a label set was put under, most specific first. */
+export type LabelSource = "ak_name" | "node_id" | "config_root";
+
+/** A key whose sets give the node different values, and the value it took. */
+export type LabelConflict = {
+  key: string;
+  value: string;
+  by: LabelSource;
+  /** Every value given, most specific name first. */
+  given: { by: LabelSource; value: string }[];
+};
 
 export const STATUS_RANK: Record<NodeStatus, number> = { unhealthy: 0, stale: 1, healthy: 2 };
 export const STATUSES = ["unhealthy", "stale", "healthy"] as const;
 export const TRUSTS = ["untrusted", "enrolled"] as const;
-export const LABELS_BY = ["ak_name", "node_id", "config_root", "none"] as const;
+export const LABEL_SOURCES = ["ak_name", "node_id", "config_root"] as const;
 
 export type Shields = {
   /** Upatches loaded that shield a finding of the node. */
@@ -45,10 +55,14 @@ export type FleetNode = {
   exposed: number;
   /** Findings the backend cannot place: no image, no SBOM. */
   unknown: number;
-  /** What jobs/labels-put gave the node, not its own node.labels. */
+  /**
+   * What jobs/labels-put gave the node, not its own node.labels: the union
+   * of its sets, the most specific name's value where they disagree.
+   */
   labels: Record<string, string>;
-  /** The name the labels were put under. */
-  labelsBy: LabelsBy;
+  /** Per key, the name its value was put under. */
+  labelSources: Record<string, LabelSource>;
+  labelConflicts: LabelConflict[];
 };
 
 export type FleetReport = {

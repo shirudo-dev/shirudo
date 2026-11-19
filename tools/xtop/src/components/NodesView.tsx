@@ -106,7 +106,12 @@ const NODE_COLUMNS: readonly Column<FleetNode>[] = [
     sortKey: (n) => labelPairs(n.labels).join(" ") || "~",
     render: (n) => {
       const pairs = labelPairs(n.labels);
-      return pairs.length ? <Text color="magenta">{pairs.join(" ")}</Text> : <Text dimColor>—</Text>;
+      return (
+        <>
+          {n.labelConflicts.length > 0 && <Text color="yellow">!{n.labelConflicts.length} </Text>}
+          {pairs.length ? <Text color="magenta">{pairs.join(" ")}</Text> : <Text dimColor>—</Text>}
+        </>
+      );
     },
   },
   {
@@ -161,6 +166,7 @@ const nodeMatches = (n: FleetNode, q: string) =>
     n.version,
     n.failedCheck ? (n.log[n.failedCheck - 1] ?? "") : "",
     ...labelPairs(n.labels),
+    n.labelConflicts.length ? "label conflict" : "",
   ].some((s) => s.toLowerCase().includes(q));
 
 // ---- per-image table -------------------------------------------------------
@@ -345,6 +351,9 @@ export function NodesView({ backend, mode, onModeChange, height, active, onClose
                   <Text color="green">{count("healthy")} healthy</Text> · <Text color="red">{count("unhealthy")} unhealthy</Text> ·{" "}
                   <Text color="gray">{count("stale")} stale</Text> ·{" "}
                   <Text color="yellow">{rows.filter((n) => n.trust === "untrusted").length} untrusted</Text>
+                  {rows.some((n) => n.labelConflicts.length) && (
+                    <Text color="yellow"> · {rows.filter((n) => n.labelConflicts.length).length} with label conflicts</Text>
+                  )}
                   <Text dimColor> · sorted by {sortedBy}</Text>
                   {asOf(report)}
                 </>
