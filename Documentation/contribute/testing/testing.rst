@@ -553,11 +553,11 @@ Boot an interactive VM
       # make -C testing vm-stop VM_NAME=<name>
       # make -C testing vm-clean VM_NAME=<name>
 
-.. warning::
-
-   Without ``VM_NAME``, ``vm-clean`` removes the whole
-   ``build/test-vm/`` directory, the bundles and the cached runtime
-   image included. Name the VM to remove only its state.
+   Without ``VM_NAME``, ``vm-clean`` stops every VM and removes the state
+   and logs of them all, ``build/test-vm/vms/`` and
+   ``build/test-vm/logs/``. The bundles, the cached kernels and runtime
+   image, and the local stack stay; ``make -C testing clean`` removes the
+   bundles, and ``make stack-down`` the stack.
 
 .. list-table::
    :header-rows: 1
@@ -744,7 +744,8 @@ own ``enroll.json``.
 
 Without the checker, ``make telemetry`` starts the telemetry stack alone and says so. A
 stack started before the checker was built keeps its collector: run
-``make stack-down`` before ``make telemetry`` to add the backend.
+``make stack-down``, which also removes the stack's data, before
+``make telemetry`` to add the backend.
 
 ``make vm`` prepares a stable CA even when neither service is running.
 After initialization, it activates the signed ``config-local-stack``
@@ -762,8 +763,11 @@ collector JSON is ``out/otlp.json`` there. Server private keys live outside
 the checkout in a directory under ``/tmp`` named for the checkout's hash.
 Normal and sudo invocations use the same trust material. The guest
 receives only the public CA. ``make stack-down`` removes the service
-containers and network while retaining the data and CA for the next start.
-It does not stop the VM; use ``make vm-stop`` for that.
+containers and network, then ``build/test-vm/stack/`` and the private
+keys: the registry's and ClickHouse's data, the collector JSON and the
+CA. The next ``make stack-up`` starts empty, with a new CA, which a VM
+booted before does not trust: boot the VMs again after it. It does not
+stop the VMs; use ``make vm-stop`` for that.
 
 ``make -C testing vm`` uses the same defaults. Set ``LOCAL_STACK=0`` to
 boot a VM without the local-stack configuration and use the explicit

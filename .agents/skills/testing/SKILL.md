@@ -220,5 +220,7 @@ initrd verified; `shirudo-runtime status` shows an initialized target,
 and `. /etc/shirudo-test-vm.env` sets the environment a family run
 gives the target tests.
 The checkout is mounted read-only at `/workspace/shirudo`. Without
-`VM_NAME`, `vm-clean` removes all of `build/test-vm/`, the bundles and
-the cached runtime image included, so always name the VM.
+`VM_NAME`, `vm-clean` stops every VM and removes the state and logs of
+them all, and leaves the bundles, the cache and the local stack; name
+the VM to remove only its state. `make stack-down` removes the local
+stack with its data and CA.

@@ -50,7 +50,22 @@ telemetry)
 		printf '%s\n' 'no backend: make quote-check, make stack-down, then make telemetry' >&2
 	fi
 	;;
-down) stack_down ;;
+down)
+	case "$W/:$TLS_DIR/" in
+	//:* | *://) echo 'refusing to remove a stack at /' >&2; exit 1 ;;
+	esac
+	stack_down
+	# What the containers wrote is theirs, not ours to remove: a
+	# container removes it, and then the stack's directory goes.
+	if [ -d "$W" ]; then
+		docker run --rm -v "$W:/stack" --entrypoint sh "$CLICKHOUSE_IMAGE" \
+			-c 'rm -rf /stack/clickhouse /stack/registry /stack/out' ||
+			{ echo "cannot remove the data under $W" >&2; exit 1; }
+	fi
+	rm -rf -- "$W" "$TLS_DIR"
+	rmdir -- "$(dirname "$TLS_DIR")" 2>/dev/null || :
+	printf 'removed the stack, its data and its CA: %s\n' "$W"
+	;;
 enroll)
 	# Shown before they run, so that a demo shows what each step is: the
 	# keys the builder made, then the builds the VMs boot.

@@ -978,9 +978,11 @@ clean_state()
 		log "removed VM state and logs: $VM_NAME_REQUEST"
 		return 0
 	fi
+	# The bundles, the cache and the local stack stay: rebuilding them is
+	# slow, and make -C testing clean and make stack-down remove them.
 	stop_all_state
-	rm -rf -- "$VM_ROOT"
-	log "removed VM state and logs: $VM_ROOT"
+	rm -rf -- "$VMS_DIR" "$LOGS_DIR" "$VM_ROOT/enroll.json"
+	log "removed the state and logs of every VM under $VM_ROOT"
 }
 
 save_failure_logs()
