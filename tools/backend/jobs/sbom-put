@@ -1,0 +1,154 @@
+#!/bin/sh
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+#
+# jobs/sbom-put -- store the CycloneDX SBOM of an image in the SBOM store
+# that jobs/sbom-scan reads, for an image pipeline to call once it has
+# built an image and its SBOM.
+#
+#   jobs/sbom-put [--store <url>] --image-id <id> --image-version <version>
+#                 [--image-root <root>] [--built-at <YYYY-MM-DDThh:mm:ssZ>]
+#                 [--scan] <sbom.cdx.json>
+#
+# It checks the image's key and the SBOM as jobs/sbom-scan would and
+# writes <image_id>/<image_version>/<image_root or ->/ in the store: the
+# SBOM, then image.json, which names its SHA-256 and is what makes a scan
+# read the image. The store is written once: an image already there with
+# the same SBOM is left as it is, one with another SBOM is refused. With
+# --scan, jobs/sbom-scan runs next, over the whole store, so the image's
+# findings reach the backend now rather than at the next scheduled scan.
+#
+#   SBOM_STORE         the store, in place of --store.
+#   S3_CLIENT          the AWS command line and its options, split at
+#                      spaces, for an s3:// store. Default: aws.
+#
+# jobs/sbom-scan reads its own variables for --scan.
+#
+# Exit status: 0 when the image is in the store, and was scanned with
+# --scan; 1 when the image was refused, could not be stored, or the scan
+# failed; 2 for wrong usage.
+
+set -eu
+
+here=$(cd "$(dirname "$0")" && pwd)
+store=${SBOM_STORE:-}
+image_id=
+image_version=
+image_root=-
+built_at=
+scan=0
+work=
+
+die()
+{
+	printf 'sbom-put: %s\n' "$1" >&2
+	exit 1
+}
+
+usage()
+{
+	printf '%s\n' \
+		'usage: sbom-put [--store <url>] --image-id <id> --image-version <version>' \
+		'                [--image-root <root>] [--built-at <YYYY-MM-DDThh:mm:ssZ>]' \
+		'                [--scan] <sbom.cdx.json>' >&2
+	exit 2
+}
+
+cleanup()
+{
+	[ -z "$work" ] || rm -rf "$work"
+}
+
+s3()
+{
+	# shellcheck disable=SC2086 # a command with its options, to be split
+	${S3_CLIENT:-aws} "$@"
+}
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--store|--image-id|--image-version|--image-root|--built-at)
+		[ $# -ge 2 ] || usage
+		case "$1" in
+		--store) store=$2 ;;
+		--image-id) image_id=$2 ;;
+		--image-version) image_version=$2 ;;
+		--image-root) image_root=$2 ;;
+		--built-at) built_at=$2 ;;
+		esac
+		shift 2 ;;
+	--scan)
+		scan=1
+		shift ;;
+	-*)
+		usage ;;
+	*)
+		break ;;
+	esac
+done
+[ $# -eq 1 ] && [ -n "$store" ] && [ -n "$image_id" ] && [ -n "$image_version" ] ||
+	usage
+sbom=$1
+# An empty root is an image built without verity, as in image.json.
+[ -n "$image_root" ] || image_root=-
+[ -n "$built_at" ] || built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+work=$(mktemp -d)
+mkdir "$work/new" "$work/old"
+
+python3 "$here/sbom-rows.py" put "$work/new" "$image_id" "$image_version" \
+	"$image_root" "$built_at" "$sbom" >"$work/put" || exit 1
+IFS='	' read -r path sha components <"$work/put"
+
+# stored <image.json>: whether the store already holds this image with
+# this SBOM; an image.json naming another refuses the image.
+stored()
+{
+	[ -f "$1" ] || return 1
+	python3 "$here/sbom-rows.py" stored "$1" "$sha" ||
+		die "$path is already in the store with another SBOM; the store is written once"
+}
+
+case "$store" in
+file://?*)
+	directory=${store#file://}
+	[ -d "$directory" ] || die "no store directory $directory"
+	target=$directory/$path
+	if stored "$target/image.json"; then
+		printf 'sbom-put: %s: already stored with this SBOM\n' "$path"
+	else
+		mkdir -p "$target" || die "cannot make $target"
+		# Each file is renamed into place, the SBOM first: a scan in
+		# between sees no image.json, or a whole one naming a whole SBOM.
+		for name in sbom.cdx.json image.json; do
+			cp "$work/new/$name" "$target/.$name.tmp" &&
+				mv -f "$target/.$name.tmp" "$target/$name" ||
+				die "cannot write $target/$name"
+		done
+		printf 'sbom-put: %s: stored, sha256 %s, components: %s\n' \
+			"$path" "$sha" "$components"
+	fi ;;
+s3://?*)
+	target=${store%/}/$path
+	# A prefix with nothing under it copies nothing and succeeds.
+	s3 s3 cp --recursive --only-show-errors "$target/" "$work/old" \
+		--exclude '*' --include image.json </dev/null ||
+		die "cannot read $target"
+	if stored "$work/old/image.json"; then
+		printf 'sbom-put: %s: already stored with this SBOM\n' "$path"
+	else
+		for name in sbom.cdx.json image.json; do
+			s3 s3 cp --only-show-errors "$work/new/$name" "$target/$name" </dev/null ||
+				die "cannot write $target/$name"
+		done
+		printf 'sbom-put: %s: stored, sha256 %s, components: %s\n' \
+			"$path" "$sha" "$components"
+	fi ;;
+*)
+	die "the store $store is neither file://<directory> nor s3://<bucket>" ;;
+esac
+
+[ "$scan" -eq 1 ] || exit 0
+exec "$here/sbom-scan" --store "$store"

@@ -2,12 +2,16 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 #
-# jobs/sbom-rows.py -- the parts of jobs/sbom-scan that shell does not
-# reach: reading image.json and the SBOMs, and the matcher's JSON.
+# jobs/sbom-rows.py -- the parts of jobs/sbom-scan and jobs/sbom-put that
+# shell does not reach: reading image.json and the SBOMs, and the
+# matcher's JSON.
 #
 #   sbom-rows.py files
 #   sbom-rows.py images <store directory> <work directory>
 #   sbom-rows.py rows <work directory> <scanned_at>
+#   sbom-rows.py put <directory> <image_id> <image_version> <image_root or ->
+#                    <built_at> <sbom>
+#   sbom-rows.py stored <image.json> <sbom_sha256>
 #
 # files prints the names of the objects an image directory may hold that
 # the job reads, one per line.
@@ -25,9 +29,19 @@
 # seconds since the epoch, on every row, and summary, one line per image
 # loaded.
 #
+# put checks an image's key and build time and its CycloneDX SBOM as
+# images would, and writes into the directory, which must be empty, the
+# image.json and sbom.cdx.json that make the image's directory in the
+# store. It prints the image's path in the store, the SHA-256 of the
+# SBOM and the number of its components, separated by tabs.
+#
+# stored says whether the image.json of an image already in the store
+# names that SHA-256 and format: status 0 when it does, 1 when it names
+# another SBOM or cannot be read.
+#
 # Exit status: 0; 3 when an object or a matcher's output was left out and
-# named on standard error, the rest written; 1 when nothing could be done;
-# 2 for wrong usage.
+# named on standard error, the rest written; 1 when nothing could be done
+# or put refused the image; 2 for wrong usage.
 
 import calendar
 import hashlib
@@ -402,7 +416,68 @@ def rows_main(work, scanned_at):
     return LEFT_OUT if left_out else 0
 
 
+def put_main(directory, image_id, image_version, root, built_at, sbom):
+    """Stage the image.json and SBOM of one image for the store."""
+    try:
+        if not SEGMENT.fullmatch(image_id):
+            raise Refused("the image id is not 1 to 255 of [A-Za-z0-9._~+-]"
+                          " that do not start with a dot")
+        if not SEGMENT.fullmatch(image_version):
+            raise Refused("the image version is not 1 to 255 of"
+                          " [A-Za-z0-9._~+-] that do not start with a dot")
+        if root != "-" and not HEX64.fullmatch(root):
+            raise Refused("the image root is not 64 lowercase hex digits")
+        try:
+            epoch(built_at)
+        except Refused:
+            raise Refused('the build time is not a UTC "YYYY-MM-DDThh:mm:ssZ"')
+        name, reader = FORMATS[DEFAULT_FORMAT]
+        with open(sbom, "rb") as f:
+            data = f.read()
+        components = reader(data)
+    except Refused as reason:
+        print("%s: %s" % (PROG, reason), file=sys.stderr)
+        return 1
+    except OSError as error:
+        print("%s: cannot read %s" % (PROG, printable(error.filename or sbom)),
+              file=sys.stderr)
+        return 1
+    sbom_sha256 = hashlib.sha256(data).hexdigest()
+    meta = {
+        "image_id": image_id,
+        "image_version": image_version,
+        "image_root": "" if root == "-" else root,
+        "sbom_format": DEFAULT_FORMAT,
+        "sbom_sha256": sbom_sha256,
+        "built_at": built_at,
+    }
+    with open(os.path.join(directory, name), "wb") as f:
+        f.write(data)
+    with open(os.path.join(directory, "image.json"), "w",
+              encoding="ascii") as f:
+        json.dump(meta, f, separators=(",", ":"))
+        f.write("\n")
+    print("%s/%s/%s\t%s\t%d" % (image_id, image_version, root, sbom_sha256,
+                                len(components)))
+    return 0
+
+
+def stored_main(path, sbom_sha256):
+    """Whether the stored image.json names this SBOM."""
+    try:
+        with open(path, "rb") as f:
+            meta = parse_json(f.read(), "image.json")
+    except (OSError, Refused):
+        return 1
+    if type(meta) is not dict:
+        return 1
+    same = (meta.get("sbom_sha256") == sbom_sha256
+            and meta.get("sbom_format", DEFAULT_FORMAT) == DEFAULT_FORMAT)
+    return 0 if same else 1
+
+
 def main():
+    global PROG
     args = sys.argv[1:]
     if args == ["files"]:
         print("image.json")
@@ -413,8 +488,15 @@ def main():
         return images_main(args[1], args[2])
     if len(args) == 3 and args[0] == "rows":
         return rows_main(args[1], args[2])
+    if len(args) == 7 and args[0] == "put":
+        PROG = "sbom-put"
+        return put_main(*args[1:])
+    if len(args) == 3 and args[0] == "stored":
+        return stored_main(args[1], args[2])
     print("usage: sbom-rows.py files | images <store> <work> | "
-          "rows <work> <scanned_at>", file=sys.stderr)
+          "rows <work> <scanned_at> | put <directory> <image_id> "
+          "<image_version> <image_root or -> <built_at> <sbom> | "
+          "stored <image.json> <sbom_sha256>", file=sys.stderr)
     return 2
 
 

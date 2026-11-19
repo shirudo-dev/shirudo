@@ -47,7 +47,8 @@ Inputs
 ------
 
 :src:`tools/backend/jobs/sbom-scan` writes ``sbom_images`` and
-``sbom_vulns``, see :doc:`sbom-scan`. Nothing in the backend fills
+``sbom_vulns`` from the SBOM store, see :doc:`sbom-scan`, which an image
+pipeline fills itself or with :doc:`sbom-put`. Nothing in the backend fills
 ``kernel_vulns``: the operator writes it.
 
 ``shirudo.sbom_images``:

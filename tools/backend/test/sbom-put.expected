@@ -1,0 +1,62 @@
+sbom-put: fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c: stored, sha256 fd2407ebf451915ddb23cd4cabd3cee23db62e7f1d7a81c8c3cfb3b1c48596e4, components: 4
+sbom-scan: fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c: ok, components: 4, findings: 2, of kernel packages left out: 3
+sbom-scan: loaded images: 1, findings: 2
+put and scan: status 0
+./fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c/image.json
+./fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c/sbom.cdx.json
+{"image_id":"fleet-os","image_version":"2026.11.1","image_root":"a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c","sbom_format":"cyclonedx-json","sbom_sha256":"fd2407ebf451915ddb23cd4cabd3cee23db62e7f1d7a81c8c3cfb3b1c48596e4","built_at":"2026-11-02T08:00:00Z"}
+the SBOM is the bytes given
+sbom-put: fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c: already stored with this SBOM
+same again: status 0
+sbom-put: fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c is already in the store with another SBOM; the store is written once
+another sbom: status 1
+sbom-put: fleet-os/2026.11.6/-: stored, sha256 d89d4d8966a7264023fb306de62ee1b5a40e6376dfffec4b59d0774fb988f333, components: 2
+no root, default time: status 0
+{"image_id":"fleet-os","image_version":"2026.11.6","image_root":"","sbom_format":"cyclonedx-json","sbom_sha256":"d89d4d8966a7264023fb306de62ee1b5a40e6376dfffec4b59d0774fb988f333","built_at":"<now>"}
+stub-aws: s3 cp --recursive --only-show-errors s3://fleet-images/sboms/fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c/ <directory> --exclude * --include image.json
+stub-aws: s3 cp --only-show-errors <file> s3://fleet-images/sboms/fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c/sbom.cdx.json
+stub-aws: s3 cp --only-show-errors <file> s3://fleet-images/sboms/fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c/image.json
+sbom-put: fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c: stored, sha256 fd2407ebf451915ddb23cd4cabd3cee23db62e7f1d7a81c8c3cfb3b1c48596e4, components: 4
+s3 put: status 0
+./fleet-images/sboms/fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c/image.json
+./fleet-images/sboms/fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c/sbom.cdx.json
+stub-aws: s3 cp --recursive --only-show-errors s3://fleet-images/sboms/fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c/ <directory> --exclude * --include image.json
+sbom-put: fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c: already stored with this SBOM
+s3 same again: status 0
+stub-aws: s3 cp --recursive --only-show-errors s3://fleet-images/sboms/fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c/ <directory> --exclude * --include image.json
+sbom-put: fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c is already in the store with another SBOM; the store is written once
+s3 another sbom: status 1
+stub-aws: s3 cp --recursive --only-show-errors s3://fleet-images/sboms/fleet-os/2026.11.2/-/ <directory> --exclude * --include image.json
+sbom-put: cannot read s3://fleet-images/sboms/fleet-os/2026.11.2/-
+s3 fails: status 1
+sbom-put: the image id is not 1 to 255 of [A-Za-z0-9._~+-] that do not start with a dot
+dot id: status 1
+sbom-put: the image version is not 1 to 255 of [A-Za-z0-9._~+-] that do not start with a dot
+slash version: status 1
+sbom-put: the image root is not 64 lowercase hex digits
+short root: status 1
+sbom-put: the build time is not a UTC "YYYY-MM-DDThh:mm:ssZ"
+bad time: status 1
+sbom-put: bomFormat of sbom.cdx.json is not "CycloneDX"
+not cyclonedx: status 1
+sbom-put: cannot read none.json
+no sbom: status 1
+sbom-put: the store https://example.com/sboms is neither file://<directory> nor s3://<bucket>
+https store: status 1
+sbom-put: no store directory no-such-store
+no store directory: status 1
+usage: sbom-put [--store <url>] --image-id <id> --image-version <version>
+                [--image-root <root>] [--built-at <YYYY-MM-DDThh:mm:ssZ>]
+                [--scan] <sbom.cdx.json>
+no image id: status 2
+usage: sbom-put [--store <url>] --image-id <id> --image-version <version>
+                [--image-root <root>] [--built-at <YYYY-MM-DDThh:mm:ssZ>]
+                [--scan] <sbom.cdx.json>
+two sboms: status 2
+./fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c/image.json
+./fleet-os/2026.11.1/a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c/sbom.cdx.json
+./fleet-os/2026.11.6/-/image.json
+./fleet-os/2026.11.6/-/sbom.cdx.json
+fleet-os	2026.11.1	a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c	cyclonedx-json	fd2407ebf451915ddb23cd4cabd3cee23db62e7f1d7a81c8c3cfb3b1c48596e4	ok	2026-11-02 08:00:00	2026-11-11T06:00:00Z
+fd2407ebf451915ddb23cd4cabd3cee23db62e7f1d7a81c8c3cfb3b1c48596e4	EXAMPLE-0202	openssl
+fd2407ebf451915ddb23cd4cabd3cee23db62e7f1d7a81c8c3cfb3b1c48596e4	EXAMPLE-0505	zlib

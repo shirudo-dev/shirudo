@@ -947,12 +947,14 @@ trust from ``untrusted`` to ``enrolled``, each status check and the
 history it reads, ``node_vulns`` and its inputs, the
 retention script and the views that keep boot baselines, the tree
 ingest job on a single publication and on a walk over sealed segments,
-the SBOM scan job on a store that holds an image in every state, and
-the queries of :src:`tools/xtop/sql/nodes.sql` and
-:src:`tools/xtop/sql/shields.sql`, with the names and types of their
-columns, over nodes healthy, unhealthy, stale and without a tree or an
-image, and a tree with one upatch deployed and one still rolling out
-(``test/xtop-nodes``, ``test/xtop-shields``).
+the SBOM scan job on a store that holds an image in every state, the
+SBOM put job into a ``file://`` and an ``s3://`` store, again and with
+another SBOM, and what it refuses (``test/sbom-put``), and the queries
+of :src:`tools/xtop/sql/nodes.sql` and :src:`tools/xtop/sql/shields.sql`,
+with the names and types of their columns, over nodes healthy,
+unhealthy, stale and without a tree or an image, and a tree with one
+upatch deployed and one still rolling out (``test/xtop-nodes``,
+``test/xtop-shields``).
 
 The unit tests of :src:`tools/xtop/test/` cover how xtop turns the rows
 of those queries into nodes and shields, the health percent, the

@@ -1201,7 +1201,10 @@ The tests of ``jobs/sbom-scan`` run the job the same way, on the store
 of place, with ``test/stub-trivy.sh`` in place of Trivy and
 ``test/stub-aws.sh`` in place of ``aws``. The stub matches nothing: it
 prints the report in ``test/trivy/`` named by the SHA-256 of the SBOM it
-is given. A script that exits with status 77 skips its test and says
+is given. ``test/sbom-put`` stores two of those SBOMs with
+``jobs/sbom-put`` into a ``file://`` store and through the same AWS stub
+into an ``s3://`` one, runs ``--scan`` on the first, and checks what it
+refuses. A script that exits with status 77 skips its test and says
 why. ``test/sbom-scan-trivy`` is skipped unless ``trivy`` is on the host
 and ``SBOM_TRIVY_CACHE`` names a Trivy cache directory with a database,
 since its findings would change with every database CI could fetch.

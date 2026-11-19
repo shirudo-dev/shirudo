@@ -27,7 +27,7 @@ What it reads
 -------------
 
 One directory per image, which the image pipeline writes once and never
-changes; neither shirudo nor this job writes it:
+changes, itself or through :doc:`sbom-put`; this job never writes it:
 
 .. code-block:: none
 
@@ -164,7 +164,8 @@ When to run it
 
 Daily, after updating Trivy's database, and more often than
 ``sbom_stale_seconds`` allows; and, if you like, when the image pipeline
-has stored a new image, which is otherwise scanned at the next run. With
+has stored a new image, which is otherwise scanned at the next run:
+``sbom-put --scan`` does that. With
 ``SBOM_STORE`` and ``TRIVY_CACHE_DIR``, which Trivy reads too, in
 ``/etc/shirudo-backend/sbom-scan.env``:
 
