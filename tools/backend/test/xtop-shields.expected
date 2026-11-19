@@ -1,0 +1,5 @@
+tree_id	id	seq	op	add_seq	ops	manifest_digest	repository	selector	advisories	images	nodes	applied	not_selected	no_target	pending	published
+String	String	UInt64	String	UInt64	UInt64	String	String	String	Array(Tuple(String, String, String, String, UInt64, UInt64))	Array(String)	UInt64	UInt64	UInt64	UInt64	UInt64	UInt8
+fleet-base	ssl-fix	4	add	4	1	c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00	oci://registry.example.com/shirudo/fleet-base	{}	[('EXAMPLE-0202','HIGH','openssl','sbom',0,4)]	['fleet-os 2026.11.1']	4	0	0	0	4	1
+fleet-base	xfs-fix	3	add	3	3	b25c835b353ba101d51c4473d602764c2f8746a6e60342bcf49d510a868cb62a	oci://registry.example.com/shirudo/fleet-base	{"labels":{"role":["edge"]}}	[('EXAMPLE-0101','CRITICAL','linux','kernel',2,2)]	['fleet-os 2026.11.1']	4	2	2	0	0	1
+shields	2

@@ -948,9 +948,11 @@ history it reads, ``node_vulns`` and its inputs, the
 retention script and the views that keep boot baselines, the tree
 ingest job on a single publication and on a walk over sealed segments,
 the SBOM scan job on a store that holds an image in every state, and
-the query of :src:`tools/xtop/sql/nodes.sql`, with the names and types
-of its columns, over nodes healthy, unhealthy, stale and without a tree
-or an image (``test/xtop-nodes``).
+the queries of :src:`tools/xtop/sql/nodes.sql` and
+:src:`tools/xtop/sql/shields.sql`, with the names and types of their
+columns, over nodes healthy, unhealthy, stale and without a tree or an
+image, and a tree with one upatch deployed and one still rolling out
+(``test/xtop-nodes``, ``test/xtop-shields``).
 
 The unit tests of :src:`tools/xtop/test/` cover how xtop turns the rows
 of that query into nodes, the health percent, the roll-up by image and

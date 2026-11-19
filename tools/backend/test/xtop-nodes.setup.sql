@@ -5,7 +5,10 @@
 -- the selector and node C with no image, and two more for the states the
 -- nodes view of tools/xtop tells apart: node D sends node A's record with
 -- a verdict that is not ok, so check 3 fails it, and node E sent node
--- B's record an hour ago and turns stale.
+-- B's record an hour ago and turns stale. Generation 4 of the tree adds
+-- ssl-fix for the openssl finding at operation 4, which no node has
+-- reached yet: a rollout under way, for the shields view. The test
+-- xtop-shields reads the same rows.
 
 -- The publication of testing/fixtures/keepalive/tree-1.1.0.json, as the
 -- ingest job loads it: generation 3 with its three operations.
@@ -60,12 +63,23 @@ INSERT INTO shirudo.checked (received, host_name, body, ok, ak_name, ak_public, 
 SELECT now64(3) - INTERVAL 1 HOUR, 'core-02', body, 1, '000b0e', 'QUtF', 3, 3000
 FROM fixture WHERE name = 'node-b-1.1.0';
 
+-- Generation 4: operation 4 adds ssl-fix for the openssl finding. Its
+-- digests are made up; no node reaches it.
+INSERT INTO shirudo.tree_pubs (tree_id, generation, manifest_digest, parent_manifest_digest, head_seq, published_at) VALUES
+('fleet-base', 4, '7d1e0f2a9b8c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e', '1f327364233e3f2dcebcd13c0af8d84f886201531b135294bd7356a2f7ed680b', 4, now64(3) - INTERVAL 1 MINUTE);
+INSERT INTO shirudo.tree_ops (tree_id, seq, op, id, selector, repository, manifest_digest, layer_digest, payload_sha256, operation_digest) VALUES
+('fleet-base', 4, 'add', 'ssl-fix', '{}', 'oci://registry.example.com/shirudo/fleet-base', 'c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00', 'c0ffee01c0ffee01c0ffee01c0ffee01c0ffee01c0ffee01c0ffee01c0ffee01', 'c0ffee02c0ffee02c0ffee02c0ffee02c0ffee02c0ffee02c0ffee02c0ffee02', 'c0ffee03c0ffee03c0ffee03c0ffee03c0ffee03c0ffee03c0ffee03c0ffee03');
+INSERT INTO shirudo.upatch_fixes (tree_id, seq, id, advisory, source) VALUES
+('fleet-base', 4, 'ssl-fix', 'EXAMPLE-0202', 'fixes');
+
 -- The operator's labels, as the page has them.
 INSERT INTO shirudo.nodes (ak_name, node_id)
 SELECT record.1, argMinState(record.2, toDateTime64(0, 3))
 FROM (SELECT arrayJoin([('000b23602ab98bfb', 'node-a'), ('000b9d72e08380a1', 'node-b'), ('000b0c', 'node-c'), ('000b0d', 'node-d'), ('000b0e', 'node-e')]) AS record)
 GROUP BY record.1;
 
+SYSTEM REFRESH VIEW shirudo.node_ops_mv;
+SYSTEM WAIT VIEW shirudo.node_ops_mv;
 SYSTEM REFRESH VIEW shirudo.node_status_mv;
 SYSTEM WAIT VIEW shirudo.node_status_mv;
 SYSTEM REFRESH VIEW shirudo.node_vulns_mv;
