@@ -131,21 +131,39 @@ verified() {
 	[ -f "$1" ] && [ "$(sha256sum "$1" | cut -d' ' -f1)" = "$2" ]
 }
 
+# Where the kernel's scripts come from, in the order they are asked. A
+# source that fails one script is not asked for the next, so a host that
+# does not answer costs its retries once rather than once per script.
+fetch_sources='kernel.org github'
+
+source_url() {
+	case $1 in
+	kernel.org)
+		printf '%s\n' "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/scripts/$2?h=$KERNEL_TAG"
+		;;
+	github)
+		printf '%s\n' "https://raw.githubusercontent.com/torvalds/linux/$KERNEL_TAG/scripts/$2"
+		;;
+	esac
+}
+
 # Fetch one of the kernel's scripts at the pinned tag, from kernel.org or
-# its GitHub mirror, and keep it only when it hashes as expected.
+# its GitHub mirror, and keep it only when it hashes as expected. Without
+# a connect timeout curl waits out the system's TCP one, over two minutes
+# an attempt, on a host that drops what it is sent.
 fetch() {
 	name=$1
 	sum=$2
 	dest=$3
-	for url in \
-	    "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/scripts/$name?h=$KERNEL_TAG" \
-	    "https://raw.githubusercontent.com/torvalds/linux/$KERNEL_TAG/scripts/$name"; do
-		if curl -fsSL --retry 3 -o "$dest.tmp" "$url" &&
+	for source in $fetch_sources; do
+		if curl -fsSL --connect-timeout 10 --max-time 60 --retry 3 \
+			-o "$dest.tmp" "$(source_url "$source" "$name")" &&
 		   verified "$dest.tmp" "$sum"; then
 			mv "$dest.tmp" "$dest"
 			return 0
 		fi
 		rm -f "$dest.tmp"
+		fetch_sources=${fetch_sources#*"$source"}
 	done
 	die "could not fetch scripts/$name at $KERNEL_TAG with sha256 $sum"
 }

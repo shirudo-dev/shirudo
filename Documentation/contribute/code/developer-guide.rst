@@ -575,7 +575,9 @@ the commit at ``HEAD`` alone without them.
        :doc:`/contribute/testing/proofs`.
 
 ``check-style.sh`` fetches the kernel's ``checkpatch.pl`` at a pinned
-tag into ``build/checkpatch/`` and verifies its SHA-256. Set
+tag into ``build/checkpatch/`` and verifies its SHA-256. It asks
+kernel.org first and then its GitHub mirror, gives each ten seconds to
+answer, and does not ask again a source that failed once. Set
 ``CHECKPATCH=<path>`` to use a kernel tree's
 ``scripts/checkpatch.pl`` instead, for example without network access.
 

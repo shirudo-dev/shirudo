@@ -7,7 +7,8 @@
 # opener and the subject length the wrapper adds, the message of a commit
 # that touches no C, the sources it leaves alone, the userspace spellings
 # it lets through, the C library's integer names, number parsers and
-# string copies it refuses and the list of what stays enabled, on a
+# string copies it refuses, the list of what stays enabled, and the fetch
+# of checkpatch.pl, which asks a host that does not answer only once, on a
 # throwaway repository.
 
 cd "$(dirname "$0")/.."
@@ -298,5 +299,49 @@ test_expect_success '--diff checks the uncommitted changes' '
 	check --diff &&
 	grep -q "no uncommitted changes" "$W/out"
 '
+
+# A curl to which kernel.org does not answer, as curl reports a timeout,
+# and which serves the GitHub mirror from the copy the tests run with:
+# only that copy at the pinned tag can stand in for the mirror.
+P=$(dirname "$CHECKPATCH")
+pinned() {
+	[ "$(sha256sum "$P/$2" 2>/dev/null | cut -d' ' -f1)" = \
+	  "$(sed -n "s/^$1=//p" "$S")" ]
+}
+mkdir -p "$W/bin"
+cat >"$W/bin/curl" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >>"$CURL_LOG"
+out=
+while [ $# -gt 1 ]; do
+	[ "$1" = -o ] && out=$2
+	shift
+done
+case $1 in
+https://raw.githubusercontent.com/*)
+	cp "$PINNED/${1##*/}" "$out"
+	;;
+*)
+	exit 28
+	;;
+esac
+EOF
+chmod +x "$W/bin/curl"
+
+if pinned CHECKPATCH_PL_SHA256 checkpatch.pl &&
+   pinned SPELLING_SHA256 spelling.txt &&
+   pinned CONST_STRUCTS_SHA256 const_structs.checkpatch; then
+test_expect_success 'a source that does not answer is asked once, then the mirror' '
+	rm -rf "$R/build/checkpatch" "$W/curl.log" &&
+	(cd "$R" && PATH="$W/bin:$PATH" CURL_LOG="$W/curl.log" PINNED="$P" \
+		CHECKPATCH= sh "$S" --types) >"$W/out" 2>"$W/err" &&
+	[ "$(grep -c "https://git.kernel.org/" "$W/curl.log")" -eq 1 ] &&
+	[ "$(grep -c "https://raw.githubusercontent.com/" "$W/curl.log")" -eq 3 ] &&
+	! grep -v -e "--connect-timeout" "$W/curl.log" &&
+	for f in checkpatch.pl spelling.txt const_structs.checkpatch; do
+		cmp -s "$P/$f" "$R/build/checkpatch/$f" || exit 1
+	done
+'
+fi
 
 test_done
