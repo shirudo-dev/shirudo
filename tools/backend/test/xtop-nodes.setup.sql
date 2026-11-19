@@ -87,6 +87,12 @@ SELECT record.1, argMinState(record.2, toDateTime64(0, 3))
 FROM (SELECT arrayJoin([('000b23602ab98bfb', 'node-a'), ('000b9d72e08380a1', 'node-b'), ('000b0c', 'node-c'), ('000b0d', 'node-d'), ('000b0e', 'node-e')]) AS record)
 GROUP BY record.1;
 
+-- node-b's key, enrolled from its builder's records.
+INSERT INTO shirudo.nodes (ak_name, trust) VALUES ('000b9d72e08380a1', 'enrolled');
+INSERT INTO shirudo.enrollments (ak_name, ek_name, node_id, source, put_at)
+VALUES ('000b9d72e08380a1', concat('000b', repeat('e', 64)), 'node-b', 'vm-host-1',
+        toDateTime64('2026-11-01 10:00:00', 3, 'UTC'));
+
 SYSTEM REFRESH VIEW shirudo.node_ops_mv;
 SYSTEM WAIT VIEW shirudo.node_ops_mv;
 SYSTEM REFRESH VIEW shirudo.node_status_mv;

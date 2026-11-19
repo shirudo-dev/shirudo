@@ -5,6 +5,7 @@
 
 import type { ReactNode } from "react";
 import { Box, Text, useInput } from "ink";
+import { ago } from "../lib/format.ts";
 import { imageLabel, type FleetNode } from "../lib/fleet.ts";
 import { STATUS_STYLE } from "./style.tsx";
 
@@ -61,6 +62,13 @@ export function NodeDetail({ node, height, active, onClose }: Props) {
         </Text>
         <Field name="host">{node.hostName}</Field>
         <Field name="key">{node.akName}</Field>
+        <Field name="enrolled">
+          {node.enrollment
+            ? `by ${node.enrollment.source}, ${ago(node.enrollment.at)} ago, ek ${node.enrollment.ekName ?? "not given"}`
+            : node.trust === "enrolled"
+              ? "by hand, no builder's record"
+              : "no"}
+        </Field>
         <Field name="labels">
           {Object.keys(node.labels).length === 0 && "none put"}
           {Object.keys(node.labels)

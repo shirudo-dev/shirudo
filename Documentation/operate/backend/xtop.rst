@@ -116,7 +116,10 @@ The summary line gives the health of the nodes shown: the percent of
 them ``healthy``, so 100% when every node is healthy and 0% when none
 is. A stale node counts against it like an unhealthy one.
 
-Enter on a node shows its host name, key, labels with the name each was
+Enter on a node shows its host name, key, the builder that enrolled the
+key, when, and the endorsement key's name it gave, from
+``shirudo.enrollments`` (:doc:`enroll-put`), or ``by hand`` for a key
+enrolled without one, labels with the name each was
 put under, ``ak_name``, ``node_id`` or ``config_root``, a line per
 conflict with the values it overrode, what its record says it runs, and
 the seven lines of its ``log``, a failed one in red; Esc returns. ``/``

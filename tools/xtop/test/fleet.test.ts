@@ -48,6 +48,9 @@ function row(over: Partial<NodeRow>): NodeRow {
     labels: { role: "edge", site: "fra" },
     label_sources: { role: "node_id", site: "node_id" },
     label_conflicts: [],
+    enroll_ek_name: "",
+    enroll_source: "",
+    enrolled_ms: 0,
     ...over,
   };
 }
@@ -153,6 +156,16 @@ describe("toFleetNode", () => {
         ],
       },
     ]);
+  });
+
+  test("keeps the builder's record of an enrolled key", () => {
+    const ek = `000b${"e".repeat(64)}`;
+    const n = toFleetNode(
+      row({ trust: "enrolled", enroll_ek_name: ek, enroll_source: "vm-host-1", enrolled_ms: 1_793_527_200_000 }),
+    );
+    expect(n.enrollment).toEqual({ ekName: ek, source: "vm-host-1", at: new Date(1_793_527_200_000) });
+    expect(toFleetNode(row({ enroll_source: "vm-host-1", enrolled_ms: 1 })).enrollment?.ekName).toBeNull();
+    expect(toFleetNode(ROWS[0]!).enrollment).toBeNull();
   });
 
   test("refuses a status the view does not know", () => {

@@ -71,6 +71,10 @@ export type NodeRow = {
   label_sources: Record<string, string>;
   /** (key, value, by, [(rank, by, value)]) */
   label_conflicts: [string, string, string, [number, string, string][]][];
+  enroll_ek_name: string;
+  enroll_source: string;
+  /** 0 for a key with no row in shirudo.enrollments. */
+  enrolled_ms: number;
 };
 
 const labelSource = (by: string) => oneOf<LabelSource>(LABEL_SOURCES, by, "label source");
@@ -114,6 +118,9 @@ export function toFleetNode(r: NodeRow): FleetNode {
       Object.entries(r.label_sources).map(([key, by]) => [key, labelSource(by)]),
     ),
     labelConflicts: r.label_conflicts.map(toLabelConflict),
+    enrollment: r.enrolled_ms
+      ? { ekName: r.enroll_ek_name || null, source: r.enroll_source, at: new Date(r.enrolled_ms) }
+      : null,
   };
 }
 

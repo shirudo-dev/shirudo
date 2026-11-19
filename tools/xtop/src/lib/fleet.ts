@@ -19,6 +19,14 @@ export type LabelConflict = {
   given: { by: LabelSource; value: string }[];
 };
 
+/** The builder's record of the node's key, from jobs/enroll-put. */
+export type Enrollment = {
+  /** The endorsement key's name the builder saw, null when it gave none. */
+  ekName: string | null;
+  source: string;
+  at: Date;
+};
+
 export const STATUS_RANK: Record<NodeStatus, number> = { unhealthy: 0, stale: 1, healthy: 2 };
 export const STATUSES = ["unhealthy", "stale", "healthy"] as const;
 export const TRUSTS = ["untrusted", "enrolled"] as const;
@@ -63,6 +71,8 @@ export type FleetNode = {
   /** Per key, the name its value was put under. */
   labelSources: Record<string, LabelSource>;
   labelConflicts: LabelConflict[];
+  /** null for a key no builder enrolled, enrolled by hand or untrusted. */
+  enrollment: Enrollment | null;
 };
 
 export type FleetReport = {
