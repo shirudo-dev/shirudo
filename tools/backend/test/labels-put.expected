@@ -1,7 +1,8 @@
 labels-put: node_id edge-01: 2 labels
 labels-put: node_id edge-02: 2 labels
 labels-put: ak_name 000b03: 1 label
-labels-put: loaded sets: 3
+labels-put: config_root c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1: 1 label
+labels-put: loaded sets: 4
 first put: status 0
 labels-put: node_id edge-02: cleared
 labels-put: ak_name 000b01: 3 labels
@@ -10,6 +11,7 @@ second put: status 0
 labels-put: node_id edge-01: 2 labels
 labels-put: node_id edge-02: 2 labels
 labels-put: ak_name 000b03: 1 label
+labels-put: config_root c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1: 1 label
 check: status 0
 labels-put: the file is not a JSON value, nothing loaded
 not json: status 1
@@ -17,13 +19,15 @@ labels-put: the file is not an object whose one key is "nodes", nothing loaded
 not the form: status 1
 labels-put: the file is not an object whose one key is "nodes", nothing loaded
 another top key: status 1
-labels-put: set 1 names its node by neither or both of node_id and ak_name, nothing loaded
+labels-put: set 1 does not name its node by exactly one of node_id, ak_name and config_root, nothing loaded
 both names: status 1
-labels-put: set 1 names its node by neither or both of node_id and ak_name, nothing loaded
+labels-put: set 1 does not name its node by exactly one of node_id, ak_name and config_root, nothing loaded
 no name: status 1
+labels-put: set 1: config_root is not 64 lowercase hex digits, nothing loaded
+short root: status 1
 labels-put: set 1: ak_name is not 1 to 255 lowercase hex digits, nothing loaded
 ak not hex: status 1
-labels-put: set 1 has the key "label", which is not node_id, ak_name or labels, nothing loaded
+labels-put: set 1 has the key "label", which is not node_id, ak_name, config_root or labels, nothing loaded
 unknown key: status 1
 labels-put: node_id a has two sets, nothing loaded
 two sets: status 1
@@ -47,5 +51,6 @@ usage: labels-put [--check] <sets.json>|-
 no argument: status 2
 core-01	000b03	{'role':'core'}	ak_name
 edge-01	000b01	{'role':'edge','site':'fra','rack':'r 7'}	ak_name
-edge-02	000b02	{}	none
-sets	5
+edge-02	000b02	{'image':'base'}	config_root
+lab-01	000b04	{'image':'base'}	config_root
+sets	6

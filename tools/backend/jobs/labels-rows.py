@@ -8,7 +8,8 @@
 #   labels-rows.py <sets.json> <rows.jsonl> <put_at>
 #
 # Reads {"nodes": [{"node_id": <name>, "labels": {<key>: <value>, ...}},
-# {"ak_name": <key>, "labels": {...}}, ...]} and writes one row of
+# {"ak_name": <key>, "labels": {...}}, {"config_root": <hash>, "labels":
+# {...}}, ...]} and writes one row of
 # shirudo.label_sets per set, in ClickHouse's JSONEachRow format, with
 # put_at, milliseconds since the epoch, on every row. Prints a line per
 # set. A label is one that etc/shirudo/node.labels could hold, so that a
@@ -28,6 +29,12 @@ MAX_LABELS = 64
 MAX_TEXT = 255
 NODE_ID = re.compile(r"[^\x00-\x1f\x7f]{1,255}")
 AK_NAME = re.compile(r"[0-9a-f]{1,255}")
+CONFIG_ROOT = re.compile(r"[0-9a-f]{64}")
+NAMES = {
+    "node_id": (NODE_ID, "1 to 255 characters with no control character"),
+    "ak_name": (AK_NAME, "1 to 255 lowercase hex digits"),
+    "config_root": (CONFIG_ROOT, "64 lowercase hex digits"),
+}
 CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 
@@ -92,21 +99,20 @@ def node_of(n, entry):
     """The set's (by, node) from its one name."""
     if type(entry) is not dict:
         raise Refused("set %d is not an object" % n)
-    extra = set(entry) - {"node_id", "ak_name", "labels"}
+    extra = set(entry) - set(NAMES) - {"labels"}
     if extra:
         raise Refused('set %d has the key "%s", which is not node_id,'
-                      ' ak_name or labels' % (n, printable(sorted(extra)[0])))
-    names = [k for k in ("node_id", "ak_name") if k in entry]
+                      ' ak_name, config_root or labels'
+                      % (n, printable(sorted(extra)[0])))
+    names = [k for k in NAMES if k in entry]
     if len(names) != 1:
-        raise Refused("set %d names its node by neither or both of node_id"
-                      " and ak_name" % n)
+        raise Refused("set %d does not name its node by exactly one of"
+                      " node_id, ak_name and config_root" % n)
     by = names[0]
     node = entry[by]
-    pattern = NODE_ID if by == "node_id" else AK_NAME
+    pattern, form = NAMES[by]
     if type(node) is not str or not pattern.fullmatch(node):
-        raise Refused("set %d: %s is not %s" % (
-            n, by, "1 to 255 characters with no control character"
-            if by == "node_id" else "1 to 255 lowercase hex digits"))
+        raise Refused("set %d: %s is not %s" % (n, by, form))
     return by, node
 
 

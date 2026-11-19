@@ -33,9 +33,10 @@ Views, functions and jobs
 ``shirudo.node_labels``
    view.
 
-   label_sets FINAL joined to nodes: per key, the labels put under its
-   ak_name, else those put under its node_id, else none, and by, which of
-   the three it is. An empty set counts as none.
+   label_sets FINAL joined to nodes and keepalive_latest: per key, the
+   labels put under its ak_name, else those put under its node_id, else
+   those put under the config_root of its newest record, else none, and
+   by, which of the four it is. An empty set counts as none.
 
 ``shirudo.history_conflicts``
    view.

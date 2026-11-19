@@ -216,16 +216,17 @@ shirudo.label_sets
    :reference: 10,000 rows ≈ 2 MB
    :bytes: 2e+06
 
-   The labels the operator gives a node out of band, one set per node_id
-   or ak_name. Not what the node's node.labels holds: tree sync matches
-   selectors against that file, and nothing here reaches the node.
+   The labels the operator gives a node out of band, one set per node_id,
+   ak_name or config_root. Not what the node's node.labels holds: tree
+   sync matches selectors against that file, and nothing here reaches the
+   node; a set by config_root is the one place they can agree.
 
    - Read with FINAL, or through node_labels: the newest put of a name
      replaces the set.
    - An empty map clears the set; node_labels then falls back to the
      other name, or none.
 
-   :by: Whether node names a node_id or an ak_name.
-   :node: The node_id or ak_name.
+   :by: Whether node names a node_id, an ak_name, or the config_root of the nodes that booted that config image.
+   :node: The node_id, ak_name or config_root.
    :labels: The whole set, key to value.
    :put_at: When labels-put loaded it; the version ReplacingMergeTree keeps the newest of.

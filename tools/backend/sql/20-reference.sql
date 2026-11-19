@@ -103,12 +103,13 @@ ORDER BY (tree_id, seq, advisory, source);
 
 -- The labels the operator gives a node, out of band: what jobs/labels-put
 -- loads, not what the node's own node.labels holds, which only its tree
--- sync reads. One row per set, by node_id or by ak_name; a newer put of
--- the same name replaces it, and an empty map clears it. Read it with
--- FINAL, or through shirudo.node_labels.
+-- sync reads. One row per set, by node_id, by ak_name, or by config_root
+-- for every node whose newest record names that config image; a newer
+-- put of the same name replaces it, and an empty map clears it. Read it
+-- with FINAL, or through shirudo.node_labels.
 CREATE TABLE IF NOT EXISTS shirudo.label_sets
 (
-    by Enum8('node_id' = 1, 'ak_name' = 2),
+    by Enum8('node_id' = 1, 'ak_name' = 2, 'config_root' = 3),
     node String,
     labels Map(String, String),
     put_at DateTime64(3) DEFAULT now64(3)

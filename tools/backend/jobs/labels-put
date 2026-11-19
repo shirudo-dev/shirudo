@@ -7,9 +7,10 @@
 #
 #   jobs/labels-put [--check] <sets.json>|-
 #
-# The file names each node by node_id or by ak_name and gives its whole
-# set of labels, which replaces the one stored under that name; an empty
-# set clears it. Nodes the file does not name keep theirs. The file is
+# The file names each node by node_id or by ak_name, or every node booted
+# from a config image by its config_root, and gives the whole set of
+# labels, which replaces the one stored under that name; an empty set
+# clears it. Nodes the file does not name keep theirs. The file is
 # loaded whole or not at all. --check reads and checks it, and loads
 # nothing.
 #

@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 #
-# jobs/labels-put: a file of sets by node_id and by ak_name loads whole,
-# from a file and from standard input; a second put replaces the sets it
-# names, clears one with an empty set, and keeps those it does not name;
-# --check loads nothing. Then what it refuses, each with a message and
+# jobs/labels-put: a file of sets by node_id, by ak_name and by
+# config_root loads whole, from a file and from standard input; a second
+# put replaces the sets it names, clears one with an empty set, and keeps
+# those it does not name; --check loads nothing. Then what it refuses, each with a message and
 # nothing loaded: a file that is not JSON or not of the form, a set that
 # names its node twice or not at all, two sets for one name, a key or
 # value node.labels could not hold, too many labels, a missing file and
@@ -40,7 +40,8 @@ cat >"$work/first.json" <<'SETS'
 {"nodes": [
  {"node_id": "edge-01", "labels": {"role": "edge", "site": "fra"}},
  {"node_id": "edge-02", "labels": {"role": "edge", "site": "ams"}},
- {"ak_name": "000b03", "labels": {"role": "core"}}
+ {"ak_name": "000b03", "labels": {"role": "core"}},
+ {"config_root": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1", "labels": {"image": "base"}}
 ]}
 SETS
 run 'first put' "$job" "$work/first.json"
@@ -61,6 +62,7 @@ refused 'not the form' '[]'
 refused 'another top key' '{"nodes": [], "extra": 1}'
 refused 'both names' '{"nodes": [{"node_id": "a", "ak_name": "0b", "labels": {}}]}'
 refused 'no name' '{"nodes": [{"labels": {}}]}'
+refused 'short root' '{"nodes": [{"config_root": "c1c1", "labels": {}}]}'
 refused 'ak not hex' '{"nodes": [{"ak_name": "000B", "labels": {}}]}'
 refused 'unknown key' '{"nodes": [{"node_id": "a", "labels": {}, "label": {}}]}'
 refused 'two sets' '{"nodes": [{"node_id": "a", "labels": {}}, {"node_id": "a", "labels": {"x": "y"}}]}'

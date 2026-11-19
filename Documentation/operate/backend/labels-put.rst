@@ -23,14 +23,16 @@ matches: tree sync on the node reads its own ``node.labels``, and nothing
 the job loads reaches a node. Load them from the same source as the
 config images, after each change, or the two drift apart.
 
-1. Write the sets, one per node, each named by its ``node_id`` or by its
-   ``ak_name``:
+1. Write the sets, each named by a node's ``node_id`` or ``ak_name``, or
+   by the ``config_root`` of a config image, for every node that booted
+   it:
 
    .. code-block:: json
 
       {"nodes": [
+        {"config_root": "6d5ed552f448a1c07e3b9d24f5a86c1e0b7d93f2c4e5a6b7180c9d2e3f4a5b6c",
+         "labels": {"role": "edge"}},
         {"node_id": "edge-01", "labels": {"role": "edge", "site": "fra"}},
-        {"node_id": "edge-02", "labels": {"role": "edge", "site": "ams"}},
         {"ak_name": "000b9d72e08380a1", "labels": {"role": "core"}}
       ]}
 
@@ -45,8 +47,8 @@ config images, after each change, or the two drift apart.
    .. code-block:: console
 
       $ jobs/labels-put labels.json
+      labels-put: config_root 6d5ed552f448a1c07e3b9d24f5a86c1e0b7d93f2c4e5a6b7180c9d2e3f4a5b6c: 1 label
       labels-put: node_id edge-01: 2 labels
-      labels-put: node_id edge-02: 2 labels
       labels-put: ak_name 000b9d72e08380a1: 1 label
       labels-put: loaded sets: 3
 
@@ -61,11 +63,19 @@ not name keeps its labels. The file is loaded in one insert, whole or
 not at all.
 
 A node gets the set put under its ``ak_name``, else the one put under its
-``node_id``, else none, as the view ``shirudo.node_labels`` reads them
-(:doc:`tables/status`). Name a node by its ``node_id``, the name
-:doc:`maintain` gives it, so that the labels stay with it when it gets a
-new key; name it by its ``ak_name`` to give one key labels of its own. A
-name no node has yet keeps its set until one has it.
+``node_id``, else the one put under the ``config_root`` its newest
+keepalive reports, else none, as the view ``shirudo.node_labels`` reads
+them (:doc:`tables/status`): the most specific name wins.
+
+Name the sets by ``config_root`` where you can. A config image holds
+``etc/shirudo/node.labels``, so the pipeline that builds the image can
+load the same labels under its root, and they are then the ones the
+node's tree sync matches for as long as the node runs that image. A node
+that boots another image takes that image's set, or none. Name a node by
+its ``node_id``, the name :doc:`maintain` gives it, to label it apart
+from its image, and so that the labels stay with it when it gets a new
+key; name it by its ``ak_name`` to give one key labels of its own. A name
+no node has yet keeps its set until one has it.
 
 What it refuses
 ---------------
@@ -77,9 +87,10 @@ refuses the whole file, with status 1 and a message naming the set, when:
 - it is not UTF-8 JSON, or not an object whose one key is ``nodes``, an
   array; or an object has a key twice;
 - a set is not an object with ``labels`` and exactly one of ``node_id``,
-  1 to 255 characters with no control character, and ``ak_name``, 1 to
-  255 lowercase hex digits; or has another key;
-- two sets name the same ``node_id`` or ``ak_name``;
+  1 to 255 characters with no control character, ``ak_name``, 1 to 255
+  lowercase hex digits, and ``config_root``, 64 lowercase hex digits; or
+  has another key;
+- two sets name the same ``node_id``, ``ak_name`` or ``config_root``;
 - ``labels`` is not an object of strings, or holds more than 64 labels;
 - a key is empty, has ``=``, starts with ``#``, or a key or value has a
   blank at either end, a control character, or more than 255 bytes.
