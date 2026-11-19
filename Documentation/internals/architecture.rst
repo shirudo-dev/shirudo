@@ -22,7 +22,10 @@ operator installed without a record, or rewrite the record. Root can issue
 every system call, so none of these properties can rest on a userspace
 process that root could stop, trace or bypass. We put each decision into
 the kernel, on the call that changes state, and keep the userspace part
-small, short-lived and verified at boot.
+small, short-lived and verified at boot. A Java upatch is the one
+exception: a JVM, not the kernel, loads its jar, so its signature is
+checked in userspace, and it is a mitigation in the JVMs it reaches, not
+a boundary against root (:doc:`/security/threat-model`, R24).
 
 The operator side has the opposite problem. It holds the only secret, the
 ML-DSA-87 signing key, and it must not need any state about the targets,

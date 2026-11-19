@@ -76,6 +76,9 @@ struct cert;
  */
 int keys_cert_der(const struct trusted_cert *c, const __u8 **der,
 		  size_t *len);
+/* The member with that fingerprint, or NULL. */
+const struct trusted_cert *keys_member(const struct trusted_set *set,
+				       const __u8 fingerprint[32]);
 int keys_cert_read(const struct trusted_cert *c,
 		   struct cert *cert);
 

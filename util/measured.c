@@ -5,7 +5,6 @@
 #include <errno.h>
 #include <limits.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <sys/xattr.h>
 
 #include <shirudo/misc.h>
@@ -459,27 +458,17 @@ int measured_unmeasured_pins(const struct measured_set *s,
 	return ret ? ret : unmeasured;
 }
 
-int measured_unpinned(const struct measured_set *s,
-		      int (*cb)(const char *name, void *ctx), void *ctx)
+int measured_each(const struct measured_set *s,
+		  int (*cb)(const char *name, const char *payload_hex,
+			    void *ctx),
+		  void *ctx)
 {
-	char dir[PATH_MAX];
-	int ret = 0, n = 0;
-	struct stat st;
+	int ret = 0;
 	size_t i;
 
-	for (i = 0; i < s->n && !ret; i++) {
-		if (upatch_pin_path(dir, sizeof(dir), s->entries[i].name,
-				    NULL) < 0)
-			return -ENAMETOOLONG;
-		if (!lstat(dir, &st))
-			continue;
-		if (errno != ENOENT)
-			return -errno;
-		n++;
-		if (cb)
-			ret = cb(s->entries[i].name, ctx);
-	}
-	return ret ? ret : n;
+	for (i = 0; i < s->n && !ret; i++)
+		ret = cb(s->entries[i].name, s->entries[i].payload_hex, ctx);
+	return ret;
 }
 
 int measured_unmeasured_archives(const struct measured_set *s,

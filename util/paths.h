@@ -29,6 +29,16 @@
 #define INITRD_KEYS_DIR		"/etc/shirudo/keys"
 #define INITRD_CERT_PATH	INITRD_KEYS_DIR "/" CERT_FILE
 #define UPATCHES_DIR		VAR_LIB "/upatches"
+/*
+ * The jars of the loaded Java upatches, the one directory of sealed
+ * state a JVM reads, which boot restore writes again each boot: outside
+ * the state root, which stays closed to other users. The options a user
+ * manager's environment.d hands each JVM it starts live as long as the
+ * jars they name, so that options never outlive the jars across a boot.
+ */
+#define JAVA_DIR		"/run/shirudo-java"
+#define JAVA_ENV_DIR		"/run/environment.d"
+#define JAVA_ENV_PATH		JAVA_ENV_DIR "/shirudo.conf"
 #define LOCKS_DIR		VAR_LIB "/locks"
 #define EVENTLOG_PATH		VAR_LIB "/eventlog"
 /*

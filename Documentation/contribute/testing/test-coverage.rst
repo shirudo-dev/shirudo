@@ -270,6 +270,18 @@ signed config image.
      - Live ``kprobe.multi`` and ``kretprobe.multi`` links attach to two
        functions, run on entry and return, report their kind and count,
        unload cleanly, and reject a missing target
+   * - ``t3114-java-agent``
+     - A Java load under a umask of ``077`` writes the jar sealed,
+       readable by an unprivileged user and unchangeable by root, in a
+       directory root cannot move while the state root stays ``0700``,
+       names it in ``JAVA_TOOL_OPTIONS`` in a ``0644`` file of a ``0755``
+       directory, measures a ``java_load`` that ``status``
+       counts as in place and lists with the location ``java``, and
+       refuses a second load; one signed by a key
+       not enrolled, one relabelled BPF with a loader its header bounds
+       admit, and a BPF unload directive that names the agent are
+       refused; the unload removes options and archive, measures a
+       ``java_unload`` and leaves a jar whose agent does nothing
 
 ``tpm`` (4)
 ~~~~~~~~~~~
@@ -816,13 +828,14 @@ signed config image.
 Unit suites and fuzz targets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The unit suites in :src:`testing/unit/` cover 32 of the modules in
+The unit suites in :src:`testing/unit/` cover 34 of the modules in
 :src:`util/`: ``attest``, ``bpm_oci``, ``bpm_package``, ``bpm_state``,
 ``bpm_tree``, ``bpm_tree_overlap``, ``bpm_tree_state``, ``chain``,
 ``chain_history``, ``conditions``, ``crypto_openssl``,
-``eventlog``, ``format``, ``hex``, ``io``, ``json``, ``kernel_abi``,
+``eventlog``, ``format``, ``hex``, ``io``, ``java_agent``, ``json``,
+``kernel_abi``,
 ``keepalive``, ``keepalive_quote``, ``kernel_build_id``,
-``kernel_release``, ``measured``, ``options``,
+``kernel_release``, ``keys``, ``measured``, ``options``,
 ``paths``, ``string``, ``sysinfo``, ``upatch``, ``upatch_decode``,
 ``upatch_pins``, ``upatch_resolve``, ``upatch_verify`` and ``xdp``, and
 ``overflow`` the arithmetic of

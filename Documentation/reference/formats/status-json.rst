@@ -119,7 +119,8 @@ determined, as noted.
    * - ``upatches_loaded``
      - array of object
      - One object per upatch pinned under
-       ``/run/shirudo/bpffs/upatches``, see `upatches_loaded`_.
+       ``/run/shirudo/bpffs/upatches``, then one per loaded Java agent,
+       see `upatches_loaded`_.
    * - ``assets``
      - object
      - Persistent state, see `assets`_.
@@ -472,7 +473,8 @@ upatches_loaded
      - The upatch name.
    * - ``location``
      - string
-     - The attach point, for example ``fentry/do_nanosleep``.
+     - The attach point, for example ``fentry/do_nanosleep``; ``java``
+       for a Java agent.
    * - ``status``
      - string
      - ``success``
@@ -481,7 +483,8 @@ upatches_loaded
      - Maps pinned for the upatch.
    * - ``loaded_at``
      - string
-     - Change time of the upatch's pin directory, ISO 8601 UTC.
+     - Change time of the upatch's pin directory, or of a Java agent's
+       jar, ISO 8601 UTC.
    * - ``age_sec``
      - integer or ``null``
      - Seconds since ``loaded_at``.

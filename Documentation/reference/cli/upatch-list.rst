@@ -30,8 +30,10 @@ Description
 ``/run/shirudo/bpffs/upatches/``:
 
 - one row per archived artifact: its name, ``LOADED`` ``yes`` or
-  ``no``, its type (``load`` or ``unload``), its payload kind and the
-  first 16 hexadecimal characters of its payload digest
+  ``no``, its type (``load`` or ``unload``), its payload kind (``bpf``
+  or ``java``) and the first 16 hexadecimal characters of its payload
+  digest. A Java upatch is loaded while its installed jar is the
+  archived one.
 - one row per pinned upatch without an archive copy, marked
   ``not archived, gone at reboot``
 

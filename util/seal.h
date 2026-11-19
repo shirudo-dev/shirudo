@@ -77,6 +77,9 @@ bool seal_parent_labeled(const char *path);
 
 int seal_write_file(const char *path, const void *data, size_t len,
 		    mode_t mode);
+/* The same, with exactly that mode whatever the umask, before the rename. */
+int seal_write_file_mode(const char *path, const void *data, size_t len,
+			 mode_t mode);
 
 /*
  * The lock file at path, created sealed when it is not there, held

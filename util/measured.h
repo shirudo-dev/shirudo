@@ -65,12 +65,12 @@ int measured_unmeasured_archives(const struct measured_set *s,
 				 void *ctx);
 
 /*
- * The upatches the set holds without a pin directory: detached with no
- * unload of record, which only a task with runtime authority does. cb
- * runs for each; the number found, or -errno when a pin cannot be
- * looked up.
+ * cb for each member with its payload digest in hex, in the set's order;
+ * a non-zero return of cb ends the walk with that value.
  */
-int measured_unpinned(const struct measured_set *s,
-		      int (*cb)(const char *name, void *ctx), void *ctx);
+int measured_each(const struct measured_set *s,
+		  int (*cb)(const char *name, const char *payload_hex,
+			    void *ctx),
+		  void *ctx);
 
 #endif /* SHIRUDO_MEASURED_H */

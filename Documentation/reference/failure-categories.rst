@@ -45,8 +45,8 @@ the rest of the artifact in ``parse``, and then goes from
        data, and the signed attach metadata.
    * - ``pin``
      - Load: refusing a name that is loaded. Unload: comparing the
-       payload recorded on the pin directory with the directive's, and
-       removing the pins.
+       payload recorded on the pin directory, or the archive of a Java
+       upatch, with the directive's, and removing the pins or the jar.
    * - ``target_verify``
      - Opening each ``uprobe``, ``uretprobe``, ``uprobe.multi`` and
        ``uretprobe.multi`` target binary and comparing its GNU build ID
@@ -55,6 +55,15 @@ the rest of the artifact in ``parse``, and then goes from
      - Creating, filling and freezing ``__loader.map`` and the
        ``BPF_PROG_LOAD`` of the signed loader, where the kernel verifies
        the signature against the ``.bpf`` keyring.
+   * - ``java_verify``
+     - A Java upatch only, in place of ``signed_loader_load``: its signed
+       name, type and payload digest, and its signature over the signed
+       data against the certificates of the runtime that the ``.bpf``
+       keyring holds.
+   * - ``java_install``
+     - A Java load only, in place of ``payload_load`` and
+       ``link_create``: writing the jar to
+       ``/run/shirudo-java/<name>.jar``.
    * - ``payload_load``
      - ``BPF_PROG_TEST_RUN`` of the loader, which loads the payload
        programs and maps through the verifier.
@@ -132,7 +141,7 @@ Categories
        :doc:`/reference/configuration`. The eventlog is sealed
        and cannot be rotated.
    * - ``parser_rejected``
-     - ``parse``, ``target_verify``
+     - ``parse``, ``target_verify``, ``java_verify``
      - - The artifact cannot be read or is malformed: the errno of the
          read.
        - Wrong kind (a directive given to ``load`` or the reverse),
@@ -187,8 +196,9 @@ Categories
        while it was opened, or its build ID differs from the recorded one.
      - Rebuild the upatch against the installed binary.
    * - ``signature_rejected``
-     - ``signed_loader_load``
-     - ``EKEYREJECTED``. The kernel rejected the loader's signature.
+     - ``signed_loader_load``, ``java_verify``
+     - ``EKEYREJECTED``. The kernel rejected the loader's signature, or
+       no enrolled certificate verifies a Java upatch's signature.
      - Fetch or rebuild the artifact. Check that the file was not
        modified after signing.
    * - ``signature_unsupported``
@@ -268,8 +278,8 @@ Categories
        ``tampered``; handle that as an incident.
    * - ``unknown``
      - ``pre_flight``, ``parse``, ``target_verify``,
-       ``signed_loader_load``, ``payload_load``, ``link_create``,
-       ``persist``, ``pin``
+       ``signed_loader_load``, ``java_verify``, ``java_install``,
+       ``payload_load``, ``link_create``, ``persist``, ``pin``
      - The errno of the call. Any other failure: out of memory, a failed
        hash of the loader, an unclassified attach error, a payload that
        cannot be recorded on the pin directory or a failed archive copy

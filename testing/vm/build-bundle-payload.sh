@@ -616,6 +616,42 @@ PY
 	done
 }
 
+# A Java agent jar, a load and an unload of it, a BPF unload directive
+# that names its payload, and a load of it that a key the target does not
+# enrol signed.
+build_java_fixture()
+{
+	local builder="$REPO_ROOT/tools/shirudo-build/shirudo-build"
+	local jar="$FIXTURE_WORK/shirudo-test-java.jar"
+	local out="$TMP_DIR/fixtures/shirudo-test-java"
+	local trusted="$FIXTURE_WORK/trusted"
+	local payload
+
+	python3 -I - "$jar" <<'PY'
+import sys
+import zipfile
+
+with zipfile.ZipFile(sys.argv[1], "w") as z:
+    z.writestr("META-INF/MANIFEST.MF",
+               "Manifest-Version: 1.0\nPremain-Class: shirudo.test.Agent\n\n")
+    z.writestr("shirudo/test/Agent.class", b"\xca\xfe\xba\xbe")
+PY
+	cp "$jar" "$out.jar"
+	"$builder" "$jar" -o "$out.upatch" --name shirudo-test-java \
+		--key "$trusted/signing_key.pem" --cert "$trusted/cert.der"
+	payload="$("$REPO_ROOT/shirudo" upatch info "$out.upatch" --json |
+		python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+	"$builder" --unload shirudo-test-java --java --payload-sha256 "$payload" \
+		-o "$out.unload.upatch" \
+		--key "$trusted/signing_key.pem" --cert "$trusted/cert.der"
+	"$builder" --unload shirudo-test-java --payload-sha256 "$payload" \
+		-o "$out.bpf-unload.upatch" \
+		--key "$trusted/signing_key.pem" --cert "$trusted/cert.der"
+	"$builder" "$jar" -o "$out-foreign.upatch" --name shirudo-test-java-foreign \
+		--key "$FIXTURE_WORK/foreign/signing_key.pem" \
+		--cert "$FIXTURE_WORK/foreign/cert.der"
+}
+
 build_obs_fixture()
 {
 	local keys_dir="$1"
@@ -760,6 +796,7 @@ queue_fixture build_fixture basic.bpf.c shirudo-test-own-keyring "$FIXTURE_WORK/
 queue_fixture build_policy_labels_fixture
 queue_fixture build_policy_exec_graph_fixture
 queue_fixture build_obs_fixture "$FIXTURE_WORK/trusted"
+queue_fixture build_java_fixture
 wait_fixture_jobs
 
 basic_payload="$($REPO_ROOT/shirudo upatch info \

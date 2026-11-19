@@ -253,8 +253,8 @@ shirudo's seal marks writable state with the xattr
 ``security.bpf.shirudo``. Its value is a fixed 64-character string, the
 same on every target; the seal treats any inode that carries a label
 under that name as protected. ``shirudo init`` labels the state tree
-under ``/var/lib/shirudo`` on its first run, and ``/run/shirudo`` on
-every boot. From then on, every inode created in a labeled directory
+under ``/var/lib/shirudo`` on its first run, and ``/run/shirudo`` and
+``/run/shirudo-java`` on every boot. From then on, every inode created in a labeled directory
 receives the label as it is created, with ``bpf_inode_init_xattr()``.
 
 The seal's sleepable programs read the label with

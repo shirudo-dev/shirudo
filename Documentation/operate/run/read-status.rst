@@ -280,7 +280,8 @@ The details other than ``OK`` are below, with what each means.
        <names>``
      - What a load stopped between its pins and its extend leaves, or an
        archive root brought back after its unload. The next ``upatch
-       load`` or ``upatch unload`` undoes them before it acts.
+       load`` or ``upatch unload`` undoes them before it acts. The count
+       includes the jar of a Java agent that no archive backs.
    * - ``UpatchesMeasured``
      - ``ALERT``
      - ``<n> XDP archives differ from the loaded payload: <names>``
@@ -421,7 +422,8 @@ Loaded upatches
 
 One row per upatch pinned in the private bpffs: its name, the attach
 location resolved from kernel BTF, its number of maps, ``success`` and
-the time since it was loaded. ``Loaded upatches (0):`` followed by
+the time since it was loaded. A loaded Java agent follows them with the
+location ``java`` and no maps. ``Loaded upatches (0):`` followed by
 ``none`` means nothing is loaded.
 
 TPM measurement

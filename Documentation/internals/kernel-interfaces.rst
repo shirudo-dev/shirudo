@@ -302,7 +302,8 @@ Extended attributes
    * - Name
      - Use
    * - ``security.bpf.shirudo``
-     - The seal label on writable state and on ``/run/shirudo``.
+     - The seal label on writable state, on ``/run/shirudo`` and on
+       ``/run/shirudo-java``.
    * - ``security.bpf.shirudo.payload``
      - The 32-byte payload digest on each upatch's pin directory in the
        private bpffs.

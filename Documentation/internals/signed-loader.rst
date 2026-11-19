@@ -17,10 +17,16 @@ the mechanism stops.
 Problem
 -------
 
-Every upatch is BPF, so shirudo cannot switch BPF off. It needs a kernel
+Upatches are BPF, so shirudo cannot switch BPF off. It needs a kernel
 that accepts BPF the operator signed and refuses BPF from anyone else,
 root with every capability included. Root can issue any system call, so
 the decision has to sit where root cannot step around it.
+
+A Java upatch is the exception: it carries a jar and no loader, so it
+never takes this path. The target checks its signature in userspace, as
+the Java payloads section of :doc:`/reference/formats/upatch-format`
+describes, and :doc:`/security/threat-model` (T15, R24) says why that
+makes it a mitigation and not a boundary against root.
 
 Why a check in userspace fails
 ------------------------------

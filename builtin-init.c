@@ -42,6 +42,7 @@
 #include "util/identity.h"
 #include "util/initrd.h"
 #include "util/io.h"
+#include "util/java_agent.h"
 #include "util/image_config.h"
 #include "util/image_guards.h"
 #include "util/image_runtime.h"
@@ -985,6 +986,40 @@ static int init_lsm(void)
 #define HEXLEN(n)	((n) * 2 + 1)
 
 /*
+ * A Java upatch is in place when its jar is the archived one. Once the
+ * register was bound this boot a missing or other jar is refused, as a
+ * BPF upatch without its pins is: JVMs may have started without the agent
+ * meanwhile, which writing the jar again would hide.
+ */
+static int java_restore(const char *name, const char *path, bool recorded)
+{
+	__u8 payload[UPATCH_PAYLOAD_HASH_LEN];
+	int ret;
+
+	ret = java_agent_payload(name, payload);
+	if (!ret) {
+		pr_info("boot-restore: %s already installed", name);
+		return 0;
+	}
+	if (ret != -ESTALE) {
+		pr_err("boot-restore: cannot tell whether %s is installed: %s",
+		       name, strerror(-ret));
+		return ret;
+	}
+	if (recorded) {
+		pr_err("boot-restore: the jar of %s is missing or another "
+		       "after the register was bound this boot (tampered); "
+		       "unload it or reboot", name);
+		return -EPERM;
+	}
+	if (upatch_restore(path) != 0) {
+		pr_err("boot-restore: failed to install %s", name);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+/*
  * All or nothing: one failure leaves init incomplete and the register
  * unextended. The eventlog says which archives are shirudo's to
  * restore: those whose load it records without a later unload. One it
@@ -1080,6 +1115,12 @@ static int boot_restore_locked(bool recorded,
 				"entry); ignored", names[i]->d_name);
 			goto next;
 		}
+		if (set[cnt].type == UPATCH_TYPE_JAVA) {
+			ret = java_restore(set[cnt].name, path, recorded);
+			if (!ret)
+				cnt++;
+			goto next;
+		}
 		if (upatch_loaded_pins(set[cnt].name)) {
 			upatch_payload_sha256(set[cnt].name, pinned_hex,
 					      sizeof(pinned_hex));
@@ -1137,6 +1178,19 @@ next:
 }
 
 /*
+ * A failure leaves JVMs without the agents, which the status of the
+ * archive shows, and does not stop the boot.
+ */
+static void java_restore_options(void)
+{
+	int ret = java_agents_sync();
+
+	if (ret)
+		pr_warn("boot-restore: cannot bring the Java agents and %s in line: %s",
+			JAVA_ENV_PATH, strerror(-ret));
+}
+
+/*
  * A run after the register was bound this boot runs beside the upatch
  * commands the completed activation admits, so it takes their lock: an
  * unload between the archive scan and the pin check is otherwise taken
@@ -1158,6 +1212,8 @@ static int boot_restore(bool recorded,
 		}
 	}
 	ret = boot_restore_locked(recorded, out_set, out_n);
+	if (!ret)
+		java_restore_options();
 	eventlog_unlock(lock);
 	return ret;
 }
@@ -1522,6 +1578,10 @@ static int run_init(void)
 	ret = init_bpffs();
 	if (ret)
 		return init_phase_error(ret, "private bpffs setup");
+	/* Labelled before anyone else can make it, as RUN_DIR is. */
+	ret = java_agent_dir_prepare();
+	if (ret)
+		return init_phase_error(ret, "Java agent directory setup");
 
 	ret = init_keyring();
 	if (ret)

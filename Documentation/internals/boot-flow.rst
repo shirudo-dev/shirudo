@@ -60,6 +60,9 @@ the switch to the root file system. It needs
 #. Create ``/run/shirudo``, mount a private tmpfs there when it is still
    part of ``/run``, label it, and mount the private bpffs at
    ``/run/shirudo/bpffs`` with ``mode=0700,nosuid,nodev,noexec``.
+#. Create ``/run/shirudo-java`` with mode ``0755`` and label it, or check
+   that the one there is root's and labeled: boot restore writes the
+   jars of the Java upatches there, where every JVM can read them.
 #. Map the runtime image with dm-verity, check its root hash against
    ``runtime.root_hash``, read the whole mapping, mount it and read the
    runtime's bootstrap settings: ``config.image``,

@@ -51,9 +51,10 @@ both in signed sections (see :doc:`build`). ``unload``:
    digest that cannot be read, is refused with ``payload_mismatch``. A
    directive signed with an all-zero digest never matches.
 #. When the upatch has no pin, it removes the archive copy if it holds
-   the directive's payload, reports ``already_unloaded`` and exits with
-   0 without measuring. An archive of another payload stays, and the
-   unload is refused with ``payload_mismatch``.
+   the directive's payload and is a BPF upatch, reports
+   ``already_unloaded`` and exits with 0 without measuring. An archive of
+   another payload or of a Java upatch stays, and the unload is refused
+   with ``payload_mismatch``.
 #. It extends the register with the ``upatch_unload`` event and appends
    it to the eventlog. The event comes first: a failed extend leaves the
    upatch attached.
@@ -61,6 +62,20 @@ both in signed sections (see :doc:`build`). ``unload``:
    ``/var/lib/shirudo/upatches/<name>.upatch``. When the pin cannot be
    removed after the event was measured, the report says
    ``detach_failed``. Repeat the unload.
+
+The directive of a Java upatch (see :doc:`/upatches/write/java-agents`)
+has no loader. ``unload`` checks its signature over the signed data
+against the certificates of the ``.bpf`` keyring (``java_verify``
+phase), and refuses with ``payload_mismatch`` unless the archive is the
+Java upatch with the directive's payload. Without an archive it reports
+``already_unloaded``. It then extends the register with the
+``java_unload`` event, replaces ``/run/shirudo-java/<name>.jar`` with a
+jar whose agent does nothing, removes the archive, and rewrites
+``/run/environment.d/shirudo.conf``. The jar stays until the next boot:
+a user manager started before the unload still names it in
+``JAVA_TOOL_OPTIONS``, and a JVM does not start when a ``-javaagent``
+jar is missing. A BPF unload directive that names a Java upatch is
+refused with ``payload_mismatch``.
 
 An unload moves the register forward. It never returns the register to
 the value it had before the load.

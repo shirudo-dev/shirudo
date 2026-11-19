@@ -39,6 +39,7 @@
 
 #include "util/help.h"
 #include "util/io.h"
+#include "util/java_agent.h"
 #include "util/json.h"
 #include "util/identity.h"
 #include "util/keepalive.h"
@@ -400,55 +401,33 @@ static const struct help status_help = {
 	.n_sections = ARRAY_SIZE(status_help_sections),
 };
 
-static size_t build_upatches_table(struct dirent **ups, int n_ups,
-				   struct upatch_table_row **out)
+struct java_rows {
+	struct upatch_table_row	*rows;
+	size_t			n;
+};
+
+/* A Java agent has no pin: its jar's change time is when it was loaded. */
+static int java_row(const char *name,
+		    const __u8 payload[UPATCH_PAYLOAD_HASH_LEN], void *ctx)
 {
-	struct upatch_table_row *rows;
-	struct btf *vbtf;
-	int i;
+	struct java_rows *j = ctx;
+	struct upatch_table_row *r;
+	char path[PATH_MAX];
+	struct stat st;
 
-	if (n_ups <= 0) {
-		*out = NULL;
-		return 0;
-	}
-	rows = xcalloc((size_t)n_ups, sizeof(*rows));
-	if (!rows) {
-		*out = NULL;
-		return 0;
-	}
-	/*
-	 * vmlinux BTF loaded once; per-upatch reload would burn syscalls
-	 * for no gain since every shirudo upatch attaches to vmlinux.
-	 */
-	vbtf = btf__load_vmlinux_btf();
-	for (i = 0; i < n_ups; i++) {
-		struct upatch_table_row *r = &rows[i];
-		struct map_summary *list = NULL;
-		char raw_name[UPATCH_NAME_MAX + 1];
-		size_t nm = 0;
-		const char *name = ups[i]->d_name;
-
-		if (upatch_name_from_bpffs(raw_name, sizeof(raw_name),
-					   ups[i]->d_name) == 0)
-			name = raw_name;
-
-		strscpy(r->name, name, sizeof(r->name));
-		upatch_resolve_location(vbtf, name,
-					r->location,
-					sizeof(r->location));
-		upatch_loaded_at(name, r->loaded_at,
-				 sizeof(r->loaded_at));
-		upatch_payload_sha256(name,
-				      r->payload_sha256,
-				      sizeof(r->payload_sha256));
-		upatch_maps_list_one(name, &list, &nm);
-		r->n_maps = (__u32)nm;
-		map_summary_free(list, nm);
-		r->age_sec = upatch_age_sec(r->loaded_at);
-	}
-	btf__free(vbtf);
-	*out = rows;
-	return (size_t)n_ups;
+	r = xreallocarray(j->rows, j->n, j->n + 1, sizeof(*r));
+	if (!r)
+		return -ENOMEM;
+	j->rows = r;
+	r = &j->rows[j->n++];
+	memset(r, 0, sizeof(*r));
+	strscpy(r->name, name, sizeof(r->name));
+	strscpy(r->location, "java", sizeof(r->location));
+	hex_encode(payload, UPATCH_PAYLOAD_HASH_LEN, r->payload_sha256);
+	if (!java_agent_path(name, path, sizeof(path)) && !stat(path, &st))
+		iso8601(st.st_ctim.tv_sec, r->loaded_at, sizeof(r->loaded_at));
+	r->age_sec = upatch_age_sec(r->loaded_at);
+	return 0;
 }
 
 static const char *roles_str(int is_target, int is_operator)
@@ -555,47 +534,100 @@ static bool keepalive_upatch_not_ok(const char *name)
 	return access(path, F_OK) == 0;
 }
 
-/* The set_digest of an init event, over every upatch pinned now. */
+struct loaded_set {
+	struct measured_upatch	*set;
+	size_t			n;
+	size_t			cap;
+	__u64			not_ok;
+};
+
+static struct measured_upatch *loaded_set_next(struct loaded_set *l)
+{
+	size_t cap = l->cap ? 2 * l->cap : 16;
+	struct measured_upatch *set;
+
+	if (l->n == l->cap) {
+		set = xreallocarray(l->set, l->cap, cap, sizeof(*set));
+		if (!set)
+			return NULL;
+		l->set = set;
+		l->cap = cap;
+	}
+	return &l->set[l->n];
+}
+
+static void loaded_set_take(struct loaded_set *l)
+{
+	if (keepalive_upatch_not_ok(l->set[l->n].name))
+		l->not_ok++;
+	l->n++;
+}
+
+static int loaded_set_pins(struct loaded_set *l)
+{
+	struct dirent **ups = NULL;
+	int n, i, ret = 0;
+
+	n = scandir(BPFFS_UPATCHES_DIR, &ups, notdot, alphasort);
+	for (i = 0; i < n; i++) {
+		struct measured_upatch *u = ret ? NULL : loaded_set_next(l);
+
+		if (!u) {
+			ret = -ENOMEM;
+		} else if (!upatch_name_from_bpffs(u->name, sizeof(u->name),
+						   ups[i]->d_name)) {
+			upatch_payload_sha256(u->name, u->payload_hex,
+					      sizeof(u->payload_hex));
+			loaded_set_take(l);
+		}
+		libc_free(ups[i]);
+	}
+	libc_free(ups);
+	return ret;
+}
+
+/*
+ * The member carries no type: the tree operation a collector compares the
+ * set with names an upatch and its payload, not what kind it is.
+ */
+static int loaded_set_java(const char *name,
+			   const __u8 payload[UPATCH_PAYLOAD_HASH_LEN],
+			   void *ctx)
+{
+	struct loaded_set *l = ctx;
+	struct measured_upatch *u = loaded_set_next(l);
+
+	if (!u)
+		return -ENOMEM;
+	strscpy(u->name, name, sizeof(u->name));
+	hex_encode(payload, UPATCH_PAYLOAD_HASH_LEN, u->payload_hex);
+	loaded_set_take(l);
+	return 0;
+}
+
+/*
+ * The set_digest form of an init event, over every upatch loaded now:
+ * the pinned ones and the Java agents installed as archived.
+ */
 static int keepalive_loaded_set(struct keepalive_view *v)
 {
 	__u8 none[CHAIN_DIGEST_LEN] = {}, digest[CHAIN_DIGEST_LEN];
-	struct measured_upatch *set = NULL;
 	__u8 event[CHAIN_DIGEST_LEN];
-	struct dirent **ups = NULL;
-	int n, i, ret = 0;
-	size_t m = 0;
+	struct loaded_set l = {};
+	int ret;
 
-	n = scandir(BPFFS_UPATCHES_DIR, &ups, notdot, alphasort);
-	if (n < 0)
-		n = 0;
-	if (n) {
-		set = xcalloc((size_t)n, sizeof(*set));
-		if (!set)
-			ret = -ENOMEM;
-	}
 	v->not_ok = 0;
-	for (i = 0; !ret && i < n; i++) {
-		struct measured_upatch *u = &set[m];
-
-		if (upatch_name_from_bpffs(u->name, sizeof(u->name),
-					   ups[i]->d_name))
-			continue;
-		upatch_payload_sha256(u->name, u->payload_hex,
-				      sizeof(u->payload_hex));
-		if (keepalive_upatch_not_ok(u->name))
-			v->not_ok++;
-		m++;
-	}
+	ret = loaded_set_pins(&l);
 	if (!ret)
-		ret = chain_init_event(none, set, m, none, digest, event);
+		ret = java_agents_each_loaded(loaded_set_java, &l);
+	if (!ret)
+		ret = chain_init_event(none, l.set, l.n, none, digest, event);
 	if (!ret) {
 		hex_encode(digest, sizeof(digest), v->set_sha256);
-		v->count = m;
+		v->count = l.n;
+		v->not_ok = l.not_ok;
 	}
-	for (i = 0; i < n; i++)
-		libc_free(ups[i]);
-	libc_free(ups);
-	xfree(set, (size_t)n * sizeof(*set));
+	xfree(l.set, l.cap * sizeof(*l.set));
 	return ret;
 }
 
@@ -1163,6 +1195,7 @@ struct status_view {
 	struct status_keyring	dmv;
 	struct dirent		**ups;
 	int			n_ups;
+	struct java_rows	java;
 	struct status_pins	pins;
 	struct asset_view	assets;
 	struct guard_counts	counts;
@@ -1304,6 +1337,11 @@ static int count_unmeasured(const struct measured_set *mset, char *names)
 		unmeasured = archived < 0 ? archived :
 			     unmeasured + archived;
 	}
+	if (unmeasured >= 0) {
+		int jars = java_agents_unbacked(note_unmeasured, names);
+
+		unmeasured = jars < 0 ? jars : unmeasured + jars;
+	}
 	return unmeasured;
 }
 
@@ -1327,8 +1365,8 @@ static void status_check_pins(struct status_pins *pins)
 						    pins->unmeasured_names);
 		upatch_checks_run(mset, &checks);
 		pins->xdp_tampered = checks.nr_changed;
-		pins->links_lost = measured_unpinned(mset, note_unmeasured,
-						     pins->links_lost_names);
+		pins->links_lost = upatch_unpinned(mset, note_unmeasured,
+						   pins->links_lost_names);
 		pins->links_lost = pins->links_lost < 0 ? pins->links_lost :
 				   pins->links_lost + checks.nr_lost;
 		pins->xdp_uncovered = checks.nr_uncovered;
@@ -1452,6 +1490,8 @@ static void status_gather(struct status_view *v, bool include_system)
 	v->n_ups = scandir(BPFFS_UPATCHES_DIR, &v->ups, notdot, alphasort);
 	if (v->n_ups < 0)
 		v->n_ups = 0;
+	if (java_agents_each_loaded(java_row, &v->java))
+		pr_warn("status: the Java agents could not all be read");
 	status_check_pins(&v->pins);
 	gather_assets(&v->assets);
 	v->counts.tamper_rc = tamper_read(&v->counts.tamper);
@@ -1470,6 +1510,7 @@ static void status_view_free(struct status_view *v)
 	for (i = 0; i < v->n_ups; i++)
 		libc_free(v->ups[i]);
 	libc_free(v->ups);
+	xfree(v->java.rows, v->java.n * sizeof(*v->java.rows));
 }
 
 static void emit_verdict_json(struct json_emit *e,
@@ -1543,11 +1584,66 @@ static void emit_certs_json(struct json_emit *e, const struct status_view *v)
 		json_kv_null(e, "certs_enrolled");
 }
 
-static void emit_upatches_json(struct json_emit *e, struct dirent **ups,
-			       int n_ups)
+/* The rows of the pinned upatches, then those of the Java agents. */
+static size_t build_upatches_table(const struct status_view *v,
+				   struct upatch_table_row **out)
+{
+	size_t n_rows = (size_t)v->n_ups + v->java.n;
+	struct dirent **ups = v->ups;
+	struct upatch_table_row *rows;
+	int n_ups = v->n_ups;
+	struct btf *vbtf;
+	int i;
+
+	*out = NULL;
+	if (!n_rows)
+		return 0;
+	rows = xcalloc(n_rows, sizeof(*rows));
+	if (!rows)
+		return 0;
+	if (v->java.n)
+		memcpy(&rows[n_ups], v->java.rows,
+		       v->java.n * sizeof(*rows));
+	/*
+	 * vmlinux BTF loaded once; per-upatch reload would burn syscalls
+	 * for no gain since every shirudo upatch attaches to vmlinux.
+	 */
+	vbtf = btf__load_vmlinux_btf();
+	for (i = 0; i < n_ups; i++) {
+		struct upatch_table_row *r = &rows[i];
+		struct map_summary *list = NULL;
+		char raw_name[UPATCH_NAME_MAX + 1];
+		size_t nm = 0;
+		const char *name = ups[i]->d_name;
+
+		if (upatch_name_from_bpffs(raw_name, sizeof(raw_name),
+					   ups[i]->d_name) == 0)
+			name = raw_name;
+
+		strscpy(r->name, name, sizeof(r->name));
+		upatch_resolve_location(vbtf, name,
+					r->location,
+					sizeof(r->location));
+		upatch_loaded_at(name, r->loaded_at,
+				 sizeof(r->loaded_at));
+		upatch_payload_sha256(name,
+				      r->payload_sha256,
+				      sizeof(r->payload_sha256));
+		upatch_maps_list_one(name, &list, &nm);
+		r->n_maps = (__u32)nm;
+		map_summary_free(list, nm);
+		r->age_sec = upatch_age_sec(r->loaded_at);
+	}
+	btf__free(vbtf);
+	*out = rows;
+	return n_rows;
+}
+
+static void emit_upatches_json(struct json_emit *e,
+			       const struct status_view *v)
 {
 	struct upatch_table_row *rows = NULL;
-	size_t n_rows = build_upatches_table(ups, n_ups, &rows);
+	size_t n_rows = build_upatches_table(v, &rows);
 
 	upatch_table_emit_json(e, rows, n_rows);
 	xfree(rows, n_rows * sizeof(*rows));
@@ -1686,7 +1782,7 @@ static void status_emit_json(struct json_emit *e, const struct status_view *v,
 	keyring_emit_json(e, "bpf_keyring", &v->bpf, "primary");
 	keyring_emit_json(e, "dm_verity_keyring", &v->dmv, "config");
 	json_kv_bool(e, "signing_key_present", v->is_operator);
-	emit_upatches_json(e, v->ups, v->n_ups);
+	emit_upatches_json(e, v);
 	emit_assets_json(e, &v->assets);
 	emit_guard_counts_json(e, &v->counts);
 	emit_config_json(e, v->config_state, v->config_root_hex);
@@ -1708,7 +1804,7 @@ static size_t status_json_cap(const struct status_view *v,
 {
 	size_t json_cap;
 
-	json_cap = 16384 + (size_t)v->n_ups *
+	json_cap = 16384 + ((size_t)v->n_ups + v->java.n) *
 		   (6 * sizeof(struct upatch_table_row) + 256);
 	json_cap += (v->bpf.n_certs + v->bpf.n_links + v->dmv.n_certs +
 		     v->dmv.n_links) *
@@ -1919,7 +2015,7 @@ static void status_print_text(const struct status_view *v,
 	verdict = status_verdict(&v->cin);
 	status_reason(&v->cin, reason, sizeof(reason));
 	nc = conditions(&v->cin, conds, ARRAY_SIZE(conds));
-	n_rows = build_upatches_table(v->ups, v->n_ups, &rows);
+	n_rows = build_upatches_table(v, &rows);
 	/*
 	 * A section a condition vouches for says nothing the
 	 * condition did not: it unfolds when that condition is not

@@ -102,6 +102,7 @@ artifact carries no loader: its data holds the signed name, the payload
 type and the jar, and the detached CMS signature covers that data alone
 (see the Java payloads of :doc:`/reference/formats/upatch-format`).
 The helper prints ``wrote <output> (java sig=<n> data=<n> name=<name>)``.
+:doc:`/upatches/write/java-agents` describes what a target does with it.
 
 Signing an unload directive
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~

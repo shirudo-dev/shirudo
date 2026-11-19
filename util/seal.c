@@ -611,8 +611,8 @@ int seal_mkdir_p(const char *path, mode_t mode)
 	return 0;
 }
 
-int seal_write_file(const char *path, const void *data, size_t len,
-		    mode_t mode)
+static int write_file(const char *path, const void *data, size_t len,
+		      mode_t mode, bool exact)
 {
 	char tmp[NAME_MAX + 1];
 	const char *name;
@@ -633,6 +633,8 @@ int seal_write_file(const char *path, const void *data, size_t len,
 		return ret;
 	}
 	ret = seal_inherit(dfd, fd);
+	if (!ret && exact && fchmod(fd, mode))
+		ret = -errno;
 	if (!ret)
 		ret = write_complete(fd, data, len);
 	if (!ret && fsync(fd))
@@ -647,4 +649,16 @@ int seal_write_file(const char *path, const void *data, size_t len,
 		unlinkat(dfd, tmp, 0);
 	close(dfd);
 	return ret;
+}
+
+int seal_write_file(const char *path, const void *data, size_t len,
+		    mode_t mode)
+{
+	return write_file(path, data, len, mode, false);
+}
+
+int seal_write_file_mode(const char *path, const void *data, size_t len,
+			 mode_t mode)
+{
+	return write_file(path, data, len, mode, true);
 }

@@ -93,6 +93,10 @@ verifies:
        algorithm. The pre-flight check ``cert_algorithm`` refuses
        anything but ML-DSA-87, but in the initrd it reads
        ``/etc/shirudo/keys``, not that set (threat model U4).
+   * - Target, Java upatch signatures
+     - Any algorithm OpenSSL supports for a certificate of the runtime's
+       set that ``.bpf`` holds, as for the kernel's check of a loader
+       (threat model T15).
    * - Target, config roots
      - ML-DSA-87 under one of the runtime bootstrap's config certificates.
        The target checks this exact set before the kernel's dm-verity

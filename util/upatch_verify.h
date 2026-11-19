@@ -27,6 +27,17 @@ int upatch_payload_digest(const struct upatch *u,
 			  __u8 out[UPATCH_PAYLOAD_HASH_LEN]) __must_check;
 
 /*
+ * What the kernel checks of a BPF upatch, checked in userspace for a Java
+ * one, which has no loader: the signed type and name, the section its
+ * direction needs, the payload digest, and the signature over the data
+ * under a certificate of the runtime's set that the .bpf keyring still
+ * holds. -EBADMSG for a malformed or mismatched upatch, -EKEYREJECTED
+ * for a signature no such certificate made, or another negative errno
+ * when the check could not run.
+ */
+int java_upatch_verify(const struct upatch *u) __must_check;
+
+/*
  * 0 with the artifact open in *out, -ESTALE when it is not what payload
  * names, or another negative errno when the check itself could not run.
  * The bytes are hashed, not the header's claim about them.
@@ -67,6 +78,24 @@ int upatch_xdp_each_uncovered(const char *name, const struct prog_spec *specs,
 			      void *ctx);
 
 struct measured_set;
+
+/*
+ * The payload loaded under name: the one its pins record, else the
+ * archived one of a Java upatch whose jar is installed as archived.
+ * -ENOENT when neither, -ESTALE for a Java load whose jar is missing or
+ * another, or another negative errno when that cannot be told.
+ */
+int upatch_loaded_payload(const char *name,
+			  __u8 payload[UPATCH_PAYLOAD_HASH_LEN]) __must_check;
+
+/*
+ * The upatches the set holds that do not run: no pin directory, and for a
+ * Java one no jar installed as archived; a BPF one is detached with no
+ * unload of record, which only a task with runtime authority does. cb runs
+ * for each; the number found, or -errno when a pin cannot be looked up.
+ */
+int upatch_unpinned(const struct measured_set *s,
+		    int (*cb)(const char *name, void *ctx), void *ctx);
 
 /*
  * Whether the set holds name with the payload its pin directory records,

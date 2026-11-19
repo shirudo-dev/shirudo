@@ -212,7 +212,8 @@ int read_file(const char *path, size_t max, void *out, size_t *len)
 		if (fd < 0)
 			return fd;
 	} else {
-		fd = open(path, O_RDONLY | O_CLOEXEC);
+		/* O_NONBLOCK: a FIFO is refused below, not waited on. */
+		fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
 		if (fd < 0)
 			return -errno;
 	}

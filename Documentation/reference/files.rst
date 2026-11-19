@@ -253,6 +253,23 @@ carries ``/run`` from the initrd into the root file system.
      - dm-verity
      - A config image being activated. Its mapping is
        ``shirudo-config-<root-hash>``.
+   * - ``/run/shirudo-java/<name>.jar``
+     - ``upatch load``, ``init``
+     - seal, ``0644`` in a ``0755`` directory
+     - The agent jar of a loaded Java upatch, readable by every JVM.
+       ``init`` makes and labels the directory, and writes each jar
+       from its archive at boot. An unload, a purge and every upatch
+       command replace a jar whose archive is not a Java load with one
+       whose agent does nothing, which stays until the next boot.
+   * - ``/run/environment.d/shirudo.conf``
+     - ``upatch load``, ``upatch unload``, ``init``
+     - none, ``0644``
+     - A ``-javaagent`` for each jar in ``/run/shirudo-java`` whose
+       archive is a Java load, in name order, appended to
+       ``JAVA_TOOL_OPTIONS``. Rewritten only when that changes it, and
+       removed when there is none. It lasts as long as the jars it names. Root can change it.
+       systemd's user managers read it; see
+       :doc:`/upatches/write/java-agents`.
 
 Runtime image
 ~~~~~~~~~~~~~
@@ -415,7 +432,7 @@ Extended attributes
      - Value and rules
    * - ``security.bpf.shirudo``
      - Every regular file and directory of shirudo's writable state:
-       ``/var/lib/shirudo``, ``/run/shirudo``.
+       ``/var/lib/shirudo``, ``/run/shirudo``, ``/run/shirudo-java``.
      - 64 lowercase hex characters, the SHA-256 of the attribute name,
        the same on every build. The seal treats any value as the label.
        Only a task with runtime authority may set it (``SealLabel``).

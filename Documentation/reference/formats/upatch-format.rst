@@ -338,9 +338,11 @@ loader. It has no loader instructions and no ``metadata``, and
 ``loader_insns_off``, ``log_buf_sz``, ``nr_maps``, ``nr_progs`` and
 ``rodata_data_off`` are 0. Its ``data`` holds only signed sections, so the
 signature covers ``data`` alone and ``payload_sha256`` is SHA-256 of
-``data``. The kernel never sees a Java payload: the target verifies its
-signature in userspace against the certificates the sealed ``.bpf`` keyring
-was enrolled from.
+``data``. The kernel never sees a Java payload. The target verifies its
+signature in userspace with OpenSSL, against the unrevoked certificates of
+the authenticated runtime's set, and then requires the signer to be a key
+the sealed ``.bpf`` keyring holds. That lookup compares the description the
+kernel gives the key, not the key material.
 
 The header is not signed, so the signed ``PTYP`` section carries the type
 too, and the reader refuses a file whose header ``type`` differs from it. A
@@ -836,6 +838,16 @@ of checks 1 to 7 is reported as ``parser_rejected``, see
    ``uretprobe.multi`` target file is a regular file whose GNU build ID
    equals the recorded one.
 #. The kernel verifies the signature in ``BPF_PROG_LOAD``.
+
+A Java load artifact passes the reader, then, in place of the checks
+above: ``flags`` bit 0 is clear, the name is as in check 4, ``NAME``,
+``PTYP`` and ``JAVA`` are present, ``NAME`` equals the header ``name``,
+``PTYP`` is 2, ``payload_sha256`` equals SHA-256 of ``data``
+(``parser_rejected``), and the signature verifies over ``data`` under a
+certificate ``init`` enrolled in the ``.bpf`` keyring
+(``signature_rejected``). A Java unload directive takes the same checks
+with ``UNLD`` in place of ``JAVA`` and bit 0 set. See
+:doc:`/upatches/write/java-agents`.
 
 An unload directive passes the reader, then these checks:
 

@@ -582,12 +582,12 @@ static int check_cert_algorithm(const __u8 *der, size_t der_sz,
 static int check_voucher_live(const struct trusted_set *set,
 			      const __u8 voucher[32])
 {
+	const struct trusted_cert *member;
 	struct identity id;
 	const __u8 *der = NULL;
 	key_serial_t ring;
 	size_t der_sz = 0;
 	int ret = 0;
-	size_t i;
 
 	if (identity_read(&id) ||
 	    id.keyring_type != SIG_KEYRING_BPF)
@@ -595,13 +595,10 @@ static int check_voucher_live(const struct trusted_set *set,
 	ring = keyring_bpf_serial();
 	if (ring <= 0)
 		return 0;
-	for (i = 0; i < set->n; i++) {
-		if (memcmp(set->certs[i].fingerprint, voucher, 32) == 0)
-			break;
-	}
-	if (i == set->n)
+	member = keys_member(set, voucher);
+	if (!member)
 		return -ENOKEY;
-	ret = keys_cert_der(&set->certs[i], &der, &der_sz);
+	ret = keys_cert_der(member, &der, &der_sz);
 	if (ret)
 		return ret;
 	ret = keyring_holds_cert(ring, der, der_sz);

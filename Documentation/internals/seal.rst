@@ -214,7 +214,9 @@ attached, ``init`` refuses a state root without a label, because that is
 a tree bound over the path rather than the one it sealed.
 
 ``init`` also labels ``/run/shirudo``, so that the init record it leaves
-there for the root file system is sealed from its creation. The runtime
+there for the root file system is sealed from its creation, and
+``/run/shirudo-java``, the one sealed directory every user may read,
+which holds the jars of the Java upatches. The runtime
 and config images carry no labels; dm-verity protects them.
 
 What the seal checks

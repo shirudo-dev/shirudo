@@ -44,7 +44,7 @@ Every entry has a stable ID that commits, issues and other pages cite:
      - Residual risks: known and bounded limits of the mechanisms.
    * - U1 to U20
      - Threats to resolve: gaps in the code that are not closed yet.
-   * - D1 to D9
+   * - D1 to D10
      - Deferred mitigations that are in scope.
 
 Each threat is explained in prose and then summarized in a fact box.
@@ -1505,6 +1505,62 @@ driver; sessions do not prevent denial of service by dropping requests.
 :Proofs: ``tpm-public``, ``tpm-kdf``
 :Residual: trusted bootstrap (A1, A6, A8); denial of service
 
+T15 Installing an unsigned Java agent
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A Java upatch installs a jar that every JVM started with shirudo's
+options loads as an agent, with the JVM's privileges. Root who could
+install a jar of its own there, change the installed one, or have a BPF
+artifact taken for a Java one, or the reverse, would run code the
+operator never signed under a name the register records as signed.
+
+No kernel check covers a Java upatch: it has no loader. ``upatch load``
+and boot restore check its signature over the signed data in userspace
+with OpenSSL, against the unrevoked certificates of the authenticated
+runtime's set, then require the signer to be a key the ``.bpf`` keyring
+holds, found by the description the kernel gives the key, not by its
+material. Config activation already refuses a set the keyring does not
+hold, so the lookup keeps the Java check from resting on that alone. A
+key a revocation unlinked signs no Java upatch, as it signs no BPF one;
+a key a later config drops without revoking it stays in the ring and
+still signs a BPF upatch, but no Java one. They also check its signed
+name, signed type and payload digest. The header's type is not signed,
+so the reader refuses a file whose type differs from the signed ``PTYP``
+section; a BPF artifact carries none and cannot be relabelled Java. A
+Java artifact relabelled BPF is refused by that check too. The two
+signatures cover one byte stream under one key with no type in it,
+though: signed Java data split into a loader and data of another
+length loses its section directory, reads as BPF, and is then refused
+only because it has no signed name and its bytes are no loader the
+verifier accepts (D10). The jar is written
+sealed under ``/run/shirudo-java``, which ``init`` makes and labels
+before anyone else can, outside the state root, which stays ``0700``.
+The seal refuses a write, rename, unlink or label change of the jar, and
+the removal of its directory, to every task without runtime authority.
+Boot restore writes the jar from the archive at each boot, and a later
+run of ``init`` in the same boot refuses a jar that is missing or
+another rather than writing it again, which would hide that JVMs started
+without it. An unload or a purge leaves a jar in its place whose agent
+does nothing, which is part of the shirudo binary and stays until the
+next boot, so that a JVM whose options still name the jar starts. Its
+load and unload are measured as ``java_load`` and
+``java_unload`` events, which no BPF event can be read as, and
+``status`` reports a measured agent whose jar is missing or another.
+
+.. rst-class:: facts
+
+:Adversary: ADV-B, root on the target without the signing key
+:Enforced at: ``java_upatch_verify()`` and the reader's type check in
+   userspace; ``lsm.s/file_open`` and the seal's inode hooks for the jar
+:Refusal: ``signature_rejected`` or ``parser_rejected``; ``EACCES`` on
+   the jar
+:Counters: ``SealWrite``, ``SealUnlink``, ``SealRename``, ``SealSetattr``,
+   ``SealXattr`` for the jar; none for a refused load
+:Tests: ``t3014``, ``t3114``
+:Proofs: ``upatch-header``, ``upatch-signed-sections``, ``chain-events``,
+   ``Shirudo.Events``
+:Residual: R2, R24
+
 Residual risks
 --------------
 
@@ -1857,6 +1913,21 @@ R23 Policy labels follow the inode
    reloads after a change to a labeled path. Detection: none on the
    target.
 
+R24 A Java agent reaches only the JVMs its options reach
+   The options that name the agents are
+   ``/run/environment.d/shirudo.conf``, which is not sealed, and which
+   systemd's user managers read. Root can change or remove it, set
+   ``JAVA_TOOL_OPTIONS`` for a JVM of its own, or start one without a
+   user manager, and a JVM running when the agent loads keeps the agents
+   it started with. A user manager reads the options when it starts: one
+   started before a load starts its JVMs without the agent until it
+   restarts, and another ``environment.d`` file can set
+   ``JAVA_TOOL_OPTIONS`` over shirudo's. An agent is Java code in the JVM it guards, which
+   the application can undo. A Java upatch is therefore a mitigation in
+   the applications that start with it, not a boundary against root,
+   which only a BPF upatch is. Detection: a JVM's ``-javaagent``
+   arguments, ``jcmd <pid> VM.command_line``; none from shirudo.
+
 Threats to resolve
 ------------------
 
@@ -2102,6 +2173,12 @@ D9 Perf events across exec
    Refuse task-bound perf events that a task opened before the exec
    that marks it (T3), tracked in `issue 11
    <https://github.com/shirudo-dev/shirudo/issues/11>`__.
+
+D10 A payload type in the signed message
+   Sign the payload type with the loader and the data, so that a
+   signature made for a Java upatch verifies for nothing a BPF header
+   can describe, and the reverse, without resting on the signed
+   sections that follow (T15).
 
 Out of scope
 ------------

@@ -54,8 +54,9 @@ Description
    only the records the register vouches for, which fold to the value
    the TPM reports, and refuses (``tampered``) when they do not, and
    (``tpm_error``) when it cannot read this boot's records or cannot
-   undo one of them. A upatch of the same name that is loaded is
-   refused (``already_loaded``).
+   undo one of them. A upatch of the same name that is loaded, BPF or
+   Java, is refused (``already_loaded``), a Java one also when its jar
+   is missing or another, until its signed directive unloads it.
 #. It parses the artifact: a LOAD artifact, a safe and signed name, a
    payload digest that matches the payload, valid attach metadata
    (``parser_rejected``). For a uprobe it checks each target binary
@@ -76,8 +77,19 @@ Description
    payload digest, and appends the event to the eventlog (``tpm_extend``
    phase).
 
+A Java upatch (see :doc:`/upatches/write/java-agents`) takes these steps
+in place of loading, running and attaching a loader: ``load`` checks its
+signature over the signed data against the certificates of the
+runtime that the ``.bpf`` keyring holds (``java_verify`` phase,
+``signature_rejected``), and its signed name, type and payload digest
+(``parser_rejected``), then writes its jar
+to ``/run/shirudo-java/<name>.jar`` (``java_install`` phase). It
+archives and extends as above, with the ``java_load`` event, then
+rewrites ``/run/environment.d/shirudo.conf``. A failure to write that
+file is a warning: the upatch is loaded and measured.
+
 When the copy to the archive or the register extend fails, ``load``
-removes the pins and the archive again, so that no upatch runs
+removes the pins or the jar and the archive again, so that no upatch runs
 unmeasured. When the extend succeeded and only the eventlog append failed,
 the upatch stays loaded and the report says ``tpm_error``. A ``load``
 stopped between its pins and its extend leaves the pins: ``status``

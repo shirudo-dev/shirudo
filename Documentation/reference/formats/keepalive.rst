@@ -339,8 +339,9 @@ upatch or a thousand.
      - hash
      - SHA-256 over a ``<payload_sha256> <name>`` line for every loaded
        upatch, sorted by name: the ``set_digest`` form of the ``init``
-       event (:doc:`/reference/eventlog`). Upatches loaded outside the
-       tree are included.
+       event (:doc:`/reference/eventlog`), without the ``java`` prefix
+       that event gives a Java upatch, as a tree operation names no
+       payload type. Upatches loaded outside the tree are included.
    * - ``count``
      - integer
      - The upatches loaded.

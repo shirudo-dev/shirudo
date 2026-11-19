@@ -177,6 +177,18 @@ int keys_cert_der(const struct trusted_cert *c, const __u8 **der,
 	return -ENOKEY;
 }
 
+const struct trusted_cert *keys_member(const struct trusted_set *set,
+				       const __u8 fingerprint[32])
+{
+	size_t i;
+
+	for (i = 0; i < set->n; i++) {
+		if (!memcmp(set->certs[i].fingerprint, fingerprint, 32))
+			return &set->certs[i];
+	}
+	return NULL;
+}
+
 int keys_cert_read(const struct trusted_cert *c,
 		   struct cert *cert)
 {

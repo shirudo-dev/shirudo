@@ -19,6 +19,9 @@
 
 #include "chain.h"
 #include "hex.h"
+#include "java_agent.h"
+#include "keyring.h"
+#include "keys.h"
 #include "malloc.h"
 #include "measured.h"
 #include "paths.h"
@@ -39,6 +42,84 @@ int upatch_payload_digest(const struct upatch *u,
 {
 	return sha256_2(upatch_loader(u), u->hdr.loader_insns_len,
 			upatch_data(u), u->hdr.data_len, out);
+}
+
+static bool java_sections_complete(const struct upatch *u)
+{
+	__u32 len;
+
+	if (u->hdr.type != UPATCH_TYPE_JAVA ||
+	    upatch_signed_type(u) != UPATCH_TYPE_JAVA || !upatch_name_signed(u))
+		return false;
+	if (upatch_is_unload(u))
+		return upatch_signed_unload_payload(u);
+	return upatch_signed_jar(u, &len);
+}
+
+/*
+ * The kernel trusts a BPF signer only through the .bpf keyring, so a
+ * Java signer has to be there too. Activation already refuses a set the
+ * ring does not hold; this keeps the Java check from resting on that.
+ */
+static int signer_enrolled(const struct trusted_set *set,
+			   const __u8 fingerprint[32])
+{
+	const struct trusted_cert *member;
+	key_serial_t ring;
+	const __u8 *der;
+	size_t len;
+	int ret;
+
+	ring = keyring_bpf_serial();
+	if (ring < 0)
+		return ring;
+	member = keys_member(set, fingerprint);
+	if (!member)
+		return -EKEYREJECTED;
+	ret = keys_cert_der(member, &der, &len);
+	if (!ret)
+		ret = keyring_holds_cert(ring, der, len);
+	if (ret < 0)
+		return ret;
+	return ret ? 0 : -EKEYREJECTED;
+}
+
+static int java_signature_verify(const struct upatch *u)
+{
+	struct trusted_set *set;
+	__u8 signer[32];
+	int ret;
+
+	set = xcalloc(1, sizeof(*set));
+	if (!set)
+		return -ENOMEM;
+	ret = keys_load(RUNTIME_DIR "/keys", KEYS_REVOKED_DIR, true, set);
+	if (!ret && !set->n)
+		ret = -EKEYREJECTED;
+	if (!ret)
+		ret = keys_verify_signature(set, upatch_data(u),
+					    u->hdr.data_len,
+					    upatch_signature(u),
+					    u->hdr.signature_len, signer);
+	if (!ret)
+		ret = signer_enrolled(set, signer);
+	xfree(set, sizeof(*set));
+	return ret;
+}
+
+int java_upatch_verify(const struct upatch *u)
+{
+	__u8 digest[UPATCH_PAYLOAD_HASH_LEN];
+	int ret;
+
+	if (!java_sections_complete(u))
+		return -EBADMSG;
+	ret = upatch_payload_digest(u, digest);
+	if (ret)
+		return ret;
+	if (memneq_explicit(digest, u->hdr.payload_sha256, sizeof(digest)))
+		return -EBADMSG;
+	return java_signature_verify(u);
 }
 
 int upatch_verify_fd(int fd, const __u8 payload[UPATCH_PAYLOAD_HASH_LEN],
@@ -240,6 +321,53 @@ int upatch_xdp_each_uncovered(const char *name, const struct prog_spec *specs,
 		close(fd);
 	}
 	return 0;
+}
+
+int upatch_loaded_payload(const char *name,
+			  __u8 payload[UPATCH_PAYLOAD_HASH_LEN])
+{
+	if (!upatch_pin_payload(name, payload))
+		return 0;
+	return java_agent_payload(name, payload);
+}
+
+struct unpinned_walk {
+	int	(*cb)(const char *name, void *ctx);
+	void	*ctx;
+	int	n;
+};
+
+static int unpinned_one(const char *name, const char *payload_hex,
+			void *ctx)
+{
+	char hex[2 * UPATCH_PAYLOAD_HASH_LEN + 1];
+	__u8 payload[UPATCH_PAYLOAD_HASH_LEN];
+	struct unpinned_walk *w = ctx;
+	char dir[PATH_MAX];
+	struct stat st;
+
+	if (upatch_pin_path(dir, sizeof(dir), name, NULL) < 0)
+		return -ENAMETOOLONG;
+	if (!lstat(dir, &st))
+		return 0;
+	if (errno != ENOENT)
+		return -errno;
+	if (!upatch_loaded_payload(name, payload)) {
+		hex_encode(payload, sizeof(payload), hex);
+		if (!strcmp(hex, payload_hex))
+			return 0;
+	}
+	w->n++;
+	return w->cb ? w->cb(name, w->ctx) : 0;
+}
+
+int upatch_unpinned(const struct measured_set *s,
+		    int (*cb)(const char *name, void *ctx), void *ctx)
+{
+	struct unpinned_walk w = { .cb = cb, .ctx = ctx };
+	int ret = measured_each(s, unpinned_one, &w);
+
+	return ret ? ret : w.n;
 }
 
 bool upatch_pin_measured(const struct measured_set *s, const char *name,
