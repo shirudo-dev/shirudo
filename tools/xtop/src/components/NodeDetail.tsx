@@ -49,35 +49,38 @@ export function NodeDetail({ node, height, active, onClose }: Props) {
   const t = node.tree;
   return (
     <Box flexDirection="column" height={height} overflow="hidden">
-      <Text>
-        <Text bold>{node.name}</Text>
-        <Text color={style.color}>
-          {"  "}
-          {style.icon} {node.status}
-        </Text>
-        <Text color={node.trust === "enrolled" ? "green" : "yellow"}> · {node.trust}</Text>
-      </Text>
-      <Field name="host">{node.hostName}</Field>
-      <Field name="key">{node.akName}</Field>
-      <Field name="image">{imageLabel(node.imageId, node.imageVersion)}</Field>
-      <Field name="kernel">{node.kernel}</Field>
-      <Field name="build">{node.version}</Field>
-      <Field name="tree">
-        {t.lastSeq === null
-          ? "follows no tree"
-          : `seq ${t.lastSeq} of ${t.headSeq ?? "?"}, generation ${t.generation ?? "?"}, ${node.loaded} loaded`}
-      </Field>
-      <Field name="seen">{node.lastSeen.toLocaleString()}</Field>
-      <Box marginTop={1} flexDirection="column">
-        <Text dimColor>checks</Text>
-        {node.log.map((line, i) => (
-          <Text key={i} color={checkColor(line)} wrap="truncate-end">
-            {line}
+      {/* Lines keep their height and the pane clips them, rather than squeeze them onto each other. */}
+      <Box flexDirection="column" flexShrink={0}>
+        <Text>
+          <Text bold>{node.name}</Text>
+          <Text color={style.color}>
+            {"  "}
+            {style.icon} {node.status}
           </Text>
-        ))}
-      </Box>
-      <Box marginTop={1}>
-        <Text dimColor>esc back</Text>
+          <Text color={node.trust === "enrolled" ? "green" : "yellow"}> · {node.trust}</Text>
+        </Text>
+        <Field name="host">{node.hostName}</Field>
+        <Field name="key">{node.akName}</Field>
+        <Field name="image">{imageLabel(node.imageId, node.imageVersion)}</Field>
+        <Field name="kernel">{node.kernel}</Field>
+        <Field name="build">{node.version}</Field>
+        <Field name="tree">
+          {t.lastSeq === null
+            ? "follows no tree"
+            : `seq ${t.lastSeq} of ${t.headSeq ?? "?"}, generation ${t.generation ?? "?"}, ${node.loaded} loaded`}
+        </Field>
+        <Field name="seen">{node.lastSeen.toLocaleString()}</Field>
+        <Box marginTop={1} flexDirection="column">
+          <Text dimColor>checks</Text>
+          {node.log.map((line, i) => (
+            <Text key={i} color={checkColor(line)} wrap="truncate-end">
+              {line}
+            </Text>
+          ))}
+        </Box>
+        <Box marginTop={1}>
+          <Text dimColor>esc back</Text>
+        </Box>
       </Box>
     </Box>
   );
