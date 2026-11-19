@@ -99,6 +99,37 @@ check_libguestfs_host()
 	fi
 }
 
+# unwrap_arm64_kernel VMLINUZ IMAGE: QEMU boots an arm64 kernel directly
+# only as a raw Image or a gzip EFI zboot image. Ubuntu wraps its kernel
+# in a systemd stub, a PE image whose .linux section holds a zstd zboot
+# image, on which QEMU jumps into the compressed bytes and spins.
+unwrap_arm64_kernel()
+{
+	local vmlinuz="$1" image="$2" tmp offset size compression
+
+	[[ "$image" -nt "$vmlinuz" ]] && return 0
+	tmp="${image}.tmp.$$"
+	cp -- "$vmlinuz" "$tmp"
+	if objdump -h "$tmp" 2>/dev/null | awk '$2 == ".linux" {found = 1} END {exit !found}'; then
+		objcopy -O binary --only-section=.linux "$tmp" "${tmp}.linux"
+		mv -- "${tmp}.linux" "$tmp"
+	fi
+	if [[ "$(dd if="$tmp" bs=1 skip=4 count=4 status=none)" == zimg ]]; then
+		offset="$(od -An -t u4 -j 8 -N 4 "$tmp" | tr -d ' ')"
+		size="$(od -An -t u4 -j 12 -N 4 "$tmp" | tr -d ' ')"
+		compression="$(dd if="$tmp" bs=1 skip=24 count=8 status=none | tr -d '\0')"
+		case "$compression" in
+		gzip) tail -c "+$((offset + 1))" "$tmp" | head -c "$size" | gzip -dc >"${tmp}.raw" ;;
+		zstd) tail -c "+$((offset + 1))" "$tmp" | head -c "$size" | zstd -qdc >"${tmp}.raw" ;;
+		*) die "unsupported EFI zboot compression in $vmlinuz: $compression" ;;
+		esac
+		mv -- "${tmp}.raw" "$tmp"
+	fi
+	[[ "$(dd if="$tmp" bs=1 skip=56 count=4 status=none)" == ARMd ]] ||
+		die "could not unwrap $vmlinuz to an arm64 Image"
+	mv -- "$tmp" "$image"
+}
+
 prepare_ubuntu_libguestfs_kernel()
 {
 	local cache_dir index metadata package version kernel_version filename deb tmp
@@ -204,7 +235,13 @@ prepare_ubuntu_libguestfs_kernel()
 	   -r "$cache_dir/lib/modules/$kernel_version/modules.dep" ]] ||
 		die "Ubuntu kernel package lacks a usable kernel/module tree"
 	rm -rf -- "$tmp"
-	export SUPERMIN_KERNEL="$cache_dir/boot/vmlinuz-$kernel_version"
+	if [[ "$TEST_VM_ARCH" == aarch64 ]]; then
+		unwrap_arm64_kernel "$cache_dir/boot/vmlinuz-$kernel_version" \
+			"$cache_dir/boot/Image-$kernel_version"
+		export SUPERMIN_KERNEL="$cache_dir/boot/Image-$kernel_version"
+	else
+		export SUPERMIN_KERNEL="$cache_dir/boot/vmlinuz-$kernel_version"
+	fi
 	export SUPERMIN_MODULES="$cache_dir/lib/modules/$kernel_version"
 	export SUPERMIN_KERNEL_VERSION="$kernel_version"
 	return 0
@@ -224,6 +261,10 @@ done
 # which Ubuntu 24.04 no longer installs; without it apt in the appliance
 # reaches nothing.
 [[ "$TEST_VM_HOST_PKG" != apt ]] || require_command dhclient isc-dhcp-client
+if [[ "$TEST_VM_ARCH" == aarch64 ]]; then
+	require_command objcopy binutils binutils
+	require_command zstd zstd zstd
+fi
 check_libguestfs_host
 
 resolve_rootfs()

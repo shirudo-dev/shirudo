@@ -129,8 +129,12 @@ if [[ -n "$SETUP_SCRIPT" ]]; then
 	SETUP_COMMAND="env${APT_HTTP_PROXY:+ http_proxy=$APT_HTTP_PROXY}${APT_HTTPS_PROXY:+ https_proxy=$APT_HTTPS_PROXY} sh /root/shirudo-setup"
 	SETUP_ARGS=(--upload "$SETUP_SCRIPT:/root/shirudo-setup")
 fi
+# The arm64 appliance has no clock source before its RTC module loads, so
+# its time starts in 1970 and apt takes every Release file to be from the
+# future. The host's time is set first.
 # shellcheck disable=SC2016 # expanded in the appliance
 INSTALL_SCRIPT='set -e
+date -u -s @'"$(date +%s)"' >/dev/null
 export DEBIAN_FRONTEND=noninteractive
 if ! grep -q "^nameserver" /etc/resolv.conf; then
 	cat /root/shirudo-nameservers >>/etc/resolv.conf
