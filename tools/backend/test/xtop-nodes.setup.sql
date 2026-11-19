@@ -7,8 +7,10 @@
 -- a verdict that is not ok, so check 3 fails it, and node E sent node
 -- B's record an hour ago and turns stale. Generation 4 of the tree adds
 -- ssl-fix for the openssl finding at operation 4, which no node has
--- reached yet: a rollout under way, for the shields view. The test
--- xtop-shields reads the same rows.
+-- reached yet: a rollout under way, for the shields view. The operator
+-- labels node A and node D by node_id and node B by its key, as
+-- jobs/labels-put loads them. The tests xtop-shields and xtop-sbom read
+-- the same rows.
 
 -- The publication of testing/fixtures/keepalive/tree-1.1.0.json, as the
 -- ingest job loads it: generation 3 with its three operations.
@@ -71,6 +73,11 @@ INSERT INTO shirudo.tree_ops (tree_id, seq, op, id, selector, repository, manife
 ('fleet-base', 4, 'add', 'ssl-fix', '{}', 'oci://registry.example.com/shirudo/fleet-base', 'c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00', 'c0ffee01c0ffee01c0ffee01c0ffee01c0ffee01c0ffee01c0ffee01c0ffee01', 'c0ffee02c0ffee02c0ffee02c0ffee02c0ffee02c0ffee02c0ffee02c0ffee02', 'c0ffee03c0ffee03c0ffee03c0ffee03c0ffee03c0ffee03c0ffee03c0ffee03');
 INSERT INTO shirudo.upatch_fixes (tree_id, seq, id, advisory, source) VALUES
 ('fleet-base', 4, 'ssl-fix', 'EXAMPLE-0202', 'fixes');
+
+INSERT INTO shirudo.label_sets (by, node, labels) VALUES
+('node_id', 'node-a', {'role': 'edge', 'site': 'fra'}),
+('node_id', 'node-d', {'role': 'edge', 'site': 'ams'}),
+('ak_name', '000b9d72e08380a1', {'role': 'core'});
 
 -- The operator's labels, as the page has them.
 INSERT INTO shirudo.nodes (ak_name, node_id)

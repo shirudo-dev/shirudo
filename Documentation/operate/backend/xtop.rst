@@ -80,6 +80,10 @@ key the operator has recorded as a TPM's.
      - ``untrusted`` or ``enrolled``.
    * - ``NODE``
      - ``node_id``.
+   * - ``LABELS``
+     - The labels from ``shirudo.node_labels``, as ``key=value`` in key
+       order: what :doc:`labels-put` loaded, not the node's own
+       ``node.labels``; ``—`` when none was put.
    * - ``CHECK``
      - The first check that failed, as its line names it, for example
        ``3 reported``; ``—`` when all passed.
@@ -108,21 +112,22 @@ The summary line gives the health of the nodes shown: the percent of
 them ``healthy``, so 100% when every node is healthy and 0% when none
 is. A stale node counts against it like an unhealthy one.
 
-Enter on a node shows its host name, key, what its record says it runs,
-and the seven lines of its ``log``, a failed one in red; Esc returns.
-``/`` searches the node, host and key names, status, trust, image,
-kernel, build and the line of the failed check.
+Enter on a node shows its host name, key, labels, what its record says
+it runs, and the seven lines of its ``log``, a failed one in red; Esc
+returns. ``/`` searches the node, host and key names, status, trust,
+image, kernel, build, the line of the failed check and each label as
+``key=value``, so ``role=edge`` finds the nodes of that role.
 
-``t`` switches to one row per image id and version. A group's status is
-its worst member's, its health the percent of its members ``healthy``,
-its kernel ``mixed`` when its members differ, its tree the member
-furthest behind, its shields the sums over its members, and its
-exposure that of its most exposed member. Enter on an image shows its
-nodes.
+``t`` switches to one row per image id and version, with the ``role``
+labels of its members beside it, ``?`` for a member without one. A
+group's status is its worst member's, its health the percent of its
+members ``healthy``, its kernel ``mixed`` when its members differ, its
+tree the member furthest behind, its shields the sums over its members,
+and its exposure that of its most exposed member. Enter on an image
+shows its nodes.
 
-Labels and detector hits are not shown: the keepalive carries no labels,
-and the collector of :src:`tools/backend/otelcol.yaml` takes in no map
-snapshot metrics.
+Detector hits are not shown: the collector of
+:src:`tools/backend/otelcol.yaml` takes in no map snapshot metrics.
 
 Read the shields
 ----------------

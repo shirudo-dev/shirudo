@@ -43,6 +43,8 @@ export type FleetNode = {
   exposed: number;
   /** Findings the backend cannot place: no image, no SBOM. */
   unknown: number;
+  /** What jobs/labels-put gave the node, not its own node.labels. */
+  labels: Record<string, string>;
 };
 
 export type FleetReport = {
@@ -68,10 +70,18 @@ export type ImageGroup = {
   /** Exposed findings of the worst member. */
   exposed: number;
   unknown: number;
+  /** The members' role labels, each once; "?" for a member without one. */
+  roles: string[];
   lastSeen: Date;
 };
 
 export const NO_IMAGE = "—";
+
+/** key=value, in key order: how the labels show and are searched. */
+export const labelPairs = (labels: Record<string, string>) =>
+  Object.keys(labels)
+    .sort()
+    .map((k) => `${k}=${labels[k]}`);
 
 export const imageLabel = (id: string | null, version: string | null) =>
   id === null ? NO_IMAGE : version ? `${id} ${version}` : id;
@@ -128,6 +138,7 @@ export function groupByImage(nodes: readonly FleetNode[]): ImageGroup[] {
       shields: { applied: sum("applied"), pending: sum("pending"), idle: sum("idle") },
       exposed: Math.max(...members.map((m) => m.exposed)),
       unknown: members.reduce((t, m) => t + m.unknown, 0),
+      roles: [...new Set(members.map((m) => m.labels.role ?? "?"))].sort(),
       lastSeen: new Date(Math.max(...members.map((m) => m.lastSeen.getTime()))),
     };
   });

@@ -3,8 +3,9 @@
 --
 -- One row per node for the nodes view of tools/xtop: the outcome of the
 -- checks from node_status, what the newest record says it runs from
--- latest, and per node the counts of node_vulns. Times are epoch
--- milliseconds, so that no client reads them in the server's time zone.
+-- latest, the labels the operator gave it from node_labels, and per node
+-- the counts of node_vulns. Times are epoch milliseconds, so that no
+-- client reads them in the server's time zone.
 
 WITH vulns AS
 (
@@ -40,8 +41,10 @@ SELECT
     v.shields_pending AS shields_pending,
     v.shields_idle AS shields_idle,
     v.exposed AS exposed,
-    v.unknown AS unknown
+    v.unknown AS unknown,
+    lb.labels AS labels
 FROM shirudo.node_status AS s
 LEFT JOIN shirudo.latest AS l ON l.ak_name = s.ak_name
 LEFT JOIN vulns AS v ON v.ak_name = s.ak_name
+LEFT JOIN shirudo.node_labels AS lb ON lb.ak_name = s.ak_name
 ORDER BY node_id, ak_name

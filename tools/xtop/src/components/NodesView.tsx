@@ -14,6 +14,7 @@ import {
   groupByImage,
   healthPercent,
   imageLabel,
+  labelPairs,
   type FleetNode,
   type FleetReport,
   type ImageGroup,
@@ -97,7 +98,17 @@ const NODE_COLUMNS: readonly Column<FleetNode>[] = [
     sortKey: (n) => n.trust,
     render: (n) => <Text color={n.trust === "enrolled" ? "green" : "yellow"}>{n.trust}</Text>,
   },
-  { id: "name", title: "NODE", defaultDir: "asc", sortKey: (n) => n.name, render: (n) => <Text bold>{n.name}</Text> },
+  { id: "name", title: "NODE", width: 16, defaultDir: "asc", sortKey: (n) => n.name, render: (n) => <Text bold>{n.name}</Text> },
+  {
+    id: "labels",
+    title: "LABELS",
+    defaultDir: "asc",
+    sortKey: (n) => labelPairs(n.labels).join(" ") || "~",
+    render: (n) => {
+      const pairs = labelPairs(n.labels);
+      return pairs.length ? <Text color="magenta">{pairs.join(" ")}</Text> : <Text dimColor>—</Text>;
+    },
+  },
   {
     id: "check",
     title: "CHECK",
@@ -149,13 +160,25 @@ const nodeMatches = (n: FleetNode, q: string) =>
     n.kernel,
     n.version,
     n.failedCheck ? (n.log[n.failedCheck - 1] ?? "") : "",
+    ...labelPairs(n.labels),
   ].some((s) => s.toLowerCase().includes(q));
 
 // ---- per-image table -------------------------------------------------------
 
 const IMAGE_COLUMNS: readonly Column<ImageGroup>[] = [
   { id: "status", title: "STATUS", width: 12, defaultDir: "asc", sortKey: (g) => STATUS_RANK[g.status], render: (g) => <StatusCell status={g.status} /> },
-  { id: "image", title: "IMAGE", defaultDir: "asc", sortKey: (g) => g.key, render: (g) => imageCell(g.imageId, g.imageVersion) },
+  {
+    id: "image",
+    title: "IMAGE",
+    defaultDir: "asc",
+    sortKey: (g) => g.key,
+    render: (g) => (
+      <>
+        {imageCell(g.imageId, g.imageVersion)}
+        <Text dimColor> {g.roles.join(",")}</Text>
+      </>
+    ),
+  },
   {
     id: "nodes",
     title: "NODES",
@@ -214,7 +237,7 @@ const IMAGE_COLUMNS: readonly Column<ImageGroup>[] = [
 ];
 
 const imageMatches = (g: ImageGroup, q: string) =>
-  [g.key, g.status, g.kernel ?? "mixed"].some((s) => s.toLowerCase().includes(q));
+  [g.key, g.status, g.kernel ?? "mixed", ...g.roles].some((s) => s.toLowerCase().includes(q));
 
 // ---- view ------------------------------------------------------------------
 

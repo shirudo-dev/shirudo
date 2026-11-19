@@ -8,7 +8,7 @@
 import { describe, expect, test } from "bun:test";
 import { toFleetNode, toFleetReport, type NodeRow } from "../src/lib/backend.ts";
 import { configFromEnv, queryRows } from "../src/lib/clickhouse.ts";
-import { failedCheckName, groupByImage, healthPercent, imageLabel } from "../src/lib/fleet.ts";
+import { failedCheckName, groupByImage, healthPercent, imageLabel, labelPairs } from "../src/lib/fleet.ts";
 
 const BUILD = "d6d918ad22ff597579e6678bef75adca84d30f9661e0b7bbdbf534eebc138c1f";
 const LOG = [
@@ -45,13 +45,23 @@ function row(over: Partial<NodeRow>): NodeRow {
     shields_idle: 0,
     exposed: 1,
     unknown: 0,
+    labels: { role: "edge", site: "fra" },
     ...over,
   };
 }
 
 const ROWS: NodeRow[] = [
   row({}),
-  row({ node_id: "node-b", ak_name: "000b9d72e08380a1", host_name: "core-01", loaded: 0, shields_applied: 0, shields_idle: 1, exposed: 2 }),
+  row({
+    node_id: "node-b",
+    ak_name: "000b9d72e08380a1",
+    host_name: "core-01",
+    loaded: 0,
+    shields_applied: 0,
+    shields_idle: 1,
+    exposed: 2,
+    labels: { role: "core" },
+  }),
   row({
     node_id: "node-c",
     ak_name: "000b0c",
@@ -66,6 +76,7 @@ const ROWS: NodeRow[] = [
     shields_applied: 0,
     exposed: 0,
     unknown: 1,
+    labels: {},
   }),
   row({
     node_id: "node-d",
@@ -75,7 +86,7 @@ const ROWS: NodeRow[] = [
     failed_check: 3,
     log: LOG.map((l, i) => (i === 2 ? "3 reported: FAIL, verdict degraded, cond 0x1555, flags 0, tamper +0, build d6d918ad" : l)),
   }),
-  row({ node_id: "node-e", ak_name: "000b0e", host_name: "core-02", status: "stale", failed_check: 2, last_seq: 2, loaded: 0, shields_applied: 0, shields_idle: 1, exposed: 2 }),
+  row({ labels: {}, node_id: "node-e", ak_name: "000b0e", host_name: "core-02", status: "stale", failed_check: 2, last_seq: 2, loaded: 0, shields_applied: 0, shields_idle: 1, exposed: 2 }),
 ];
 
 describe("toFleetNode", () => {
@@ -100,6 +111,11 @@ describe("toFleetNode", () => {
 
   test("an empty image from a missing join reads as none", () => {
     expect(toFleetNode(row({ image_id: "", image_version: "" })).imageId).toBeNull();
+  });
+
+  test("keeps the labels the operator put", () => {
+    expect(toFleetNode(ROWS[0]!).labels).toEqual({ role: "edge", site: "fra" });
+    expect(toFleetNode(ROWS[2]!).labels).toEqual({});
   });
 
   test("refuses a status the view does not know", () => {
@@ -152,6 +168,11 @@ describe("groupByImage", () => {
     expect(none.unknown).toBe(1);
   });
 
+  test("rolls up the role labels, ? for a member without one", () => {
+    expect(fleetOs.roles).toEqual(["?", "core", "edge"]);
+    expect(none.roles).toEqual(["?"]);
+  });
+
   test("reports a mixed kernel as null", () => {
     const mixed = groupByImage([toFleetNode(ROWS[0]!), toFleetNode(row({ ak_name: "x", kernel_release: "7.5.0" }))]);
     expect(mixed[0]!.kernel).toBeNull();
@@ -190,5 +211,12 @@ describe("clickhouse", () => {
   test("turns a ClickHouse error into its first line", async () => {
     const fake = (async () => new Response("Code: 60. DB::Exception: Unknown table\nstack", { status: 404 })) as unknown as typeof fetch;
     await expect(queryRows(configFromEnv({}), "SELECT 1", fake)).rejects.toThrow("404 Code: 60. DB::Exception: Unknown table");
+  });
+});
+
+describe("labelPairs", () => {
+  test("key=value in key order", () => {
+    expect(labelPairs({ site: "fra", role: "edge" })).toEqual(["role=edge", "site=fra"]);
+    expect(labelPairs({})).toEqual([]);
   });
 });

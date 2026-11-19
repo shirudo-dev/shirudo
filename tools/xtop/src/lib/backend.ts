@@ -57,6 +57,7 @@ export type NodeRow = {
   shields_idle: number;
   exposed: number;
   unknown: number;
+  labels: Record<string, string>;
 };
 
 function oneOf<T extends string>(allowed: readonly T[], value: string, what: string): T {
@@ -84,6 +85,7 @@ export function toFleetNode(r: NodeRow): FleetNode {
     shields: { applied: r.shields_applied, pending: r.shields_pending, idle: r.shields_idle },
     exposed: r.exposed,
     unknown: r.unknown,
+    labels: r.labels,
   };
 }
 
