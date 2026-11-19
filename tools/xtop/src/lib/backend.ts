@@ -5,15 +5,32 @@
 
 import NODES_SQL from "../../sql/nodes.sql" with { type: "text" };
 import SHIELDS_SQL from "../../sql/shields.sql" with { type: "text" };
+import SBOM_SQL from "../../sql/sbom.sql" with { type: "text" };
+import SBOM_IMAGES_SQL from "../../sql/sbom-images.sql" with { type: "text" };
 import { queryRows, type ClickHouseConfig } from "./clickhouse.ts";
 import { STATUSES, TRUSTS, type FleetNode, type FleetReport, type NodeStatus, type Trust } from "./fleet.ts";
 import { shieldStatus, worstSeverity, type Advisory, type Shield, type ShieldsReport } from "./shields.ts";
+import {
+  EXPOSURES,
+  IMAGE_STATES,
+  findingStatus,
+  type Exposure,
+  type Finding,
+  type ImageState,
+  type ImagesReport,
+  type SbomImage,
+  type SbomReport,
+} from "./sbom.ts";
 
 export interface Backend {
   /** Every node of shirudo.node_status. */
   getFleet(): Promise<FleetReport>;
   /** Every upatch of every tree in shirudo.tree_ops. */
   getShields(): Promise<ShieldsReport>;
+  /** Every finding of shirudo.node_vulns, with the nodes it affects. */
+  getSbom(): Promise<SbomReport>;
+  /** Every image of shirudo.sbom_images, and those nodes run without an SBOM. */
+  getSbomImages(): Promise<ImagesReport>;
 }
 
 /** A row of sql/nodes.sql. */
@@ -134,6 +151,96 @@ export function toShield(r: ShieldRow): Shield {
   };
 }
 
+/** A row of sql/sbom.sql. */
+export type FindingRow = {
+  vuln_id: string;
+  package: string;
+  severity: string;
+  source: string;
+  fixed: string;
+  installed: string[];
+  affected: number;
+  total: number;
+  upatch_id: string;
+  shielded: number;
+  pending: number;
+  idle: number;
+  withdrawn: number;
+  unshielded: number;
+  stale: boolean | number;
+  /** (node_id, ak_name, exposure, image_id, image_version, installed, binding, status) */
+  nodes: [string, string, string, string, string, string, string, string][];
+};
+
+export function toFinding(r: FindingRow): Finding {
+  const f = {
+    vulnId: r.vuln_id,
+    package: r.package,
+    severity: r.severity,
+    source: r.source,
+    fixed: r.fixed,
+    installed: r.installed,
+    affected: r.affected,
+    total: r.total,
+    upatchId: r.upatch_id,
+    shielded: r.shielded,
+    pending: r.pending,
+    idle: r.idle,
+    withdrawn: r.withdrawn,
+    unshielded: r.unshielded,
+    stale: Boolean(r.stale),
+    nodes: r.nodes.map(([name, akName, exposure, imageId, imageVersion, installed, binding, status]) => ({
+      name,
+      akName,
+      exposure: oneOf<Exposure>(EXPOSURES, exposure, "exposure"),
+      imageId,
+      imageVersion,
+      installed,
+      binding,
+      status,
+    })),
+  };
+  return { ...f, status: findingStatus(f) };
+}
+
+/** A row of sql/sbom-images.sql. */
+export type ImageRow = {
+  image_id: string;
+  image_version: string;
+  image_root: string;
+  state: string;
+  sbom_format: string;
+  sbom_sha256: string;
+  built_ms: number;
+  scanned_ms: number;
+  db_version: string;
+  stale: boolean | number;
+  vulns: number;
+  critical: number;
+  high: number;
+  nodes: number;
+};
+
+export function toSbomImage(r: ImageRow): SbomImage {
+  return {
+    imageId: r.image_id,
+    imageVersion: r.image_version,
+    imageRoot: r.image_root,
+    state: oneOf<ImageState>(IMAGE_STATES, r.state, "image state"),
+    sbomFormat: r.sbom_format,
+    sbomSha256: r.sbom_sha256,
+    // A row without a scan, or a build time sbom-scan could not read, has 0.
+    builtAt: r.built_ms ? new Date(r.built_ms) : null,
+    scannedAt: r.scanned_ms ? new Date(r.scanned_ms) : null,
+    dbVersion: r.db_version,
+    stale: Boolean(r.stale),
+    vulns: r.vulns,
+    critical: r.critical,
+    high: r.high,
+    nodes: r.nodes,
+  };
+}
+
 export class ClickHouseBackend implements Backend {
   constructor(private readonly cfg: ClickHouseConfig) {}
 
@@ -144,5 +251,15 @@ export class ClickHouseBackend implements Backend {
   async getShields(): Promise<ShieldsReport> {
     const rows = await queryRows<ShieldRow>(this.cfg, SHIELDS_SQL);
     return { generatedAt: new Date(), shields: rows.map(toShield) };
+  }
+
+  async getSbom(): Promise<SbomReport> {
+    const rows = await queryRows<FindingRow>(this.cfg, SBOM_SQL);
+    return { generatedAt: new Date(), findings: rows.map(toFinding) };
+  }
+
+  async getSbomImages(): Promise<ImagesReport> {
+    const rows = await queryRows<ImageRow>(this.cfg, SBOM_IMAGES_SQL);
+    return { generatedAt: new Date(), images: rows.map(toSbomImage) };
   }
 }

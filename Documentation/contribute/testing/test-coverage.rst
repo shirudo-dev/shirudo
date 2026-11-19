@@ -950,16 +950,16 @@ ingest job on a single publication and on a walk over sealed segments,
 the SBOM scan job on a store that holds an image in every state, the
 SBOM put job into a ``file://`` and an ``s3://`` store, again and with
 another SBOM, and what it refuses (``test/sbom-put``), and the queries
-of :src:`tools/xtop/sql/nodes.sql` and :src:`tools/xtop/sql/shields.sql`,
-with the names and types of their columns, over nodes healthy,
-unhealthy, stale and without a tree or an image, and a tree with one
-upatch deployed and one still rolling out (``test/xtop-nodes``,
-``test/xtop-shields``).
+of :src:`tools/xtop/sql/`, with the names and types of their columns,
+over nodes healthy, unhealthy, stale and without a tree or an image, a
+tree with one upatch deployed and one still rolling out, and the
+findings and images of their SBOMs (``test/xtop-nodes``,
+``test/xtop-shields``, ``test/xtop-sbom``).
 
 The unit tests of :src:`tools/xtop/test/` cover how xtop turns the rows
-of those queries into nodes and shields, the health percent, the
-roll-up by image, the status and severity of a shield and its
-ClickHouse client; ``make -C tools/xtop tests`` type-checks the
+of those queries into nodes, shields, findings and images, the health
+percent, the roll-up by image, the status and severity of a shield, the
+status of a finding and its ClickHouse client; ``make -C tools/xtop tests`` type-checks the
 program and runs them (:ref:`testing-xtop`).
 
 Coverage by area

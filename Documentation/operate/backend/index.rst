@@ -89,8 +89,8 @@ Files
        (:ref:`testing-backend`).
    * - :src:`tools/xtop/`
      - A terminal view of the nodes, over ``node_status``,
-       ``latest`` and ``node_vulns``, and of the upatches of the trees
-       and their rollout (:doc:`xtop`).
+       ``latest`` and ``node_vulns``, of the upatches of the trees and
+       their rollout, and of the SBOM findings and images (:doc:`xtop`).
 
 .. toctree::
    :titlesonly:

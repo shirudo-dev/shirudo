@@ -1,0 +1,8 @@
+vuln_id	package	severity	source	fixed	installed	affected	total	upatch_id	shielded	pending	idle	withdrawn	unshielded	stale	nodes
+String	String	String	String	String	Array(String)	UInt64	UInt64	String	UInt64	UInt64	UInt64	UInt64	UInt64	Bool	Array(Tuple(String, String, String, String, String, String, String, String))
+EXAMPLE-0101	linux	CRITICAL	kernel	7.4.5	['7.4.2']	4	5	xfs-fix	2	0	2	0	0	false	[('node-a','000b23602ab98bfb','shielded','fleet-os','2026.11.1','7.4.2','verified','healthy'),('node-b','000b9d72e08380a1','shield_excludes_node','fleet-os','2026.11.1','7.4.2','declared','healthy'),('node-d','000b0d','shielded','fleet-os','2026.11.1','7.4.2','verified','unhealthy'),('node-e','000b0e','shield_excludes_node','fleet-os','2026.11.1','7.4.2','declared','stale')]
+EXAMPLE-0202	openssl	HIGH	sbom	3.5.1-2	['3.5.1-1']	4	5	ssl-fix	0	4	0	0	0	false	[('node-a','000b23602ab98bfb','shield_pending','fleet-os','2026.11.1','3.5.1-1','verified','healthy'),('node-b','000b9d72e08380a1','shield_pending','fleet-os','2026.11.1','3.5.1-1','declared','healthy'),('node-d','000b0d','shield_pending','fleet-os','2026.11.1','3.5.1-1','verified','unhealthy'),('node-e','000b0e','shield_pending','fleet-os','2026.11.1','3.5.1-1','declared','stale')]
+image_id	image_version	image_root	state	sbom_format	sbom_sha256	built_ms	db_version	stale	vulns	critical	high	nodes	scanned
+String	String	String	String	String	String	Int64	String	UInt8	UInt64	UInt64	UInt64	UInt64	UInt8
+fleet-os	2026.11.1	a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c	ok	cyclonedx-json	5b0e2c8a4f6d1e3b7a9c0d2e4f6a8b1c3d5e7f9a0b2c4d6e8f1a3b5c7d9e91d4	1793606400000	2	0	1	0	1	4	1
+findings	2

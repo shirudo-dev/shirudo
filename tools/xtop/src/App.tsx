@@ -11,22 +11,25 @@ import { Panel } from "./components/Panel.tsx";
 import { Sidebar, type MenuItem } from "./components/Sidebar.tsx";
 import { NodesView, type NodesMode } from "./components/NodesView.tsx";
 import { ShieldsView } from "./components/ShieldsView.tsx";
+import { SbomView, type SbomMode } from "./components/SbomView.tsx";
 
-type ViewId = "nodes" | "shields";
+type ViewId = "nodes" | "shields" | "sbom";
 
 const MENU: readonly (MenuItem & { id: ViewId; title: string })[] = [
   { id: "nodes", label: "Nodes", title: "nodes · status from shirudo.node_status" },
   { id: "shields", label: "Shields", title: "shields · upatches of the trees in shirudo.tree_ops" },
+  { id: "sbom", label: "SBOM", title: "sbom · findings from shirudo.node_vulns, images from shirudo.sbom_images" },
 ];
 const SIDEBAR_WIDTH = 16;
 
 type Focus = "menu" | "menu-open" | ViewId | "detail" | "search";
 
 const HINTS: Record<Focus, string> = {
-  menu: "j/k menu · l/enter open · 1 nodes · 2 shields · q quit",
+  menu: "j/k menu · l/enter open · 1 nodes · 2 shields · 3 sbom · q quit",
   "menu-open": "j/k menu · l/enter open · tab back to view · esc close view · q quit",
   nodes: "j/k scroll · k past top → sort, then tabs · / search · enter node checks, image → nodes · t by image · r refresh · tab menu · esc close · q quit",
   shields: "j/k scroll · k past top → sort · / search · enter details · r refresh · tab menu · esc close · q quit",
+  sbom: "j/k scroll · k past top → sort, then tabs · / search · enter finding nodes, image → findings · t images · r refresh · tab menu · esc close · q quit",
   detail: "esc back · q quit",
   search: "type to filter · enter keep · esc clear",
 };
@@ -41,6 +44,7 @@ export function App({ backend }: { backend: Backend }) {
   const [detail, setDetail] = useState(false);
   // Kept while the app runs, so reopening Nodes keeps the toggle.
   const [nodesMode, setNodesMode] = useState<NodesMode>("nodes");
+  const [sbomMode, setSbomMode] = useState<SbomMode>("findings");
 
   const open = (view: ViewId) => {
     setMenuCursor(MENU.findIndex((m) => m.id === view));
@@ -126,6 +130,17 @@ export function App({ backend }: { backend: Backend }) {
                 backend={backend}
                 mode={nodesMode}
                 onModeChange={setNodesMode}
+                height={viewLines}
+                active={!menuFocused}
+                onClose={close}
+                onSearchingChange={setSearching}
+                onDetailChange={setDetail}
+              />
+            ) : view.id === "sbom" ? (
+              <SbomView
+                backend={backend}
+                mode={sbomMode}
+                onModeChange={setSbomMode}
                 height={viewLines}
                 active={!menuFocused}
                 onClose={close}

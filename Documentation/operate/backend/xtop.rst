@@ -5,8 +5,8 @@
 :page-type: How-to
 :audience: Operators, SecOps
 
-Watch nodes and shields with xtop
-=================================
+Watch nodes, shields and SBOMs with xtop
+========================================
 
 :src:`tools/xtop/` is a terminal view of the backend. It reads the
 backend's ClickHouse over its HTTP interface, one query per view: Nodes
@@ -14,8 +14,10 @@ sends :src:`tools/xtop/sql/nodes.sql`, over ``shirudo.node_status``,
 ``shirudo.latest`` and ``shirudo.node_vulns``, and shows one row per
 node, or one per image; Shields sends :src:`tools/xtop/sql/shields.sql`,
 over the tree tables, ``shirudo.node_ops`` and ``shirudo.node_vulns``,
-and shows one row per upatch. It only reads: every query is sent with
-``readonly=1``. It is a `Bun <https://bun.sh>`_ program built on
+and shows one row per upatch; SBOM sends :src:`tools/xtop/sql/sbom.sql`,
+over ``shirudo.node_vulns``, and shows one row per finding, or, with
+:src:`tools/xtop/sql/sbom-images.sql` over ``shirudo.sbom_images``, one
+per image. It only reads: every query is sent with ``readonly=1``. It is a `Bun <https://bun.sh>`_ program built on
 Ink and React, and runs on an operator's host, never on a target.
 
 Build and run
@@ -169,3 +171,47 @@ repository, advisories, packages and images.
 The rollout counts the nodes whose newest record names the tree; a node
 that moved to another tree leaves it. Detector hits are not shown,
 because the backend takes in no metrics.
+
+Read the SBOM findings
+----------------------
+
+SBOM has one row per finding, an advisory in a package, that
+``node_vulns`` has on any node: from the SBOM of a node's image, as
+:doc:`sbom-scan` matched it, or from ``kernel_vulns`` by the node's
+kernel release (:doc:`exposure`).
+
+.. list-table::
+   :header-rows: 1
+
+   * - Column
+     - Value
+   * - ``SEVERITY``, ``VULNERABILITY``
+     - The advisory and its severity.
+   * - ``PACKAGE``
+     - ``kernel``, or the package of the SBOM, and the versions the
+       nodes have installed.
+   * - ``FIXED IN``
+     - The first version without it; ``none yet`` when there is none.
+   * - ``NODES``
+     - The nodes it affects, of all the nodes in ``node_status``.
+   * - ``SHIELD``
+     - The upatch linked to the advisory, ``—`` when none is.
+   * - ``STATUS``
+     - ``no shield`` when no upatch is linked; ``shielded`` when it
+       shields every affected node; ``pending`` while it is still
+       coming to one; ``partial`` when it leaves some out, because the
+       selector does, the module it attaches to is not loaded or it was
+       withdrawn. The nodes it shields of those affected follow.
+
+The summary line says when the findings come from a scan older than
+``sbom_stale_seconds``. Enter on a finding shows its package, source and
+shield, and every node it affects with its exposure, image, installed
+version, the binding of its image to an SBOM and its status.
+
+``t`` switches to the images: every image of ``sbom_images`` at its
+newest scan, with its state (:doc:`sbom-scan`), ``stale`` when that scan
+is older than ``sbom_stale_seconds``, the nodes that run it, its
+findings with how many are critical and high, how long ago it was
+scanned and the version of the matcher's database. An image a node runs
+that has no SBOM in the store reads ``no_sbom``: store one with
+:doc:`sbom-put`. Enter on an image shows its findings.

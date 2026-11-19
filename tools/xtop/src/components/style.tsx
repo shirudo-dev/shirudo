@@ -3,6 +3,7 @@
 
 import { Text } from "ink";
 import type { NodeStatus } from "../lib/fleet.ts";
+import type { FindingStatus, ImageState } from "../lib/sbom.ts";
 import type { ShieldStatus } from "../lib/shields.ts";
 
 export const STATUS_STYLE: Record<NodeStatus, { icon: string; color: string }> = {
@@ -32,3 +33,19 @@ export function SeverityText({ severity }: { severity: string }) {
     </Text>
   );
 }
+
+export const FINDING_STATUS_STYLE: Record<FindingStatus, { label: string; color: string }> = {
+  no_shield: { label: "no shield", color: "red" },
+  partial: { label: "partial", color: "yellow" },
+  pending: { label: "pending", color: "yellow" },
+  shielded: { label: "shielded", color: "green" },
+};
+
+export const IMAGE_STATE_COLOR: Record<ImageState, string> = {
+  ok: "green",
+  missing: "red",
+  hash_mismatch: "red",
+  parse_error: "red",
+  unsupported_format: "red",
+  no_sbom: "yellow",
+};
