@@ -52,8 +52,10 @@ telemetry)
 	;;
 down) stack_down ;;
 enroll)
-	# Shown before it runs, so that a demo shows what the step is.
-	file=$(realpath --relative-to="$REPO" "${1:?usage: stack.sh enroll <enroll.json>}")
+	# Shown before they run, so that a demo shows what each step is: the
+	# keys the builder made, then the builds the VMs boot.
+	file=$(realpath --relative-to="$REPO" "${1:?usage: stack.sh enroll <enroll.json> [<version_id>...]}")
+	shift
 	[ "$(docker container inspect -f '{{.State.Running}}' "$STACK_NAME-clickhouse" 2>/dev/null)" = true ] ||
 		{ echo 'the local stack is not up: run make stack-up' >&2; exit 1; }
 	cd "$REPO"
@@ -62,6 +64,9 @@ enroll)
 	cat "$file"
 	printf "\$ CLICKHOUSE_CLIENT='%s' tools/backend/jobs/enroll-put %s\n" "$client" "$file"
 	CLICKHOUSE_CLIENT=$client tools/backend/jobs/enroll-put "$file"
+	[ $# -gt 0 ] || exit 0
+	printf "\$ CLICKHOUSE_CLIENT='%s' tools/put-shirudo-build --note 'test-vm build' %s\n" "$client" "$*"
+	CLICKHOUSE_CLIENT=$client tools/put-shirudo-build --note 'test-vm build' "$@"
 	;;
 vm)
 	prepare

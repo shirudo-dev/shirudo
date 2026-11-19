@@ -710,11 +710,15 @@ Every ``make vm`` acts as the builder of :doc:`/operate/run/attest`:
 before the guest first boots, :src:`testing/vm/tpm-builder.sh` creates
 its attestation and endorsement keys in the fresh vTPM, and writes
 ``enroll.json`` in its state directory, naming the node by the VM's name,
-which is also its host name. ``make vm-enroll`` gathers the
-``enroll.json`` of every VM under ``build/test-vm/vms/`` into
-``build/test-vm/enroll.json`` and loads it into the stack's backend with
-one ``enroll-put``, so that the VMs read ``enrolled``. It prints the file
-and the command before it runs them:
+which is also its host name, and the ``version_id`` of the bundle's
+shirudo, the build the VM boots, in ``shirudo-build`` beside it.
+``make vm-enroll`` gathers the ``enroll.json`` of every VM under
+``build/test-vm/vms/`` into ``build/test-vm/enroll.json`` and loads it
+into the stack's backend with one ``enroll-put``, so that the VMs read
+``enrolled``, then allows their builds with
+:src:`tools/put-shirudo-build`, so that check 3 does not fail them as
+``(not expected)``. It prints the file and each command before it runs
+it:
 
 .. code-block:: console
 
@@ -728,8 +732,11 @@ and the command before it runs them:
    enroll-put: 000b… (ek_name 000b…, node_id interactive-Xa3k9q): already enrolled
    enroll-put: 000b… (ek_name 000b…, node_id interactive-pL2m7c): enrolled
    enroll-put: loaded bindings: 2
+   $ CLICKHOUSE_CLIENT='docker exec -i shirudo-dev-clickhouse clickhouse-client' tools/put-shirudo-build --note 'test-vm build' 6e52d48e…
+   put-shirudo-build: 6e52d48e…: allowed
 
-A VM enrolled before is loaded again, which changes nothing, so run it
+A VM enrolled before, and a build allowed before, are loaded again,
+which changes nothing, so run it
 after each ``make vm``, before the VM's first keepalive or after. A VM
 stopped but not removed with ``make vm-clean`` keeps its state directory
 and is enrolled too. ``VM_NAME=<name>`` enrolls that VM alone, from its

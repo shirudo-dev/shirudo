@@ -532,16 +532,30 @@ with open(sys.argv[1], "w") as f:
 PY
 }
 
+# The builds the VMs of directories $@ boot, each once.
+shirudo_builds()
+{
+	local dir
+
+	for dir; do
+		[[ ! -s "$dir/shirudo-build" ]] || cat "$dir/shirudo-build"
+	done | sort -u
+}
+
 run_enroll()
 {
+	local builds
+
 	if [[ -z "$VM_NAME_REQUEST" ]]; then
 		merge_enroll_files
-		exec "$REPO_ROOT/testing/vm/stack.sh" enroll "$VM_ROOT/enroll.json"
+		mapfile -t builds < <(shirudo_builds "$VMS_DIR"/*/)
+		exec "$REPO_ROOT/testing/vm/stack.sh" enroll "$VM_ROOT/enroll.json" "${builds[@]}"
 	fi
 	select_named_run_dir
 	[[ -s "$RUN_DIR/enroll.json" ]] ||
 		die "VM '$VM_NAME' has no enroll.json: only 'make vm' and end2end nodes have a builder"
-	exec "$REPO_ROOT/testing/vm/stack.sh" enroll "$RUN_DIR/enroll.json"
+	mapfile -t builds < <(shirudo_builds "$RUN_DIR")
+	exec "$REPO_ROOT/testing/vm/stack.sh" enroll "$RUN_DIR/enroll.json" "${builds[@]}"
 }
 
 start_swtpm()
@@ -557,7 +571,12 @@ start_swtpm()
 			"$RUN_DIR/ek-ca.pem" "$RUN_DIR/enroll.json" "$VM_NAME" \
 			>>"$RUN_DIR/swtpm.log" 2>&1 ||
 			die "could not create the keys of the vTPM; see $RUN_DIR/swtpm.log"
-		log "builder's records of the vTPM keys: $RUN_DIR/enroll.json (make vm-enroll loads them)"
+		# The build the VM boots, for the operator to allow as it enrolls
+		# the keys; the binary needs no TPM to say it.
+		"$TEST_VM_HOST_BUNDLE/root/usr/local/bin/shirudo" version --version-id \
+			>"$RUN_DIR/shirudo-build" 2>>"$RUN_DIR/swtpm.log" ||
+			die "cannot read the version_id of the bundle's shirudo; see $RUN_DIR/swtpm.log"
+		log "builder's records of the vTPM keys and the build: $RUN_DIR/enroll.json, $RUN_DIR/shirudo-build (make vm-enroll loads them)"
 	fi
 	if user_systemd_available; then
 		SWTPM_UNIT_FILE="${RUN_DIR}/swtpm.unit"
