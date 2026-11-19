@@ -686,6 +686,26 @@ storage.
 ``make stack-up`` is shorthand for ``make oci telemetry``. Start the VM
 with ``make vm``.
 
+When ``make quote-check`` has built
+``tools/quote-check/shirudo-quote-check``, ``make telemetry`` also turns
+that ClickHouse into a keepalive backend: it installs the checker as
+``tpm_quote_check`` and loads the schema of :src:`tools/backend/`, and
+its collector runs :src:`testing/vm/otelcol-stack.yaml`, which writes
+every log record into ``otel.otel_logs`` as well, where the backend reads
+the keepalives. The VM then shows in ``shirudo.node_status``, and
+:doc:`/operate/backend/xtop` reads them:
+
+.. code-block:: console
+
+   $ make quote-check
+   $ make stack-up
+   $ make vm
+   $ CLICKHOUSE_URL=http://127.0.0.1:18124/ tools/xtop/dist/xtop
+
+Without the checker it starts the telemetry stack alone and says so. A
+stack started before the checker was built keeps its collector: run
+``make stack-down`` before ``make telemetry`` to add the backend.
+
 ``make vm`` prepares a stable CA even when neither service is running.
 After initialization, it activates the signed ``config-local-stack``
 image. That image points telemetry at ``https://10.0.2.2:14319`` and the

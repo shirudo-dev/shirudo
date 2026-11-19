@@ -39,7 +39,9 @@ Build and run
         CLICKHOUSE_PASSWORD=... tools/xtop/dist/xtop
 
 ``bun run src/index.tsx`` in :src:`tools/xtop/` runs it without
-building. A user that can only ``SELECT`` from the ``shirudo`` database
+building. Against the local development stack, whose ClickHouse holds
+the backend once ``make quote-check`` has built the checker, the URL is
+``http://127.0.0.1:18124/`` (:ref:`local-dev-stack`). A user that can only ``SELECT`` from the ``shirudo`` database
 is enough.
 
 .. list-table::

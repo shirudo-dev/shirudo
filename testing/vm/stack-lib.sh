@@ -79,8 +79,15 @@ stack_oci_log()
 	docker logs "$STACK_NAME-registry" 2>/dev/null
 }
 
+# The telemetry stack: ClickHouse on $CLICKHOUSE and a collector on
+# $COLLECTOR that runs configuration $1, by default the end-to-end one.
+# With a backend directory $2 and a quote checker $3, ClickHouse also
+# gets the backend's schema, before the collector starts writing to it.
 stack_telemetry()
 {
+	config=${1:-$REPO/testing/end2end/otelcol.yaml}
+	backend=${2:-}
+	checker=${3:-}
 	docker network inspect "$STACK_NAME" >/dev/null 2>&1 ||
 		docker network create "$STACK_NAME" >/dev/null
 	set --
@@ -95,18 +102,62 @@ stack_telemetry()
 		[ "$attempt" -lt 150 ] || return 1
 		sleep 0.2
 	done
+	if [ -n "$backend" ]; then
+		stack_backend_install "$STACK_NAME-clickhouse" "$backend" \
+			"$checker" || return 1
+	fi
 	stack_run "$STACK_NAME-collector" --network "$STACK_NAME" \
 		-p "$COLLECTOR:4318" -v "$TLS_DIR:/certs:ro" \
 		-v "$W/out:/out" \
-		-v "$REPO/testing/end2end/otelcol.yaml:/etc/otelcol-contrib/config.yaml:ro" \
+		-v "$config:/etc/otelcol-contrib/config.yaml:ro" \
 		"$COLLECTOR_IMAGE"
 	stack_wait_https -X POST -H 'Content-Type: application/json' -d '{}' \
 		"https://$COLLECTOR/v1/logs"
 }
 
+stack_clickhouse_client()
+{
+	name=$1
+	shift
+	docker exec -i "$name" clickhouse-client "$@"
+}
+
 stack_backend_client()
 {
-	docker exec -i "$STACK_NAME-backend-clickhouse" clickhouse-client "$@"
+	stack_clickhouse_client "$STACK_NAME-backend-clickhouse" "$@"
+}
+
+# Into the ClickHouse of container $1, install the quote checker $3 as
+# tpm_quote_check, as the backend's README installs it, and load the
+# schema of the backend in directory $2.
+stack_backend_install()
+{
+	into=$1
+	attempt=0
+	until stack_clickhouse_client "$into" --query 'SELECT 1' \
+		</dev/null >/dev/null 2>&1; do
+		attempt=$((attempt + 1))
+		[ "$attempt" -lt 150 ] || return 1
+		sleep 0.2
+	done
+	docker exec "$into" mkdir -p /var/lib/clickhouse/user_scripts &&
+	docker cp "$3" \
+		"$into:/var/lib/clickhouse/user_scripts/shirudo-quote-check" &&
+	docker exec "$into" \
+		chmod 0755 /var/lib/clickhouse/user_scripts/shirudo-quote-check &&
+	docker cp "$2/clickhouse/tpm_quote_check_function.xml" \
+		"$into:/etc/clickhouse-server/tpm_quote_check_function.xml" &&
+	stack_clickhouse_client "$into" --query 'SYSTEM RELOAD FUNCTIONS' \
+		</dev/null || return 1
+	attempt=0
+	until stack_clickhouse_client "$into" --query "SELECT name
+		FROM system.functions WHERE name = 'tpm_quote_check'" \
+		</dev/null 2>/dev/null | grep -q .; do
+		attempt=$((attempt + 1))
+		[ "$attempt" -lt 150 ] || return 1
+		sleep 0.2
+	done
+	stack_backend_schema "$2" "$into"
 }
 
 # The keepalive backend of directory $1 beside the telemetry stack: a
@@ -123,28 +174,7 @@ stack_backend()
 	stack_run "$container" --network "$STACK_NAME" \
 		--network-alias backend-clickhouse -p "$BACKEND_CLICKHOUSE:8123" \
 		-e CLICKHOUSE_SKIP_USER_SETUP=1 "$CLICKHOUSE_IMAGE"
-	attempt=0
-	until stack_backend_client --query 'SELECT 1' >/dev/null 2>&1; do
-		attempt=$((attempt + 1))
-		[ "$attempt" -lt 150 ] || return 1
-		sleep 0.2
-	done
-	docker exec "$container" mkdir -p /var/lib/clickhouse/user_scripts &&
-	docker cp "$checker" \
-		"$container:/var/lib/clickhouse/user_scripts/shirudo-quote-check" &&
-	docker exec "$container" \
-		chmod 0755 /var/lib/clickhouse/user_scripts/shirudo-quote-check &&
-	docker cp "$backend/clickhouse/tpm_quote_check_function.xml" \
-		"$container:/etc/clickhouse-server/tpm_quote_check_function.xml" &&
-	stack_backend_client --query 'SYSTEM RELOAD FUNCTIONS' || return 1
-	attempt=0
-	until stack_backend_client --query "SELECT name FROM system.functions
-		WHERE name = 'tpm_quote_check'" 2>/dev/null | grep -q .; do
-		attempt=$((attempt + 1))
-		[ "$attempt" -lt 150 ] || return 1
-		sleep 0.2
-	done
-	stack_backend_schema "$backend" || return 1
+	stack_backend_install "$container" "$backend" "$checker" || return 1
 	stack_run "$STACK_NAME-backend-collector" --network "$STACK_NAME" \
 		-p "$BACKEND_COLLECTOR:4318" -v "$TLS_DIR:/certs:ro" \
 		-e CLICKHOUSE_ENDPOINT=tcp://backend-clickhouse:9000 \
@@ -155,14 +185,16 @@ stack_backend()
 }
 
 # Load the schema of the backend in directory $1, with the retention its
-# settings name, into the backend's ClickHouse.
+# settings name, into the ClickHouse of container $2, by default the
+# backend's.
 stack_backend_schema()
 {
+	into=${2:-$STACK_NAME-backend-clickhouse}
 	for file in "$1"/sql/*.sql; do
-		stack_backend_client <"$file" || return 1
+		stack_clickhouse_client "$into" <"$file" || return 1
 	done
-	"$1/sql/apply-retention.sh" docker exec -i \
-		"$STACK_NAME-backend-clickhouse" clickhouse-client >/dev/null
+	"$1/sql/apply-retention.sh" docker exec -i "$into" \
+		clickhouse-client >/dev/null
 }
 
 stack_down()

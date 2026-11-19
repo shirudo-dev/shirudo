@@ -38,8 +38,17 @@ prepare) prepare ;;
 oci) prepare; stack_oci; printf 'OCI: oci://%s (CA: %s/ca.pem)\n' "$REGISTRY" "$W" ;;
 telemetry)
 	prepare
-	stack_telemetry
-	printf 'OTLP: https://%s; ClickHouse: http://%s\n' "$COLLECTOR" "$CLICKHOUSE"
+	checker=$REPO/tools/quote-check/shirudo-quote-check
+	if [ -x "$checker" ]; then
+		stack_telemetry "$REPO/testing/vm/otelcol-stack.yaml" \
+			"$REPO/tools/backend" "$checker"
+		printf 'OTLP: https://%s; ClickHouse with the backend: http://%s\n' \
+			"$COLLECTOR" "$CLICKHOUSE"
+	else
+		stack_telemetry
+		printf 'OTLP: https://%s; ClickHouse: http://%s\n' "$COLLECTOR" "$CLICKHOUSE"
+		printf '%s\n' 'no backend: make quote-check, make stack-down, then make telemetry' >&2
+	fi
 	;;
 down) stack_down ;;
 vm)
