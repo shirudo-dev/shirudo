@@ -715,6 +715,8 @@ def Event.Predicted : Event → Prop
   | .init _ s _ => ∀ m ∈ s, NameAdmitted m.name
   | .load n _ => NameFits n
   | .unload n _ => NameFits n
+  | .javaLoad n _ => NameFits n
+  | .javaUnload n _ => NameFits n
   | .keyRevoke _ => True
   | .tree s _ => S64 s
 
@@ -724,6 +726,8 @@ theorem Event.Admitted.predicted {e : Event} (h : e.Admitted) :
   | init => exact h
   | load n p => exact NameAdmitted.fits h
   | unload n p => exact NameAdmitted.fits h
+  | javaLoad n p => exact NameAdmitted.fits h
+  | javaUnload n p => exact NameAdmitted.fits h
   | keyRevoke => trivial
   | tree s o => exact h
 
@@ -796,6 +800,8 @@ theorem Event.predicted_fits {e : Event} (h : e.Predicted) :
   | init => trivial
   | load n p => exact h
   | unload n p => exact h
+  | javaLoad n p => exact h
+  | javaUnload n p => exact h
   | keyRevoke => trivial
   | tree s o => exact h
 
