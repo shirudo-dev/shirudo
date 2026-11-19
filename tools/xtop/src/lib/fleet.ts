@@ -7,10 +7,12 @@
 /** node_status.status, worst first in STATUS_RANK. */
 export type NodeStatus = "unhealthy" | "stale" | "healthy";
 export type Trust = "untrusted" | "enrolled";
+export type LabelsBy = "ak_name" | "node_id" | "config_root" | "none";
 
 export const STATUS_RANK: Record<NodeStatus, number> = { unhealthy: 0, stale: 1, healthy: 2 };
 export const STATUSES = ["unhealthy", "stale", "healthy"] as const;
 export const TRUSTS = ["untrusted", "enrolled"] as const;
+export const LABELS_BY = ["ak_name", "node_id", "config_root", "none"] as const;
 
 export type Shields = {
   /** Upatches loaded that shield a finding of the node. */
@@ -45,6 +47,8 @@ export type FleetNode = {
   unknown: number;
   /** What jobs/labels-put gave the node, not its own node.labels. */
   labels: Record<string, string>;
+  /** The name the labels were put under. */
+  labelsBy: LabelsBy;
 };
 
 export type FleetReport = {

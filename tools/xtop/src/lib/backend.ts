@@ -8,7 +8,16 @@ import SHIELDS_SQL from "../../sql/shields.sql" with { type: "text" };
 import SBOM_SQL from "../../sql/sbom.sql" with { type: "text" };
 import SBOM_IMAGES_SQL from "../../sql/sbom-images.sql" with { type: "text" };
 import { queryRows, type ClickHouseConfig } from "./clickhouse.ts";
-import { STATUSES, TRUSTS, type FleetNode, type FleetReport, type NodeStatus, type Trust } from "./fleet.ts";
+import {
+  LABELS_BY,
+  STATUSES,
+  TRUSTS,
+  type FleetNode,
+  type FleetReport,
+  type LabelsBy,
+  type NodeStatus,
+  type Trust,
+} from "./fleet.ts";
 import { shieldStatus, worstSeverity, type Advisory, type Shield, type ShieldsReport } from "./shields.ts";
 import {
   EXPOSURES,
@@ -58,6 +67,7 @@ export type NodeRow = {
   exposed: number;
   unknown: number;
   labels: Record<string, string>;
+  labels_by: string;
 };
 
 function oneOf<T extends string>(allowed: readonly T[], value: string, what: string): T {
@@ -86,6 +96,7 @@ export function toFleetNode(r: NodeRow): FleetNode {
     exposed: r.exposed,
     unknown: r.unknown,
     labels: r.labels,
+    labelsBy: oneOf<LabelsBy>(LABELS_BY, r.labels_by, "labels source"),
   };
 }
 

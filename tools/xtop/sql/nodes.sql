@@ -42,7 +42,8 @@ SELECT
     v.shields_idle AS shields_idle,
     v.exposed AS exposed,
     v.unknown AS unknown,
-    lb.labels AS labels
+    lb.labels AS labels,
+    ifNull(lb.by, 'none') AS labels_by
 FROM shirudo.node_status AS s
 LEFT JOIN shirudo.latest AS l ON l.ak_name = s.ak_name
 LEFT JOIN vulns AS v ON v.ak_name = s.ak_name

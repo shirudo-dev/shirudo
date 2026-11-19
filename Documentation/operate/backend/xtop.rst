@@ -112,9 +112,10 @@ The summary line gives the health of the nodes shown: the percent of
 them ``healthy``, so 100% when every node is healthy and 0% when none
 is. A stale node counts against it like an unhealthy one.
 
-Enter on a node shows its host name, key, labels, what its record says
-it runs, and the seven lines of its ``log``, a failed one in red; Esc
-returns. ``/`` searches the node, host and key names, status, trust,
+Enter on a node shows its host name, key, labels and the name they were
+put under, ``ak_name``, ``node_id`` or ``config_root``, what its record
+says it runs, and the seven lines of its ``log``, a failed one in red;
+Esc returns. ``/`` searches the node, host and key names, status, trust,
 image, kernel, build, the line of the failed check and each label as
 ``key=value``, so ``role=edge`` finds the nodes of that role.
 

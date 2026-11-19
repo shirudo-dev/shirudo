@@ -61,7 +61,10 @@ export function NodeDetail({ node, height, active, onClose }: Props) {
         </Text>
         <Field name="host">{node.hostName}</Field>
         <Field name="key">{node.akName}</Field>
-        <Field name="labels">{labelPairs(node.labels).join(" ") || "none put"}</Field>
+        <Field name="labels">
+          {labelPairs(node.labels).join(" ") || "none put"}
+          {node.labelsBy !== "none" && <Text dimColor>  put by {node.labelsBy}</Text>}
+        </Field>
         <Field name="image">{imageLabel(node.imageId, node.imageVersion)}</Field>
         <Field name="kernel">{node.kernel}</Field>
         <Field name="build">{node.version}</Field>
