@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import { Box, Text, useInput } from "ink";
+import type { ReactNode } from "react";
 import type { Backend } from "../lib/backend.ts";
 import { useRefreshing } from "../lib/useRefreshing.ts";
 import {
@@ -19,6 +20,7 @@ import {
   type ShieldsReport,
 } from "../lib/shields.ts";
 import { DataTable, type Column } from "./DataTable.tsx";
+import { ViewMessage } from "./ViewMessage.tsx";
 import { MiniBar } from "./MiniBar.tsx";
 import { ShieldDetail } from "./ShieldDetail.tsx";
 import { SHIELD_STATUS_COLOR, SeverityText } from "./style.tsx";
@@ -161,15 +163,16 @@ export function ShieldsView({ backend, height, active, onClose, onSearchingChang
     { isActive: active && !searching && !detail },
   );
 
+  const message = (color: string | undefined, text: ReactNode) => (
+    <ViewMessage active={active && !searching} onClose={onClose} color={color}>
+      {text}
+    </ViewMessage>
+  );
   if (!query.data)
-    return query.error ? (
-      <Text color="red">shields query failed: {query.error}</Text>
-    ) : (
-      <Text dimColor>querying backend…</Text>
-    );
+    return query.error ? message("red", `shields query failed: ${query.error}`) : message(undefined, "querying backend…");
   const report = query.data;
   if (report.shields.length === 0)
-    return <Text dimColor>no upatch in shirudo.tree_ops: load a tree with jobs/tree-ingest</Text>;
+    return message(undefined, "no upatch in shirudo.tree_ops: load a tree with jobs/tree-ingest");
   const tableHeight = Math.max(4, height);
   const trees = new Set(report.shields.map((s) => s.treeId));
 

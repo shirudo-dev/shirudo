@@ -23,6 +23,7 @@ import {
 } from "../lib/sbom.ts";
 import { severityRank } from "../lib/shields.ts";
 import { DataTable, Tabs, type Column } from "./DataTable.tsx";
+import { ViewMessage } from "./ViewMessage.tsx";
 import { FindingDetail } from "./FindingDetail.tsx";
 import { FINDING_STATUS_STYLE, IMAGE_STATE_COLOR, SeverityText } from "./style.tsx";
 
@@ -271,7 +272,9 @@ export function SbomView({ backend, mode, onModeChange, height, active, onClose,
     return (
       <Box flexDirection="column">
         <Tabs labels={tabs.labels} selected={tabs.selected} />
-        {query.error ? <Text color="red">{mode} query failed: {query.error}</Text> : <Text dimColor>querying backend…</Text>}
+        <ViewMessage active={active && !searching} onClose={onClose} color={query.error ? "red" : undefined}>
+          {query.error ? `${mode} query failed: ${query.error}` : "querying backend…"}
+        </ViewMessage>
       </Box>
     );
   const status = (generatedAt: Date) => (

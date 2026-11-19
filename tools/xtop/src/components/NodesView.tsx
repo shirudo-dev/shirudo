@@ -22,6 +22,7 @@ import {
   type Shields,
 } from "../lib/fleet.ts";
 import { DataTable, Tabs, type Column } from "./DataTable.tsx";
+import { ViewMessage } from "./ViewMessage.tsx";
 import { NodeDetail } from "./NodeDetail.tsx";
 import { HealthCell } from "./MiniBar.tsx";
 import { ago } from "../lib/format.ts";
@@ -312,7 +313,9 @@ export function NodesView({ backend, mode, onModeChange, height, active, onClose
     return (
       <Box flexDirection="column">
         <Tabs labels={tabs.labels} selected={tabs.selected} />
-        {fleet.error ? <Text color="red">node query failed: {fleet.error}</Text> : <Text dimColor>querying backend…</Text>}
+        <ViewMessage active={active && !searching} onClose={onClose} color={fleet.error ? "red" : undefined}>
+          {fleet.error ? `node query failed: ${fleet.error}` : "querying backend…"}
+        </ViewMessage>
       </Box>
     );
   const report = fleet.data;
