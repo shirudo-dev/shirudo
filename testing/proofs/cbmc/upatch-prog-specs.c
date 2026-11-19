@@ -13,7 +13,25 @@
 
 #include "proof.h"
 #include "../../../util/malloc.c"
+#ifdef PROOF_XMALLOC
+#define xmalloc PROOF_XMALLOC
+#endif
+#ifdef PROOF_XCALLOC
+#define xcalloc PROOF_XCALLOC
+#endif
+#ifdef PROOF_XSTRNDUP
+#define xstrndup PROOF_XSTRNDUP
+#endif
 #include "../../../util/upatch.c"
+#ifdef PROOF_XMALLOC
+#undef xmalloc
+#endif
+#ifdef PROOF_XCALLOC
+#undef xcalloc
+#endif
+#ifdef PROOF_XSTRNDUP
+#undef xstrndup
+#endif
 
 /* A harness that includes this one may fix bytes of the metadata. */
 #ifndef SHAPE_METADATA

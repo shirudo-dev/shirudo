@@ -578,8 +578,12 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
        strictly rising, everything freed
    * - ``upatch-prog-kprobes``
      - The kprobe multi target records of ``prog_specs_parse()``
-     - One program and one record in 206 to 210 bytes, 2 to 6 bytes of
-       names
+     - Arbitrary tables of 206 to 210 bytes, one program, 2 to 6 bytes
+       of names, every allocation allowed to fail. Allocation requests
+       dispatch to the original allocator at the same constant extent:
+       one program, a buffer of 2 to 6 bytes or 1 to 3 symbol pointers;
+       a request outside those bounds fails an assertion, as does an
+       attempt to allocate a uprobe path, whose payload cannot fit
      - At least one name, each terminated inside the record's buffer,
        the names strictly rising, everything freed
    * - ``upatch-loader``
