@@ -700,7 +700,11 @@ the keepalives. The VM then shows in ``shirudo.node_status``, and
    $ make quote-check
    $ make stack-up
    $ make vm
-   $ CLICKHOUSE_URL=http://127.0.0.1:18124/ tools/xtop/dist/xtop
+   $ make xtop
+
+``make xtop`` builds :src:`tools/xtop/` and runs it with
+``CLICKHOUSE_URL`` set to the stack's ClickHouse, unless the environment
+names another.
 
 Every ``make vm`` acts as the builder of :doc:`/operate/run/attest`:
 before the guest first boots, :src:`testing/vm/tpm-builder.sh` creates

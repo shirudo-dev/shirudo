@@ -22,7 +22,7 @@ fi
 exec 9>"$W/.lock"
 flock 9
 case "$TLS_DIR/" in "$REPO/"*) echo 'stack private keys must be outside the checkout' >&2; exit 1 ;; esac
-command=${1:?usage: stack.sh prepare|oci|telemetry|down|enroll|vm}
+command=${1:?usage: stack.sh prepare|oci|telemetry|down|enroll|xtop|vm}
 shift
 prepare()
 {
@@ -74,6 +74,13 @@ vm)
 	flock -u 9
 	exec 9>&-
 	exec "$@"
+	;;
+xtop)
+	# Not under the lock: xtop runs until it is quit, while make vm-enroll
+	# and the others still have to get it.
+	flock -u 9
+	exec 9>&-
+	CLICKHOUSE_URL=${CLICKHOUSE_URL:-http://$CLICKHOUSE/} exec "$REPO/tools/xtop/dist/xtop"
 	;;
 *) echo "unknown stack command: $command" >&2; exit 2 ;;
 esac
