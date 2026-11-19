@@ -84,6 +84,7 @@ stage_config_certificates()
 
 	awk '!/^[[:space:]]*config[.]verification_key[[:space:]]*=/' \
 		"$conf" >"$runtime_conf"
+	chmod 0644 "$runtime_conf"
 	for ((i = 0; i < ${#config_certs[@]}; i++)); do
 		name=config-cert.der
 		if [ "$i" -gt 0 ]; then
