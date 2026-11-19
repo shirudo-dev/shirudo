@@ -1332,6 +1332,34 @@ static void build_stage_close(struct bpm_build_spec *spec)
 }
 
 /*
+ * Sign the unload directive of the load just written, for the name and
+ * the payload digest the load carries, and record both for the manifest.
+ */
+static int build_upatch_unload(struct bpm_build_upatch *u, const char *load,
+			       const char *unload, const char *pkey,
+			       const char *cert)
+{
+	__u8 payload[CRYPTO_SHA256_LEN];
+	struct upatch parsed = {};
+	int ret;
+
+	if (upatch_open(load, &parsed))
+		return -EINVAL;
+	if (upatch_is_unload(&parsed) || !parsed.hdr.name[0]) {
+		upatch_close(&parsed);
+		return -EINVAL;
+	}
+	upatch_header_name(&parsed, u->name);
+	hex_encode(parsed.hdr.payload_sha256, CRYPTO_SHA256_LEN,
+		   u->payload_sha256);
+	memcpy(payload, parsed.hdr.payload_sha256, sizeof(payload));
+	strscpy(u->type, upatch_type_str(&parsed), sizeof(u->type));
+	upatch_close(&parsed);
+	ret = build_package_unload(u->name, payload, unload, pkey, cert);
+	return ret < 0 ? ret : ret ? -EIO : 0;
+}
+
+/*
  * The unload directive is bound to the payload digest the load artifact
  * ended up with.
  */
@@ -1349,8 +1377,6 @@ static int build_upatches(struct bpm_build_spec *spec, const char *pkey,
 		struct upatch_policy_label_entry *labels = NULL;
 		struct bpm_build_upatch *u = &spec->upatches[i];
 		const char *bpf_o = source, *src_path = NULL;
-		__u8 payload[CRYPTO_SHA256_LEN];
-		struct upatch parsed = {};
 		__u32 nr_labels = 0;
 		int ret;
 
@@ -1421,23 +1447,9 @@ static int build_upatches(struct bpm_build_spec *spec, const char *pkey,
 					 n_overrides, update);
 		if (ret)
 			return ret;
-		if (upatch_open(load, &parsed))
-			return -EINVAL;
-		if (upatch_is_unload(&parsed) || !parsed.hdr.name[0]) {
-			upatch_close(&parsed);
-			return -EINVAL;
-		}
-		upatch_header_name(&parsed, u->name);
-		hex_encode(parsed.hdr.payload_sha256,
-			   CRYPTO_SHA256_LEN,
-			   u->payload_sha256);
-		memcpy(payload, parsed.hdr.payload_sha256, sizeof(payload));
-		strscpy(u->type, upatch_type_str(&parsed), sizeof(u->type));
-		upatch_close(&parsed);
-		ret = build_package_unload(u->name, payload, unload, pkey,
-					   cert);
+		ret = build_upatch_unload(u, load, unload, pkey, cert);
 		if (ret)
-			return ret < 0 ? ret : -EIO;
+			return ret;
 	}
 	return 0;
 }
