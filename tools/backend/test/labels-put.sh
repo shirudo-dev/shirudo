@@ -5,7 +5,8 @@
 # jobs/labels-put: a file of sets by node_id, by ak_name and by
 # config_root loads whole, from a file and from standard input; a second
 # put replaces the sets it names, clears one with an empty set, and keeps
-# those it does not name; --check loads nothing. Then what it refuses, each with a message and
+# those it does not name; each put names the keys whose sets disagree;
+# --check loads nothing. Then what it refuses, each with a message and
 # nothing loaded: a file that is not JSON or not of the form, a set that
 # names its node twice or not at all, two sets for one name, a key or
 # value node.labels could not hold, too many labels, a missing file and
@@ -41,7 +42,7 @@ cat >"$work/first.json" <<'SETS'
  {"node_id": "edge-01", "labels": {"role": "edge", "site": "fra"}},
  {"node_id": "edge-02", "labels": {"role": "edge", "site": "ams"}},
  {"ak_name": "000b03", "labels": {"role": "core"}},
- {"config_root": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1", "labels": {"image": "base"}}
+ {"config_root": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1", "labels": {"image": "base", "role": "lab"}}
 ]}
 SETS
 run 'first put' "$job" "$work/first.json"

@@ -12,7 +12,10 @@
 # labels, which replaces the one stored under that name; an empty set
 # clears it. Nodes the file does not name keep theirs. The file is
 # loaded whole or not at all. --check reads and checks it, and loads
-# nothing.
+# nothing. A node's labels are the union of its sets; once loaded, every
+# key whose sets give a node different values is named on standard error,
+# as shirudo.label_conflicts has it, and the most specific name's value
+# is the one the node takes.
 #
 #   CLICKHOUSE_CLIENT  the client command and its options, split at
 #                      spaces. Default: clickhouse-client, which reads
@@ -20,8 +23,8 @@
 #                      CLICKHOUSE_PASSWORD itself.
 #
 # Exit status: 0 when every set is loaded, or checked with --check; 1
-# when the file is refused or the load fails, with nothing loaded; 2 for
-# wrong usage.
+# when the file is refused or the load fails, with nothing loaded, or the
+# conflicts cannot be read after the load; 2 for wrong usage.
 
 set -eu
 
@@ -87,3 +90,14 @@ if [ -s "$work/rows.jsonl" ]; then
 fi
 cat "$work/summary"
 printf 'labels-put: loaded sets: %d\n' "$(wc -l <"$work/rows.jsonl")"
+
+# The sets are in; a conflict is the operator's to resolve, not a failed
+# load.
+client --query "SELECT concat('labels-put: conflict: ', node_id, ' (', ak_name, '): ',
+	key, '=', value, ' from ', by, ' over ',
+	arrayStringConcat(arrayMap(x -> concat(x.3, ' from ', x.2),
+		arrayFilter(x -> x.3 != value, given)), ', '))
+	FROM shirudo.label_conflicts ORDER BY node_id, ak_name, key FORMAT TSVRaw" \
+	</dev/null >"$work/conflicts" ||
+	die 'the sets are loaded, but shirudo.label_conflicts cannot be read'
+cat "$work/conflicts" >&2

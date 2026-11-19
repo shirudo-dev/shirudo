@@ -62,18 +62,38 @@ is gone. An empty set, ``"labels": {}``, clears it. A node the file does
 not name keeps its labels. The file is loaded in one insert, whole or
 not at all.
 
-A node gets the set put under its ``ak_name``, else the one put under its
-``node_id``, else the one put under the ``config_root`` its newest
-keepalive reports, else none, as the view ``shirudo.node_labels`` reads
-them (:doc:`tables/status`): the most specific name wins.
+A node's labels are the union of the sets put under its ``ak_name``, its
+``node_id`` and the ``config_root`` its newest keepalive reports, as the
+view ``shirudo.node_labels`` reads them (:doc:`tables/status`). Where two
+of them give one key different values, the node takes the value of the
+more specific name, ``ak_name`` over ``node_id`` over ``config_root``,
+and the key is a conflict:
+
+.. code-block:: none
+
+   config_root  role=lab   image=base
+   node_id      role=edge             site=fra
+   labels       role=edge  image=base site=fra    conflict: role
+
+The view ``shirudo.label_conflicts`` has one row per node and key in
+conflict, with the value the node took, the name it came from and every
+value given; query it to report them. After every load the job names each
+one on standard error, whether or not the file caused it:
+
+.. code-block:: none
+
+   labels-put: conflict: edge-01 (000b23602ab98bfb): role=edge from node_id over lab from config_root
+
+A conflict is not an error of the load: the sets stay loaded, and the
+status is 0. Resolve it by changing one of the sets.
 
 Name the sets by ``config_root`` where you can. A config image holds
 ``etc/shirudo/node.labels``, so the pipeline that builds the image can
 load the same labels under its root, and they are then the ones the
 node's tree sync matches for as long as the node runs that image. A node
 that boots another image takes that image's set, or none. Name a node by
-its ``node_id``, the name :doc:`maintain` gives it, to label it apart
-from its image, and so that the labels stay with it when it gets a new
+its ``node_id``, the name :doc:`maintain` gives it, to add labels its
+image does not have, and so that they stay with it when it gets a new
 key; name it by its ``ak_name`` to give one key labels of its own. A name
 no node has yet keeps its set until one has it.
 
@@ -98,12 +118,15 @@ refuses the whole file, with status 1 and a message naming the set, when:
 Exit status
 -----------
 
-0 when every set is loaded, or checked with ``--check``; 1 when the file
-is refused or the load fails, with nothing loaded; 2 for wrong usage.
+0 when every set is loaded, conflicts or not, or checked with
+``--check``; 1 when the file is refused or the load fails, with nothing
+loaded, or the conflicts cannot be read after the load; 2 for wrong
+usage.
 
 Connection
 ----------
 
 As :src:`tools/backend/jobs/tree-ingest`, the job runs
 ``clickhouse-client`` or the command ``CLICKHOUSE_CLIENT`` names. Its user
-needs ``SELECT`` and ``INSERT`` on ``shirudo.label_sets``.
+needs ``SELECT`` and ``INSERT`` on ``shirudo.label_sets`` and ``SELECT``
+on the views ``shirudo.label_conflicts`` reads.

@@ -27,34 +27,119 @@ INNER JOIN
     GROUP BY ak_name
 ) AS n ON n.ak_name = k.ak_name;
 
--- The labels of every node: the set put under its ak_name, else the one
--- put under its node_id, else the one put under the config_root of its
--- newest record, else none. by says which.
-CREATE VIEW IF NOT EXISTS shirudo.node_labels AS
-WITH sets AS
+-- Every label of every node, one row per set it comes from: the set put
+-- under the node's ak_name, the one under its node_id, and the one under
+-- the config_root of its newest record. rank orders them by how specific
+-- the name is, the ak_name highest.
+CREATE VIEW IF NOT EXISTS shirudo.node_label_items AS
+WITH
+sets AS
 (
-    SELECT by, node, labels FROM shirudo.label_sets FINAL WHERE notEmpty(labels)
+    SELECT toString(by) AS by, node, CAST(labels, 'Array(Tuple(String, String))') AS items
+    FROM shirudo.label_sets FINAL
+),
+named AS
+(
+    SELECT n.ak_name AS ak_name, n.node_id AS node_id, ifNull(r.config_root, '') AS config_root
+    FROM
+    (
+        SELECT ak_name, argMinMerge(node_id) AS node_id
+        FROM shirudo.nodes
+        GROUP BY ak_name
+    ) AS n
+    LEFT JOIN
+    (
+        SELECT k.ak_name AS ak_name, k.config_root AS config_root
+        FROM shirudo.keepalive_latest AS k FINAL
+    ) AS r ON r.ak_name = n.ak_name
+),
+found AS
+(
+    SELECT n.ak_name AS ak_name, n.node_id AS node_id, s.by AS by, s.items AS items
+    FROM named AS n
+    INNER JOIN (SELECT * FROM sets WHERE by = 'ak_name') AS s ON s.node = n.ak_name
+    UNION ALL
+    SELECT n.ak_name, n.node_id, s.by, s.items
+    FROM named AS n
+    INNER JOIN (SELECT * FROM sets WHERE by = 'node_id') AS s ON s.node = n.node_id
+    UNION ALL
+    SELECT n.ak_name, n.node_id, s.by, s.items
+    FROM named AS n
+    INNER JOIN (SELECT * FROM sets WHERE by = 'config_root') AS s ON s.node = n.config_root
+    WHERE n.config_root != ''
+)
+SELECT
+    f.ak_name AS ak_name,
+    f.node_id AS node_id,
+    f.by AS by,
+    multiIf(f.by = 'ak_name', 3, f.by = 'node_id', 2, 1) AS rank,
+    item.1 AS key,
+    item.2 AS value
+FROM found AS f
+ARRAY JOIN f.items AS item;
+
+-- The labels of every node: the union of its sets, where a key two sets
+-- give takes the value of the more specific name. sources says, per key,
+-- which name its value came from, and conflicts how many keys the sets
+-- gave different values; label_conflicts has them.
+CREATE VIEW IF NOT EXISTS shirudo.node_labels AS
+WITH
+won AS
+(
+    SELECT
+        i.ak_name AS ak_name,
+        i.key AS key,
+        argMax(i.value, i.rank) AS value,
+        argMax(i.by, i.rank) AS by,
+        uniqExact(i.value) > 1 AS conflict
+    FROM shirudo.node_label_items AS i
+    GROUP BY i.ak_name, i.key
+),
+sorted AS
+(
+    SELECT
+        w.ak_name AS ak_name,
+        arraySort(groupArray(tuple(w.key, w.value, w.by))) AS items,
+        countIf(w.conflict) AS conflicts
+    FROM won AS w
+    GROUP BY w.ak_name
+),
+merged AS
+(
+    SELECT
+        ak_name,
+        mapFromArrays(arrayMap(x -> x.1, items), arrayMap(x -> x.2, items)) AS labels,
+        mapFromArrays(arrayMap(x -> x.1, items), arrayMap(x -> x.3, items)) AS sources,
+        conflicts
+    FROM sorted
 )
 SELECT
     n.ak_name AS ak_name,
     n.node_id AS node_id,
-    multiIf(a.node != '', a.labels, i.node != '', i.labels, c.labels) AS labels,
-    multiIf(a.node != '', 'ak_name', i.node != '', 'node_id', c.node != '', 'config_root', 'none') AS by
+    m.labels AS labels,
+    m.sources AS sources,
+    m.conflicts AS conflicts
 FROM
 (
     SELECT ak_name, argMinMerge(node_id) AS node_id
     FROM shirudo.nodes
     GROUP BY ak_name
 ) AS n
-LEFT JOIN
-(
-    SELECT k.ak_name AS ak_name, ifNull(k.config_root, '') AS config_root
-    FROM shirudo.keepalive_latest AS k FINAL
-) AS r ON r.ak_name = n.ak_name
-LEFT JOIN (SELECT node, labels FROM sets WHERE by = 'ak_name') AS a ON a.node = n.ak_name
-LEFT JOIN (SELECT node, labels FROM sets WHERE by = 'node_id') AS i ON i.node = n.node_id
-LEFT JOIN (SELECT node, labels FROM sets WHERE by = 'config_root') AS c
-    ON c.node = r.config_root AND r.config_root != '';
+LEFT JOIN merged AS m ON m.ak_name = n.ak_name;
+
+-- The keys whose sets give a node different values: the value that won,
+-- the name it came from, and every value with the name that gave it.
+CREATE VIEW IF NOT EXISTS shirudo.label_conflicts AS
+SELECT
+    i.ak_name AS ak_name,
+    any(i.node_id) AS node_id,
+    i.key AS key,
+    argMax(i.value, i.rank) AS value,
+    argMax(i.by, i.rank) AS by,
+    arraySort(x -> -x.1, groupArray(tuple(i.rank, i.by, i.value))) AS given
+FROM shirudo.node_label_items AS i
+GROUP BY i.ak_name, i.key
+HAVING uniqExact(i.value) > 1;
 
 -- History: what each node did at every operation of its tree that the
 -- backend has seen it reach, so that checks 4 and 6 and node_vulns can

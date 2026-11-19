@@ -223,8 +223,8 @@ shirudo.label_sets
 
    - Read with FINAL, or through node_labels: the newest put of a name
      replaces the set.
-   - An empty map clears the set; node_labels then falls back to the
-     other name, or none.
+   - An empty map clears the set. A node's labels are the union of its
+     sets in node_labels; label_conflicts lists the keys they disagree on.
 
    :by: Whether node names a node_id, an ak_name, or the config_root of the nodes that booted that config image.
    :node: The node_id, ak_name or config_root.

@@ -13,8 +13,10 @@ shirudo	keepalive_latest	ReplacingMergeTree	ak_name
 shirudo	keepalive_latest_mv	MaterializedView	
 shirudo	keepalive_mv	MaterializedView	
 shirudo	kernel_vulns	ReplacingMergeTree	vuln_id, introduced
+shirudo	label_conflicts	View	
 shirudo	label_sets	ReplacingMergeTree	by, node
 shirudo	latest	View	
+shirudo	node_label_items	View	
 shirudo	node_labels	View	
 shirudo	node_ops	ReplacingMergeTree	ak_name, tree_id, seq
 shirudo	node_ops_mv	MaterializedView	

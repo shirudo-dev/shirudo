@@ -1,17 +1,20 @@
 labels-put: node_id edge-01: 2 labels
 labels-put: node_id edge-02: 2 labels
 labels-put: ak_name 000b03: 1 label
-labels-put: config_root c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1: 1 label
+labels-put: config_root c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1: 2 labels
 labels-put: loaded sets: 4
+labels-put: conflict: edge-01 (000b01): role=edge from node_id over lab from config_root
+labels-put: conflict: edge-02 (000b02): role=edge from node_id over lab from config_root
 first put: status 0
 labels-put: node_id edge-02: cleared
 labels-put: ak_name 000b01: 3 labels
 labels-put: loaded sets: 2
+labels-put: conflict: edge-01 (000b01): role=edge from ak_name over lab from config_root
 second put: status 0
 labels-put: node_id edge-01: 2 labels
 labels-put: node_id edge-02: 2 labels
 labels-put: ak_name 000b03: 1 label
-labels-put: config_root c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1: 1 label
+labels-put: config_root c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1: 2 labels
 check: status 0
 labels-put: the file is not a JSON value, nothing loaded
 not json: status 1
@@ -49,8 +52,10 @@ labels-put: cannot read none.json, nothing loaded
 no file: status 1
 usage: labels-put [--check] <sets.json>|-
 no argument: status 2
-core-01	000b03	{'role':'core'}	ak_name
-edge-01	000b01	{'role':'edge','site':'fra','rack':'r 7'}	ak_name
-edge-02	000b02	{'image':'base'}	config_root
-lab-01	000b04	{'image':'base'}	config_root
+core-01	000b03	{'role':'core'}	{'role':'ak_name'}	0
+edge-01	000b01	{'image':'base','rack':'r 7','role':'edge','site':'fra'}	{'image':'config_root','rack':'ak_name','role':'ak_name','site':'ak_name'}	1
+edge-02	000b02	{'image':'base','role':'lab'}	{'image':'config_root','role':'config_root'}	0
+lab-01	000b04	{'image':'base','role':'lab'}	{'image':'config_root','role':'config_root'}	0
+edge-01	000b01	role	edge	ak_name	[(3,'ak_name','edge'),(2,'node_id','edge'),(1,'config_root','lab')]
+items	12
 sets	6

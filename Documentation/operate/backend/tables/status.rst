@@ -30,13 +30,27 @@ Views, functions and jobs
    keepalive_latest FINAL joined to nodes: the newest record of every node
    with node_id and trust.
 
+``shirudo.node_label_items``
+   view.
+
+   label_sets FINAL joined to nodes and keepalive_latest: one row per
+   node, set and label, from the sets put under the node's ak_name, its
+   node_id and the config_root of its newest record, with rank 3, 2 and 1.
+
 ``shirudo.node_labels``
    view.
 
-   label_sets FINAL joined to nodes and keepalive_latest: per key, the
-   labels put under its ak_name, else those put under its node_id, else
-   those put under the config_root of its newest record, else none, and
-   by, which of the four it is. An empty set counts as none.
+   node_label_items per node: labels, the union of its sets, where a key
+   in several takes the value of the highest rank; sources, per key, the
+   name that value was put under; conflicts, how many keys the sets gave
+   different values.
+
+``shirudo.label_conflicts``
+   view.
+
+   node_label_items per node and key whose sets give different values:
+   the value of the highest rank, by, its name, and given, every
+   (rank, by, value), highest first.
 
 ``shirudo.history_conflicts``
    view.

@@ -1206,7 +1206,8 @@ is given. ``test/sbom-put`` stores two of those SBOMs with
 into an ``s3://`` one, runs ``--scan`` on the first, and checks what it
 refuses. ``test/labels-put`` loads label sets with ``jobs/labels-put``
 by ``node_id``, by ``ak_name`` and by ``config_root``, replaces and
-clears some, and checks what it refuses. A script that exits with status 77 skips its test and says
+clears some, checks the union each node reads and the conflicts the job
+reports, and checks what it refuses. A script that exits with status 77 skips its test and says
 why. ``test/sbom-scan-trivy`` is skipped unless ``trivy`` is on the host
 and ``SBOM_TRIVY_CACHE`` names a Trivy cache directory with a database,
 since its findings would change with every database CI could fetch.

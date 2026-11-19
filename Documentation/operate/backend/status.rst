@@ -25,9 +25,15 @@ follows. The objects that do it are in :src:`tools/backend/sql/40-status.sql`, a
    * - ``shirudo.latest``
      - view
      - The newest record of every node, from ``keepalive_latest``, with the node's ``node_id`` and ``trust``.
+   * - ``shirudo.node_label_items``
+     - view
+     - Every label of every node, one row per set it comes from, see :doc:`labels-put`.
    * - ``shirudo.node_labels``
      - view
-     - The labels of every node, from ``label_sets``, see :doc:`labels-put`.
+     - The labels of every node: the union of its sets, the most specific name's value where they disagree.
+   * - ``shirudo.label_conflicts``
+     - view
+     - Per node, each key its sets give different values, and those values.
    * - ``shirudo.node_ops``
      - ReplacingMergeTree, ``ORDER BY (ak_name, tree_id, seq)``, no TTL
      - The history of every node: what it did at each operation of its tree the backend has seen it reach, see `History`_.
