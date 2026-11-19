@@ -1,0 +1,88 @@
+#!/bin/sh
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+#
+# jobs/labels-put -- load the label sets of nodes into shirudo.label_sets,
+# out of band from what the nodes report.
+#
+#   jobs/labels-put [--check] <sets.json>|-
+#
+# The file names each node by node_id or by ak_name and gives its whole
+# set of labels, which replaces the one stored under that name; an empty
+# set clears it. Nodes the file does not name keep theirs. The file is
+# loaded whole or not at all. --check reads and checks it, and loads
+# nothing.
+#
+#   CLICKHOUSE_CLIENT  the client command and its options, split at
+#                      spaces. Default: clickhouse-client, which reads
+#                      CLICKHOUSE_HOST, CLICKHOUSE_USER and
+#                      CLICKHOUSE_PASSWORD itself.
+#
+# Exit status: 0 when every set is loaded, or checked with --check; 1
+# when the file is refused or the load fails, with nothing loaded; 2 for
+# wrong usage.
+
+set -eu
+
+here=$(cd "$(dirname "$0")" && pwd)
+check=0
+work=
+
+die()
+{
+	printf 'labels-put: %s\n' "$1" >&2
+	exit 1
+}
+
+usage()
+{
+	printf '%s\n' 'usage: labels-put [--check] <sets.json>|-' >&2
+	exit 2
+}
+
+cleanup()
+{
+	[ -z "$work" ] || rm -rf "$work"
+}
+
+client()
+{
+	# shellcheck disable=SC2086 # a command with its options, to be split
+	${CLICKHOUSE_CLIENT:-clickhouse-client} "$@"
+}
+
+[ "${1:-}" = --check ] && { check=1; shift; }
+[ $# -eq 1 ] || usage
+case "$1" in
+-) ;;
+-*) usage ;;
+esac
+
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+work=$(mktemp -d)
+if [ "$1" = - ]; then
+	cat >"$work/sets.json"
+else
+	cp "$1" "$work/sets.json" 2>/dev/null || die "cannot read $1, nothing loaded"
+fi
+
+if [ "$check" -eq 1 ]; then
+	python3 "$here/labels-rows.py" "$work/sets.json" "$work/rows.jsonl" 0
+	exit
+fi
+
+# Every put gets a time of its own, after every put before it, so that
+# the newest set of a name is the one ReplacingMergeTree keeps.
+put_at=$(client --query 'SELECT toUnixTimestamp64Milli(greatest(now64(3),
+	(SELECT max(put_at) FROM shirudo.label_sets) + toIntervalMillisecond(1)))' \
+	</dev/null) || die 'cannot read shirudo.label_sets, nothing loaded'
+python3 "$here/labels-rows.py" "$work/sets.json" "$work/rows.jsonl" \
+	"$put_at" >"$work/summary" || exit 1
+# One insert, one block: the sets land together or not at all.
+if [ -s "$work/rows.jsonl" ]; then
+	client --query 'INSERT INTO shirudo.label_sets FORMAT JSONEachRow' \
+		<"$work/rows.jsonl" || die 'cannot insert into shirudo.label_sets, nothing loaded'
+fi
+cat "$work/summary"
+printf 'labels-put: loaded sets: %d\n' "$(wc -l <"$work/rows.jsonl")"

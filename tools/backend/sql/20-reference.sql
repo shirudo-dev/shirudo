@@ -101,6 +101,21 @@ CREATE TABLE IF NOT EXISTS shirudo.upatch_fixes
 ENGINE = ReplacingMergeTree
 ORDER BY (tree_id, seq, advisory, source);
 
+-- The labels the operator gives a node, out of band: what jobs/labels-put
+-- loads, not what the node's own node.labels holds, which only its tree
+-- sync reads. One row per set, by node_id or by ak_name; a newer put of
+-- the same name replaces it, and an empty map clears it. Read it with
+-- FINAL, or through shirudo.node_labels.
+CREATE TABLE IF NOT EXISTS shirudo.label_sets
+(
+    by Enum8('node_id' = 1, 'ak_name' = 2),
+    node String,
+    labels Map(String, String),
+    put_at DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(put_at)
+ORDER BY (by, node);
+
 -- The thresholds of the checks, the retention of shirudo.keepalive and
 -- shirudo.boot_first and the age at which an SBOM's scan is stale, in one
 -- row. Read it with FINAL; to change a value, insert the whole row again

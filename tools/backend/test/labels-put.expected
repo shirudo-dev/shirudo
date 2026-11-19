@@ -1,0 +1,51 @@
+labels-put: node_id edge-01: 2 labels
+labels-put: node_id edge-02: 2 labels
+labels-put: ak_name 000b03: 1 label
+labels-put: loaded sets: 3
+first put: status 0
+labels-put: node_id edge-02: cleared
+labels-put: ak_name 000b01: 3 labels
+labels-put: loaded sets: 2
+second put: status 0
+labels-put: node_id edge-01: 2 labels
+labels-put: node_id edge-02: 2 labels
+labels-put: ak_name 000b03: 1 label
+check: status 0
+labels-put: the file is not a JSON value, nothing loaded
+not json: status 1
+labels-put: the file is not an object whose one key is "nodes", nothing loaded
+not the form: status 1
+labels-put: the file is not an object whose one key is "nodes", nothing loaded
+another top key: status 1
+labels-put: set 1 names its node by neither or both of node_id and ak_name, nothing loaded
+both names: status 1
+labels-put: set 1 names its node by neither or both of node_id and ak_name, nothing loaded
+no name: status 1
+labels-put: set 1: ak_name is not 1 to 255 lowercase hex digits, nothing loaded
+ak not hex: status 1
+labels-put: set 1 has the key "label", which is not node_id, ak_name or labels, nothing loaded
+unknown key: status 1
+labels-put: node_id a has two sets, nothing loaded
+two sets: status 1
+labels-put: the key "x" is given twice in one object, nothing loaded
+key twice: status 1
+labels-put: node_id a: the key "a=b" is not one node.labels can hold: 1 to 255 bytes, no "=", no "#" first, no blank at either end, no control character, nothing loaded
+equals in key: status 1
+labels-put: node_id a: the key "#a" is not one node.labels can hold: 1 to 255 bytes, no "=", no "#" first, no blank at either end, no control character, nothing loaded
+hash first: status 1
+labels-put: node_id a: the value of a is not one node.labels can hold: at most 255 bytes, no blank at either end, no control character, nothing loaded
+blank at end: status 1
+labels-put: node_id a: the value of a is not a string, nothing loaded
+value not text: status 1
+labels-put: node_id a: the value of a is not one node.labels can hold: at most 255 bytes, no blank at either end, no control character, nothing loaded
+long value: status 1
+labels-put: node_id a: more than 64 labels, nothing loaded
+too many: status 1
+labels-put: cannot read none.json, nothing loaded
+no file: status 1
+usage: labels-put [--check] <sets.json>|-
+no argument: status 2
+core-01	000b03	{'role':'core'}	ak_name
+edge-01	000b01	{'role':'edge','site':'fra','rack':'r 7'}	ak_name
+edge-02	000b02	{}	none
+sets	5

@@ -30,6 +30,13 @@ Views, functions and jobs
    keepalive_latest FINAL joined to nodes: the newest record of every node
    with node_id and trust.
 
+``shirudo.node_labels``
+   view.
+
+   label_sets FINAL joined to nodes: per key, the labels put under its
+   ak_name, else those put under its node_id, else none, and by, which of
+   the three it is. An empty set counts as none.
+
 ``shirudo.history_conflicts``
    view.
 

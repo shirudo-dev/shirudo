@@ -78,6 +78,9 @@ Files
        keeps a record and ``shirudo.boot_first`` a boot.
    * - :src:`tools/backend/jobs/tree-ingest`
      - Loads every segment of a upatch tree into the reference tables.
+   * - :src:`tools/backend/jobs/labels-put`
+     - Loads the labels the operator gives the nodes, out of band
+       (:doc:`labels-put`).
    * - :src:`tools/backend/jobs/sbom-put`
      - Stores the CycloneDX SBOM of an image in the SBOM store, for an
        image pipeline to call (:doc:`sbom-put`).
@@ -102,6 +105,7 @@ Files
    tree-ingest
    sbom-scan
    sbom-put
+   labels-put
    maintain
    boot-baselines
    xtop

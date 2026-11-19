@@ -8,9 +8,10 @@
 Reference
 =========
 
-What the checks compare a record against. nodes fills itself from accepted
-records; tree-ingest loads the tree tables; the operator writes builds,
-manual fixes and settings.
+What the checks compare a record against, and what the operator says of a
+node. nodes fills itself from accepted records; tree-ingest loads the tree
+tables; labels-put loads label_sets; the operator writes builds, manual
+fixes and settings.
 
 Schema: :src:`tools/backend/sql/20-reference.sql`
 
@@ -28,6 +29,12 @@ Views, functions and jobs
    Runs shirudo bpm tree show --walk and loads every verified segment not
    yet loaded into tree_pubs, tree_ops and upatch_fixes (source fixes). All
    or nothing on a conflict.
+
+``jobs/labels-put``
+   external job.
+
+   Checks a file of label sets and loads it into label_sets in one insert,
+   all or nothing, each row with one put_at later than any before.
 
 shirudo.nodes
 -------------
@@ -197,3 +204,28 @@ shirudo.settings
    :sbom_stale_seconds: 172800 (2 days). Age after which a scan marks node_vulns rows
       sbom_stale.
    :updated: Version column: the newest row wins.
+
+shirudo.label_sets
+------------------
+
+.. clickhouse-table:: shirudo.label_sets
+   :kind: ref
+   :written-by: jobs/labels-put
+   :row-size: ~200 B (estimate: a few short labels).
+   :scale: Every node and key ever labeled, each put once more until a merge.
+   :reference: 10,000 rows ≈ 2 MB
+   :bytes: 2e+06
+
+   The labels the operator gives a node out of band, one set per node_id
+   or ak_name. Not what the node's node.labels holds: tree sync matches
+   selectors against that file, and nothing here reaches the node.
+
+   - Read with FINAL, or through node_labels: the newest put of a name
+     replaces the set.
+   - An empty map clears the set; node_labels then falls back to the
+     other name, or none.
+
+   :by: Whether node names a node_id or an ak_name.
+   :node: The node_id or ak_name.
+   :labels: The whole set, key to value.
+   :put_at: When labels-put loaded it; the version ReplacingMergeTree keeps the newest of.

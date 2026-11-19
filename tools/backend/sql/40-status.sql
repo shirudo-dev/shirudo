@@ -27,6 +27,27 @@ INNER JOIN
     GROUP BY ak_name
 ) AS n ON n.ak_name = k.ak_name;
 
+-- The labels of every node: the set put under its ak_name, else the one
+-- put under its node_id, else none. by says which.
+CREATE VIEW IF NOT EXISTS shirudo.node_labels AS
+WITH sets AS
+(
+    SELECT by, node, labels FROM shirudo.label_sets FINAL WHERE notEmpty(labels)
+)
+SELECT
+    n.ak_name AS ak_name,
+    n.node_id AS node_id,
+    if(a.node != '', a.labels, i.labels) AS labels,
+    multiIf(a.node != '', 'ak_name', i.node != '', 'node_id', 'none') AS by
+FROM
+(
+    SELECT ak_name, argMinMerge(node_id) AS node_id
+    FROM shirudo.nodes
+    GROUP BY ak_name
+) AS n
+LEFT JOIN (SELECT node, labels FROM sets WHERE by = 'ak_name') AS a ON a.node = n.ak_name
+LEFT JOIN (SELECT node, labels FROM sets WHERE by = 'node_id') AS i ON i.node = n.node_id;
+
 -- History: what each node did at every operation of its tree that the
 -- backend has seen it reach, so that checks 4 and 6 and node_vulns can
 -- look below the window of the last 512 operations a keepalive covers.
