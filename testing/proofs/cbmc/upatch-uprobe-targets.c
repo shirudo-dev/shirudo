@@ -59,6 +59,10 @@ void harness(void)
 	entry.build_id_len = 0;
 	entry.uprobe_offsets = NULL;
 	entry.nr_uprobe_offsets = 0;
+	entry.kprobe_sym_buf = NULL;
+	entry.kprobe_sym_buf_len = 0;
+	entry.kprobe_syms = NULL;
+	entry.nr_kprobe_syms = 0;
 	entry.target_fd = -1;
 	specs = xcalloc(1, sizeof(*specs));
 	if (!specs)
