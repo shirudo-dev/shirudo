@@ -1,0 +1,118 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+#
+# A Lima VM on an Apple M3 or later Mac that plays the operator host of
+# Documentation/start/quickstart.rst, with nested KVM for the test VM.
+#
+#   limactl start --name=shirudo-dev --param checkout="$PWD" infra/lima/shirudo.yaml
+
+minimumLimaVersion: 2.2.0
+
+base:
+- template:_images/ubuntu-26.04
+
+vmType: vz
+arch: aarch64
+nestedVirtualization: true
+memory: 8GiB
+disk: 100GiB
+
+param:
+  checkout: ""
+
+# The checkout is shared at the path it has on the Mac, so that limactl
+# shell opens in it and the build writes there.
+mounts:
+- location: "{{.Param.checkout}}"
+  writable: true
+
+containerd:
+  system: false
+  user: false
+
+provision:
+# A group added during provisioning does not reach the shells Lima has
+# already opened, so the socket is handed to the user instead.
+- mode: yq
+  path: /etc/systemd/system/docker.socket.d/override.conf
+  format: ini
+  expression: .Socket.SocketUser="{{.User}}"
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    # The kernel build and the test VM's images use several GiB under /tmp,
+    # which Ubuntu 26.04 mounts as a tmpfs sized from the VM's memory.
+    if [ "$(findmnt -no FSTYPE /tmp)" = tmpfs ]; then
+      systemctl mask tmp.mount
+      umount -l /tmp
+      chmod 1777 /tmp
+    fi
+    printf '* - memlock unlimited\n' >/etc/security/limits.d/90-shirudo-memlock.conf
+    mkdir -p /etc/systemd/system.conf.d /etc/systemd/user.conf.d
+    printf '[Manager]\nDefaultLimitMEMLOCK=infinity\n' |
+      tee /etc/systemd/system.conf.d/90-shirudo-memlock.conf \
+          /etc/systemd/user.conf.d/90-shirudo-memlock.conf >/dev/null
+    printf 'KERNEL=="kvm", OWNER="{{.User}}", MODE="0660"\n' \
+      >/etc/udev/rules.d/90-shirudo-kvm.rules
+    udevadm control --reload
+    udevadm trigger --name-match=kvm
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends \
+      build-essential pkg-config python3 git curl ca-certificates gpg jq \
+      openssl libssl-dev libcurl4-openssl-dev libelf-dev libluajit-5.1-dev \
+      libtpms-dev libtss2-dev zlib1g-dev libzstd-dev \
+      autoconf autoconf-archive automake libtool libltdl-dev \
+      bc bison flex cpio debhelper dpkg-dev fakeroot kmod libdw-dev \
+      libncurses-dev pahole rsync xz-utils zstd \
+      qemu-system-arm qemu-utils swtpm swtpm-tools cloud-image-utils \
+      libguestfs-tools dracut-core cryptsetup-bin e2fsprogs file \
+      openssh-client iproute2 isc-dhcp-client docker.io
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    sh "{{.Param.checkout}}/.github/scripts/install-clang.sh"
+    sh "{{.Param.checkout}}/.github/scripts/install-static-libcrypto-deps.sh"
+# The test VMs' TPM and console sockets cannot live on the shared checkout,
+# and Ubuntu's AppArmor profile lets swtpm write only under the home
+# directory, so build/test-vm points there.
+- mode: user
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    mkdir -p ~/test-vm "{{.Param.checkout}}/build"
+    if [ ! -e "{{.Param.checkout}}/build/test-vm" ]; then
+      ln -s ~/test-vm "{{.Param.checkout}}/build/test-vm"
+    fi
+
+probes:
+- description: nested KVM
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    test -c /dev/kvm
+  hint: |
+    /dev/kvm is missing. The test VM needs nested virtualization, which
+    Lima offers on an Apple M3 or later running macOS 15 or later.
+- description: clang 23
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    if ! timeout 1800s bash -c "until test -x /usr/bin/clang; do sleep 5; done"; then
+      echo >&2 "clang 23 is not installed yet"
+      exit 1
+    fi
+  hint: See /var/log/cloud-init-output.log in the guest.
+
+message: |
+  Build and boot the test target as Documentation/start/quickstart.rst
+  describes, in your checkout, which limactl shell opens in when you run
+  it from there:
+  ------
+  limactl shell {{.Name}}
+  make -C testing kernel
+  make && make shirudo-build
+  make -C testing vm VM_NAME=quickstart
+  ------

@@ -20,7 +20,8 @@ Before you begin
 ----------------
 
 - A Linux host on x86-64 or arm64 with KVM. ``/dev/kvm`` must be readable
-  and writable.
+  and writable. On a Mac, :doc:`/start/quickstart-macos` sets up such
+  a host in a Lima VM.
 - A locked-memory limit of ``unlimited`` (``ulimit -l``): the shirudo
   binaries lock their memory and refuse to run without it. Root is not
   needed; the test VM builds its initrd with dracut as you, without

@@ -114,6 +114,13 @@ x86-64, arm64 and riscv64, at different stages: CI tests x86-64, the
 test VM also runs on arm64, and no riscv64 target has booted yet.
 :doc:`/contribute/arch-support` compares the three.
 
+Can I try shirudo on macOS?
+---------------------------
+
+Not natively: shirudo is Linux only. On an Apple M3 or later with macOS
+15 or later, :doc:`/start/quickstart-macos` runs the quickstart in a
+Lima VM, with the test VM nested inside it.
+
 How much does shirudo cost on a target, and how far does it scale?
 ------------------------------------------------------------------
 
