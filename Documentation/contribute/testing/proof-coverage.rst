@@ -510,10 +510,11 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
      - Every file: the header is read from a buffer of exactly its size
        for files of any size
      - Reads nothing past the header; an accepted header has its magic,
-       version, zero reserved field and a terminated name, a BPF
-       payload, a loader and a signature, whole aligned instructions,
-       every section inside the file and behind the header, and a
-       ``.rodata`` offset inside the data
+       version, zero reserved field and a terminated name, a BPF or Java
+       payload, a signature, every section inside the file and behind
+       the header; a BPF payload has a loader of whole aligned
+       instructions and a ``.rodata`` offset inside the data, a Java
+       payload data and none of the loader's fields
    * - ``upatch-signed-sections``
      - ``parse_signed_sections()``
      - Data of 15, 16, 40 and 64 bytes

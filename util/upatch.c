@@ -94,26 +94,47 @@ static int section_inside(__u32 off, __u32 len, size_t n)
 	return 1;
 }
 
-static int validate_bounds(const struct upatch_host_header *h,
-			   size_t n)
+static int validate_bpf_bounds(const struct upatch_host_header *h,
+			       size_t n)
 {
-	if (h->type != UPATCH_TYPE_BPF)
-		return -EINVAL;
 	if (h->loader_insns_off < UPATCH_HEADER_SIZE ||
 	    h->loader_insns_off % 8 || h->loader_insns_len % 8 ||
 	    !section_inside(h->loader_insns_off, h->loader_insns_len, n))
 		return -EINVAL;
+	if (h->rodata_data_off > h->data_len || h->loader_insns_len == 0)
+		return -EINVAL;
+	return 0;
+}
+
+/* A Java payload is all data: none of the loader's fields apply. */
+static int validate_java_bounds(const struct upatch_host_header *h)
+{
+	if (h->loader_insns_off || h->loader_insns_len || h->metadata_len ||
+	    h->log_buf_sz || h->nr_maps || h->nr_progs ||
+	    h->rodata_data_off || h->data_len == 0)
+		return -EINVAL;
+	return 0;
+}
+
+static int validate_bounds(const struct upatch_host_header *h,
+			   size_t n)
+{
 	if (!section_inside(h->signature_off, h->signature_len, n))
 		return -EINVAL;
 	if (!section_inside(h->metadata_off, h->metadata_len, n))
 		return -EINVAL;
 	if (!section_inside(h->data_off, h->data_len, n))
 		return -EINVAL;
-	if (h->rodata_data_off > h->data_len)
+	if (h->signature_len == 0)
 		return -EINVAL;
-	if (h->loader_insns_len == 0 || h->signature_len == 0)
+	switch (h->type) {
+	case UPATCH_TYPE_BPF:
+		return validate_bpf_bounds(h, n);
+	case UPATCH_TYPE_JAVA:
+		return validate_java_bounds(h);
+	default:
 		return -EINVAL;
-	return 0;
+	}
 }
 
 static bool has_nul(const char *s, size_t n)
@@ -224,6 +245,9 @@ static void forget_signed_sections(struct upatch *u)
 	u->signed_policy_labels_len = 0;
 	u->signed_policy_map_idx = 0;
 	u->signed_socket_policy_map_idx = 0;
+	u->signed_type = NULL;
+	u->signed_jar = NULL;
+	u->signed_jar_len = 0;
 }
 
 /*
@@ -301,6 +325,19 @@ static void parse_signed_sections(struct upatch *u)
 			u->signed_policy_labels = data + off;
 			u->signed_policy_labels_len = len;
 			break;
+		case UPATCH_SECTION_TYPE:
+			bit = 32;
+			if (len != sizeof(__le32))
+				goto reject;
+			u->signed_type = data + off;
+			break;
+		case UPATCH_SECTION_JAR:
+			bit = 64;
+			if (len == 0)
+				goto reject;
+			u->signed_jar = data + off;
+			u->signed_jar_len = len;
+			break;
 		default:
 			goto reject;
 		}
@@ -331,6 +368,14 @@ static int upatch_parse(const void *data, size_t size,
 	if (ret)
 		goto err;
 	parse_signed_sections(out);
+	/*
+	 * The header is not signed: a type it names that the signed
+	 * sections do not would route the bytes to the wrong verifier.
+	 */
+	if (upatch_signed_type(out) != out->hdr.type) {
+		ret = -EINVAL;
+		goto err;
+	}
 	return 0;
 err:
 	memset(out, 0, sizeof(*out));
@@ -503,7 +548,20 @@ bool upatch_is_unload(const struct upatch *u)
 
 const char *upatch_type_str(const struct upatch *u)
 {
-	return "bpf";
+	return u->hdr.type == UPATCH_TYPE_JAVA ? "java" : "bpf";
+}
+
+__u32 upatch_signed_type(const struct upatch *u)
+{
+	if (!u->map || !u->signed_type)
+		return UPATCH_TYPE_BPF;
+	return get_le32(u->signed_type);
+}
+
+const void *upatch_signed_jar(const struct upatch *u, __u32 *len)
+{
+	*len = u->map ? u->signed_jar_len : 0;
+	return u->map ? u->signed_jar : NULL;
 }
 
 bool upatch_has_decoders(const struct upatch *u)

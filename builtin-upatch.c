@@ -2167,6 +2167,18 @@ static int refuse_unload_directive(const struct signed_load *sl)
 	return 0;
 }
 
+/* Only a BPF payload has a loader for the kernel to verify and run. */
+static int refuse_foreign_payload(const struct signed_load *sl)
+{
+	if (sl->u->hdr.type == UPATCH_TYPE_BPF)
+		return 0;
+	pr_err("upatch load: %s carries a %s payload, not BPF", sl->label,
+	       upatch_type_str(sl->u));
+	rep_fail(sl->rep, "parse", "parser_rejected", 0,
+		 "not a BPF payload");
+	return 1;
+}
+
 /*
  * The pin directory, the archive and unload share the raw name. Boot
  * restore reaches here without the command-level check, so validate it
@@ -2541,7 +2553,7 @@ static int signed_load_run(struct signed_load *sl)
 	const struct upatch *u = sl->u;
 	int ret;
 
-	if (refuse_unload_directive(sl) ||
+	if (refuse_unload_directive(sl) || refuse_foreign_payload(sl) ||
 	    trust_anchor_keyring(&sl->keyring, &sl->serial, sl->rep) ||
 	    upatch_signed_name_check(sl) || upatch_payload_check(sl) ||
 	    upatch_attach_prepare(sl) || loader_map_prepare(sl) ||

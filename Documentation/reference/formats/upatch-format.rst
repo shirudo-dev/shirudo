@@ -165,7 +165,9 @@ Header
    * - 352
      - 4
      - ``type``
-     - ``1`` (``UPATCH_TYPE_BPF``).
+     - ``1`` (``UPATCH_TYPE_BPF``) or ``2`` (``UPATCH_TYPE_JAVA``), see
+       `Java payloads`_. Equal to the signed ``PTYP`` section, or 1 where
+       there is none.
    * - 356
      - 4
      - ``reserved1``
@@ -196,7 +198,8 @@ Signature
    * - Size
      - At most 16 KiB from the writer. The kernel accepts at most 64 KiB.
    * - Verifier
-     - The kernel, during ``BPF_PROG_LOAD`` of the loader, with
+     - For a Java payload, the target in userspace, see `Java payloads`_.
+       For a BPF payload, the kernel, during ``BPF_PROG_LOAD`` of the loader, with
        ``attr.keyring_id`` set to ``KEY_SPEC_BPF_KEYRING`` (the ``.bpf``
        keyring). The target passes ``data`` as the frozen value of a
        one-element array map, ``__loader.map``, made exclusive to the
@@ -311,9 +314,41 @@ Section tags
        absolute file path. Its presence opts into the shared task
        ``shirudo_task_policy`` and socket ``shirudo_sock_policy``
        bindings.
+   * - ``PTYP``
+     - ``0x50595450``
+     - 4
+     - The payload type, a little-endian ``__u32`` equal to the header
+       ``type``. Required in a Java payload, absent from a BPF one.
+   * - ``JAVA``
+     - ``0x4156414a``
+     - variable, non-zero
+     - The Java agent ``.jar``, byte for byte. Required in a Java load
+       artifact.
 
-The writer emits ``NAME``, then ``UNLD`` for an unload directive, or
-``UPGM`` and optional ``DCDB`` and ``SHPL`` sections for a load artifact.
+For a BPF payload the writer emits ``NAME``, then ``UNLD`` for an unload
+directive, or ``UPGM`` and optional ``DCDB`` and ``SHPL`` sections for a
+load artifact. For a Java payload it emits ``NAME`` and ``PTYP``, then
+``UNLD`` for an unload directive or ``JAVA`` for a load artifact.
+
+Java payloads
+~~~~~~~~~~~~~
+
+A Java payload (``type`` 2) carries a Java agent ``.jar`` instead of a BPF
+loader. It has no loader instructions and no ``metadata``, and
+``loader_insns_off``, ``log_buf_sz``, ``nr_maps``, ``nr_progs`` and
+``rodata_data_off`` are 0. Its ``data`` holds only signed sections, so the
+signature covers ``data`` alone and ``payload_sha256`` is SHA-256 of
+``data``. The kernel never sees a Java payload: the target verifies its
+signature in userspace against the certificates the sealed ``.bpf`` keyring
+was enrolled from.
+
+The header is not signed, so the signed ``PTYP`` section carries the type
+too, and the reader refuses a file whose header ``type`` differs from it. A
+BPF payload's header cannot be relabelled ``2``, since its signed sections
+carry no ``PTYP``. A Java payload cannot pass for a BPF one either: its
+``data`` has no loader, and any split of its signed bytes into a loader and
+data moves the directory away from where the trailer points, so the reader
+finds no ``NAME`` and the load refuses.
 
 UPGM section
 ~~~~~~~~~~~~
@@ -732,14 +767,16 @@ file.
 #. ``version`` equals 1.
 #. ``name`` contains a NUL.
 #. ``reserved1`` is 0.
-#. ``type`` equals 1.
-#. ``loader_insns_off`` is at least 360 and a multiple of 8,
-   ``loader_insns_len`` is a multiple of 8, and the region lies inside the
-   file.
 #. ``signature``, ``metadata`` and ``data`` each lie inside the file, and
    each non-empty one starts at or after offset 360.
-#. ``rodata_data_off`` is at most ``data_len``.
-#. ``loader_insns_len`` and ``signature_len`` are not 0.
+#. ``signature_len`` is not 0.
+#. ``type`` is 1 or 2.
+#. For ``type`` 1: ``loader_insns_off`` is at least 360 and a multiple of
+   8, ``loader_insns_len`` is a multiple of 8 and not 0, the region lies
+   inside the file, and ``rodata_data_off`` is at most ``data_len``.
+#. For ``type`` 2: ``loader_insns_off``, ``loader_insns_len``,
+   ``metadata_len``, ``log_buf_sz``, ``nr_maps``, ``nr_progs`` and
+   ``rodata_data_off`` are 0, and ``data_len`` is not.
 
 The reader then parses the signed sections. A failure here does not reject
 the file. The reader treats the whole directory as absent, so a load or an
@@ -752,14 +789,19 @@ unload later refuses for the section it lacks, and
    and the trailer.
 #. Each entry has ``reserved`` 0 and a section that ends at or before
    ``dir_off``.
-#. Each tag is ``NAME``, ``UPGM``, ``UNLD``, ``DCDB`` or ``SHPL``, and appears at most
-   once.
+#. Each tag is ``NAME``, ``UPGM``, ``UNLD``, ``DCDB``, ``SHPL``, ``PTYP``
+   or ``JAVA``, and appears at most once.
 #. ``NAME`` is 256 bytes and contains a NUL. ``UPGM`` is not empty.
-   ``UNLD`` is 32 bytes.
+   ``UNLD`` is 32 bytes. ``PTYP`` is 4 bytes. ``JAVA`` is not empty.
 #. ``DCDB`` has magic ``DCDB``, version 1, at least one entry, all entries
    inside the section, NUL-terminated strings, non-zero ``language``,
    ``api_version``, ``input_format`` and ``export_signal``, and each source
    inside the section behind the entries.
+
+Last, the reader rejects the file unless the header ``type`` equals the
+``PTYP`` value, or is 1 where the sections carry no ``PTYP``. A Java file
+whose directory is malformed is therefore rejected rather than read with
+no sections.
 
 CBMC proves these checks of the reader for every header, of a file of
 any size, and for the signed sections, decoders, policy labels and
@@ -774,10 +816,11 @@ Target admission
 ----------------
 
 A load artifact passes the reader, then these checks in order. A failure
-of checks 1 to 6 is reported as ``parser_rejected``, see
+of checks 1 to 7 is reported as ``parser_rejected``, see
 :doc:`/reference/failure-categories`.
 
 #. ``flags`` bit 0 is clear.
+#. ``type`` is 1.
 #. ``loader_insns_len`` is a multiple of 8.
 #. The header ``name`` is not empty, does not start with ``.``, contains
    only ``[A-Za-z0-9._-]`` and has at most 255 characters with each ``.``
@@ -799,7 +842,7 @@ An unload directive passes the reader, then these checks:
 #. ``flags`` bit 0 is set.
 #. ``NAME`` and ``UNLD`` sections are present and ``NAME`` equals the
    header ``name``.
-#. Load checks 2 to 5 above, then the kernel verifies the signature in
+#. Load checks 2 to 6 above, then the kernel verifies the signature in
    ``BPF_PROG_LOAD``. The target never runs the directive's loader.
 #. The ``UNLD`` value equals the ``security.bpf.shirudo.payload`` xattr of
    the loaded upatch, or no upatch of that name is pinned.

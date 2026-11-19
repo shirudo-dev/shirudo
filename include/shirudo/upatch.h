@@ -17,8 +17,10 @@
 /*
  * The PKCS#7 signature covers insns || data (the gen_loader metadata
  * blob), verified by the kernel at load time; payload_sha256 is SHA-256
- * of that same concatenation. See the kernel's Documentation/bpf/signing.rst
- * and Documentation/reference/formats/upatch-format.rst in this tree.
+ * of that same concatenation. A Java payload has no insns, and the target
+ * verifies its signature over the data against the sealed certificates.
+ * See the kernel's Documentation/bpf/signing.rst and
+ * Documentation/reference/formats/upatch-format.rst in this tree.
  */
 #define UPATCH_VERSION		1u
 #define UPATCH_HEADER_SIZE	360u
@@ -27,6 +29,7 @@
 
 enum upatch_type {
 	UPATCH_TYPE_BPF = 1,
+	UPATCH_TYPE_JAVA = 2,
 };
 
 #define UPATCH_NAME_MAX		256
@@ -70,7 +73,9 @@ BUILD_BUG_ON(sizeof(struct upatch_header) != UPATCH_HEADER_SIZE);
  * data's last 16 bytes. The loader ignores the bytes behind its own.
  * A LOAD carries its name and its attach metadata, an UNLOAD directive
  * the name of its target and the payload digest it expects, and a LOAD
- * carries decoders when its programs declare any.
+ * carries decoders when its programs declare any. A Java upatch carries
+ * its payload type, which the header's type must match, and a Java LOAD
+ * its agent .jar.
  */
 #define UPATCH_SIGNED_TRAILER_MAGIC	0x52544753u	/* "SGTR" le */
 #define UPATCH_SIGNED_VERSION		1u
@@ -82,6 +87,8 @@ enum upatch_section_tag {
 	UPATCH_SECTION_UNLOAD	= 0x444c4e55u,	/* "UNLD" le */
 	UPATCH_SECTION_DECODERS	= 0x42444344u,	/* "DCDB" le */
 	UPATCH_SECTION_POLICY_LABELS	= 0x4c504853u,	/* "SHPL" le */
+	UPATCH_SECTION_TYPE	= 0x50595450u,	/* "PTYP" le */
+	UPATCH_SECTION_JAR	= 0x4156414au,	/* "JAVA" le */
 };
 
 #define UPATCH_POLICY_LABELS_MAGIC	0x4c504853u	/* "SHPL" le */

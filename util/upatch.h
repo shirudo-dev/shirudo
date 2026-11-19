@@ -58,6 +58,9 @@ struct upatch {
 	__u32				signed_policy_labels_len;
 	__u32				signed_policy_map_idx;
 	__u32				signed_socket_policy_map_idx;
+	const __u8			*signed_type;	/* __le32 */
+	const __u8			*signed_jar;
+	__u32				signed_jar_len;
 };
 
 struct upatch_decoder_view {
@@ -134,6 +137,13 @@ const __u8 *upatch_signed_unload_payload(const struct upatch *u);
 
 const void *upatch_signed_policy_labels(const struct upatch *u,
 					__u32 *len);
+/*
+ * The payload type the signed sections carry, UPATCH_TYPE_BPF where they
+ * carry none. A file opens only when it equals the header's type.
+ */
+__u32 upatch_signed_type(const struct upatch *u);
+/* The agent .jar of a Java load, NULL where there is none. */
+const void *upatch_signed_jar(const struct upatch *u, __u32 *len);
 
 /*
  * An upatch name: [A-Za-z0-9._-]+ not starting with '.', so nothing that

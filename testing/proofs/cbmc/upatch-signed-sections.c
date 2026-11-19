@@ -30,7 +30,7 @@ static bool kept_any(const struct upatch *u)
 {
 	return u->signed_name || u->signed_attach ||
 	       u->signed_unload_payload || u->signed_policy_labels ||
-	       u->decoder_blob;
+	       u->decoder_blob || u->signed_type || u->signed_jar;
 }
 
 static void forgotten(const struct upatch *u)
@@ -39,7 +39,8 @@ static void forgotten(const struct upatch *u)
 			 !u->signed_policy_labels_len &&
 			 !u->decoder_blob_len && !u->nr_decoders &&
 			 !u->signed_policy_map_idx &&
-			 !u->signed_socket_policy_map_idx,
+			 !u->signed_socket_policy_map_idx &&
+			 !u->signed_jar_len,
 			 "no length, count or map without a section");
 }
 
@@ -90,6 +91,13 @@ void harness(void)
 			 below(&u, u.signed_unload_payload,
 			       UPATCH_PAYLOAD_HASH_LEN, dir_off),
 			 "an unload digest below the directory");
+	__CPROVER_assert(!u.signed_type ||
+			 below(&u, u.signed_type, sizeof(__le32), dir_off),
+			 "a payload type below the directory");
+	__CPROVER_assert(!u.signed_jar ||
+			 (u.signed_jar_len &&
+			  below(&u, u.signed_jar, u.signed_jar_len, dir_off)),
+			 "a jar below the directory");
 	__CPROVER_assert(!u.signed_policy_labels, "no policy labels");
 	__CPROVER_assert(!u.decoder_blob ||
 			 (u.nr_decoders &&
