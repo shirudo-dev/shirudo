@@ -19,8 +19,27 @@
 #include "proof.h"
 #include "../../../util/malloc.c"
 #include "../../../util/string.c"
+#if defined(KPROBE_OBJECTS) && LEN == 14
+static void *metadata_malloc(size_t size);
+static void *metadata_calloc(size_t nmemb, size_t size);
+static char *metadata_strndup(const char *s, size_t len);
+static void *metadata_realloc(void *ptr, size_t old_nmemb, size_t new_nmemb,
+			      size_t size);
+#define xmalloc metadata_malloc
+#define xcalloc metadata_calloc
+#define xstrndup metadata_strndup
+#endif
 #include "../../../util/upatch.c"
+#if defined(KPROBE_OBJECTS) && LEN == 14
+#undef xmalloc
+#undef xcalloc
+#undef xstrndup
+#define xreallocarray metadata_realloc
+#endif
 #include "../../../tools/shirudo-build/package.c"
+#if defined(KPROBE_OBJECTS) && LEN == 14
+#undef xreallocarray
+#endif
 
 #define TAIL		3
 #define TEXT_MAX	160
@@ -407,6 +426,155 @@ static __u32 table_len(void)
 	return len + (nr_uprobes ? 16 : 0) + (nr_kprobes ? 16 : 0);
 }
 
+#if defined(KPROBE_OBJECTS) && LEN == 14
+static void *metadata_malloc(size_t size)
+{
+	__CPROVER_assert(size == 2, "the mixed table's symbol buffer has two bytes");
+	return xmalloc(2);
+}
+
+static void *metadata_calloc(size_t nmemb, size_t size)
+{
+	if (nmemb == 2 && size == sizeof(struct prog_spec))
+		return xcalloc(2, sizeof(struct prog_spec));
+	if (nmemb == 1 && size == sizeof(__u64))
+		return xcalloc(1, sizeof(__u64));
+	__CPROVER_assert(false, "the mixed table's program and target array extents");
+	return NULL;
+}
+
+static char *metadata_strndup(const char *s, size_t len)
+{
+	char *copy;
+
+	__CPROVER_assert(len == 2 && strnlen(s, len) == 2,
+			 "the mixed table's path has two non-NUL bytes");
+	copy = xmalloc(3);
+	if (!copy)
+		return NULL;
+	copy[0] = s[0];
+	copy[1] = s[1];
+	copy[2] = '\0';
+	return copy;
+}
+
+/* A symbolic heap extent makes the mixed table exceed CI's memory cap. */
+static void *metadata_realloc(void *ptr, size_t old_nmemb, size_t new_nmemb,
+			      size_t size)
+{
+	const size_t base_len = sizeof(struct upatch_prog_metadata) +
+		NR_PROGS * sizeof(struct upatch_prog_entry);
+	const size_t grown_len = table_len();
+
+	__CPROVER_assert(old_nmemb == base_len && new_nmemb == grown_len && size == 1,
+			 "the mixed table grows to its exact extent");
+	return xreallocarray(ptr, base_len, grown_len, 1);
+}
+#endif
+
+#if (defined(KPROBE_OBJECTS) && LEN == 14) || defined(XDP_OBJECTS)
+/*
+ * Re-store only a value proved equal, so the reader's attach branches and
+ * allocation sizes depend on constants rather than reads of heap bytes.
+ */
+static void constant_u32(void *field, __u32 value)
+{
+	__le32 encoded = cpu_to_le32(value);
+
+	__CPROVER_assert(get_le32(field) == value, "the writer's structural field");
+	memcpy(field, &encoded, sizeof(encoded));
+}
+
+static __u8 *constant_uprobe_block(__u8 *cursor, __u32 nr_targets)
+{
+	struct upatch_uprobe_targets header;
+	__u32 i;
+
+	memcpy(&header, cursor, sizeof(header));
+	constant_u32(&header.magic, UPATCH_UPROBE_TARGET_MAGIC);
+	constant_u32(&header.version, UPATCH_UPROBE_TARGET_VERSION);
+	constant_u32(&header.nr_targets, nr_targets);
+	constant_u32(&header.reserved, 0);
+	memcpy(cursor, &header, sizeof(header));
+	cursor += sizeof(header);
+	for (i = 0; i < NR_PROGS; i++) {
+		const struct shape *shape = &objects[LEN].progs[i];
+		struct upatch_uprobe_target record;
+		__u32 nr_offsets;
+
+		if (!kind_has_uprobe_target(shape->kind))
+			continue;
+		nr_offsets = kind_is_uprobe_multi(shape->kind) ? NR_OFFSETS : 1;
+		memcpy(&record, cursor, sizeof(record));
+		constant_u32(&record.prog_idx, i);
+		constant_u32(&record.path_len, strlen(UPROBE_PATH));
+		constant_u32(&record.build_id_len, shape->build_id_len);
+		constant_u32(&record.nr_offsets, nr_offsets);
+		memcpy(cursor, &record, sizeof(record));
+		cursor += sizeof(record) + strlen(UPROBE_PATH) +
+			  shape->build_id_len + nr_offsets * sizeof(__le64);
+	}
+	return cursor;
+}
+
+static __u8 *constant_kprobe_block(__u8 *cursor, __u32 nr_targets)
+{
+	struct upatch_kprobe_targets header;
+	__u32 i;
+
+	memcpy(&header, cursor, sizeof(header));
+	constant_u32(&header.magic, UPATCH_KPROBE_TARGET_MAGIC);
+	constant_u32(&header.version, UPATCH_KPROBE_TARGET_VERSION);
+	constant_u32(&header.nr_targets, nr_targets);
+	constant_u32(&header.reserved, 0);
+	memcpy(cursor, &header, sizeof(header));
+	cursor += sizeof(header);
+	for (i = 0; i < NR_PROGS; i++) {
+		const struct shape *shape = &objects[LEN].progs[i];
+		struct upatch_kprobe_target record;
+		__u32 syms_len;
+
+		if (!kind_is_kprobe_multi(shape->kind))
+			continue;
+		syms_len = strlen(shape->syms) + 1;
+		memcpy(&record, cursor, sizeof(record));
+		constant_u32(&record.prog_idx, i);
+		constant_u32(&record.nr_syms, strchr(shape->syms, ',') ? 2 : 1);
+		constant_u32(&record.syms_len, syms_len);
+		memcpy(cursor, &record, sizeof(record));
+		cursor += sizeof(record) + syms_len;
+	}
+	return cursor;
+}
+
+static void constant_metadata(void *metadata, __u32 nr_maps, __u32 len)
+{
+	struct upatch_prog_metadata *md = metadata;
+	__u8 *cursor = (__u8 *)metadata + sizeof(*md) +
+		NR_PROGS * sizeof(struct upatch_prog_entry);
+	__u32 nr_uprobes = 0, nr_kprobes = 0, i;
+
+	constant_u32(&md->magic, UPATCH_PROG_MAGIC);
+	constant_u32(&md->version, UPATCH_PROG_VERSION);
+	constant_u32(&md->nr_progs, NR_PROGS);
+	constant_u32(&md->nr_maps, nr_maps);
+	for (i = 0; i < NR_PROGS; i++) {
+		const struct shape *shape = &objects[LEN].progs[i];
+
+		constant_u32(&md->progs[i].role, shape->role);
+		constant_u32(&md->progs[i].kind, shape->kind);
+		nr_uprobes += kind_has_uprobe_target(shape->kind);
+		nr_kprobes += kind_is_kprobe_multi(shape->kind);
+	}
+	if (nr_uprobes)
+		cursor = constant_uprobe_block(cursor, nr_uprobes);
+	if (nr_kprobes)
+		cursor = constant_kprobe_block(cursor, nr_kprobes);
+	__CPROVER_assert(cursor == (__u8 *)metadata + len, "the blocks fill the metadata");
+}
+
+#endif
+
 static void uprobe_target(const struct prog_spec *s,
 			  const struct shape *shape, __u32 nth)
 {
@@ -518,6 +686,9 @@ void harness(void)
 			 "a table of the length the format gives");
 	/* As just shown, so that CBMC takes both for the constants they are. */
 	__CPROVER_assume(md && len == table_len());
+#if (defined(KPROBE_OBJECTS) && LEN == 14) || defined(XDP_OBJECTS)
+	constant_metadata(md, nr_maps, len);
+#endif
 	ret = prog_specs_parse(md, len, nr_maps, NR_PROGS, &specs);
 	__CPROVER_assert(!ret, "the reader takes what the writer wrote");
 	if (ret)

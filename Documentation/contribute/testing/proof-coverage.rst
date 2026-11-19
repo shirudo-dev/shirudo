@@ -670,7 +670,13 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
        given twice and an empty name among them
      - The symbol and offset read back are the section's, and a list's
        names its own, sorted; a uprobe and a list in one object both read
-       back; what the reader refuses, or would cut short, is refused
+       back; what the reader refuses, or would cut short, is refused.
+       The mixed table's fixed structural fields are asserted and stored
+       again as equal constants before the reader runs. The mixed table's
+       growth request is asserted to match its exact base and final
+       lengths before calling the original allocator with those extents.
+       Its reader's allocation extents and two-byte, non-NUL path are
+       asserted before equivalent fixed-size allocations and path copying
    * - ``upatch-writer-xdp``
      - The XDP entries of ``build_prog_metadata()``
      - ``xdp/`` with a first digit of 0 to 4, 8 or 9 and any 3 bytes
@@ -678,7 +684,9 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
        with 1
      - The device classes read back are the decimal mask of the section;
        a mask the reader refuses, and a class two programs select, are
-       refused
+       refused. The writer's fixed structural fields are asserted and
+       stored again as equal constants before the reader runs; target
+       block parser loops are unreachable
    * - ``upatch-writer-uprobes``
      - The uprobe target block of ``build_prog_metadata()``
      - 22 objects from a table: each uprobe section form at the path
