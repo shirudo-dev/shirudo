@@ -1,0 +1,97 @@
+#!/bin/sh
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+#
+# jobs/enroll-put -- enroll the attestation keys a builder created in
+# TPMs: record each key's binding in shirudo.enrollments and raise its
+# trust in shirudo.nodes to enrolled.
+#
+#   jobs/enroll-put [--check] <bindings.json>|-
+#
+# The file names the builder and, per key, its ak_name, and the ek_name
+# and node_id the builder gave it, each optional. A key is bound once: a
+# binding the backend already holds is enrolled again, which changes
+# nothing, and one that differs from it refuses the file. The node_id
+# names the node in shirudo.nodes until the operator renames it.
+# --check reads and checks the file against the bindings loaded, and
+# loads nothing.
+#
+#   CLICKHOUSE_CLIENT  the client command and its options, split at
+#                      spaces. Default: clickhouse-client, which reads
+#                      CLICKHOUSE_HOST, CLICKHOUSE_USER and
+#                      CLICKHOUSE_PASSWORD itself.
+#
+# Exit status: 0 when every binding is loaded, or checked with --check;
+# 1 when the file is refused or the load fails; 2 for wrong usage.
+
+set -eu
+
+here=$(cd "$(dirname "$0")" && pwd)
+check=0
+work=
+columns='ak_name String, ek_name String, node_id String, source String, new UInt8'
+
+die()
+{
+	printf 'enroll-put: %s\n' "$1" >&2
+	exit 1
+}
+
+usage()
+{
+	printf '%s\n' 'usage: enroll-put [--check] <bindings.json>|-' >&2
+	exit 2
+}
+
+cleanup()
+{
+	[ -z "$work" ] || rm -rf "$work"
+}
+
+client()
+{
+	# shellcheck disable=SC2086 # a command with its options, to be split
+	${CLICKHOUSE_CLIENT:-clickhouse-client} "$@"
+}
+
+[ "${1:-}" = --check ] && { check=1; shift; }
+[ $# -eq 1 ] || usage
+case "$1" in
+-) ;;
+-*) usage ;;
+esac
+
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+work=$(mktemp -d)
+if [ "$1" = - ]; then
+	cat >"$work/bindings.json"
+else
+	cp "$1" "$work/bindings.json" 2>/dev/null || die "cannot read $1, nothing loaded"
+fi
+
+client --query 'SELECT ak_name, ek_name, node_id FROM shirudo.enrollments FINAL
+	FORMAT JSONEachRow' </dev/null >"$work/enrolled.jsonl" ||
+	die 'cannot read shirudo.enrollments, nothing loaded'
+python3 "$here/enroll-rows.py" "$work/bindings.json" "$work/enrolled.jsonl" \
+	"$work/rows.jsonl" >"$work/summary" || exit 1
+[ "$check" -eq 0 ] || { cat "$work/summary"; exit 0; }
+
+# nodes first: its rows can go in again unchanged, so a load stopped
+# before the bindings is finished by the next. A binding's node_id sorts
+# after epoch 0, where the operator's rename goes, and before any host
+# name a record claims.
+if [ -s "$work/rows.jsonl" ]; then
+	client --query "INSERT INTO shirudo.nodes (ak_name, node_id, trust)
+		SELECT ak_name, argMinStateIf(node_id, toDateTime64(0.001, 3), node_id != ''),
+			'enrolled'
+		FROM input('$columns') GROUP BY ak_name FORMAT JSONEachRow" \
+		<"$work/rows.jsonl" || die 'cannot insert into shirudo.nodes, nothing loaded'
+	client --query "INSERT INTO shirudo.enrollments (ak_name, ek_name, node_id, source)
+		SELECT ak_name, ek_name, node_id, source
+		FROM input('$columns') WHERE new FORMAT JSONEachRow" \
+		<"$work/rows.jsonl" ||
+		die 'the keys are enrolled, but their bindings are not recorded; run it again'
+fi
+cat "$work/summary"
+printf 'enroll-put: loaded bindings: %d\n' "$(wc -l <"$work/rows.jsonl")"

@@ -43,7 +43,8 @@ created the TPM's keys, raise it:
 
    INSERT INTO shirudo.nodes (ak_name, trust) VALUES ('<ak_name>', 'enrolled');
 
-The row may come before the node's first record, as it does when a
+A builder's records go in with :doc:`enroll-put`, which does the same for
+each key, names its node and keeps the binding. The row may come before the node's first record, as it does when a
 builder hands you the name before the node boots. It changes nothing
 but ``trust``, and no row lowers it again: a key that is no longer
 trusted, such as one whose TPM was replaced, shows up under a new

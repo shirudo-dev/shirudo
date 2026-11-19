@@ -340,14 +340,15 @@ one QEMU's or libvirt's swtpm will use.
 7. Record both names for this target in your inventory. Take them from
    the builder, never from the target.
 
-8. If you run the keepalive backend, mark the key as enrolled. The row
-   can go in before the target first boots; its first keepalive joins
-   it:
+8. If you run the keepalive backend, enroll the key from the builder's
+   names with :doc:`/operate/backend/enroll-put`, which also names the
+   node and keeps the binding. It can run before the target first boots;
+   its first keepalive joins it:
 
    .. code-block:: console
 
-      operator$ clickhouse-client --query "INSERT INTO shirudo.nodes \
-          (ak_name, trust) VALUES ('<ak-name>', 'enrolled')"
+      operator$ printf '{"source": "%s", "nodes": [{"ak_name": "%s", "ek_name": "%s", "node_id": "%s"}]}' \
+          <builder> <ak-name> <ek-name> <node-id> | tools/backend/jobs/enroll-put -
 
 9. Verify every evidence document with the recorded names, as
    `Verify evidence`_ shows. There is no credential to expect:

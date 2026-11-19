@@ -4,6 +4,7 @@ shirudo	boot_first_keep_mv	MaterializedView
 shirudo	boot_first_mv	MaterializedView	
 shirudo	checked	Null	
 shirudo	checked_mv	MaterializedView	
+shirudo	enrollments	ReplacingMergeTree	ak_name
 shirudo	expected_builds	ReplacingMergeTree	version_id
 shirudo	history_conflicts	View	
 shirudo	history_contradictions	MergeTree	ak_name, tree_id

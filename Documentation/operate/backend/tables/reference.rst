@@ -10,8 +10,9 @@ Reference
 
 What the checks compare a record against, and what the operator says of a
 node. nodes fills itself from accepted records; tree-ingest loads the tree
-tables; labels-put loads label_sets; the operator writes builds, manual
-fixes and settings.
+tables; labels-put loads label_sets; enroll-put loads enrollments and
+raises trust in nodes; the operator writes builds, manual fixes and
+settings.
 
 Schema: :src:`tools/backend/sql/20-reference.sql`
 
@@ -36,6 +37,13 @@ Views, functions and jobs
    Checks a file of label sets and loads it into label_sets in one insert,
    all or nothing, each row with one put_at later than any before.
 
+``jobs/enroll-put``
+   external job.
+
+   Checks a builder's file of key bindings against enrollments, raises
+   each key's trust in nodes to enrolled and names its node there, then
+   records the new bindings in enrollments. A key is bound once.
+
 shirudo.nodes
 -------------
 
@@ -58,7 +66,9 @@ shirudo.nodes
      they don't change.
    - trust only ever rises. The operator inserts (ak_name, 'enrolled') once
      credential activation or a builder's records show the key is a TPM's,
-     before or after the node's first record. It is shown but never part
+     before or after the node's first record; jobs/enroll-put does it from
+     a builder's records, with the node_id it gave at
+     toDateTime64(0.001, 3), which a rename at epoch 0 still beats. It is shown but never part
      of status.
 
    :ak_name: Node identity.
@@ -230,3 +240,27 @@ shirudo.label_sets
    :node: The node_id, ak_name or config_root.
    :labels: The whole set, key to value.
    :put_at: When labels-put loaded it; the version ReplacingMergeTree keeps the newest of.
+
+shirudo.enrollments
+-------------------
+
+.. clickhouse-table:: shirudo.enrollments
+   :kind: ref
+   :written-by: jobs/enroll-put
+   :row-size: ~250 B (estimate: two TPM names, a node_id and a source).
+   :scale: Every key a builder enrolled. No TTL.
+   :reference: 10,000 rows ≈ 2.5 MB
+   :bytes: 2.5e+06
+
+   The attestation keys a builder created in a TPM, as it recorded them:
+   what enrolled each key, where nodes only keeps that it is.
+
+   - Read with FINAL. A key's binding is written once; enroll-put refuses
+     another.
+   - The row may come before the node's first record.
+
+   :ak_name: The attestation key's name.
+   :ek_name: The endorsement key's name the builder saw beside it, empty when it gave none. Nothing checks against it; attest verify --ek-name does.
+   :node_id: The name the builder gave the node, empty when it gave none.
+   :source: The builder, as the file named it.
+   :put_at: When enroll-put loaded it.

@@ -1,0 +1,40 @@
+enroll-put: 000baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa (ek_name 000beeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee, node_id edge-01): enrolled
+enroll-put: 000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb (ek_name none, node_id none): enrolled
+enroll-put: loaded bindings: 2
+first put: status 0
+enroll-put: 000baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa (ek_name 000beeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee, node_id edge-01): already enrolled
+enroll-put: 000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb (ek_name none, node_id none): already enrolled
+enroll-put: loaded bindings: 2
+again: status 0
+enroll-put: 000baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa is enrolled with ek_name 000beeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee, node_id edge-01, not ek_name 000beeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee, node_id edge-09, nothing loaded
+rebound: status 1
+enroll-put: 000bcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc (ek_name none, node_id none): enrolled
+check: status 0
+enroll-put: the file is not a JSON value, nothing loaded
+not json: status 1
+enroll-put: the file is not an object whose keys are "source" and "nodes", nothing loaded
+no source: status 1
+enroll-put: source is not 1 to 255 characters with no control character, nothing loaded
+source empty: status 1
+enroll-put: binding 1 has no ak_name, nothing loaded
+no ak: status 1
+enroll-put: binding 1: ak_name is not 000b and 64 lowercase hex digits, nothing loaded
+short ak: status 1
+enroll-put: binding 1: ak_name is not 000b and 64 lowercase hex digits, nothing loaded
+upper ak: status 1
+enroll-put: binding 1: ek_name is not 000b and 64 lowercase hex digits, nothing loaded
+bad ek: status 1
+enroll-put: binding 1 has the key "trust", which is not ak_name, ek_name or node_id, nothing loaded
+unknown key: status 1
+enroll-put: 000bcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc is bound twice, nothing loaded
+bound twice: status 1
+enroll-put: binding 1: node_id is not 1 to 255 characters with no control character, nothing loaded
+control in node_id: status 1
+enroll-put: cannot read none.json, nothing loaded
+no file: status 1
+usage: enroll-put [--check] <bindings.json>|-
+no argument: status 2
+aaaa	edge-01	enrolled	2026-11-01 10:00:00.000
+bbbb	core-01	enrolled	\N
+aaaa	eeee	edge-01	vm-host-1
+bbbb			vm-host-1

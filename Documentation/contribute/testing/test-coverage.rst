@@ -950,7 +950,9 @@ ingest job on a single publication and on a walk over sealed segments,
 the SBOM scan job on a store that holds an image in every state, the
 SBOM put job into a ``file://`` and an ``s3://`` store, again and with
 another SBOM, and what it refuses (``test/sbom-put``), the label put job
-and the labels each node reads from it (``test/labels-put``), and the queries
+and the labels each node reads from it (``test/labels-put``), the
+enroll put job, a key bound once and what it refuses
+(``test/enroll-put``), and the queries
 of :src:`tools/xtop/sql/`, with the names and types of their columns,
 over nodes healthy, unhealthy, stale and without a tree or an image, a
 tree with one upatch deployed and one still rolling out, and the

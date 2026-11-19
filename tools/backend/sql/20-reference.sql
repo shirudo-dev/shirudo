@@ -148,3 +148,19 @@ INSERT INTO shirudo.settings (stale_seconds, stuck_seconds, window, keepalive_re
                               boot_first_retention_seconds, sbom_stale_seconds)
 SELECT 600, 3600, 512, 3600, 2592000, 172800
 WHERE (SELECT count() FROM shirudo.settings) = 0;
+
+-- The attestation keys a builder created in a TPM, as jobs/enroll-put
+-- loads its records: the key's name, the endorsement key's name the
+-- builder saw beside it, and the node_id it gave the node, empty when it
+-- gave none. A key's binding is written once; the job raises the key's
+-- trust in shirudo.nodes to enrolled and names its node there.
+CREATE TABLE IF NOT EXISTS shirudo.enrollments
+(
+    ak_name String,
+    ek_name String,
+    node_id String,
+    source String,
+    put_at DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(put_at)
+ORDER BY ak_name;
