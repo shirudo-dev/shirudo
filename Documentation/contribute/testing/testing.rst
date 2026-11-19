@@ -297,6 +297,14 @@ installs no signal handler, so it reports nothing today; the ``TSan``
 leg of the ``Sanitizers`` workflow runs it with clang so that the first
 one added is checked.
 
+These three CI jobs install dependencies with
+:src:`.github/scripts/sanitizer-deps.sh` inside a disposable LVH guest.
+The script replaces the image's apt sources with the Debian sid snapshot
+``20261119T120000Z`` so an incomplete distribution transition cannot
+break the install. It disables the snapshot's expiry check and keeps
+signature verification. Refresh the snapshot deliberately when updating
+the toolchain; the jobs do not receive package updates automatically.
+
 Run under MemorySanitizer
 -------------------------
 

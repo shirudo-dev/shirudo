@@ -71,25 +71,7 @@ jobs:
             }
             cd /host
 
-            apt-get update
-            apt-get install -y --no-install-recommends \
-              build-essential \
-              ca-certificates \
-              coccinelle \
-              cryptsetup-bin \
-              e2fsprogs \
-              curl \
-              git \
-              pkg-config \
-              python3 \
-              libcurl4-openssl-dev \
-              libelf-dev \
-              libluajit-5.1-dev \
-              libpython3-dev \
-              libtpms-dev \
-              libtss2-dev \
-              zlib1g-dev
-            sh .github/scripts/install-clang.sh libclang-rt-23-dev
+            sh .github/scripts/sanitizer-deps.sh
 
             git config --global --add safe.directory /host
             sh .github/scripts/check-style.sh --types >/dev/null ||
