@@ -24,6 +24,7 @@
 #include "util/chain.h"
 #include "util/crypto.h"
 #include "util/config_measure.h"
+#include "util/eventlog.h"
 #include "util/image_runtime.h"
 #include "util/help.h"
 #include "util/hex.h"
@@ -97,7 +98,7 @@ static const struct opt_spec verify_opts[] = {
 		"a certificate the target enrols (repeatable)" },
 	[VERIFY_UPATCH] = { "--upatch", 0, OPT_REPEAT, "<file>",
 		"an installed artifact (repeatable)" },
-	[VERIFY_EXPECT] = { "--expect", 0, OPT_REPEAT, "<name>=<hex>",
+	[VERIFY_EXPECT] = { "--expect", 0, OPT_REPEAT, "[java:]<name>=<hex>",
 		"an installed upatch by name and payload digest" },
 	[VERIFY_TREE_ROOT] = { "--tree-root", 0, 0, "<hex>",
 		"the upatch tree projection root at boot" },
@@ -165,12 +166,13 @@ static const struct opt_spec predict_opts[] = {
 		"a certificate the target enrols (repeatable)" },
 	[PREDICT_UPATCH] = { "--upatch", 0, OPT_REPEAT, "<file>",
 		"an installed artifact (repeatable)" },
-	[PREDICT_EXPECT] = { "--expect", 0, OPT_REPEAT, "<name>=<hex>",
+	[PREDICT_EXPECT] = { "--expect", 0, OPT_REPEAT, "[java:]<name>=<hex>",
 		"an installed upatch by name and payload digest" },
 	[PREDICT_TREE_ROOT] = { "--tree-root", 0, 0, "<hex>",
 		"the upatch tree projection root at boot" },
 	[PREDICT_EVENT] = { "--event", 0, OPT_REPEAT, "<kind>:<name>=<hex>",
-		"a load, unload, tree:<seq> or revoke:<fingerprint> event after boot" },
+		"a load, unload, java-load, java-unload, tree:<seq> or "
+		"revoke:<fingerprint> event after boot" },
 	[PREDICT_BIND_PCR] = { "--bind-pcr", 0, OPT_REPEAT, "<n>=<hex>",
 		"PCR 9 and 11 values at binding, for the register name" },
 	[PREDICT_JSON] = { "--json", 0, 0, NULL,
@@ -235,7 +237,7 @@ static int member_add_file(struct members *m, const char *path)
 	measured_upatch_of(&e, &u);
 	upatch_close(&u);
 	ret = measured_set_add(m->set, &m->n, ATTEST_MEMBERS_MAX, e.name,
-			       e.payload_hex);
+			       e.payload_hex, e.type);
 	if (ret)
 		pr_err("attest: --upatch %s: %s", path,
 		       ret == -EEXIST ? "a second upatch of that name" :
@@ -243,18 +245,23 @@ static int member_add_file(struct members *m, const char *path)
 	return ret;
 }
 
+/* name=<hex> for a BPF upatch, java:name=<hex> for a Java one. */
 static int member_add_spec(struct members *m, const char *spec)
 {
-	char name[UPATCH_NAME_MAX + 1];
 	char hex[2 * UPATCH_PAYLOAD_HASH_LEN + 1];
 	__u8 payload[UPATCH_PAYLOAD_HASH_LEN];
+	char name[UPATCH_NAME_MAX + 1];
+	const char *rest = spec;
+	bool java;
 	int ret;
 
-	ret = attest_parse_name_digest(spec, name, payload);
+	java = str_skip_prefix(&rest, "java:");
+	ret = attest_parse_name_digest(rest, name, payload);
 	if (!ret) {
 		hex_encode(payload, sizeof(payload), hex);
 		ret = measured_set_add(m->set, &m->n, ATTEST_MEMBERS_MAX, name,
-				       hex);
+				       hex, java ? UPATCH_TYPE_JAVA :
+				       UPATCH_TYPE_BPF);
 	}
 	if (ret)
 		pr_err("attest: --expect '%s': %s", spec,
@@ -287,15 +294,15 @@ static int apply_event(const char *spec, __u8 chain[32])
 	char name[UPATCH_NAME_MAX + 1];
 	__u8 digest[32], event[32];
 	size_t kind_len;
+	__u32 type;
+	bool load;
 
 	if (!colon || attest_parse_name_digest(colon + 1, name, digest))
 		return -EINVAL;
 	kind_len = (size_t)(colon - spec);
-	if (span_equals(spec, kind_len, "load")) {
-		if (chain_upatch_event("shirudo-upatch", name, digest, event))
-			return -EIO;
-	} else if (span_equals(spec, kind_len, "unload")) {
-		if (chain_upatch_event("shirudo-unload", name, digest, event))
+	if (eventlog_upatch_kind_parse(spec, kind_len, &type, &load)) {
+		if (chain_upatch_event(chain_upatch_tag(type, load), name,
+				       digest, event))
 			return -EIO;
 	} else if (span_equals(spec, kind_len, "tree")) {
 		__s64 seq;

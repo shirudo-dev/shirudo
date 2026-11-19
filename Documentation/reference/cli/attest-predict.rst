@@ -21,7 +21,7 @@ Usage
 .. code-block:: none
 
    shirudo attest predict --cert=<certificate>... [--upatch=<file>]...
-                          [--expect=<name>=<digest>]... [--tree-root=<digest>]
+                          [--expect=[java:]<name>=<digest>]... [--tree-root=<digest>]
                           [--event=<event>]...
                           [--bind-pcr=9=<value> --bind-pcr=11=<value>
                            --writer-public=<modulus>] [--json]
@@ -65,6 +65,11 @@ Events
    * - ``unload:<name>=<payload-sha256>``
      - ``upatch unload`` of ``<name>``, with the digest the directive
        names
+   * - ``java-load:<name>=<payload-sha256>``
+     - ``upatch load`` of the Java upatch ``<name>``
+   * - ``java-unload:<name>=<payload-sha256>``
+     - ``upatch unload`` of the Java upatch ``<name>``, with the digest
+       the directive names
    * - ``tree:<sequence>=<operation-digest>``
      - an operation ``bpm tree sync`` applied
    * - ``revoke:<label>=<certificate-sha256>``
@@ -114,10 +119,11 @@ Options
      - An artifact archived on the target at boot. Repeatable, each
        upatch name once across ``--upatch`` and ``--expect``.
    * - ``--expect``
-     - ``<name>=<digest>``
-     - An archived upatch by name and payload digest. Repeatable. The
-       name is one a upatch can have, see
-       :doc:`/concepts/upatches-and-packages`, and comes once.
+     - ``[java:]<name>=<digest>``
+     - An archived upatch by name and payload digest, ``java:`` before
+       the name for a Java upatch. Repeatable. The name is one a upatch
+       can have, see :doc:`/concepts/upatches-and-packages`, and comes
+       once.
    * - ``--tree-root``
      - ``<digest>``, 64 hex characters
      - The upatch tree projection root at boot. Default: all zero.

@@ -526,7 +526,9 @@ static bool record_word(const char *s)
 static int on_record(void *ctx)
 {
 	struct parse *p = ctx;
+	__u32 payload_type;
 	struct record *r;
+	bool load;
 
 	if (p->n_recs >= RECORDS_MAX)
 		return -E2BIG;
@@ -582,18 +584,16 @@ static int on_record(void *ctx)
 		memset(r, 0, sizeof(*r));
 		strscpy(r->type, "init", sizeof(r->type));
 		memcpy(r->digest, in->digest, 32);
-	} else if (!strcmp(p->type, "upatch_load") ||
-		   !strcmp(p->type, "upatch_unload")) {
-		bool load = p->type[7] == 'l';
+	} else if (eventlog_upatch_record_parse(p->type, &payload_type,
+						&load)) {
 		__u8 payload[32], event[32];
 
 		if (!upatch_name_valid(p->upatch_name))
 			return -EINVAL;
 		strscpy(r->label, p->upatch_name, sizeof(r->label));
 		if (!hex_decode(p->upatch_payload_hex, payload, 32) &&
-		    !chain_upatch_event(load ? "shirudo-upatch" :
-					"shirudo-unload", p->upatch_name,
-					payload, event))
+		    !chain_upatch_event(chain_upatch_tag(payload_type, load),
+					p->upatch_name, payload, event))
 			r->derived = !memneq_explicit(event, r->digest, 32);
 	} else if (!strcmp(p->type, "tree_op")) {
 		__u8 operation[32], event[32];

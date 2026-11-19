@@ -245,6 +245,13 @@ the formulas, ``\0`` is the NUL that ends the tag.
    * - ``upatch_unload``
      - ``SHA256("shirudo-unload\0" || payload_sha256 || name)``
      - ``upatch unload``, ``bpm`` removals, revocation purges
+   * - ``java_load``
+     - ``SHA256("shirudo-java\0" || payload_sha256 || name)``
+     - ``upatch load`` and ``bpm`` installs of a Java upatch
+   * - ``java_unload``
+     - ``SHA256("shirudo-java-unload\0" || payload_sha256 || name)``
+     - ``upatch unload``, ``bpm`` removals and revocation purges of a
+       Java upatch
    * - ``tree_op``
      - ``SHA256("shirudo-tree\0" || seq || operation_digest)``, ``seq``
        as eight big-endian bytes
@@ -257,7 +264,9 @@ the formulas, ``\0`` is the NUL that ends the tag.
 the SHA-256 of the certificate's DER when the set has one member, else
 the SHA-256 over the members' DER digests in sorted order.
 ``set_digest`` is the SHA-256 of one line ``<payload_sha256 hex>
-<name>\n`` per restored upatch, sorted by name. ``tree_root`` is the
+<name>\n`` per restored upatch, sorted by name, a Java upatch's line
+prefixed with ``java ``. A payload digest is hex alone, so a Java member
+never lists like a BPF one. ``tree_root`` is the
 upatch tree's projection root at boot, or 32 zero bytes without a tree.
 
 Boot restore is one event however many upatches it restores, and the
@@ -268,8 +277,8 @@ purges follows as an ``upatch_unload`` with the reason ``key_revoke``.
 Revocations a config carries at boot are not individual events; the
 ``init`` event's trust set reflects them.
 
-Lean 4 proves that these encodings tell every two events apart, for
-upatch names of every length ``upatch_name_valid()`` takes, load and
+Lean 4 proves that these encodings tell every two events apart, a Java
+event from a BPF one included, for upatch names of every length ``upatch_name_valid()`` takes, load and
 unload names of 1 to 256 bytes as ``attest predict`` takes them, and
 every sequence number, and that the ``init`` listing spells one set of
 distinct names whatever order ``qsort()`` leaves. With the register's

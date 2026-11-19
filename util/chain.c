@@ -49,6 +49,15 @@ out:
 	return ret;
 }
 
+/*
+ * A payload digest is hex alone, so the prefix cannot be read as part of
+ * one: a Java member and a BPF member never list alike.
+ */
+static const char *member_prefix(const struct measured_upatch *m)
+{
+	return m->type == UPATCH_TYPE_JAVA ? "java " : "";
+}
+
 static int member_cmp(const void *a, const void *b)
 {
 	return strcmp(((const struct measured_upatch *)a)->name,
@@ -65,11 +74,12 @@ int chain_init_event(const __u8 cert_sha[32],
 	char *listing;
 	int ret;
 
-	/* set_digest = SHA256(sorted "<payload_hex> <name>\n" listing) */
+	/* set_digest = SHA256(sorted "[java ]<payload_hex> <name>\n" listing) */
 	if (n > 1)
 		qsort(set, n, sizeof(*set), member_cmp);
 	for (i = 0; i < n; i++)
-		listing_len += strlen(set[i].payload_hex) + 1 +
+		listing_len += strlen(member_prefix(&set[i])) +
+			       strlen(set[i].payload_hex) + 1 +
 			       strlen(set[i].name) + 1;
 	memset(set_digest, 0, 32);
 	memset(event, 0, 32);
@@ -78,7 +88,8 @@ int chain_init_event(const __u8 cert_sha[32],
 		return -ENOMEM;
 	for (i = 0; i < n; i++) {
 		int w = strsprintf(listing + off, listing_len + 1 - off,
-				   "%s %s\n", set[i].payload_hex, set[i].name);
+				   "%s%s %s\n", member_prefix(&set[i]),
+				   set[i].payload_hex, set[i].name);
 
 		if (w < 0) {
 			xfree(listing, listing_len + 1);
@@ -98,10 +109,22 @@ int chain_init_event(const __u8 cert_sha[32],
 	return sha256_buffer(tag, taglen + 96, event);
 }
 
+const char *chain_upatch_tag(__u32 type, bool load)
+{
+	switch (type) {
+	case UPATCH_TYPE_BPF:
+		return load ? "shirudo-upatch" : "shirudo-unload";
+	case UPATCH_TYPE_JAVA:
+		return load ? "shirudo-java" : "shirudo-java-unload";
+	default:
+		return NULL;
+	}
+}
+
 int chain_upatch_event(const char *tag, const char *name,
 		       const __u8 payload[32], __u8 event[32])
 {
-	__u8 buf[sizeof("shirudo-unload") + 32 + UPATCH_NAME_MAX];
+	__u8 buf[sizeof("shirudo-java-unload") + 32 + UPATCH_NAME_MAX];
 	size_t taglen = strlen(tag) + 1, off = 0;
 	size_t namelen = strnlen(name, UPATCH_NAME_MAX);
 

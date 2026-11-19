@@ -23,7 +23,7 @@ Usage
                          [--ak-name=<name>] [--ek-name=<name>]
                          [--expect-credential=<credential>]
                          [--cert=<certificate>]... [--upatch=<file>]...
-                         [--expect=<name>=<digest>]... [--tree-root=<digest>]
+                         [--expect=[java:]<name>=<digest>]... [--tree-root=<digest>]
                          [--expect-chain=<register>] [--allow-runtime-events]
                          [--expect-config-root=<root> --expect-config-pcr=<pcr>]
                          [--expect-pcr=<pcr>=<value>]...
@@ -106,11 +106,11 @@ Options
        upatch name once across ``--upatch`` and ``--expect``. Needs
        ``--cert``.
    * - ``--expect``
-     - ``<name>=<digest>``
-     - An archived upatch by name and payload digest. Repeatable. The
-       name is one a upatch can have, see
-       :doc:`/concepts/upatches-and-packages`, and comes once. Needs
-       ``--cert``.
+     - ``[java:]<name>=<digest>``
+     - An archived upatch by name and payload digest, ``java:`` before
+       the name for a Java upatch. Repeatable. The name is one a upatch
+       can have, see :doc:`/concepts/upatches-and-packages`, and comes
+       once. Needs ``--cert``.
    * - ``--tree-root``
      - ``<digest>``, 64 hex characters
      - The upatch tree projection root at boot. Needs ``--cert``.

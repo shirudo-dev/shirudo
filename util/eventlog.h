@@ -92,6 +92,26 @@ enum eventlog_upatch_event {
 };
 
 /*
+ * The record type of an upatch load or unload of a payload of type:
+ * "upatch_load" and "upatch_unload" for BPF, "java_load" and
+ * "java_unload" for Java. NULL for a type with none.
+ */
+const char *eventlog_upatch_record(__u32 type, bool load);
+/*
+ * Whether record is one eventlog_upatch_record() gives, and if so the
+ * payload type and direction it records.
+ */
+bool eventlog_upatch_record_parse(const char *record, __u32 *type,
+				  bool *load);
+/*
+ * As eventlog_upatch_record_parse(), for the len bytes at kind that
+ * attest predict --event spells the record with: "load", "unload",
+ * "java-load" or "java-unload".
+ */
+bool eventlog_upatch_kind_parse(const char *kind, size_t len, __u32 *type,
+				bool *load);
+
+/*
  * The loads and unloads the records measure, in order: this boot's, or
  * every boot's since the log began. An init record gives
  * EVENTLOG_UPATCH_INIT with no name, which starts the set over, then

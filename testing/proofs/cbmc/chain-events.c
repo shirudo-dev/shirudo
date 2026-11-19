@@ -23,7 +23,7 @@
 #pragma CPROVER check pop
 
 /* The longest string an event hashes: a upatch of a 256-byte name. */
-#define HASHED_MAX	(sizeof("shirudo-unload") + 32 + UPATCH_NAME_MAX)
+#define HASHED_MAX	(sizeof("shirudo-java-unload") + 32 + UPATCH_NAME_MAX)
 
 /* What the last hash was given and gave, and the one before it. */
 static __u8 hashed[HASHED_MAX];
@@ -176,6 +176,20 @@ static void upatch_event(const char *tag)
 	check_result(ret, 1, event);
 }
 
+/* The tag each payload type and direction takes, as the model names it. */
+static void upatch_tags(void)
+{
+	__CPROVER_assert(!strcmp(chain_upatch_tag(UPATCH_TYPE_BPF, true),
+				 "shirudo-upatch") &&
+			 !strcmp(chain_upatch_tag(UPATCH_TYPE_BPF, false),
+				 "shirudo-unload") &&
+			 !strcmp(chain_upatch_tag(UPATCH_TYPE_JAVA, true),
+				 "shirudo-java") &&
+			 !strcmp(chain_upatch_tag(UPATCH_TYPE_JAVA, false),
+				 "shirudo-java-unload"),
+			 "tagUpatch, tagUnload, tagJava and tagJavaUnload");
+}
+
 /* keyBytes: the tag and its NUL, then the certificate's digest. */
 static void key_event(void)
 {
@@ -291,8 +305,11 @@ static void init_event(void)
 
 void harness(void)
 {
+	upatch_tags();
 	upatch_event("shirudo-upatch");
 	upatch_event("shirudo-unload");
+	upatch_event("shirudo-java");
+	upatch_event("shirudo-java-unload");
 	key_event();
 	tree_event();
 	fold();

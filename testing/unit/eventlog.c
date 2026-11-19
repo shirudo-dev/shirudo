@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <shirudo/string.h>
+#include <shirudo/upatch.h>
 
 #include "eventlog.h"
 #include "io.h"
@@ -229,11 +230,73 @@ static void set_counts_in_an_init_record_alone(void)
 	drop_log();
 }
 
+static void upatch_record(char *buf, size_t cap, const char *type,
+			  const char *name)
+{
+	struct json_emit e = { .buf = buf, .cap = cap };
+	__u8 digest[32];
+
+	memset(digest, 3, sizeof(digest));
+	eventlog_record_open(&e, type, digest);
+	json_obj_open_key(&e, "upatch");
+	json_kv_string(&e, "name", name);
+	json_kv_string(&e, "payload_sha256", DIGEST_HEX);
+	json_obj_close(&e);
+	json_obj_close(&e);
+	ASSERT_EQ(e.err, 0);
+}
+
+static void upatch_records_name_type_and_direction(void)
+{
+	__u32 type = 0;
+	bool load = false;
+
+	EXPECT_STREQ(eventlog_upatch_record(UPATCH_TYPE_BPF, true),
+		     "upatch_load");
+	EXPECT_STREQ(eventlog_upatch_record(UPATCH_TYPE_JAVA, false),
+		     "java_unload");
+	EXPECT_FALSE(eventlog_upatch_record(3, true));
+	EXPECT_TRUE(eventlog_upatch_record_parse("java_load", &type, &load));
+	EXPECT_UEQ(type, UPATCH_TYPE_JAVA);
+	EXPECT_TRUE(load);
+	EXPECT_TRUE(eventlog_upatch_record_parse("upatch_unload", &type,
+						 &load));
+	EXPECT_UEQ(type, UPATCH_TYPE_BPF);
+	EXPECT_FALSE(load);
+	EXPECT_FALSE(eventlog_upatch_record_parse("java_loa", &type, &load));
+	EXPECT_FALSE(eventlog_upatch_record_parse("upatch_load ", &type,
+						  &load));
+}
+
+/* A Java load and unload count as upatch events like BPF ones. */
+static void java_records_count_as_upatch_events(void)
+{
+	char init[1024], load[1024], unload[1024], text[4096];
+	struct seen_upatches s = {};
+	int len;
+
+	use_log();
+	set_record(init, sizeof(init), "init", "fix");
+	upatch_record(load, sizeof(load), "java_load", "agent");
+	upatch_record(unload, sizeof(unload), "java_unload", "agent");
+	len = strsprintf(text, sizeof(text), "%s\n%s\n%s\n", init, load,
+			 unload);
+	ASSERT_TRUE(len > 0);
+	write_log(text, (size_t)len);
+	ASSERT_EQ(eventlog_boot_upatches(count_upatch, &s), 0);
+	EXPECT_EQ(s.inits, 1);
+	EXPECT_EQ(s.loads, 2);
+	EXPECT_STREQ(s.last, "agent");
+	drop_log();
+}
+
 static const struct unit_case cases[] = {
 	UNIT_CASE(unfinished_append_is_no_record),
 	UNIT_CASE(nul_in_the_log_is_refused),
 	UNIT_CASE(tree_op_measured_this_boot),
 	UNIT_CASE(set_counts_in_an_init_record_alone),
+	UNIT_CASE(upatch_records_name_type_and_direction),
+	UNIT_CASE(java_records_count_as_upatch_events),
 	{}
 };
 

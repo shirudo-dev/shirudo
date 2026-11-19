@@ -1215,6 +1215,8 @@ static int append_init_event(const struct measured_upatch *set,
 		json_kv_string(&e, "name", set[i].name);
 		json_kv_string(&e, "payload_sha256",
 			       set[i].payload_hex);
+		if (set[i].type == UPATCH_TYPE_JAVA)
+			json_kv_string(&e, "type", "java");
 		json_obj_close(&e);
 	}
 	json_arr_close(&e);

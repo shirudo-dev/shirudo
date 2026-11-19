@@ -233,13 +233,16 @@ int main(int argc, char **argv)
 			return 1;
 		return 0;
 	}
-	if (strcmp(argv[1], "load") == 0 && argc == 4) {
+	if ((strcmp(argv[1], "load") == 0 ||
+	     strcmp(argv[1], "java-load") == 0) && argc == 4) {
+		__u32 type = argv[1][0] == 'j' ? UPATCH_TYPE_JAVA :
+						 UPATCH_TYPE_BPF;
 		__u8 payload[32];
 
 		if (hex_decode(argv[3], payload, 32))
 			return 2;
-		if (chain_upatch_event("shirudo-upatch", argv[2], payload,
-				       event))
+		if (chain_upatch_event(chain_upatch_tag(type, true), argv[2],
+				       payload, event))
 			return 1;
 		ret = chain_extend(event, chain);
 		printf("rc=%d\n", ret);
@@ -247,8 +250,8 @@ int main(int argc, char **argv)
 			return 1;
 		printf("value=");
 		puthex(chain, 32);
-		return append_event("upatch_load", argv[2], payload, event,
-				    chain) ? 1 : 0;
+		return append_event(eventlog_upatch_record(type, true), argv[2],
+				    payload, event, chain) ? 1 : 0;
 	}
 	/* A tree operation, with the digest in the form the target records. */
 	if (strcmp(argv[1], "tree") == 0 && argc == 6) {

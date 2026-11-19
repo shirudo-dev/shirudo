@@ -132,15 +132,17 @@ Digests
      - Input
    * - Payload digest of a upatch (``payload_sha256``)
      - SHA-256
-     - The signed bytes: loader instructions followed by the map data
+     - The signed bytes: loader instructions followed by the map data,
+       or the data alone for a Java upatch
    * - ``excl_prog_hash`` of the metadata map
      - SHA-256
      - The loader's instructions
    * - Register events
      - SHA-256
      - A domain tag (``shirudo-init``, ``shirudo-upatch``,
-       ``shirudo-unload``, ``shirudo-key-revoke``, ``shirudo-tree``)
-       followed by the event's fields
+       ``shirudo-unload``, ``shirudo-java``, ``shirudo-java-unload``,
+       ``shirudo-key-revoke``, ``shirudo-tree``) followed by the event's
+       fields
    * - Register value
      - SHA-256
      - The TPM's NV extend: the old value followed by the event

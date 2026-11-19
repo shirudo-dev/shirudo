@@ -39,6 +39,42 @@ static void chain_events_hash_their_documented_input(void)
 	EXPECT_MEMEQ(event, want, sizeof(want));
 }
 
+/* Each payload type and direction has a tag of its own. */
+static void upatch_tags_are_distinct(void)
+{
+	const char *const tags[] = {
+		chain_upatch_tag(UPATCH_TYPE_BPF, true),
+		chain_upatch_tag(UPATCH_TYPE_BPF, false),
+		chain_upatch_tag(UPATCH_TYPE_JAVA, true),
+		chain_upatch_tag(UPATCH_TYPE_JAVA, false),
+	};
+
+	EXPECT_STREQ(tags[0], "shirudo-upatch");
+	EXPECT_STREQ(tags[1], "shirudo-unload");
+	EXPECT_STREQ(tags[2], "shirudo-java");
+	EXPECT_STREQ(tags[3], "shirudo-java-unload");
+	EXPECT_FALSE(chain_upatch_tag(3, true));
+}
+
+/* The longest tag, with its NUL, the digest and a whole name. */
+static void java_unload_event_hashes_its_documented_input(void)
+{
+	static const char tag[] = "shirudo-java-unload";
+	__u8 payload[32], buf[sizeof(tag) + 32 + UPATCH_NAME_MAX];
+	char name[UPATCH_NAME_MAX + 1];
+	__u8 want[32], event[32];
+
+	memset(payload, 0x3c, sizeof(payload));
+	memset(name, 'n', UPATCH_NAME_MAX);
+	name[UPATCH_NAME_MAX] = '\0';
+	memcpy(buf, tag, sizeof(tag));
+	memcpy(buf + sizeof(tag), payload, sizeof(payload));
+	memcpy(buf + sizeof(tag) + 32, name, UPATCH_NAME_MAX);
+	ASSERT_EQ(sha256_buffer(buf, sizeof(buf), want), 0);
+	ASSERT_EQ(chain_upatch_event(tag, name, payload, event), 0);
+	EXPECT_MEMEQ(event, want, sizeof(want));
+}
+
 static void chain_fold_extends_like_the_register(void)
 {
 	__u8 chain[32] = {}, event[32], cat[64] = {}, want[32];
@@ -54,6 +90,8 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(sha256_2_hashes_the_concatenation),
 	UNIT_CASE(sha256_2_reports_a_failure),
 	UNIT_CASE(chain_events_hash_their_documented_input),
+	UNIT_CASE(upatch_tags_are_distinct),
+	UNIT_CASE(java_unload_event_hashes_its_documented_input),
 	UNIT_CASE(chain_fold_extends_like_the_register),
 	{}
 };

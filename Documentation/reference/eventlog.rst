@@ -123,6 +123,15 @@ Event kinds
      - ``upatch``: object with ``name`` and ``payload_sha256``.
        ``reason``: ``key_revoke`` for an unload caused by a key
        revocation, absent otherwise.
+   * - ``java_load``
+     - ``shirudo upatch load`` of a Java upatch, after the agent is
+       installed, before it reports success.
+     - As ``upatch_load``.
+   * - ``java_unload``
+     - ``shirudo upatch unload`` of a Java upatch, before the agent is
+       removed, and a live config activation that revokes the key that
+       signed it.
+     - As ``upatch_unload``.
    * - ``key_revoke``
      - ``shirudo image update``, when the activated config revokes a
        certificate that is in the ``.bpf`` keyring. A revocation
@@ -167,7 +176,8 @@ Fields of an init record
    * - ``set``
      - array of object
      - The upatches boot restore applied or found loaded, each with
-       ``name`` and ``payload_sha256``.
+       ``name`` and ``payload_sha256``, and ``type`` ``java`` for a Java
+       upatch. A BPF upatch carries no ``type``.
    * - ``pcr``
      - integer
      - ``9``, the PCR that anchors the register.
@@ -229,6 +239,10 @@ document.
      - ``SHA256("shirudo-upatch\0" || payload_sha256 || name)``
    * - ``upatch_unload``
      - ``SHA256("shirudo-unload\0" || payload_sha256 || name)``
+   * - ``java_load``
+     - ``SHA256("shirudo-java\0" || payload_sha256 || name)``
+   * - ``java_unload``
+     - ``SHA256("shirudo-java-unload\0" || payload_sha256 || name)``
    * - ``key_revoke``
      - ``SHA256("shirudo-key-revoke\0" || cert_sha256)``
    * - ``tree_op``
@@ -238,7 +252,8 @@ document.
   256 bytes.
 - ``seq`` is the tree sequence number as an 8-byte big-endian integer.
 - ``set_digest`` is the SHA-256 of one line ``<payload_sha256> <name>\n``
-  per member of ``set``, sorted by name, concatenated. An empty set
+  per member of ``set``, prefixed with ``java `` for a member whose
+  ``type`` is ``java``, sorted by name, concatenated. An empty set
   gives the SHA-256 of the empty string,
   ``e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855``.
 - The register starts at 32 zero bytes after every TPM reset. Each

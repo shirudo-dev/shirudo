@@ -28,17 +28,23 @@ void measured_set_free(struct measured_set *s);
 struct measured_upatch;
 struct upatch;
 
-/* The name and payload an init record lists for the upatch u. */
+/* The name, payload and type an init record lists for the upatch u. */
 void measured_upatch_of(struct measured_upatch *e, const struct upatch *u);
 
 /*
+ * The payload type an init record's member names in its "type": BPF
+ * where it names none, Java for "java"; -EINVAL for any other.
+ */
+int measured_member_type(const char *text, __u32 *type);
+
+/*
  * A member added to the *n of set, which holds at most max: 0, -EINVAL
- * for one upatch_member_valid() refuses, -EEXIST for a name the set
+ * for one upatch_member_valid() refuses or a type with no events, -EEXIST for a name the set
  * holds, for an init event lists each upatch once and sorts by name, or
  * -E2BIG when the set is full.
  */
 int measured_set_add(struct measured_upatch *set, size_t *n, size_t max,
-		     const char *name, const char *payload_hex);
+		     const char *name, const char *payload_hex, __u32 type);
 
 /*
  * The upatches pinned in the private bpffs, or archived with the seal

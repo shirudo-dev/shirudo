@@ -10,11 +10,12 @@ hashes them. Every event is SHA-256 of a tag, its NUL and fixed fields:
 
 - `chain_init_event()`: `"shirudo-init"`, the certificate set's digest,
   the digest of the listing of the restored set, one
-  `"<payload hex> <name>\n"` line per upatch sorted by name, and the
-  upatch tree's root;
+  `"<payload hex> <name>\n"` line per upatch sorted by name, a Java
+  upatch's line prefixed with `"java "`, and the upatch tree's root;
 - `chain_upatch_event()`: `"shirudo-upatch"` for a load or
-  `"shirudo-unload"` for an unload, the payload digest and the name cut
-  at `strnlen(name, UPATCH_NAME_MAX)`;
+  `"shirudo-unload"` for an unload of a BPF upatch, `"shirudo-java"` or
+  `"shirudo-java-unload"` for a Java one, the payload digest and the name
+  cut at `strnlen(name, UPATCH_NAME_MAX)`;
 - `chain_key_event()`: `"shirudo-key-revoke"` and the certificate's
   digest;
 - `chain_tree_event()`: `"shirudo-tree"`, the operation's sequence
@@ -41,7 +42,9 @@ accepts of at most `UPATCH_NAME_MAX` bytes and sequence numbers a
 `__s64` holds, `Fields.bytes` is injective (`bytes_injective`): the first
 NUL ends the tag, no tag holds one and no two are equal, and every field
 after it has a fixed length but the name, which runs to the end. The
-listing is injective while no name holds a newline (`listing_injective`).
+listing is injective while no name holds a newline (`listing_injective`):
+no hex digit is the `j` of `"java "`, so a Java line cannot pass for a
+BPF one.
 Outside that domain both fail: a name of more than `UPATCH_NAME_MAX`
 bytes is cut (`upatch_cut`), and a name with a newline spells two
 members (`listing_newline`). `qsort()` leaves a set whose names are
@@ -101,6 +104,8 @@ def Digest.zero : Digest := ⟨List.replicate 32 0, by simp⟩
 def tagInit : List UInt8 := ascii "shirudo-init"
 def tagUpatch : List UInt8 := ascii "shirudo-upatch"
 def tagUnload : List UInt8 := ascii "shirudo-unload"
+def tagJava : List UInt8 := ascii "shirudo-java"
+def tagJavaUnload : List UInt8 := ascii "shirudo-java-unload"
 def tagKeyRevoke : List UInt8 := ascii "shirudo-key-revoke"
 def tagTree : List UInt8 := ascii "shirudo-tree"
 def tagHistory : List UInt8 := ascii "shirudo-tree-history"
@@ -118,6 +123,8 @@ inductive Fields where
   | init (cert setDigest treeRoot : Digest)
   | upatch (name : List UInt8) (payload : Digest)
   | unload (name : List UInt8) (payload : Digest)
+  | javaLoad (name : List UInt8) (payload : Digest)
+  | javaUnload (name : List UInt8) (payload : Digest)
   | keyRevoke (cert : Digest)
   | tree (seq : Int) (operation : Digest)
 
@@ -160,6 +167,8 @@ def Fields.bytes : Fields → List UInt8
   | .init c s r => initBytes c s r
   | .upatch n p => upatchBytes tagUpatch n p
   | .unload n p => upatchBytes tagUnload n p
+  | .javaLoad n p => upatchBytes tagJava n p
+  | .javaUnload n p => upatchBytes tagJavaUnload n p
   | .keyRevoke c => keyBytes tagKeyRevoke c
   | .tree s o => treeBytes s o
 
@@ -205,6 +214,8 @@ def S64 (seq : Int) : Prop :=
 def Fields.Fits : Fields → Prop
   | .upatch n _ => NameFits n
   | .unload n _ => NameFits n
+  | .javaLoad n _ => NameFits n
+  | .javaUnload n _ => NameFits n
   | .tree s _ => S64 s
   | _ => True
 
@@ -308,6 +319,8 @@ def Fields.tag : Fields → List UInt8
   | .init .. => tagInit
   | .upatch .. => tagUpatch
   | .unload .. => tagUnload
+  | .javaLoad .. => tagJava
+  | .javaUnload .. => tagJavaUnload
   | .keyRevoke .. => tagKeyRevoke
   | .tree .. => tagTree
 
@@ -316,6 +329,8 @@ def Fields.body : Fields → List UInt8
   | .init c s r => c.bytes ++ s.bytes ++ r.bytes
   | .upatch n p => p.bytes ++ n.take (strnlen n nameMax)
   | .unload n p => p.bytes ++ n.take (strnlen n nameMax)
+  | .javaLoad n p => p.bytes ++ n.take (strnlen n nameMax)
+  | .javaUnload n p => p.bytes ++ n.take (strnlen n nameMax)
   | .keyRevoke c => c.bytes
   | .tree s o => be64 (u64OfS64 s) ++ o.bytes
 
@@ -350,6 +365,14 @@ theorem Fields.body_injective {f g : Fields} (hf : f.Fits) (hg : g.Fits)
     obtain ⟨hp, hn⟩ := split_digest h
     rw [strnlen_fits hf, strnlen_fits hg] at hn
     rw [hn, hp]
+  case javaLoad.javaLoad n p n' p' =>
+    obtain ⟨hp, hn⟩ := split_digest h
+    rw [strnlen_fits hf, strnlen_fits hg] at hn
+    rw [hn, hp]
+  case javaUnload.javaUnload n p n' p' =>
+    obtain ⟨hp, hn⟩ := split_digest h
+    rw [strnlen_fits hf, strnlen_fits hg] at hn
+    rw [hn, hp]
   case keyRevoke.keyRevoke c c' =>
     rw [Digest.ext_bytes h]
   case tree.tree s o s' o' =>
@@ -372,6 +395,8 @@ at most `UPATCH_NAME_MAX` bytes, sequence numbers of a `__s64`. -/
 def Fields.Admitted : Fields → Prop
   | .upatch n _ => NameAdmitted n
   | .unload n _ => NameAdmitted n
+  | .javaLoad n _ => NameAdmitted n
+  | .javaUnload n _ => NameAdmitted n
   | .tree s _ => S64 s
   | _ => True
 
@@ -379,6 +404,8 @@ theorem Fields.Admitted.fits {f : Fields} (h : f.Admitted) : f.Fits := by
   cases f with
   | upatch n p => exact NameAdmitted.fits h
   | unload n p => exact NameAdmitted.fits h
+  | javaLoad n p => exact NameAdmitted.fits h
+  | javaUnload n p => exact NameAdmitted.fits h
   | tree s o => exact h
   | init => trivial
   | keyRevoke => trivial
@@ -408,10 +435,11 @@ theorem upatch_cut (tag n : List UInt8) (x : UInt8) (p : Digest)
 /-! ### The init event's set -/
 
 /-- A member of the restored set: `struct measured_upatch`, its payload
-already hex-encoded by `hex_encode()`. -/
+already hex-encoded by `hex_encode()`, and whether it is a Java upatch. -/
 structure Member where
   name : List UInt8
   payload : Digest
+  java : Bool
 
 /-- `"0123456789abcdef"[n]` of `hex_encode()`. -/
 def hexDigit (n : Nat) : UInt8 := (ascii "0123456789abcdef").getD n 0
@@ -421,10 +449,15 @@ high nibble first. -/
 def hexEncode (bs : List UInt8) : List UInt8 :=
   bs.flatMap fun b => [hexDigit (b.toNat >>> 4), hexDigit (b.toNat &&& 15)]
 
-/-- One line of the listing: `"%s %s\n"` of the payload's hex and the
-name. -/
+/-- `member_prefix()`: `"java "` for a Java member, nothing for a BPF
+one. -/
+def memberPrefix (m : Member) : List UInt8 :=
+  if m.java then ascii "java " else []
+
+/-- One line of the listing: `"%s%s %s\n"` of the prefix, the payload's
+hex and the name. -/
 def line (m : Member) : List UInt8 :=
-  hexEncode m.payload.bytes ++ [32] ++ m.name ++ [10]
+  memberPrefix m ++ hexEncode m.payload.bytes ++ [32] ++ m.name ++ [10]
 
 /-- The listing `chain_init_event()` hashes into the set's digest: the
 lines of the set in the order `qsort()` left it. -/
@@ -474,6 +507,47 @@ theorem hexEncode_injective :
 theorem hexEncode_digest (d : Digest) : (hexEncode d.bytes).length = 64 := by
   rw [hexEncode_length, d.length_eq]
 
+/-- No hex digit is the `j` that starts `"java "`. -/
+theorem hexDigit_ne_j (n : Nat) : hexDigit n ≠ 106 := by
+  by_cases h : n < 16
+  · exact (by decide : ∀ a : Fin 16, hexDigit a.val ≠ 106) ⟨n, h⟩
+  · have hl : (ascii "0123456789abcdef").length ≤ n := by
+      simp [ascii]; omega
+    simp only [hexDigit, List.getD_eq_getElem?_getD, List.getElem?_eq_none hl,
+      Option.getD_none]
+    decide
+
+/-- A digest's hex starts with a hex digit. -/
+theorem hexEncode_head (d : Digest) :
+    ∃ x t, hexEncode d.bytes = x :: t ∧ x ≠ 106 := by
+  have hl := d.length_eq
+  cases hb : d.bytes with
+  | nil => rw [hb] at hl; simp at hl
+  | cons b bs =>
+    exact ⟨hexDigit (b.toNat >>> 4), hexDigit (b.toNat &&& 15) :: hexEncode bs,
+      by simp [hexEncode], hexDigit_ne_j _⟩
+
+/-- Two lines that agree have the same prefix: a Java line starts with
+`j`, a BPF line with a hex digit. -/
+theorem line_prefix {m n : Member} {r s : List UInt8}
+    (h : memberPrefix m ++ (hexEncode m.payload.bytes ++ r) =
+      memberPrefix n ++ (hexEncode n.payload.bytes ++ s)) :
+    m.java = n.java ∧ hexEncode m.payload.bytes ++ r =
+      hexEncode n.payload.bytes ++ s := by
+  obtain ⟨x, t, hx, hxj⟩ := hexEncode_head m.payload
+  obtain ⟨y, u, hy, hyj⟩ := hexEncode_head n.payload
+  cases hm : m.java <;> cases hn : n.java <;>
+    simp only [memberPrefix, hm, hn, Bool.false_eq_true, ite_true, ite_false,
+      List.nil_append] at h
+  · exact ⟨rfl, h⟩
+  · rw [hx] at h
+    simp [ascii] at h
+    exact absurd h.1 hxj
+  · rw [hy] at h
+    simp [ascii] at h
+    exact absurd h.1.symm hyj
+  · exact ⟨rfl, List.append_cancel_left h⟩
+
 /-- While no name holds a newline, the listing spells one set: each line
 is 64 hex digits, a space, and the name up to the newline. -/
 theorem listing_injective :
@@ -483,27 +557,28 @@ theorem listing_injective :
   | [], m :: _, _, _, h => by simp [listing, line] at h
   | m :: _, [], _, _, h => by simp [listing, line] at h
   | m :: ms, n :: ns, hs, ht, h => by
-    simp only [listing, List.flatMap_cons, line, List.append_assoc,
-      List.singleton_append] at h
+    simp only [listing, List.flatMap_cons, line, List.append_assoc] at h
+    obtain ⟨hj, h⟩ := line_prefix h
+    simp only [List.singleton_append] at h
     have h1 := List.append_inj h
       (by rw [hexEncode_digest, hexEncode_digest])
     have hp := Digest.ext_bytes (hexEncode_injective _ _ h1.1)
     have h1' := h1.2
-    simp only [List.cons_append, List.cons.injEq, true_and] at h1'
+    simp only [List.cons.injEq, true_and] at h1'
     have h2 := split_at 10 (hs m (by simp)) (ht n (by simp)) h1'
     have hrest := listing_injective ms ns
       (fun x hx => hs x (by simp [hx])) (fun x hx => ht x (by simp [hx])) h2.2
     cases m
     cases n
-    simp only at hp h2
-    rw [hp, h2.1, hrest]
+    simp only at hp h2 hj
+    rw [hp, h2.1, hj, hrest]
 
 /-- Outside the domain: a name holding a newline and the hex of another
 payload makes one member spell two. -/
 theorem listing_newline (p q : Digest) (a b : List UInt8) :
-    listing [⟨a ++ 10 :: hexEncode q.bytes ++ 32 :: b, p⟩] =
-      listing [⟨a, p⟩, ⟨b, q⟩] := by
-  simp [listing, line]
+    listing [⟨a ++ 10 :: hexEncode q.bytes ++ 32 :: b, p, false⟩] =
+      listing [⟨a, p, false⟩, ⟨b, q, false⟩] := by
+  simp [listing, line, memberPrefix]
 
 /-! ### The order `qsort()` leaves -/
 
@@ -590,17 +665,19 @@ theorem sorts_unique {s t out out' : List Member}
 members of one name sort, and their listings differ unless the payloads
 are equal. -/
 theorem sorts_tie (n : List UInt8) (p q : Digest) :
-    Sorts [⟨n, p⟩, ⟨n, q⟩] [⟨n, p⟩, ⟨n, q⟩] ∧
-      Sorts [⟨n, p⟩, ⟨n, q⟩] [⟨n, q⟩, ⟨n, p⟩] ∧
-      (listing [⟨n, p⟩, ⟨n, q⟩] = listing [⟨n, q⟩, ⟨n, p⟩] → p = q) := by
-  have heq : memberCmp ⟨n, p⟩ ⟨n, q⟩ = .eq :=
+    Sorts [⟨n, p, false⟩, ⟨n, q, false⟩] [⟨n, p, false⟩, ⟨n, q, false⟩] ∧
+      Sorts [⟨n, p, false⟩, ⟨n, q, false⟩] [⟨n, q, false⟩, ⟨n, p, false⟩] ∧
+      (listing [⟨n, p, false⟩, ⟨n, q, false⟩] =
+        listing [⟨n, q, false⟩, ⟨n, p, false⟩] → p = q) := by
+  have heq : memberCmp ⟨n, p, false⟩ ⟨n, q, false⟩ = .eq :=
     (strcmp_total.eq_iff _ _).mpr rfl
-  have heq' : memberCmp ⟨n, q⟩ ⟨n, p⟩ = .eq :=
+  have heq' : memberCmp ⟨n, q, false⟩ ⟨n, p, false⟩ = .eq :=
     (strcmp_total.eq_iff _ _).mpr rfl
   refine ⟨⟨List.Perm.refl _, by simp [heq]⟩,
     ⟨List.Perm.swap _ _ _, by simp [heq']⟩, fun h => ?_⟩
-  simp only [listing, line, List.flatMap_cons, List.flatMap_nil,
-    List.append_nil, List.append_assoc] at h
+  simp only [listing, line, memberPrefix, List.flatMap_cons, List.flatMap_nil,
+    List.append_nil, List.append_assoc, Bool.false_eq_true, ite_false,
+    List.nil_append] at h
   have := List.append_inj h (by rw [hexEncode_digest, hexEncode_digest])
   exact Digest.ext_bytes (hexEncode_injective _ _ this.1)
 
@@ -608,12 +685,14 @@ theorem sorts_tie (n : List UInt8) (p q : Digest) :
 
 /-- An event the register measures, as the target means it: an init event
 with its certificate set's digest, the restored set as `qsort()` left it
-and the tree root; a load or an unload of a upatch; a key revocation; a
-tree operation. -/
+and the tree root; a load or an unload of a BPF or a Java upatch; a key
+revocation; a tree operation. -/
 inductive Event where
   | init (cert : Digest) (set : List Member) (treeRoot : Digest)
   | load (name : List UInt8) (payload : Digest)
   | unload (name : List UInt8) (payload : Digest)
+  | javaLoad (name : List UInt8) (payload : Digest)
+  | javaUnload (name : List UInt8) (payload : Digest)
   | keyRevoke (cert : Digest)
   | tree (seq : Int) (operation : Digest)
 
@@ -622,6 +701,8 @@ def Event.Admitted : Event → Prop
   | .init _ s _ => ∀ m ∈ s, NameAdmitted m.name
   | .load n _ => NameAdmitted n
   | .unload n _ => NameAdmitted n
+  | .javaLoad n _ => NameAdmitted n
+  | .javaUnload n _ => NameAdmitted n
   | .keyRevoke _ => True
   | .tree s _ => S64 s
 
@@ -654,6 +735,8 @@ def Event.fields : Event → Fields
   | .init c s r => .init c (sha (listing s)) r
   | .load n p => .upatch n p
   | .unload n p => .unload n p
+  | .javaLoad n p => .javaLoad n p
+  | .javaUnload n p => .javaUnload n p
   | .keyRevoke c => .keyRevoke c
   | .tree s o => .tree s o
 
@@ -702,6 +785,8 @@ theorem Event.admitted_fields {e : Event} (h : e.Admitted) :
   | init => trivial
   | load n p => exact h
   | unload n p => exact h
+  | javaLoad n p => exact h
+  | javaUnload n p => exact h
   | keyRevoke => trivial
   | tree s o => exact h
 
@@ -744,6 +829,8 @@ theorem Event.digest_injective_on (a b : Event) (ha : a.Predicted)
     first
     | (simp only [Fields.upatch.injEq] at hf; rw [hf.1, hf.2])
     | (simp only [Fields.unload.injEq] at hf; rw [hf.1, hf.2])
+    | (simp only [Fields.javaLoad.injEq] at hf; rw [hf.1, hf.2])
+    | (simp only [Fields.javaUnload.injEq] at hf; rw [hf.1, hf.2])
     | (simp only [Fields.keyRevoke.injEq] at hf; rw [hf])
     | (simp only [Fields.tree.injEq] at hf; rw [hf.1, hf.2])
 

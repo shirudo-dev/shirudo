@@ -549,6 +549,62 @@ int eventlog_tree_op_measured(__s64 seq, const char *operation_digest)
 	return t.found;
 }
 
+static const struct {
+	const char	*record;
+	const char	*kind;
+	__u32		type;
+	bool		load;
+} upatch_records[] = {
+	{ "upatch_load",	"load",		UPATCH_TYPE_BPF,	true },
+	{ "upatch_unload",	"unload",	UPATCH_TYPE_BPF,	false },
+	{ "java_load",		"java-load",	UPATCH_TYPE_JAVA,	true },
+	{ "java_unload",	"java-unload",	UPATCH_TYPE_JAVA,	false },
+};
+
+bool eventlog_upatch_kind_parse(const char *kind, size_t len, __u32 *type,
+				bool *load)
+{
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(upatch_records); i++) {
+		const char *k = upatch_records[i].kind;
+
+		if (strlen(k) == len && !memcmp(kind, k, len)) {
+			*type = upatch_records[i].type;
+			*load = upatch_records[i].load;
+			return true;
+		}
+	}
+	return false;
+}
+
+const char *eventlog_upatch_record(__u32 type, bool load)
+{
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(upatch_records); i++) {
+		if (upatch_records[i].type == type &&
+		    upatch_records[i].load == load)
+			return upatch_records[i].record;
+	}
+	return NULL;
+}
+
+bool eventlog_upatch_record_parse(const char *record, __u32 *type,
+				  bool *load)
+{
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(upatch_records); i++) {
+		if (!strcmp(upatch_records[i].record, record)) {
+			*type = upatch_records[i].type;
+			*load = upatch_records[i].load;
+			return true;
+		}
+	}
+	return false;
+}
+
 struct upatches_ctx {
 	int	(*cb)(enum eventlog_upatch_event event, const char *name,
 		      const char *payload_hex, void *ctx);
@@ -581,7 +637,9 @@ static int upatches_line(const char *line, size_t len, bool is_init,
 		  sizeof(u->payload_hex), 0, NULL, 0 },
 	};
 	struct json_array set = { upatches_set_entry, u };
+	__u32 payload_type;
 	char type[32];
+	bool load;
 	/* Only an init record's set lists what boot restore loaded. */
 	struct json_field f[] = {
 		{ "type", JSON_T_STRING, type, sizeof(type), 0, NULL, 0 },
@@ -604,12 +662,12 @@ static int upatches_line(const char *line, size_t len, bool is_init,
 		return u->ret ? u->ret : -EINVAL;
 	if (is_init)
 		return 0;
-	if (strcmp(type, "upatch_load") && strcmp(type, "upatch_unload"))
+	if (!eventlog_upatch_record_parse(type, &payload_type, &load))
 		return 0;
 	if (!f[2].seen || !upatch_member_valid(u->name, u->payload_hex))
 		return -EINVAL;
-	return u->cb(type[7] == 'l' ? EVENTLOG_UPATCH_LOAD :
-		     EVENTLOG_UPATCH_UNLOAD, u->name, u->payload_hex, u->ctx);
+	return u->cb(load ? EVENTLOG_UPATCH_LOAD : EVENTLOG_UPATCH_UNLOAD,
+		     u->name, u->payload_hex, u->ctx);
 }
 
 int eventlog_boot_upatches(int (*cb)(enum eventlog_upatch_event event,

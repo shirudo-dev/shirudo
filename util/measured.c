@@ -96,6 +96,7 @@ struct record_fields {
 	char			operation[sizeof("sha256:") + 2 * 32];
 	char			name[UPATCH_NAME_MAX + 1];
 	char			payload_hex[2 * UPATCH_PAYLOAD_HASH_LEN + 1];
+	char			member_type[8];
 	__s64			seq;
 	struct measured_upatch	*set;
 	size_t			n;
@@ -105,12 +106,16 @@ struct record_fields {
 static int record_set_entry(void *arg)
 {
 	struct record_fields *r = arg;
+	__u32 type;
 	int ret;
 
-	ret = measured_set_add(r->set, &r->n, MEASURED_MAX, r->name,
-			       r->payload_hex);
+	ret = measured_member_type(r->member_type, &type);
+	if (!ret)
+		ret = measured_set_add(r->set, &r->n, MEASURED_MAX, r->name,
+				       r->payload_hex, type);
 	r->name[0] = '\0';
 	r->payload_hex[0] = '\0';
+	r->member_type[0] = '\0';
 	return ret;
 }
 
@@ -120,6 +125,8 @@ static int record_parse(const char *line, size_t len, struct record_fields *r)
 		{ "name", JSON_T_STRING, r->name, sizeof(r->name), 0, NULL, 0 },
 		{ "payload_sha256", JSON_T_STRING, r->payload_hex,
 		  sizeof(r->payload_hex), 0, NULL, 0 },
+		{ "type", JSON_T_STRING, r->member_type,
+		  sizeof(r->member_type), 0, NULL, 0 },
 	};
 	struct json_field upatch[] = {
 		{ "name", JSON_T_STRING, r->name, sizeof(r->name), 0, NULL, 0 },
@@ -172,15 +179,16 @@ static int init_event_of(struct record_fields *r, __u8 event[32])
 				event);
 }
 
-static int upatch_event_of(struct record_fields *r, __u8 event[32])
+static int upatch_event_of(struct record_fields *r, __u32 type, bool load,
+			   __u8 event[32])
 {
 	__u8 payload[UPATCH_PAYLOAD_HASH_LEN];
 
 	if (!r->upatch || !upatch_member_valid(r->name, r->payload_hex) ||
 	    hex_decode(r->payload_hex, payload, sizeof(payload)))
 		return -EINVAL;
-	return chain_upatch_event(r->type[7] == 'l' ? "shirudo-upatch" :
-				  "shirudo-unload", r->name, payload, event);
+	return chain_upatch_event(chain_upatch_tag(type, load), r->name,
+				  payload, event);
 }
 
 static int key_event_of(struct record_fields *r, __u8 event[32])
@@ -203,11 +211,13 @@ static int tree_event_of(struct record_fields *r, __u8 event[32])
 
 static int record_event_of(struct record_fields *r, __u8 event[32])
 {
+	__u32 type;
+	bool load;
+
 	if (!strcmp(r->type, "init"))
 		return init_event_of(r, event);
-	if (!strcmp(r->type, "upatch_load") ||
-	    !strcmp(r->type, "upatch_unload"))
-		return upatch_event_of(r, event);
+	if (eventlog_upatch_record_parse(r->type, &type, &load))
+		return upatch_event_of(r, type, load, event);
 	if (!strcmp(r->type, "key_revoke"))
 		return key_event_of(r, event);
 	if (!strcmp(r->type, "tree_op"))
@@ -339,10 +349,24 @@ void measured_upatch_of(struct measured_upatch *e, const struct upatch *u)
 	upatch_header_name(u, e->name);
 	hex_encode(u->hdr.payload_sha256, UPATCH_PAYLOAD_HASH_LEN,
 		   e->payload_hex);
+	e->type = u->hdr.type;
+}
+
+int measured_member_type(const char *text, __u32 *type)
+{
+	if (!text[0]) {
+		*type = UPATCH_TYPE_BPF;
+		return 0;
+	}
+	if (!strcmp(text, "java")) {
+		*type = UPATCH_TYPE_JAVA;
+		return 0;
+	}
+	return -EINVAL;
 }
 
 int measured_set_add(struct measured_upatch *set, size_t *n, size_t max,
-		     const char *name, const char *payload_hex)
+		     const char *name, const char *payload_hex, __u32 type)
 {
 	struct measured_upatch *e;
 	size_t i;
@@ -355,10 +379,13 @@ int measured_set_add(struct measured_upatch *set, size_t *n, size_t max,
 	}
 	if (*n >= max)
 		return -E2BIG;
+	if (!chain_upatch_tag(type, true))
+		return -EINVAL;
 	e = &set[*n];
 	if (strscpy(e->name, name, sizeof(e->name)) < 0 ||
 	    strscpy(e->payload_hex, payload_hex, sizeof(e->payload_hex)) < 0)
 		return -E2BIG;
+	e->type = type;
 	(*n)++;
 	return 0;
 }

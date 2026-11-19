@@ -830,8 +830,8 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
      - Stores only PCRs 0 to 23 and marks exactly that one, from 64 hex
        digits; a refusal marks nothing
    * - ``chain-events``
-     - ``chain_upatch_event()``, ``chain_key_event()``,
-       ``chain_tree_event()``, ``chain_fold()``,
+     - ``chain_upatch_tag()``, ``chain_upatch_event()``,
+       ``chain_key_event()``, ``chain_tree_event()``, ``chain_fold()``,
        ``chain_history_step()``, ``chain_init_event()`` of an empty set
      - Names of 0 to 8 and 255 to 257 bytes; every payload, digest,
        sequence number, register and history root
@@ -839,7 +839,7 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
        ``Shirudo.Events``: the tag and its NUL, then the fixed fields, the
        name cut at 256 bytes and the sequence number most significant byte
        first; the event, or the next history root, is the digest, or zeros
-       with the error
+       with the error; a BPF or Java load or unload takes the model's tag
    * - ``measured-fold-model``
      - ``measured_event()``, ``measured_holds()``
      - Every sequence of up to six init, load and unload records over two
@@ -1084,8 +1084,9 @@ the model follows the C.
    * - ``Shirudo.Events``, the event encodings of :src:`util/chain.c`
        and the history root's step of :src:`util/chain_history.c`
      - ``bytes_injective``: two admitted events hash the same bytes only
-       when they are the same event; ``listing_injective``: the init
-       event's listing spells one set while no name holds a newline;
+       when they are the same event, a Java load or unload never a BPF
+       one; ``listing_injective``: the init event's listing spells one set,
+       each member's type with it, while no name holds a newline;
        ``sorts_unique``: ``qsort()`` leaves a set of distinct names in one
        order; ``replay_injective_on``, ``replay_collision``: equal
        registers come from the same typed events in the same order, or

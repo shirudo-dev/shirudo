@@ -41,11 +41,20 @@ int sha256_2(const void *a, size_t a_len,
 struct measured_upatch {
 	char	name[UPATCH_NAME_MAX + 1];
 	char	payload_hex[2 * UPATCH_PAYLOAD_HASH_LEN + 1];
+	__u32	type;		/* enum upatch_type */
 };
 
 /*
+ * The domain tag of an upatch event, by payload type and direction:
+ * "shirudo-upatch" and "shirudo-unload" for BPF, "shirudo-java" and
+ * "shirudo-java-unload" for Java. NULL for a type with none.
+ */
+const char *chain_upatch_tag(__u32 type, bool load);
+
+/*
  * The event digests every measuring path and the predictor share.
- * The set is sorted by name before hashing.
+ * The set is sorted by name before hashing, and lists a Java member
+ * as "java <payload_hex> <name>", a BPF one without the prefix.
  */
 int chain_init_event(const __u8 cert_sha[32],
 		     struct measured_upatch *set, size_t n,
