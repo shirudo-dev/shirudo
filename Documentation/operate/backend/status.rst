@@ -53,7 +53,7 @@ follows. The objects that do it are in :src:`tools/backend/sql/40-status.sql`, a
      - refreshable materialized view, every minute
      - Runs the checks for all nodes and replaces the rows of ``node_status`` in one step.
 
-A UI reads ``node_status`` as often as it likes:
+A UI reads ``node_status`` as often as it likes, as :doc:`xtop` does:
 
 .. code-block:: sql
 

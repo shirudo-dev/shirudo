@@ -1217,6 +1217,25 @@ instead. It has to run inside the container, so it needs the libraries
 it links there. A test named ``<name>-stub`` feeds quotes in the stub's
 form and is skipped then.
 
+.. _testing-xtop:
+
+Run the xtop tests
+------------------
+
+:src:`tools/xtop/` is a Bun program. Its tests need ``bun`` on the host
+and no ClickHouse: they feed its row mapping, roll-up and client rows
+shaped as ``tools/backend/test/xtop-nodes.expected`` has them.
+
+.. code-block:: console
+
+   $ make -C tools/xtop tests
+
+The target installs the locked packages, type-checks the program with
+``tsc`` and runs ``bun test``. The query itself is checked against the
+schema by the backend test ``xtop-nodes``, which runs
+:src:`tools/xtop/sql/nodes.sql` from ``test/xtop-nodes.sh`` over the
+rows of ``test/xtop-nodes.setup.sql``.
+
 Write a test
 ------------
 

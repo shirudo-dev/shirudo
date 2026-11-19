@@ -84,6 +84,9 @@ Files
    * - :src:`tools/backend/test/`
      - The SQL tests and their runner, ``test/run.sh``
        (:ref:`testing-backend`).
+   * - :src:`tools/xtop/`
+     - A terminal view of the nodes over ``node_status``,
+       ``latest`` and ``node_vulns`` (:doc:`xtop`).
 
 .. toctree::
    :titlesonly:
@@ -96,4 +99,5 @@ Files
    sbom-scan
    maintain
    boot-baselines
+   xtop
    tables/index

@@ -1,0 +1,193 @@
+// SPDX-License-Identifier: BSD-2-Clause
+// Copyright (c) 2026 Authors of shirudo
+//
+// The rows of sql/nodes.sql as tools/backend/test/xtop-nodes.expected has
+// them, turned into nodes and rolled up by image.
+
+import { describe, expect, test } from "bun:test";
+import { toFleetNode, toFleetReport, type NodeRow } from "../src/lib/backend.ts";
+import { configFromEnv, queryRows } from "../src/lib/clickhouse.ts";
+import { failedCheckName, groupByImage, healthPercent, imageLabel } from "../src/lib/fleet.ts";
+
+const BUILD = "d6d918ad22ff597579e6678bef75adca84d30f9661e0b7bbdbf534eebc138c1f";
+const LOG = [
+  "1 signed: pass, untrusted, 0 rejected in the last hour",
+  "2 fresh: pass, last record 12 s ago",
+  "3 reported: pass, verdict ok, cond 0x1555, flags 0, tamper +0, build d6d918ad",
+  "4 chain: pass, root 15452248",
+  "5 head: pass, seq 3 of 3, generation 3",
+  "6 set: pass, 1 loaded",
+  "7 peers: pass, 2 in group",
+];
+
+function row(over: Partial<NodeRow>): NodeRow {
+  return {
+    node_id: "node-a",
+    ak_name: "000b23602ab98bfb",
+    host_name: "edge-01",
+    status: "healthy",
+    trust: "untrusted",
+    failed_check: 0,
+    log: LOG,
+    last_seen_ms: 1_795_000_000_000,
+    updated_ms: 1_795_000_030_000,
+    generation: 3,
+    last_seq: 3,
+    head_seq: 3,
+    loaded: 1,
+    kernel_release: "7.4.2",
+    version_id: BUILD,
+    image_id: "fleet-os",
+    image_version: "2026.11.1",
+    shields_applied: 1,
+    shields_pending: 0,
+    shields_idle: 0,
+    exposed: 1,
+    unknown: 0,
+    ...over,
+  };
+}
+
+const ROWS: NodeRow[] = [
+  row({}),
+  row({ node_id: "node-b", ak_name: "000b9d72e08380a1", host_name: "core-01", loaded: 0, shields_applied: 0, shields_idle: 1, exposed: 2 }),
+  row({
+    node_id: "node-c",
+    ak_name: "000b0c",
+    host_name: "lab-01",
+    generation: null,
+    last_seq: null,
+    head_seq: null,
+    loaded: 0,
+    kernel_release: "7.5.1",
+    image_id: null,
+    image_version: null,
+    shields_applied: 0,
+    exposed: 0,
+    unknown: 1,
+  }),
+  row({
+    node_id: "node-d",
+    ak_name: "000b0d",
+    host_name: "edge-02",
+    status: "unhealthy",
+    failed_check: 3,
+    log: LOG.map((l, i) => (i === 2 ? "3 reported: FAIL, verdict degraded, cond 0x1555, flags 0, tamper +0, build d6d918ad" : l)),
+  }),
+  row({ node_id: "node-e", ak_name: "000b0e", host_name: "core-02", status: "stale", failed_check: 2, last_seq: 2, loaded: 0, shields_applied: 0, shields_idle: 1, exposed: 2 }),
+];
+
+describe("toFleetNode", () => {
+  test("maps every column", () => {
+    const n = toFleetNode(ROWS[0]!);
+    expect(n.name).toBe("node-a");
+    expect(n.hostName).toBe("edge-01");
+    expect(n.status).toBe("healthy");
+    expect(n.trust).toBe("untrusted");
+    expect(n.lastSeen.getTime()).toBe(1_795_000_000_000);
+    expect(n.tree).toEqual({ generation: 3, lastSeq: 3, headSeq: 3 });
+    expect(n.shields).toEqual({ applied: 1, pending: 0, idle: 0 });
+    expect(n.version).toBe(BUILD);
+  });
+
+  test("a node with no image or tree keeps its nulls", () => {
+    const n = toFleetNode(ROWS[2]!);
+    expect(n.imageId).toBeNull();
+    expect(n.tree.lastSeq).toBeNull();
+    expect(imageLabel(n.imageId, n.imageVersion)).toBe("—");
+  });
+
+  test("an empty image from a missing join reads as none", () => {
+    expect(toFleetNode(row({ image_id: "", image_version: "" })).imageId).toBeNull();
+  });
+
+  test("refuses a status the view does not know", () => {
+    expect(() => toFleetNode(row({ status: "degraded" }))).toThrow(/unknown status/);
+    expect(() => toFleetNode(row({ trust: "maybe" }))).toThrow(/unknown trust/);
+  });
+
+  test("names the failed check from its log line", () => {
+    expect(failedCheckName(toFleetNode(ROWS[3]!))).toBe("3 reported");
+    expect(failedCheckName(toFleetNode(ROWS[4]!))).toBe("2 fresh");
+    expect(failedCheckName(toFleetNode(ROWS[0]!))).toBe("");
+  });
+});
+
+describe("health", () => {
+  test("is the percent of nodes healthy", () => {
+    const nodes = ROWS.map(toFleetNode);
+    expect(healthPercent(nodes)).toBe(60);
+    expect(healthPercent(nodes.filter((n) => n.status === "healthy"))).toBe(100);
+    expect(healthPercent(nodes.filter((n) => n.status !== "healthy"))).toBe(0);
+    expect(healthPercent([])).toBeNull();
+  });
+});
+
+describe("groupByImage", () => {
+  const groups = groupByImage(ROWS.map(toFleetNode));
+  const fleetOs = groups.find((g) => g.key === "fleet-os 2026.11.1")!;
+  const none = groups.find((g) => g.key === "—")!;
+
+  test("groups by image id and version", () => {
+    expect(groups.map((g) => g.key).sort()).toEqual(["fleet-os 2026.11.1", "—"]);
+    expect(fleetOs.nodes).toBe(4);
+    expect(none.nodes).toBe(1);
+  });
+
+  test("takes the worst status and the share healthy", () => {
+    expect(fleetOs.status).toBe("unhealthy");
+    expect(fleetOs.statuses).toEqual({ unhealthy: 1, stale: 1, healthy: 2 });
+    expect(fleetOs.health).toBe(50);
+    expect(none.status).toBe("healthy");
+    expect(none.health).toBe(100);
+  });
+
+  test("rolls up kernel, tree, shields and exposure", () => {
+    expect(fleetOs.kernel).toBe("7.4.2");
+    expect(fleetOs.tree).toEqual({ minLastSeq: 2, headSeq: 3 });
+    expect(fleetOs.shields).toEqual({ applied: 2, pending: 0, idle: 2 });
+    expect(fleetOs.exposed).toBe(2);
+    expect(none.tree).toEqual({ minLastSeq: null, headSeq: null });
+    expect(none.unknown).toBe(1);
+  });
+
+  test("reports a mixed kernel as null", () => {
+    const mixed = groupByImage([toFleetNode(ROWS[0]!), toFleetNode(row({ ak_name: "x", kernel_release: "7.5.0" }))]);
+    expect(mixed[0]!.kernel).toBeNull();
+  });
+});
+
+describe("toFleetReport", () => {
+  test("dates the report by the newest computation", () => {
+    expect(toFleetReport(ROWS).generatedAt.getTime()).toBe(1_795_000_030_000);
+  });
+});
+
+describe("clickhouse", () => {
+  test("defaults to the local HTTP interface", () => {
+    expect(configFromEnv({}).url.href).toBe("http://127.0.0.1:8123/");
+  });
+
+  test("refuses credentials in the URL and other schemes", () => {
+    expect(() => configFromEnv({ CLICKHOUSE_URL: "http://u:p@host:8123/" })).toThrow(/credentials/);
+    expect(() => configFromEnv({ CLICKHOUSE_URL: "tcp://host:9000" })).toThrow(/http or https/);
+  });
+
+  test("posts the query and parses JSONEachRow", async () => {
+    let seen: { url: string; init: RequestInit } | null = null;
+    const fake = (async (url: URL, init: RequestInit) => {
+      seen = { url: String(url), init };
+      return new Response('{"a":1}\n{"a":2}\n');
+    }) as unknown as typeof fetch;
+    const cfg = configFromEnv({ CLICKHOUSE_URL: "http://ch:8123/", CLICKHOUSE_USER: "ro", CLICKHOUSE_PASSWORD: "pw" });
+    expect(await queryRows<{ a: number }>(cfg, "SELECT 1", fake)).toEqual([{ a: 1 }, { a: 2 }]);
+    expect(seen!.url).toContain("default_format=JSONEachRow");
+    expect(seen!.init.body).toBe("SELECT 1");
+    expect((seen!.init.headers as Record<string, string>)["X-ClickHouse-User"]).toBe("ro");
+  });
+
+  test("turns a ClickHouse error into its first line", async () => {
+    const fake = (async () => new Response("Code: 60. DB::Exception: Unknown table\nstack", { status: 404 })) as unknown as typeof fetch;
+    await expect(queryRows(configFromEnv({}), "SELECT 1", fake)).rejects.toThrow("404 Code: 60. DB::Exception: Unknown table");
+  });
+});

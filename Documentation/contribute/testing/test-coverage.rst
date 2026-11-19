@@ -952,6 +952,11 @@ the query of :src:`tools/xtop/sql/nodes.sql`, with the names and types
 of its columns, over nodes healthy, unhealthy, stale and without a tree
 or an image (``test/xtop-nodes``).
 
+The unit tests of :src:`tools/xtop/test/` cover how xtop turns the rows
+of that query into nodes, the health percent, the roll-up by image and
+its ClickHouse client; ``make -C tools/xtop tests`` type-checks the
+program and runs them (:ref:`testing-xtop`).
+
 Coverage by area
 ----------------
 
