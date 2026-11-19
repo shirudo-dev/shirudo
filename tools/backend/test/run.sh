@@ -11,7 +11,8 @@
 # test/<name>.expected. Every test starts from an empty schema, loaded
 # from sql/, as an installation loads it: the files in order, then
 # sql/apply-retention.sh. A test of what that script applies puts the
-# settings it wants in test/<name>.setup.sql, which runs between the two.
+# settings it wants in test/<name>.setup.sql, which runs between the two;
+# a test whose script needs rows to read puts them there too.
 # A test that has a test/<name>.sh runs it next, with CLICKHOUSE_CLIENT
 # naming the client of the test's server, as the jobs under jobs/ read
 # it; what the script prints comes before the output of the SQL in

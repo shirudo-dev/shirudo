@@ -1179,7 +1179,8 @@ comparing what it prints with ``test/<name>.expected``:
 ``tools/backend/test/run.sh <name>...`` runs only the tests named. The
 runner loads the schema as an installation does,
 ``sql/apply-retention.sh`` included. A test that needs other settings
-in place when that script runs puts them in ``test/<name>.setup.sql``.
+in place when that script runs puts them in ``test/<name>.setup.sql``,
+and so does a test whose script needs rows to read.
 
 A test that has a ``test/<name>.sh`` runs that script before its SQL,
 with ``CLICKHOUSE_CLIENT`` set to the client of the test's server, and

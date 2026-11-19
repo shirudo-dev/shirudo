@@ -947,7 +947,10 @@ trust from ``untrusted`` to ``enrolled``, each status check and the
 history it reads, ``node_vulns`` and its inputs, the
 retention script and the views that keep boot baselines, the tree
 ingest job on a single publication and on a walk over sealed segments,
-and the SBOM scan job on a store that holds an image in every state.
+the SBOM scan job on a store that holds an image in every state, and
+the query of :src:`tools/xtop/sql/nodes.sql`, with the names and types
+of its columns, over nodes healthy, unhealthy, stale and without a tree
+or an image (``test/xtop-nodes``).
 
 Coverage by area
 ----------------
