@@ -30,6 +30,19 @@ Check 3 fails a node whose ``version_id`` is not listed:
 
    INSERT INTO shirudo.expected_builds (version_id, note) VALUES ('<version_id>', 'shirudo 2026.11');
 
+:src:`tools/put-shirudo-build` does the same from the shell, for a
+``version_id`` or for the binary itself, whose ``shirudo version
+--version-id`` it reads, and leaves a build already allowed as it is:
+
+.. code-block:: console
+
+   $ tools/put-shirudo-build --note 'shirudo 2026.11' /usr/bin/shirudo
+   put-shirudo-build: 6e52d48ecbe8cf7e7d54e74460b3c54b3087c3d5e9eceea22644f584b34f73cb: allowed
+
+It runs ``clickhouse-client``, or the command ``CLICKHOUSE_CLIENT``
+names, as the jobs do, and exits 1 when an argument is not a build or
+the load fails, with nothing loaded, and 2 for wrong usage.
+
 Enroll a node
 -------------
 

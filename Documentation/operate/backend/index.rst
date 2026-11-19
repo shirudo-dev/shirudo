@@ -81,6 +81,9 @@ Files
    * - :src:`tools/backend/jobs/labels-put`
      - Loads the labels the operator gives the nodes, out of band
        (:doc:`labels-put`).
+   * - :src:`tools/put-shirudo-build`
+     - Allows builds of shirudo, by ``version_id`` or binary, in
+       ``shirudo.expected_builds`` (:doc:`maintain`).
    * - :src:`tools/backend/jobs/enroll-put`
      - Enrolls the attestation keys a builder created in TPMs, from its
        records (:doc:`enroll-put`).

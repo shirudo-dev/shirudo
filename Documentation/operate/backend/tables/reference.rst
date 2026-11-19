@@ -82,7 +82,7 @@ shirudo.expected_builds
 
 .. clickhouse-table:: shirudo.expected_builds
    :kind: ref
-   :written-by: the operator
+   :written-by: the operator, or tools/put-shirudo-build
    :row-size: ~100 B (estimate).
    :scale: Builds you allow.
    :reference: tens of rows, negligible

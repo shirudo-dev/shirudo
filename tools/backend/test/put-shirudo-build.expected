@@ -1,0 +1,21 @@
+put-shirudo-build: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: allowed
+put-shirudo-build: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: allowed
+first put: status 0
+put-shirudo-build: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: already allowed
+put-shirudo-build: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc: allowed
+again: status 0
+put-shirudo-build: 000000000000000000000000000000000000000000000000000000000000000 is neither a version_id nor a shirudo binary, nothing loaded
+neither: status 1
+put-shirudo-build: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA is neither a version_id nor a shirudo binary, nothing loaded
+upper: status 1
+put-shirudo-build: ./broken does not give a version_id, nothing loaded
+no build from it: status 1
+put-shirudo-build: the note has a control character, nothing loaded
+note with a tab: status 1
+usage: put-shirudo-build [--note <text>] <version_id>|<shirudo>...
+no build: status 2
+usage: put-shirudo-build [--note <text>] <version_id>|<shirudo>...
+no argument: status 2
+aaaa	test-vm build
+bbbb	test-vm build
+cccc	

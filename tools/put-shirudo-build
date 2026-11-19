@@ -1,0 +1,113 @@
+#!/bin/sh
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+#
+# tools/put-shirudo-build -- allow builds of shirudo on the backend: add
+# their version_id to shirudo.expected_builds, which check 3 of
+# node_status reads.
+#
+#   tools/put-shirudo-build [--note <text>] <version_id>|<shirudo>...
+#
+# Each argument is a version_id, 64 lowercase hex digits, or a shirudo
+# binary, whose shirudo version --version-id gives it. A build already
+# allowed is left as it is. --note says what the build is, such as the
+# release it came from.
+#
+#   CLICKHOUSE_CLIENT  the client command and its options, split at
+#                      spaces. Default: clickhouse-client, which reads
+#                      CLICKHOUSE_HOST, CLICKHOUSE_USER and
+#                      CLICKHOUSE_PASSWORD itself.
+#
+# Exit status: 0 when every build is allowed; 1 when an argument is not a
+# build or the load fails, with nothing loaded; 2 for wrong usage.
+
+set -eu
+
+note=
+work=
+
+die()
+{
+	printf 'put-shirudo-build: %s\n' "$1" >&2
+	exit 1
+}
+
+usage()
+{
+	printf '%s\n' 'usage: put-shirudo-build [--note <text>] <version_id>|<shirudo>...' >&2
+	exit 2
+}
+
+cleanup()
+{
+	[ -z "$work" ] || rm -rf "$work"
+}
+
+client()
+{
+	# shellcheck disable=SC2086 # a command with its options, to be split
+	${CLICKHOUSE_CLIENT:-clickhouse-client} "$@"
+}
+
+is_version_id()
+{
+	case "$1" in
+	*[!0-9a-f]*) return 1 ;;
+	esac
+	[ "${#1}" -eq 64 ]
+}
+
+version_id_of()
+{
+	if is_version_id "$1"; then
+		printf '%s\n' "$1"
+	elif [ -f "$1" ] && [ -x "$1" ]; then
+		id=$("$1" version --version-id 2>/dev/null) && is_version_id "$id" ||
+			die "$1 does not give a version_id, nothing loaded"
+		printf '%s\n' "$id"
+	else
+		die "$1 is neither a version_id nor a shirudo binary, nothing loaded"
+	fi
+}
+
+if [ "${1:-}" = --note ]; then
+	[ $# -ge 2 ] || usage
+	note=$2
+	shift 2
+fi
+[ $# -ge 1 ] || usage
+case "$1" in
+-*) usage ;;
+esac
+case "$note" in
+*[[:cntrl:]]*) die 'the note has a control character, nothing loaded' ;;
+esac
+
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+work=$(mktemp -d)
+for build; do
+	version_id_of "$build" >>"$work/given"
+done
+sort -u "$work/given" >"$work/builds"
+
+client --query 'SELECT version_id FROM shirudo.expected_builds FINAL FORMAT TSVRaw' \
+	</dev/null >"$work/read" ||
+	die 'cannot read shirudo.expected_builds, nothing loaded'
+sort -u "$work/read" | comm -23 "$work/builds" - >"$work/new"
+# A TSV field takes a backslash as an escape.
+escaped=$(printf '%s' "$note" | sed 's/\\/\\\\/g')
+while read -r id; do
+	printf '%s\t%s\n' "$id" "$escaped"
+done <"$work/new" >"$work/rows"
+if [ -s "$work/rows" ]; then
+	client --query 'INSERT INTO shirudo.expected_builds (version_id, note) FORMAT TSV' \
+		<"$work/rows" || die 'cannot insert into shirudo.expected_builds, nothing loaded'
+fi
+while read -r id; do
+	if grep -qx "$id" "$work/new"; then
+		printf 'put-shirudo-build: %s: allowed\n' "$id"
+	else
+		printf 'put-shirudo-build: %s: already allowed\n' "$id"
+	fi
+done <"$work/builds"

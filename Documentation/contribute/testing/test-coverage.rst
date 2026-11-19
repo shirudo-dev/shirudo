@@ -952,7 +952,8 @@ SBOM put job into a ``file://`` and an ``s3://`` store, again and with
 another SBOM, and what it refuses (``test/sbom-put``), the label put job
 and the labels each node reads from it (``test/labels-put``), the
 enroll put job, a key bound once and what it refuses
-(``test/enroll-put``), and the queries
+(``test/enroll-put``), the helper that allows builds
+(``test/put-shirudo-build``), and the queries
 of :src:`tools/xtop/sql/`, with the names and types of their columns,
 over nodes healthy, unhealthy, stale and without a tree or an image, a
 tree with one upatch deployed and one still rolling out, and the
