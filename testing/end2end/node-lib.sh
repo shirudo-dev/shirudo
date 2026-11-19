@@ -10,8 +10,9 @@
 
 # Where host.sh records each node, in node-<name>/: port, the host port of
 # its SSH server, key, the key of its root, tpm-names, the names of its
-# keys its builder recorded, ek-ca.pem, the CA of its endorsement
-# certificate, and ready once it is prepared, else failed.
+# keys its builder recorded, enroll.json, the same as jobs/enroll-put
+# loads them, ek-ca.pem, the CA of its endorsement certificate, and ready
+# once it is prepared, else failed.
 : "${NODES_DIR:=/mnt/shirudo-src/build/test-vm/end2end}"
 # Where the nodes' SSH ports are forwarded: QEMU's address for the host,
 # as node A sees it.

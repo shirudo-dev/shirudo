@@ -89,7 +89,7 @@ help:
 	  'shirudo make targets:' \
 	  '  Build: make, make target, make target-deps, make bpf-deps, make install' \
 	  '  Operator tools: make shirudo-build, make quote-check' \
-	  '  Local stack: make stack-up, make oci, make telemetry, make vm, make stack-down' \
+	  '  Local stack: make stack-up, make oci, make telemetry, make vm, make vm-enroll, make stack-down' \
 	  '  Checks: make sparse' \
 	  '  Source index: make tags (ctags), make cscope' \
 	  '  Install roles: make install-target, make install-operator' \
@@ -196,6 +196,6 @@ distclean: clean
 	$(Q)rm -rf build/quote-check-deps "$(QUOTE_CHECK_OPENSSL_PREFIX)"
 	$(Q)$(MAKE) -f Makefile.shirudo distclean
 
-.PHONY: vm vm-console vm-ssh vm-stop vm-clean oci telemetry stack-up stack-down
-vm vm-console vm-ssh vm-stop vm-clean oci telemetry stack-up stack-down:
+.PHONY: vm vm-console vm-ssh vm-enroll vm-stop vm-clean oci telemetry stack-up stack-down
+vm vm-console vm-ssh vm-enroll vm-stop vm-clean oci telemetry stack-up stack-down:
 	+$(Q)$(MAKE) -C testing $@

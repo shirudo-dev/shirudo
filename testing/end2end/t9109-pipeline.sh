@@ -166,8 +166,9 @@ test_expect_success 'node B keeps the attestation key its builder recorded' '
 '
 
 test_expect_success 'the operator enrolls node B from its builder'\''s records' '
-	ch "INSERT INTO shirudo.nodes (ak_name, trust)
-		VALUES ('\''$(node_builder_name b ak)'\'', '\''enrolled'\'')"
+	"$BACKEND/jobs/enroll-put" "$NODES_DIR/node-b/enroll.json" >&2 &&
+	test "$(ch "SELECT ek_name FROM shirudo.enrollments FINAL
+		WHERE ak_name = '\''$(node_builder_name b ak)'\''")" = "$(node_builder_name b ek)"
 '
 
 test_expect_success 'the backend keeps node B enrolled, the edge node untrusted, and every record' '

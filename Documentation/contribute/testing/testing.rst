@@ -702,7 +702,36 @@ the keepalives. The VM then shows in ``shirudo.node_status``, and
    $ make vm
    $ CLICKHOUSE_URL=http://127.0.0.1:18124/ tools/xtop/dist/xtop
 
-Without the checker it starts the telemetry stack alone and says so. A
+Every ``make vm`` acts as the builder of :doc:`/operate/run/attest`:
+before the guest first boots, :src:`testing/vm/tpm-builder.sh` creates
+its attestation and endorsement keys in the fresh vTPM, and writes
+``enroll.json`` in its state directory, naming the node by the VM's name,
+which is also its host name. ``make vm-enroll`` gathers the
+``enroll.json`` of every VM under ``build/test-vm/vms/`` into
+``build/test-vm/enroll.json`` and loads it into the stack's backend with
+one ``enroll-put``, so that the VMs read ``enrolled``. It prints the file
+and the command before it runs them:
+
+.. code-block:: console
+
+   $ make vm-enroll
+   $ cat build/test-vm/enroll.json
+   {"source": "test-vm", "nodes": [
+    {"ak_name": "000b…", "ek_name": "000b…", "node_id": "interactive-Xa3k9q"},
+    {"ak_name": "000b…", "ek_name": "000b…", "node_id": "interactive-pL2m7c"}
+   ]}
+   $ CLICKHOUSE_CLIENT='docker exec -i shirudo-dev-clickhouse clickhouse-client' tools/backend/jobs/enroll-put build/test-vm/enroll.json
+   enroll-put: 000b… (ek_name 000b…, node_id interactive-Xa3k9q): already enrolled
+   enroll-put: 000b… (ek_name 000b…, node_id interactive-pL2m7c): enrolled
+   enroll-put: loaded bindings: 2
+
+A VM enrolled before is loaded again, which changes nothing, so run it
+after each ``make vm``, before the VM's first keepalive or after. A VM
+stopped but not removed with ``make vm-clean`` keeps its state directory
+and is enrolled too. ``VM_NAME=<name>`` enrolls that VM alone, from its
+own ``enroll.json``.
+
+Without the checker, ``make telemetry`` starts the telemetry stack alone and says so. A
 stack started before the checker was built keeps its collector: run
 ``make stack-down`` before ``make telemetry`` to add the backend.
 
@@ -878,7 +907,8 @@ and leaves it running until ``host.sh`` stops it. Before the guest boots,
 node mode acts as the builder of :doc:`/operate/run/attest`:
 :src:`testing/vm/tpm-builder.sh` creates the attestation key and the
 endorsement key in the node's fresh vTPM state, with the tpm2-tools
-commands that page gives, and writes their names to ``tpm-names`` in the
+commands that page gives, and writes their names to ``tpm-names`` and to
+``enroll.json``, the file :doc:`/operate/backend/enroll-put` loads, in the
 VM's state directory. As the vTPM's maker, it also writes an
 endorsement certificate for the endorsement key to the ECC index of the
 TCG profile, ``0x01C0000A``, signed by a CA of its own whose key it
@@ -1013,8 +1043,9 @@ and the nodes' directory in its environment; its output is
    other state of an SBOM, and runs the backend's sbom-scan job with the
    stub ``trivy`` of the fixtures, which prints one ``openssl`` finding;
 #. checks that node B's records carry the attestation key its builder
-   recorded, and enrolls that key, inserting ``enrolled`` for it into
-   ``shirudo.nodes`` as an operator does;
+   recorded, and enrolls that key from the builder's ``enroll.json`` with
+   :doc:`/operate/backend/enroll-put`, as an operator does, and checks
+   the endorsement key's name it recorded;
 #. seeds the kernel advisory of the fixtures, whose range holds every test
    kernel, and the nodes' build, and refreshes ``node_status`` and
    ``node_vulns``.

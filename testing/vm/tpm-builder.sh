@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
-# testing/vm/tpm-builder.sh <state-dir> <names> <ek-ca> -- act as the builder
-# of "Enroll from a builder's records": create the attestation key and the
-# endorsement key in the vTPM state before the guest boots, with the commands
-# that page gives, and write their names to <names>. As the vTPM's maker, it
-# also stores an endorsement certificate from a CA of its own, in <ek-ca>.
+# testing/vm/tpm-builder.sh <state-dir> <names> <ek-ca> <enroll> <node-id> --
+# act as the builder of "Enroll from a builder's records": create the keys in
+# the vTPM state before the guest boots, with the commands that page gives,
+# write their names to <names> and the file jobs/enroll-put loads, naming
+# the node <node-id>, to <enroll>. As the vTPM's maker, it also stores an
+# endorsement certificate from a CA of its own, in <ek-ca>.
 
 set -euo pipefail
 
 state=$1
 names=$2
 ek_ca=$3
+enroll=$4
+node_id=$5
 work=$(mktemp -d)
 
 # swtpm drops the lock on the state directory only when it exits, and the
@@ -60,6 +63,9 @@ tpm2_readpublic -c ak.ctx -o ak.pub >/dev/null
 tpm2_flushcontext -t
 tpm2_createek -c - -G ecc -u ek.pub >/dev/null
 printf 'ak-name %s\nek-name %s\n' "$(name ak.pub)" "$(name ek.pub)" >"$names"
+# node_id is a VM name, which needs no JSON escape.
+printf '{"source": "test-vm", "nodes": [{"ak_name": "%s", "ek_name": "%s", "node_id": "%s"}]}\n' \
+	"$(name ak.pub)" "$(name ek.pub)" "$node_id" >"$enroll"
 
 # The certificate goes where a TPM's maker puts it, the ECC index of the TCG
 # EK credential profile, written under the platform hierarchy the firmware

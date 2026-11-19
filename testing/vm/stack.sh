@@ -22,7 +22,7 @@ fi
 exec 9>"$W/.lock"
 flock 9
 case "$TLS_DIR/" in "$REPO/"*) echo 'stack private keys must be outside the checkout' >&2; exit 1 ;; esac
-command=${1:?usage: stack.sh prepare|oci|telemetry|down|vm}
+command=${1:?usage: stack.sh prepare|oci|telemetry|down|enroll|vm}
 shift
 prepare()
 {
@@ -51,6 +51,18 @@ telemetry)
 	fi
 	;;
 down) stack_down ;;
+enroll)
+	# Shown before it runs, so that a demo shows what the step is.
+	file=$(realpath --relative-to="$REPO" "${1:?usage: stack.sh enroll <enroll.json>}")
+	[ "$(docker container inspect -f '{{.State.Running}}' "$STACK_NAME-clickhouse" 2>/dev/null)" = true ] ||
+		{ echo 'the local stack is not up: run make stack-up' >&2; exit 1; }
+	cd "$REPO"
+	client="docker exec -i $STACK_NAME-clickhouse clickhouse-client"
+	printf '$ cat %s\n' "$file"
+	cat "$file"
+	printf "\$ CLICKHOUSE_CLIENT='%s' tools/backend/jobs/enroll-put %s\n" "$client" "$file"
+	CLICKHOUSE_CLIENT=$client tools/backend/jobs/enroll-put "$file"
+	;;
 vm)
 	prepare
 	export TEST_VM_LOCAL_STACK=1

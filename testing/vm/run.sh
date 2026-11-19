@@ -508,19 +508,56 @@ validate_host_bundle()
 		die "prepared runtime image is missing: $runtime_image; run 'make -C testing bundle'"
 }
 
+vm_has_builder()
+{
+	[[ "$VM_MODE" == node || "$VM_MODE" == interactive ]]
+}
+
+# The bindings of every VM whose builder wrote an enroll.json, in one file
+# for one enroll-put: those enrolled before are loaded again, which
+# changes nothing.
+merge_enroll_files()
+{
+	local files=("$VMS_DIR"/*/enroll.json)
+
+	[[ -s "${files[0]}" ]] ||
+		die "no VM under $VMS_DIR has an enroll.json; start one with 'make -C testing vm'"
+	python3 - "$VM_ROOT/enroll.json" "${files[@]}" <<'PY'
+import json, sys
+nodes = [n for path in sys.argv[2:] for n in json.load(open(path))["nodes"]]
+with open(sys.argv[1], "w") as f:
+    f.write('{"source": "test-vm", "nodes": [\n')
+    f.write(",\n".join(" " + json.dumps(n) for n in nodes))
+    f.write("\n]}\n")
+PY
+}
+
+run_enroll()
+{
+	if [[ -z "$VM_NAME_REQUEST" ]]; then
+		merge_enroll_files
+		exec "$REPO_ROOT/testing/vm/stack.sh" enroll "$VM_ROOT/enroll.json"
+	fi
+	select_named_run_dir
+	[[ -s "$RUN_DIR/enroll.json" ]] ||
+		die "VM '$VM_NAME' has no enroll.json: only 'make vm' and end2end nodes have a builder"
+	exec "$REPO_ROOT/testing/vm/stack.sh" enroll "$RUN_DIR/enroll.json"
+}
+
 start_swtpm()
 {
 	local _
 
 	chmod 0700 "$RUN_DIR/tpm"
-	# An end2end node's TPM comes from a builder the operator trusts, which
-	# records the names of its keys before the guest boots, and carries an
-	# endorsement certificate from its maker's CA.
-	if [[ "$VM_MODE" == node ]]; then
+	# An end2end node's or an interactive VM's TPM comes from a builder the
+	# operator trusts, which records the names of its keys before the guest
+	# boots, and carries an endorsement certificate from its maker's CA.
+	if vm_has_builder; then
 		"$REPO_ROOT/testing/vm/tpm-builder.sh" "$RUN_DIR/tpm" "$RUN_DIR/tpm-names" \
-			"$RUN_DIR/ek-ca.pem" \
+			"$RUN_DIR/ek-ca.pem" "$RUN_DIR/enroll.json" "$VM_NAME" \
 			>>"$RUN_DIR/swtpm.log" 2>&1 ||
 			die "could not create the keys of the vTPM; see $RUN_DIR/swtpm.log"
+		log "builder's records of the vTPM keys: $RUN_DIR/enroll.json (make vm-enroll loads them)"
 	fi
 	if user_systemd_available; then
 		SWTPM_UNIT_FILE="${RUN_DIR}/swtpm.unit"
@@ -1495,6 +1532,10 @@ while [[ "$#" -gt 0 ]]; do
 		run_ssh
 		exit 0
 		;;
+	--enroll)
+		[[ "$#" -eq 1 ]] || die "--enroll does not accept additional arguments"
+		run_enroll
+		;;
 	--verbose)
 		VM_VERBOSE=1
 		shift
@@ -1519,7 +1560,7 @@ validate_bpm_oci
 if [[ "$VM_INITRD" == 1 ]]; then
 	HOST_DEPENDENCIES+=("dracut:dracut-core:dracut" "lsinitrd:dracut-core:dracut" "file:file:file")
 fi
-if [[ "$VM_MODE" == node ]]; then
+if vm_has_builder; then
 	HOST_DEPENDENCIES+=("tpm2_createprimary:tpm2-tools:tpm2-tools"
 		"swtpm_ioctl:swtpm-tools:swtpm-tools" "openssl:openssl:openssl")
 fi
@@ -1527,7 +1568,7 @@ check_host_dependencies
 # tpm2-tools load tpm2-tss's swtpm TCTI only when tpm-builder.sh runs. grep
 # reads all of ldconfig's output, which pipefail would otherwise fail on
 # SIGPIPE.
-if [[ "$VM_MODE" == node ]] &&
+if vm_has_builder &&
 	! PATH="$PATH:/sbin:/usr/sbin" ldconfig -p |
 		grep 'libtss2-tcti-swtpm\.so' >/dev/null; then
 	log "error: missing the swtpm TCTI of tpm2-tss, libtss2-tcti-swtpm.so"

@@ -29,7 +29,7 @@ test-vm-arch = $(shell TEST_VM_ARCH='$(TEST_VM_ARCH)'; \
 .DEFAULT_GOAL := all
 .PHONY: all help clean unit ci-checks functional end2end build-operator build-unit \
 	test-helpers \
-	fuzz afl bundle test-vm-bundle require-vm-kernel vm vm-console vm-ssh vm-stop vm-clean \
+	fuzz afl bundle test-vm-bundle require-vm-kernel vm vm-console vm-ssh vm-enroll vm-stop vm-clean \
 	vm-operator-end2end
 
 PACKAGE_FORMAT ?= $(call test-vm-arch,TEST_VM_HOST_PKG_FORMAT)
@@ -210,6 +210,10 @@ vm-console:
 vm-ssh:
 	$(Q)VM_NAME="$(VM_NAME)" \
 		TEST_VM_WORK_DIR="$(TEST_VM_WORK_DIR)" $(ROOT)/testing/vm/run.sh --ssh
+
+vm-enroll:
+	$(Q)VM_NAME="$(VM_NAME)" \
+		TEST_VM_WORK_DIR="$(TEST_VM_WORK_DIR)" $(ROOT)/testing/vm/run.sh --enroll
 
 define run-target-vm
 VM_MODE=$(or $(4),$(if $(filter $(1),$(VM_SERVE_SUITES)),serve,test)) \
@@ -393,7 +397,7 @@ help:
 	  '  make -j boots several at once.' \
 	  '  make -C testing fuzz [FUZZ_SECONDS=60] [FUZZ_CORPUS=<dir>] [FUZZERS=<target>...]' \
 	  '  make -C testing afl [AFL_SECONDS=600] [FUZZ_CORPUS=<dir>] [FUZZERS=<target>...]' \
-	  '  make -C testing vm, vm-console, vm-ssh, vm-stop, or vm-clean' \
+	  '  make -C testing vm, vm-console, vm-ssh, vm-enroll, vm-stop, or vm-clean' \
 	  '  VM_KERNEL=bpf-next (default) selects the shirudo-dev/kernel artifact' \
 	  '  make -C testing bundle or test-helpers' \
 	  '  make -C testing stack-up, oci, telemetry or stack-down' \

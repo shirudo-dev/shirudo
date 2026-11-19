@@ -92,6 +92,7 @@ node_boot() {
 		>"$W/node-$1$NODE_ROUND.log" 2>&1 &&
 	   cp "$run/ssh.port" "$NODES_DIR/node-$1/port" &&
 	   cp "$run/tpm-names" "$NODES_DIR/node-$1/tpm-names" &&
+	   cp "$run/enroll.json" "$NODES_DIR/node-$1/enroll.json" &&
 	   cp "$run/ek-ca.pem" "$NODES_DIR/node-$1/ek-ca.pem" &&
 	   install -m 0600 "$run/ssh/id_ed25519" "$NODES_DIR/node-$1/key"; then
 		: >"$NODES_DIR/node-$1/ready"
