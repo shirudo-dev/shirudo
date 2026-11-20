@@ -1,0 +1,55 @@
+shields-put: oci://registry.example.com/shields/xfs-fix:1.0.0 xfs-fix (EXAMPLE-0101)
+shields-put: oci://registry.example.com/shields/ssl-fix:1.0.0 ssl-fix (EXAMPLE-0202)
+shields-put: oci://registry.example.com/shields/probe:0.1.0 probe (no advisory)
+shields-put: loaded shields: 3
+first put: status 0
+shields-put: oci://registry.example.com/shields/ssl-fix:1.1.0 ssl-fix (EXAMPLE-0202, EXAMPLE-0303)
+shields-put: loaded shields: 1
+second put: status 0
+shields-put: oci://registry.example.com/shields/xfs-fix:1.0.0 xfs-fix (EXAMPLE-0101)
+shields-put: oci://registry.example.com/shields/ssl-fix:1.0.0 ssl-fix (EXAMPLE-0202)
+shields-put: oci://registry.example.com/shields/probe:0.1.0 probe (no advisory)
+check: status 0
+shields-put: the file is not a JSON value, nothing loaded
+not json: status 1
+shields-put: the file is not an object whose one key is "shields", nothing loaded
+not the form: status 1
+shields-put: shield 1 has the key "extra", which a shield does not have, nothing loaded
+key too many: status 1
+shields-put: shield 1 does not have description, fixes, manifest_digest, package, reference, selector, version, nothing loaded
+key too few: status 1
+shields-put: shield 1: id is not an upatch name: 1 to 255 of letters, digits, ., _ and -, not starting with ., nothing loaded
+dot first: status 1
+shields-put: shield 1: package is not a package name, nothing loaded
+bad package: status 1
+shields-put: shield 1: version is not a package version, nothing loaded
+bad version: status 1
+shields-put: shield 1: manifest_digest is not sha256:<64 lowercase hex>, nothing loaded
+bad digest: status 1
+shields-put: shield a: the advisory A B is not 1 to 255 bytes of letters, digits, ., _, : and -, nothing loaded
+bad advisory: status 1
+shields-put: shield a: fixes names an advisory twice, nothing loaded
+advisory twice: status 1
+shields-put: shield a: reference is not oci://<registry>/<repository>:<version> of package a at 1.0.0, nothing loaded
+other package: status 1
+shields-put: shield a: reference is not oci://<registry>/<repository>:<version> of package a at 1.0.0, nothing loaded
+other version: status 1
+shields-put: shield a: selector is not an object, nothing loaded
+selector not object: status 1
+shields-put: shield a: description is not at most 1024 bytes of text without a control character, nothing loaded
+control in description: status 1
+shields-put: shield a of oci://registry.example.com/shields/a:1.0.0 is given twice, nothing loaded
+twice: status 1
+shields-put: cannot read none.json, nothing loaded
+no file: status 1
+usage: shields-put [--check] <catalog.json>|-
+no argument: status 2
+id	package	version	reference	manifest_digest	selector	description	versions	advisories	trees
+String	String	String	String	String	String	String	UInt64	Array(Tuple(String, String, String, String, UInt64))	Array(String)
+probe	probe	0.1.0	oci://registry.example.com/shields/probe:0.1.0	0000000000000000000000000000000000000000000000000000000000000003	{}	probe at 0.1.0	1	[]	[]
+ssl-fix	ssl-fix	1.1.0	oci://registry.example.com/shields/ssl-fix:1.1.0	0000000000000000000000000000000000000000000000000000000000000004	{}	ssl-fix at 1.1.0	2	[('EXAMPLE-0202','HIGH','openssl','sbom',4),('EXAMPLE-0303','','','',0)]	['fleet-base']
+xfs-fix	xfs-fix	1.0.0	oci://registry.example.com/shields/xfs-fix:1.0.0	0000000000000000000000000000000000000000000000000000000000000001	{"labels":{"role":["edge"]}}	xfs-fix at 1.0.0	1	[('EXAMPLE-0101','CRITICAL','linux','kernel',2)]	['fleet-base']
+oci://registry.example.com/shields/probe:0.1.0	probe	probe	0.1.0	0000000000000000000000000000000000000000000000000000000000000003	[]	{}	probe at 0.1.0
+oci://registry.example.com/shields/ssl-fix:1.0.0	ssl-fix	ssl-fix	1.0.0	0000000000000000000000000000000000000000000000000000000000000002	['EXAMPLE-0202']	{}	ssl-fix at 1.0.0
+oci://registry.example.com/shields/ssl-fix:1.1.0	ssl-fix	ssl-fix	1.1.0	0000000000000000000000000000000000000000000000000000000000000004	['EXAMPLE-0202','EXAMPLE-0303']	{}	ssl-fix at 1.1.0
+oci://registry.example.com/shields/xfs-fix:1.0.0	xfs-fix	xfs-fix	1.0.0	0000000000000000000000000000000000000000000000000000000000000001	['EXAMPLE-0101']	{"labels":{"role":["edge"]}}	xfs-fix at 1.0.0

@@ -34,6 +34,7 @@ shirudo	rejected_mv	MaterializedView
 shirudo	sbom_images	ReplacingMergeTree	image_id, image_version, image_root
 shirudo	sbom_vulns	MergeTree	sbom_sha256, vuln_id, package
 shirudo	settings	ReplacingMergeTree	id
+shirudo	shield_catalog	ReplacingMergeTree	reference, id
 shirudo	tree_ops	ReplacingMergeTree	tree_id, seq
 shirudo	tree_pubs	ReplacingMergeTree	tree_id, generation
 shirudo	upatch_fixes	ReplacingMergeTree	tree_id, seq, advisory, source

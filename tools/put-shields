@@ -8,7 +8,8 @@
 # `shirudo bpm tree append` takes a package by.
 #
 #   tools/put-shields --version <version> [--keys-dir <dir>] [--new-index]
-#                     oci://<registry>/<namespace> [<beefile>|<dir>...]
+#                     [--catalog <file>] oci://<registry>/<namespace>
+#                     [<beefile>|<dir>...]
 #
 # A shield is a package whose Beefile has an [upatches.tree] entry. The
 # Beefiles are the ones given and, for each directory given, every
@@ -23,7 +24,10 @@
 #
 # Each push is reported on standard error, and standard output gets the
 # `shirudo bpm tree append` command that appends that shield by its
-# reference and manifest digest, less the tree to fill in.
+# reference and manifest digest, less the tree to fill in. --catalog
+# writes the shields pushed, with their fixes and selectors, as
+# jobs/shields-put of tools/backend loads them, so that the backend lists
+# them as available.
 #
 #   SHIRUDO           the shirudo binary. Default: shirudo.
 #   SHIRUDO_KEYS_DIR  the keys directory when --keys-dir is not given.
@@ -39,6 +43,7 @@ shirudo=${SHIRUDO:-shirudo}
 keys=${SHIRUDO_KEYS_DIR:-}
 version=
 new_index=
+catalog=
 work=
 
 die()
@@ -51,7 +56,7 @@ usage()
 {
 	printf '%s\n' \
 		'usage: put-shields --version <version> [--keys-dir <dir>] [--new-index]' \
-		'                   oci://<registry>/<namespace> [<beefile>|<dir>...]' >&2
+		'                   [--catalog <file>] oci://<registry>/<namespace> [<beefile>|<dir>...]' >&2
 	exit 2
 }
 
@@ -91,6 +96,11 @@ while [ $# -gt 0 ]; do
 	--new-index)
 		new_index=--new-index
 		shift
+		;;
+	--catalog)
+		[ $# -ge 2 ] || usage
+		catalog=$2
+		shift 2
 		;;
 	-*) usage ;;
 	*) break ;;
@@ -139,5 +149,14 @@ while read -r beefile; do
 	set -- $pushed
 	printf 'shirudo bpm tree append %s --package-digest %s oci://<registry>/<tree> --tree-id <tree-id>\n' \
 		"$1" "$2"
+	python3 "$repo/tools/shield-entries.py" "$beefile" "$1" "$2" "$version" \
+		>>"$work/entries" || die "cannot read the tree entries of $beefile"
 	rm -f "$work/out/$bee"
 done <"$work/beefiles"
+if [ -n "$catalog" ]; then
+	{
+		printf '{"shields": [\n'
+		paste -sd, "$work/entries"
+		printf ']}\n'
+	} >"$catalog" || die "cannot write $catalog"
+fi

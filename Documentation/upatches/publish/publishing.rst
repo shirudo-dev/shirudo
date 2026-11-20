@@ -209,6 +209,10 @@ id, and ``--keys-dir``. The digest decides which package is appended:
 the registry can point the tag at another package your key signed, and
 ``tree append`` refuses one whose manifest has another digest.
 
+``--catalog <file>`` also writes the shields it pushed, with their fixes
+and selectors, for the keepalive backend to list as available
+(:doc:`/operate/backend/shields-put`).
+
 Segments and registry retention
 -------------------------------
 

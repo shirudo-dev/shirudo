@@ -241,6 +241,34 @@ shirudo.label_sets
    :labels: The whole set, key to value.
    :put_at: When labels-put loaded it; the version ReplacingMergeTree keeps the newest of.
 
+shirudo.shield_catalog
+----------------------
+
+.. clickhouse-table:: shirudo.shield_catalog
+   :kind: ref
+   :written-by: jobs/shields-put, from what tools/put-shields --catalog wrote
+   :row-size: ~500 B (estimate: a reference, a 64-hex digest, selector JSON).
+   :scale: Every version of every shield pushed. Not per node.
+   :reference: thousands of rows, negligible
+   :bytes: 1000000
+
+   The shields published to a registry, available to append to a tree:
+   one row per [upatches.tree] entry of a pushed package. xtop's shields
+   view lists the newest of each id as available.
+
+   - Read with FINAL: a put of the same reference and id replaces the row.
+   - selector is copied as JSON text and never evaluated, as in tree_ops.
+
+   :reference: The package, oci://<registry>/<repository>:<version>.
+   :id: The upatch, the id of its tree entry.
+   :package: Package name.
+   :version: Package version.
+   :manifest_digest: The package's manifest, 64 lowercase hex digits without sha256:; bpm tree append takes the package by the reference and this digest.
+   :fixes: The advisories of the entry's fixes, in byte order.
+   :selector: The entry's selector as compact JSON.
+   :description: The package's description.
+   :put_at: When shields-put loaded it; the version ReplacingMergeTree keeps the newest of.
+
 shirudo.enrollments
 -------------------
 

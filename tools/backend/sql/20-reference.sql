@@ -117,6 +117,29 @@ CREATE TABLE IF NOT EXISTS shirudo.label_sets
 ENGINE = ReplacingMergeTree(put_at)
 ORDER BY (by, node);
 
+-- The shields published to a registry and available to append to a tree:
+-- one row per [upatches.tree] entry of a pushed package, as jobs/shields-put
+-- loads what tools/put-shields wrote. reference is the package's
+-- oci://<registry>/<repository>:<version> and manifest_digest its manifest,
+-- 64 lowercase hex digits without "sha256:", as tree_ops has them: bpm
+-- tree append takes the package by the two. selector is the entry's
+-- selector as JSON text, copied and never evaluated. A put of the same
+-- reference and id replaces the row. Read it with FINAL.
+CREATE TABLE IF NOT EXISTS shirudo.shield_catalog
+(
+    reference String,
+    id String,
+    package String,
+    version String,
+    manifest_digest String,
+    fixes Array(String),
+    selector String,
+    description String,
+    put_at DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(put_at)
+ORDER BY (reference, id);
+
 -- The thresholds of the checks, the retention of shirudo.keepalive and
 -- shirudo.boot_first and the age at which an SBOM's scan is stale, in one
 -- row. Read it with FINAL; to change a value, insert the whole row again

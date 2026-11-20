@@ -87,6 +87,9 @@ Files
    * - :src:`tools/backend/jobs/enroll-put`
      - Enrolls the attestation keys a builder created in TPMs, from its
        records (:doc:`enroll-put`).
+   * - :src:`tools/backend/jobs/shields-put`
+     - Loads the shields that :src:`tools/put-shields` pushed, as
+       available to append to a tree (:doc:`shields-put`).
    * - :src:`tools/backend/jobs/sbom-put`
      - Stores the CycloneDX SBOM of an image in the SBOM store, for an
        image pipeline to call (:doc:`sbom-put`).
@@ -113,6 +116,7 @@ Files
    sbom-put
    labels-put
    enroll-put
+   shields-put
    maintain
    boot-baselines
    xtop
