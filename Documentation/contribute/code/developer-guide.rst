@@ -419,8 +419,8 @@ Project layout
      - Kernel source, configuration, patches and built artifacts used
        by CI. See :doc:`/internals/kernel-patches`.
    * - :src:`upatches/`
-     - The shipped packages, ``kernel-obs`` and ``kernel-cve``, each
-       with its Beefile.
+     - The shipped packages: ``kernel-obs`` with its Beefile, and the
+       three ``kernel-cve`` detectors, each with its own.
    * - :src:`systemd/`
      - Unit and timer templates for the target.
    * - :src:`completion/`

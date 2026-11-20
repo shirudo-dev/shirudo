@@ -8,10 +8,11 @@
 Example packages
 ================
 
-The tree ships two packages under :src:`upatches/`: ``kernel-obs``, a
+The tree ships packages under :src:`upatches/`: ``kernel-obs``, a
 complete observability package with arena tables, serializers, decoders
-and generated ``.rodata``, and ``kernel-cve``, a set of small CVE
-detectors exported from a mitigation campaign.
+and generated ``.rodata``, and in ``kernel-cve`` three small CVE
+detectors exported from a mitigation campaign, each a package of its
+own.
 
 kernel-obs
 ----------
@@ -67,9 +68,15 @@ kernel-cve
 
 :src:`upatches/kernel-cve/` holds three detectors, each in
 ``sources/<slug>/observability/``, a ``vmlinux.h``, ``manifest.json``
-with one record per detector, and the Beefile ``kernel-cve.bee``. The
-manifest names the kernel the detectors were loaded on,
-``7.2.0-shirudo-7.2``.
+with one record per detector, and one Beefile per detector,
+``<detector>.bee``. The manifest names the kernel the detectors were
+loaded on, ``7.2.0-shirudo-7.2``.
+
+Each Beefile builds a package named after its detector with one upatch
+and one ``[upatches.tree]`` entry of the same name. The entry's
+``fixes`` names the detector's CVE, and its selector the kernel of the
+manifest: release prefix ``7.2``, its build ID, ``x86_64`` and the
+Kconfig option of the driver or protocol the detector watches.
 
 .. list-table::
    :header-rows: 1
@@ -97,9 +104,7 @@ predicate as ``source_derived_unvalidated``: derived from the fix, not
 checked against an exploit.
 
 :doc:`/upatches/learn/kernel-fix-tutorial` takes the third detector from its fix
-to a package, as an ``fentry`` program. ``kernel-cve.bee`` itself does not
-build, and its tree entries do not match its upatch names.
-:doc:`/reference/formats/beefile` lists what is wrong with it.
+to a package, as an ``fentry`` program.
 
 Related
 -------

@@ -1249,8 +1249,8 @@ Commands and procedures
 - ``status --include-eventlog`` and ``--show-full``.
 - ``upatch rewrite-rodata`` in ``shirudo-build``, which
   ``kernel-obs`` uses to rewrite its watch lists.
-- The ``kernel-cve`` package. Its Beefile is a seed of the ``beefile``
-  fuzz target only.
+- The ``kernel-cve`` packages. A copy of an earlier Beefile of them is a
+  seed of the ``beefile`` fuzz target.
 - The recovery, upgrade and decommissioning procedures of
   :doc:`/operate/maintain/backup-recovery` and :doc:`/operate/maintain/upgrade`.
 - Exit statuses. ``t8001``, ``t4003`` and ``t4102`` check a few, but no

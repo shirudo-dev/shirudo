@@ -642,16 +642,6 @@ and names the advisory it fixes.
    operator$ shirudo bpm tree append ./xfs-fix-1.1.0.bee \
                  oci://registry.example.com/shirudo/fleet-base --keys-dir keys
 
-Not a model
-~~~~~~~~~~~
-
-:src:`upatches/kernel-cve/kernel-cve.bee` breaks these rules. Two of its
-load targets make member paths longer than 99 bytes with any version, so
-``bpm build`` fails. Its tree ids name the CVE directories while its
-upatch names are the detectors' base names, so ``bpm tree append`` would
-refuse every entry. And its ``unload_artifact`` paths name members the
-package does not have.
-
 Related
 -------
 
