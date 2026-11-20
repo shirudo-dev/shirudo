@@ -829,7 +829,10 @@ stack started before the checker was built keeps its collector: run
 After initialization, it activates the signed ``config-local-stack``
 image. That image points telemetry at ``https://10.0.2.2:14319`` and the
 BPM tree at ``oci://10.0.2.2:15444/shirudo/local-tree``, reference
-``stable``. The existing timers retry exports and tree sync when services
+``stable``. The guest also forwards its own ``127.0.0.1:15444`` to
+``10.0.2.2:15444``, with ``systemd-socket-proxyd``: the host publishes at
+``127.0.0.1:15444``, a tree operation names its package by the address
+it was appended through, and the registry's certificate covers both. The existing timers retry exports and tree sync when services
 are unavailable; starting the containers later needs no VM reboot.
 The registry starts empty. Publish a signed tree at that reference using
 the VM bundle's operator key under ``TEST_VM_HOST_PRIVATE_DIR`` to load

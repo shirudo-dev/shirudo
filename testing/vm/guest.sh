@@ -271,6 +271,26 @@ configure_image_identity()
 
 # Target tests run from this script in test mode and from an SSH session
 # otherwise, which inherits nothing from it.
+# The host publishes to the stack's registry at 127.0.0.1:15444, and a
+# tree operation names its package by that address, which in the guest is
+# the guest: forward it to the host, whose certificate covers both.
+forward_stack_registry()
+{
+	cat >/etc/systemd/system/shirudo-stack-registry.socket <<-'EOF'
+	[Socket]
+	ListenStream=127.0.0.1:15444
+
+	[Install]
+	WantedBy=sockets.target
+	EOF
+	cat >/etc/systemd/system/shirudo-stack-registry.service <<-'EOF'
+	[Service]
+	ExecStart=/usr/lib/systemd/systemd-socket-proxyd 10.0.2.2:15444
+	EOF
+	systemctl daemon-reload
+	systemctl enable --now shirudo-stack-registry.socket
+}
+
 write_target_test_env()
 {
 	{
@@ -524,6 +544,7 @@ if [[ "${TEST_VM_LOCAL_STACK:-0}" == 1 ]]; then
 	install -d /etc/shirudo/bpm
 	printf '%s\n' 'BPM_OCI_CA_FILE=/usr/local/share/ca-certificates/shirudo-oci-ca.crt' \
 		>/etc/shirudo/bpm/environment
+	forward_stack_registry
 fi
 
 if [[ -n "${TEST_VM_BPM_TREE_INPUT:-}" ]]; then
