@@ -10,6 +10,8 @@ set -euo pipefail
 
 # shellcheck source=testing/vm/arch.sh
 . "$(dirname "${BASH_SOURCE[0]}")/arch.sh"
+# shellcheck source=testing/vm/guestfs.sh
+. "$(dirname "${BASH_SOURCE[0]}")/guestfs.sh"
 
 ROOTFS=
 CACHE_DIR=
@@ -54,23 +56,7 @@ if [[ -s "$IMAGE" ]]; then
 fi
 
 mkdir -p "$CACHE_DIR" "$(dirname "$KEY_OUTPUT")"
-GUESTFS_CACHE_ROOT="${LIBGUESTFS_CACHEDIR:-${TMPDIR:-/tmp}/shirudo-guestfs-cache}"
-GUESTFS_CACHE_DIR="$GUESTFS_CACHE_ROOT/${SUPERMIN_KERNEL_VERSION:-host}"
-GUESTFS_TMP_DIR="${LIBGUESTFS_TMPDIR:-${TMPDIR:-/tmp}/shirudo-guestfs-tmp}"
-GUESTFS_RUNTIME_DIR="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}/shirudo-guestfs-run}"
-mkdir -p "$GUESTFS_CACHE_DIR"
-mkdir -p "$GUESTFS_TMP_DIR"
-mkdir -p "$GUESTFS_RUNTIME_DIR"
-
-# libguestfs defaults to its libvirt backend and to the emulator it was
-# built with, usually /usr/libexec/qemu-kvm, and a host with only
-# qemu-system-<arch> has neither. Run the appliance directly with the
-# emulator the VM uses, unless the caller chose otherwise.
-export LIBGUESTFS_BACKEND="${LIBGUESTFS_BACKEND:-direct}"
-if [[ -z "${LIBGUESTFS_HV:-}" ]]; then
-	LIBGUESTFS_HV="$(command -v "${TEST_VM_QEMU:-$TEST_VM_ARCH_QEMU}" || true)"
-	[[ -z "$LIBGUESTFS_HV" ]] || export LIBGUESTFS_HV
-fi
+guestfs_setup
 
 TMP_IMAGE="$CACHE_DIR/.${RUNTIME_KEY}.tmp.$$"
 MARKER="${TMP_IMAGE}.marker"
@@ -146,9 +132,7 @@ apt-get $apt_opts install '"$PACKAGES"'
 
 printf '[test-vm-runtime] preparing %s\n' "$IMAGE" >&2
 CUSTOMIZE_LOG="${TMP_IMAGE}.virt-customize.log"
-if ! TMPDIR="$GUESTFS_TMP_DIR" XDG_RUNTIME_DIR="$GUESTFS_RUNTIME_DIR" \
-	LIBGUESTFS_TMPDIR="$GUESTFS_TMP_DIR" \
-	LIBGUESTFS_CACHEDIR="$GUESTFS_CACHE_DIR" virt-customize \
+if ! guestfs_run virt-customize \
 	-a "$TMP_IMAGE" --network --no-selinux-relabel \
 	--run-command 'growpart /dev/sda 1 && resize2fs /dev/sda1' \
 	--upload "$NAMESERVERS:/root/shirudo-nameservers" \
