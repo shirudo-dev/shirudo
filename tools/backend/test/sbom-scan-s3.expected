@@ -6,6 +6,8 @@ rows: 2
 stub-aws: s3 cp --recursive --only-show-errors s3://fleet-images/sboms <directory> --exclude * --include */image.json --include */sbom.cdx.json
 sbom-scan: cannot copy s3://fleet-images/sboms, nothing loaded
 copy fails: status 1
+sbom-scan: cannot list the objects to copy, nothing loaded
+no object list: status 1
 sbom-scan: the store https://registry.example.com/sboms is neither file://<directory> nor s3://<bucket>
 https store: status 1
 sbom-scan: the store s3:// is neither file://<directory> nor s3://<bucket>

@@ -5,8 +5,8 @@
 # jobs/sbom-scan over an s3:// store, with test/stub-aws.sh in place of
 # the AWS command line: the job copies the objects it reads and scans
 # them as it does a file:// store. Then what it refuses, each with a
-# message and without loading anything: a copy that fails, a store of
-# another kind or none, a file:// directory that is not there and a
+# message and without loading anything: a copy that fails, a list of the
+# objects to copy that cannot be had, a store of another kind or none, a file:// directory that is not there and a
 # matcher that cannot say its version.
 
 set -eu
@@ -48,6 +48,11 @@ refused()
 
 rows
 refused 'copy fails' 1 env STUB_S3_STATUS=1 "$job" \
+	--store s3://fleet-images/sboms --trivy "$test/stub-trivy.sh"
+mkdir "$work/bin"
+printf '#!/bin/sh\nexit 1\n' >"$work/bin/python3"
+chmod 0755 "$work/bin/python3"
+refused 'no object list' 1 env PATH="$work/bin:$PATH" "$job" \
 	--store s3://fleet-images/sboms --trivy "$test/stub-trivy.sh"
 refused 'https store' 1 "$job" --store https://registry.example.com/sboms \
 	--trivy "$test/stub-trivy.sh"

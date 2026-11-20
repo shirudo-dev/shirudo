@@ -125,8 +125,11 @@ file://?*)
 s3://?*)
 	# Only the objects the job reads, every one of them: each run
 	# scans every image again.
+	names=$(python3 "$here/sbom-rows.py" files) ||
+		die "cannot list the objects to copy, nothing loaded"
+	[ -n "$names" ] || die "no object to copy is known, nothing loaded"
 	set --
-	for name in $(python3 "$here/sbom-rows.py" files); do
+	for name in $names; do
 		set -- "$@" --include "*/$name"
 	done
 	directory=$work/store
