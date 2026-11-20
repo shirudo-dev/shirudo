@@ -558,6 +558,59 @@ run_enroll()
 	exec "$REPO_ROOT/testing/vm/stack.sh" enroll "$RUN_DIR/enroll.json" "${builds[@]}"
 }
 
+# An interactive VM runs the runtime image, which it names in os-release
+# as the image test-vm, so that the backend reads the SBOM make vm-sbom
+# loads for it. The version stands for the runtime image key.
+record_image()
+{
+	IMAGE_VERSION="$(printf '%s' "$RUNTIME_KEY" | sha256sum | cut -c1-12)"
+	printf 'test-vm\t%s\t%s\n' "$IMAGE_VERSION" "$RUNTIME_KEY" >"$RUN_DIR/image"
+}
+
+# The images the VMs of directories $@ run, each once, a line of image_id,
+# image_version and runtime image key apiece.
+vm_images()
+{
+	local dir
+
+	for dir; do
+		[[ ! -s "$dir/image" ]] || cat "$dir/image"
+	done | sort -u
+}
+
+run_sbom()
+{
+	local images image_id image_version runtime_key sbom line args=()
+
+	if [[ -z "$VM_NAME_REQUEST" ]]; then
+		mapfile -t images < <(vm_images "$VMS_DIR"/*/)
+		[[ ${#images[@]} -gt 0 ]] ||
+			die "no VM under $VMS_DIR names its image; start one with 'make -C testing vm'"
+	else
+		select_named_run_dir
+		mapfile -t images < <(vm_images "$RUN_DIR")
+		[[ ${#images[@]} -gt 0 ]] ||
+			die "VM '$VM_NAME' names no image: only 'make vm' names one"
+	fi
+	if [[ -s "$CACHE_DIR/libguestfs/supermin.env" ]]; then
+		# shellcheck source=/dev/null
+		. "$CACHE_DIR/libguestfs/supermin.env"
+	fi
+	# The SBOM is kept beside its image, so that the bytes sbom-put
+	# stores once are the same at every run.
+	for line in "${images[@]}"; do
+		IFS=$'\t' read -r image_id image_version runtime_key <<<"$line"
+		sbom="$RUNTIME_CACHE_DIR/$runtime_key.cdx.json"
+		if [[ ! -s "$sbom" ]]; then
+			log "writing the SBOM of runtime image $runtime_key"
+			"$REPO_ROOT/testing/vm/runtime-sbom.sh" \
+				"$RUNTIME_CACHE_DIR/$runtime_key.qcow2" "$sbom"
+		fi
+		args+=("$image_id" "$image_version" "$sbom")
+	done
+	exec "$REPO_ROOT/testing/vm/stack.sh" sbom "${args[@]}"
+}
+
 start_swtpm()
 {
 	local _
@@ -1557,6 +1610,10 @@ while [[ "$#" -gt 0 ]]; do
 		[[ "$#" -eq 1 ]] || die "--enroll does not accept additional arguments"
 		run_enroll
 		;;
+	--sbom)
+		[[ "$#" -eq 1 ]] || die "--sbom does not accept additional arguments"
+		run_sbom
+		;;
 	--verbose)
 		VM_VERBOSE=1
 		shift
@@ -1618,6 +1675,8 @@ KERNEL="$(resolve_kernel)"
 
 RUNTIME_KEY="$(<"$TEST_VM_HOST_BUNDLE/runtime-image-key")"
 ROOTFS="$RUNTIME_CACHE_DIR/$RUNTIME_KEY.qcow2"
+IMAGE_VERSION=
+[[ "$VM_MODE" != interactive ]] || record_image
 [[ "$VM_ROLE" != operator ]] || prepare_operator_image
 [[ "$VM_ROLE" != operator ]] ||
 	"$REPO_ROOT/testing/vm/list-source.sh" "$RUN_DIR/result/source-files"
@@ -1751,6 +1810,7 @@ printf '      export TEST_VM_SKIP_SEAL=%q\n' "$SKIP_SEAL" >>"$USER_DATA"
 printf '      export TEST_VM_INITRD=%q\n' "$VM_INITRD" >>"$USER_DATA"
 printf '      export TEST_VM_SSH_PUBLIC_KEY=%q\n' "$SSH_PUBLIC_KEY" >>"$USER_DATA"
 printf '      export TEST_VM_ROLE=%q\n' "$VM_ROLE" >>"$USER_DATA"
+printf '      export TEST_VM_IMAGE_VERSION=%q\n' "$IMAGE_VERSION" >>"$USER_DATA"
 if [[ -n "$OCI_CA_DIR" ]]; then
 	printf '      export TEST_VM_OCI_CA=/mnt/shirudo-oci/ca.crt\n' >>"$USER_DATA"
 fi

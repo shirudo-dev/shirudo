@@ -22,7 +22,7 @@ fi
 exec 9>"$W/.lock"
 flock 9
 case "$TLS_DIR/" in "$REPO/"*) echo 'stack private keys must be outside the checkout' >&2; exit 1 ;; esac
-command=${1:?usage: stack.sh prepare|oci|telemetry|down|enroll|xtop|vm}
+command=${1:?usage: stack.sh prepare|oci|telemetry|down|enroll|sbom|xtop|vm}
 shift
 prepare()
 {
@@ -82,6 +82,33 @@ enroll)
 	[ $# -gt 0 ] || exit 0
 	printf "\$ CLICKHOUSE_CLIENT='%s' tools/put-shirudo-build --note 'test-vm build' %s\n" "$client" "$*"
 	CLICKHOUSE_CLIENT=$client tools/put-shirudo-build --note 'test-vm build' "$@"
+	;;
+sbom)
+	# Shown before they run, as for enroll: each image's SBOM into the
+	# store, then the scan that loads what Trivy finds in them, then a
+	# refresh of node_vulns, which would show them only at its next
+	# scheduled one, up to 5 minutes later.
+	[ $# -gt 0 ] && [ $(($# % 3)) -eq 0 ] ||
+		{ echo 'usage: stack.sh sbom (<image_id> <image_version> <sbom>)...' >&2; exit 2; }
+	[ "$(docker container inspect -f '{{.State.Running}}' "$STACK_NAME-clickhouse" 2>/dev/null)" = true ] ||
+		{ echo 'the local stack is not up: run make stack-up' >&2; exit 1; }
+	mkdir -p "$W/sbom"
+	cd "$REPO"
+	client="docker exec -i $STACK_NAME-clickhouse clickhouse-client"
+	store=file://$(realpath --relative-to="$REPO" "$W/sbom")
+	while [ $# -gt 0 ]; do
+		sbom=$(realpath --relative-to="$REPO" "$3")
+		printf '$ tools/backend/jobs/sbom-put --store %s --image-id %s --image-version %s %s\n' \
+			"$store" "$1" "$2" "$sbom"
+		tools/backend/jobs/sbom-put --store "$store" --image-id "$1" \
+			--image-version "$2" "$sbom"
+		shift 3
+	done
+	printf "\$ CLICKHOUSE_CLIENT='%s' tools/backend/jobs/sbom-scan --store %s\n" "$client" "$store"
+	CLICKHOUSE_CLIENT=$client tools/backend/jobs/sbom-scan --store "$store"
+	refresh='SYSTEM REFRESH VIEW shirudo.node_vulns_mv; SYSTEM WAIT VIEW shirudo.node_vulns_mv'
+	printf "\$ %s --query '%s'\n" "$client" "$refresh"
+	$client --query "$refresh" </dev/null
 	;;
 vm)
 	prepare

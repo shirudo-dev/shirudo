@@ -248,15 +248,24 @@ configure_map_export()
 		>/etc/shirudo/shirudo.conf
 }
 
-# The end-to-end nodes run an image that the keepalive backend knows by
-# its os-release id and version. Their root is the stock cloud image, not a
-# dm-verity image, so the command line names no roothash= and the backend
-# binds them as declared.
+# The end-to-end nodes and the interactive VMs run an image that the
+# keepalive backend knows by its os-release id and version, the latter
+# test-vm at the version the host gives for its runtime image. Their root
+# is not a dm-verity image, so the command line names no roothash= and the
+# backend binds them as declared.
 configure_image_identity()
 {
-	[[ "${TEST_VM_SUITE:-}" == end2end ]] || return 0
-	cat /usr/lib/os-release "$LOWER/testing/vm/files/end2end.os-release" \
-		>/etc/os-release.tmp
+	if [[ "${TEST_VM_SUITE:-}" == end2end ]]; then
+		cat /usr/lib/os-release "$LOWER/testing/vm/files/end2end.os-release" \
+			>/etc/os-release.tmp
+	elif [[ -n "${TEST_VM_IMAGE_VERSION:-}" ]]; then
+		{
+			cat /usr/lib/os-release
+			printf 'IMAGE_ID=test-vm\nIMAGE_VERSION=%s\n' "$TEST_VM_IMAGE_VERSION"
+		} >/etc/os-release.tmp
+	else
+		return 0
+	fi
 	mv -f /etc/os-release.tmp /etc/os-release
 }
 

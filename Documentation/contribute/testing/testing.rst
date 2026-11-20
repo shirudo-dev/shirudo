@@ -742,6 +742,37 @@ stopped but not removed with ``make vm-clean`` keeps its state directory
 and is enrolled too. ``VM_NAME=<name>`` enrolls that VM alone, from its
 own ``enroll.json``.
 
+Each ``make vm`` runs the prepared runtime image, and names it in the
+guest's ``/etc/os-release`` as the image ``test-vm``, at a version of the
+first 12 hex digits of the SHA-256 of the runtime image key, which it
+records in ``image`` in its state directory. ``make vm-sbom`` gives the
+stack's backend the SBOM of every image the VMs run, so that xtop's SBOM
+view lists what they install and the advisories against it.
+:src:`testing/vm/runtime-sbom.sh` reads the dpkg database of the runtime
+image with ``guestfish``, without booting it, has ``trivy rootfs`` write
+a CycloneDX SBOM of it, and keeps it beside the image, so that every run
+stores the same bytes. The target then stores each SBOM with
+:doc:`/operate/backend/sbom-put` in ``build/test-vm/stack/sbom/``, loads
+the store with :doc:`/operate/backend/sbom-scan`, and refreshes
+``node_vulns``, which would otherwise show the findings only at its next
+refresh, up to 5 minutes later, printing each command before it runs
+it:
+
+.. code-block:: console
+
+   $ make vm-sbom
+   $ tools/backend/jobs/sbom-put --store file://build/test-vm/stack/sbom --image-id test-vm --image-version 2db4c1808e8a build/test-vm/cache/runtime/rootfs-….cdx.json
+   sbom-put: test-vm/2db4c1808e8a/-: stored, sha256 7596…, components: 692
+   $ CLICKHOUSE_CLIENT='docker exec -i shirudo-dev-clickhouse clickhouse-client' tools/backend/jobs/sbom-scan --store file://build/test-vm/stack/sbom
+   sbom-scan: test-vm/2db4c1808e8a/-: ok, components: 692, findings: 2680
+   sbom-scan: loaded images: 1, findings: 2680
+   $ docker exec -i shirudo-dev-clickhouse clickhouse-client --query 'SYSTEM REFRESH VIEW shirudo.node_vulns_mv; SYSTEM WAIT VIEW shirudo.node_vulns_mv'
+
+It needs ``trivy`` and its advisory database on the host, which the scan
+never updates: run ``trivy image --download-db-only`` first and whenever
+you want newer advisories. Run it again to rescan; an image already
+stored is left as it is. ``VM_NAME=<name>`` loads that VM's image alone.
+
 Without the checker, ``make telemetry`` starts the telemetry stack alone and says so. A
 stack started before the checker was built keeps its collector: run
 ``make stack-down``, which also removes the stack's data, before
