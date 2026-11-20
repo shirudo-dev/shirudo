@@ -180,6 +180,16 @@ xtop)
 	# and the others still have to get it.
 	flock -u 9
 	exec 9>&-
+	# With the operator keys of a bundle from make vm, xtop runs the
+	# commands that create a tree itself, against the stack.
+	keys=${TEST_VM_HOST_PRIVATE_DIR:-}/operator-keys/keys
+	if [ -s "$keys/signing_key.pem" ]; then
+		export XTOP_KEYS_DIR="$keys" XTOP_TREE_INGEST="$REPO/tools/backend/jobs/tree-ingest"
+		export SHIRUDO="${SHIRUDO:-$REPO/shirudo}"
+		export SHIRUDO_BUILD="${SHIRUDO_BUILD:-$REPO/tools/shirudo-build/shirudo-build}"
+		export BPM_OCI_CA_FILE="$W/ca.pem"
+		export CLICKHOUSE_CLIENT="docker exec -i $STACK_NAME-clickhouse clickhouse-client"
+	fi
 	CLICKHOUSE_URL=${CLICKHOUSE_URL:-http://$CLICKHOUSE/} exec "$REPO/tools/xtop/dist/xtop"
 	;;
 *) echo "unknown stack command: $command" >&2; exit 2 ;;

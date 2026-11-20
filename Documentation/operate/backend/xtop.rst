@@ -19,7 +19,7 @@ and shows one row per upatch, or, with
 ``shirudo.shield_catalog``, one per shield available to append; SBOM sends :src:`tools/xtop/sql/sbom.sql`,
 over ``shirudo.node_vulns``, and shows one row per finding, or, with
 :src:`tools/xtop/sql/sbom-images.sql` over ``shirudo.sbom_images``, one
-per image. It only reads: every query is sent with ``readonly=1``. It is a `Bun <https://bun.sh>`_ program built on
+per image. Every query is sent with ``readonly=1``, and it changes nothing unless it is given the operator's keys to create a tree with. It is a `Bun <https://bun.sh>`_ program built on
 Ink and React, and runs on an operator's host, never on a target.
 
 Build and run
@@ -207,6 +207,47 @@ repository, advisories, packages and images.
 The rollout counts the nodes whose newest record names the tree; a node
 that moved to another tree leaves it. Detector hits are not shown,
 because the backend takes in no metrics.
+
+``c`` creates a tree. Type the tree's repository, a path under the
+registry of the shields such as ``shirudo/fleet-base``, and Enter; then
+``j`` and ``k`` move over the available shields and Space picks one, in
+the order the tree is to take them. ``n`` returns to the repository, Esc
+to the table. Below the shields are the commands that create it: one
+``bpm tree append`` per shield picked and the :doc:`tree-ingest` that
+loads the tree into the backend. The tree's id is the last name of the
+repository:
+
+.. code-block:: none
+
+   $ shirudo bpm tree append oci://<registry>/<namespace>/<package>:<version> --package-digest sha256:<digest> oci://<registry>/shirudo/fleet-base --tree-id fleet-base --keys-dir <keys>
+   $ tools/backend/jobs/tree-ingest --cert <keys>/cert.der oci://<registry>/shirudo/fleet-base
+
+Without ``XTOP_KEYS_DIR`` xtop only shows them, with the keys directory
+left to fill in, and stays a program that reads. With it, ``x`` runs
+them in order, without a shell and with xtop's environment, which is
+where ``bpm tree append`` and ``tree-ingest`` take their registry's CA
+and their ClickHouse client from. Each command shows ``✓`` and its last
+line, or ``✗`` and what it printed, and a failure stops the ones after
+it; ``x`` again runs from the command that failed. Once all have
+succeeded xtop returns to the table, which then lists the tree. xtop then signs with
+the operator's key: set the variable only on the operator's host.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Variable
+     - Value
+   * - ``XTOP_KEYS_DIR``
+     - The operator's keys directory, with ``signing_key.pem`` and
+       ``cert.der``. Unset, xtop runs nothing.
+   * - ``SHIRUDO``
+     - The ``shirudo`` to run. Default ``shirudo``.
+   * - ``XTOP_TREE_INGEST``
+     - The tree ingest job. Default ``tools/backend/jobs/tree-ingest``,
+       from the directory xtop runs in.
+
+``make xtop`` sets all three, and the stack's CA and ClickHouse client,
+once ``make vm`` has made a bundle with operator keys.
 
 Available
 ~~~~~~~~~

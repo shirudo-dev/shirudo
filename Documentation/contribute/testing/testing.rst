@@ -705,6 +705,11 @@ the keepalives. The VM then shows in ``shirudo.node_status``, and
 ``make xtop`` builds :src:`tools/xtop/` and runs it with
 ``CLICKHOUSE_URL`` set to the stack's ClickHouse, unless the environment
 names another.
+Once ``make vm`` has made a bundle, it also gives xtop the bundle's
+operator keys, the checkout's ``shirudo`` and tree ingest job, the
+stack's CA and its ClickHouse client, so that ``c`` in its shields view
+creates a tree in the stack's registry; ``shirudo/local-tree`` is the
+one the VMs follow.
 
 Every ``make vm`` acts as the builder of :doc:`/operate/run/attest`:
 before the guest first boots, :src:`testing/vm/tpm-builder.sh` creates

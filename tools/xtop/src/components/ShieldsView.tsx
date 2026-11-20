@@ -28,6 +28,8 @@ import { ViewMessage } from "./ViewMessage.tsx";
 import { MiniBar } from "./MiniBar.tsx";
 import { ShieldDetail } from "./ShieldDetail.tsx";
 import { AvailableDetail } from "./AvailableDetail.tsx";
+import { operatorFromEnv } from "../lib/operator.ts";
+import { CreateTree } from "./CreateTree.tsx";
 import { SHIELD_STATUS_COLOR, SeverityText } from "./style.tsx";
 
 /** The upatches of the trees, or the shields available to append. */
@@ -249,8 +251,9 @@ const availableTiebreak = (a: AvailableShield, b: AvailableShield) => b.exposed 
 
 export function ShieldsView({ backend, mode, onModeChange, height, active, onClose, onSearchingChange, onDetailChange }: Props) {
   const [reload, setReload] = useState(0);
+  const [creating, setCreatingState] = useState(false);
   const trees = useRefreshing<ShieldsReport>(mode === "trees", reload, () => backend.getShields());
-  const available = useRefreshing<AvailableReport>(mode === "available", reload, () => backend.getAvailableShields());
+  const available = useRefreshing<AvailableReport>(mode === "available" || creating, reload, () => backend.getAvailableShields());
   const [searching, setSearching] = useState(false);
   const [onTabs, setOnTabs] = useState(false);
   const [detail, setDetail] = useState<string | null>(null);
@@ -263,6 +266,10 @@ export function ShieldsView({ backend, mode, onModeChange, height, active, onClo
   const reportSearching = (s: boolean) => {
     setSearching(s);
     onSearchingChange(s);
+  };
+  const setCreating = (c: boolean) => {
+    setCreatingState(c);
+    onDetailChange?.(c);
   };
   const switchTo = (m: ShieldsMode, fromTabs = false) => {
     setOnTabs(fromTabs);
@@ -280,22 +287,42 @@ export function ShieldsView({ backend, mode, onModeChange, height, active, onClo
     (input) => {
       if (input === "t") switchTo(mode === "trees" ? "available" : "trees");
       if (input === "r") setReload((r) => r + 1);
+      if (input === "c" && mode === "trees") setCreating(true);
     },
-    { isActive: active && !searching && !detail },
+    { isActive: active && !searching && !detail && !creating },
   );
 
   const query = mode === "trees" ? trees : available;
   const message = (color: string | undefined, text: ReactNode) => (
     <Box flexDirection="column">
       <Tabs labels={tabs.labels} selected={tabs.selected} />
-      <ViewMessage active={active && !searching} onClose={onClose} color={color}>
+      <ViewMessage active={active && !searching} onClose={creating ? () => setCreating(false) : onClose} color={color}>
         {text}
       </ViewMessage>
     </Box>
   );
+  const tableHeight = Math.max(4, height);
+  if (creating) {
+    if (!available.data)
+      return available.error
+        ? message("red", `available query failed: ${available.error}`)
+        : message(undefined, "querying backend…");
+    if (available.data.shields.length === 0)
+      return message(undefined, "no shield in shirudo.shield_catalog to start a tree with: run make shields");
+    return (
+      <CreateTree
+        shields={available.data.shields}
+        operator={operatorFromEnv(process.env)}
+        onCreated={() => setReload((r) => r + 1)}
+        height={tableHeight}
+        active={active}
+        onEditingChange={reportSearching}
+        onClose={() => setCreating(false)}
+      />
+    );
+  }
   if (!query.data)
     return query.error ? message("red", `${mode} query failed: ${query.error}`) : message(undefined, "querying backend…");
-  const tableHeight = Math.max(4, height);
   const failed = query.error && <Text color="red">refresh failed: {query.error} · </Text>;
   const status = (generatedAt: Date) => (
     <>
@@ -348,7 +375,7 @@ export function ShieldsView({ backend, mode, onModeChange, height, active, onClo
 
   const report = trees.data!;
   if (report.shields.length === 0)
-    return message(undefined, "no upatch in shirudo.tree_ops: load a tree with jobs/tree-ingest");
+    return message(undefined, "no upatch in shirudo.tree_ops: press c to create a tree, or load one with jobs/tree-ingest");
   const detailShield = detail ? (report.shields.find((s) => keyOf(s) === detail) ?? null) : null;
   const treeIds = new Set(report.shields.map((s) => s.treeId));
 
@@ -368,7 +395,7 @@ export function ShieldsView({ backend, mode, onModeChange, height, active, onClo
           initialSort={{ col: "status", dir: "asc" }}
           tiebreak={tiebreak}
           searchFields={shieldFields}
-          footerHint="t available · r refresh"
+          footerHint="c create tree · t available · r refresh"
           onSearchingChange={reportSearching}
           onClose={onClose}
           onOpen={(s) => showDetail(keyOf(s))}

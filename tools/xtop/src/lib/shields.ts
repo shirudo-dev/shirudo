@@ -4,6 +4,8 @@
 // The upatches of every tree the backend has loaded: what each fixes and
 // how far its newest operation has rolled out.
 
+import { DEFAULT_SHIRUDO, DEFAULT_TREE_INGEST, type Operator } from "./operator.ts";
+
 /**
  * pending while a node following the tree has not reached the newest
  * operation, deployed once every one has, withdrawn when that operation
@@ -130,3 +132,33 @@ export const mostExposed = (advisories: readonly Pick<AvailableAdvisory, "expose
 export const appendCommand = (s: Pick<AvailableShield, "reference" | "manifestDigest">) =>
   `shirudo bpm tree append ${s.reference} --package-digest sha256:${s.manifestDigest} ` +
   "oci://<registry>/<tree> --tree-id <tree-id>";
+
+const registryOf = (reference: string) => reference.match(/^oci:\/\/[^/]+/)?.[0] ?? "oci://<registry>";
+
+/**
+ * The commands, as argument lists, that start a tree at repository, a path
+ * under the registry of the first shield, with the shields in the order
+ * given, then load it into the backend. The tree's id is the last name of
+ * the path. Without an operator the keys directory is left to fill in.
+ */
+export function createTreeCommands(
+  repository: string,
+  shields: readonly Pick<AvailableShield, "reference" | "manifestDigest">[],
+  operator: Operator | null,
+): string[][] {
+  const { keysDir, shirudo, treeIngest } = operator ?? {
+    keysDir: "<keys>",
+    shirudo: DEFAULT_SHIRUDO,
+    treeIngest: DEFAULT_TREE_INGEST,
+  };
+  const path = repository.replace(/^\/+|\/+$/g, "");
+  const tree = `${shields[0] ? registryOf(shields[0].reference) : "oci://<registry>"}/${path || "<tree>"}`;
+  const treeId = path.split("/").pop() || "<tree-id>";
+  return [
+    ...shields.map((s) => [
+      shirudo, "bpm", "tree", "append", s.reference, "--package-digest", `sha256:${s.manifestDigest}`,
+      tree, "--tree-id", treeId, "--keys-dir", keysDir,
+    ]),
+    [treeIngest, ...(shirudo === DEFAULT_SHIRUDO ? [] : ["--shirudo", shirudo]), "--cert", `${keysDir}/cert.der`, tree],
+  ];
+}

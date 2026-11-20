@@ -28,7 +28,7 @@ const HINTS: Record<Focus, string> = {
   menu: "j/k menu · l/enter open · 1 nodes · 2 shields · 3 sbom · q quit",
   "menu-open": "j/k menu · l/enter open · tab back to view · esc close view · q quit",
   nodes: "j/k scroll · k past top → sort, then tabs · / search · enter node checks, image → nodes · t by image · r refresh · tab menu · esc close · q quit",
-  shields: "j/k scroll · k past top → sort, then tabs · / search · enter details · t trees/available · r refresh · tab menu · esc close · q quit",
+  shields: "j/k scroll · k past top → sort, then tabs · / search · enter details · c create tree · t trees/available · r refresh · tab menu · esc close · q quit",
   sbom: "j/k scroll · k past top → sort, then tabs · / search · enter finding nodes, image → findings · t images · r refresh · tab menu · esc close · q quit",
   detail: "esc back · q quit",
   search: "regexes, all must match · !re drops matches · enter keep · esc clear",

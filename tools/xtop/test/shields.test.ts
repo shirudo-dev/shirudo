@@ -4,10 +4,12 @@
 // The rows of sql/shields.sql as tools/backend/test/xtop-shields.expected
 // has them, turned into shields.
 
+import { operatorFromEnv } from "../src/lib/operator.ts";
 import { describe, expect, test } from "bun:test";
 import { toAvailableShield, toShield, type AvailableRow, type ShieldRow } from "../src/lib/backend.ts";
 import {
   appendCommand,
+  createTreeCommands,
   mostExposed,
   severityRank,
   shieldStatus,
@@ -189,5 +191,36 @@ describe("appendCommand", () => {
         "--package-digest sha256:23c4a6dcd8b4796af1e250257037dfbc65ecc6c8fb1dffe8b6491c4937add434 " +
         "oci://<registry>/<tree> --tree-id <tree-id>",
     );
+  });
+});
+
+describe("createTreeCommands", () => {
+  const shield = { reference: "oci://registry.example.com/shields/rpl-detector:1.0.2", manifestDigest: "ab".repeat(32) };
+  const tree = "oci://registry.example.com/shirudo/fleet-base";
+
+  test("appends each shield to the tree under the shields' registry, then loads it", () => {
+    expect(createTreeCommands("/shirudo/fleet-base/", [shield], null).map((c) => c.join(" "))).toEqual([
+      `shirudo bpm tree append ${shield.reference} --package-digest sha256:${shield.manifestDigest} ` +
+        `${tree} --tree-id fleet-base --keys-dir <keys>`,
+      `tools/backend/jobs/tree-ingest --cert <keys>/cert.der ${tree}`,
+    ]);
+  });
+
+  test("leaves the tree to fill in while it has no repository", () => {
+    expect(createTreeCommands("", [shield], null)[0]!.slice(7)).toEqual([
+      "oci://registry.example.com/<tree>", "--tree-id", "<tree-id>", "--keys-dir", "<keys>",
+    ]);
+  });
+
+  test("names the operator's keys and programs", () => {
+    const operator = operatorFromEnv({ XTOP_KEYS_DIR: "/keys", SHIRUDO: "/bin/shirudo", XTOP_TREE_INGEST: "/jobs/tree-ingest" });
+    const [append, ingest] = createTreeCommands("shirudo/fleet-base", [shield], operator);
+    expect(append!.slice(0, 2)).toEqual(["/bin/shirudo", "bpm"]);
+    expect(append!.slice(-2)).toEqual(["--keys-dir", "/keys"]);
+    expect(ingest).toEqual(["/jobs/tree-ingest", "--shirudo", "/bin/shirudo", "--cert", "/keys/cert.der", tree]);
+  });
+
+  test("xtop runs nothing without XTOP_KEYS_DIR", () => {
+    expect(operatorFromEnv({ SHIRUDO: "/bin/shirudo" })).toBeNull();
   });
 });

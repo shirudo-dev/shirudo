@@ -221,7 +221,7 @@ vm-sbom:
 
 xtop:
 	+$(Q)$(MAKE) -s -C $(ROOT)/tools/xtop
-	$(Q)$(ROOT)/testing/vm/stack.sh xtop
+	$(Q)TEST_VM_HOST_PRIVATE_DIR="$(TEST_VM_HOST_PRIVATE_DIR)" $(ROOT)/testing/vm/stack.sh xtop
 
 # SHIELDS names Beefiles and directories of them, relative to the checkout
 # root unless absolute; without it, every shield under upatches/.
