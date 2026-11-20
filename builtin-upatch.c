@@ -4326,6 +4326,7 @@ struct upatch_get_ctx {
 	char		loaded_at[32];
 	char		payload[65];
 	int		missed_ret;	/* of upatch_each_link_misses() */
+	__u64		missed;		/* the sum over progs */
 	struct upatch_link_misses *progs;	/* the links it counted */
 	__u32		nr_progs;
 	__u32		progs_cap;
@@ -4362,6 +4363,7 @@ static int keep_link_misses(const struct upatch_link_misses *m, void *ctx)
 		c->progs_cap = cap;
 	}
 	c->progs[c->nr_progs++] = *m;
+	c->missed += m->missed;
 	return 0;
 }
 
@@ -4385,6 +4387,7 @@ static int upatch_get_collect(const char *want, struct upatch_get_ctx *c)
 	c->payload[0] = '\0';
 	c->prog_id = 0;
 	c->missed_ret = 0;
+	c->missed = 0;
 	c->progs = NULL;
 	c->nr_progs = 0;
 	c->progs_cap = 0;
@@ -4472,16 +4475,6 @@ static void render_one_map_text(const char *upatch, const char *map,
 	map_view_free(&v);
 }
 
-static __u64 missed_total(const struct upatch_get_ctx *c)
-{
-	__u64 total = 0;
-	__u32 i;
-
-	for (i = 0; i < c->nr_progs; i++)
-		total += c->progs[i].missed;
-	return total;
-}
-
 /* The total, and each program's share where more than one counts. */
 static void render_missed_text(const struct upatch_get_ctx *c)
 {
@@ -4495,7 +4488,7 @@ static void render_missed_text(const struct upatch_get_ctx *c)
 		printf("%-22s not counted for this attach kind\n", "Missed runs:");
 		return;
 	}
-	printf("%-22s %llu\n", "Missed runs:", missed_total(c));
+	printf("%-22s %llu\n", "Missed runs:", c->missed);
 	for (i = 0; c->nr_progs > 1 && i < c->nr_progs; i++)
 		printf("%-22s %s: %llu\n", "",
 		       c->progs[i].location[0] ? c->progs[i].location : "?",
@@ -4507,7 +4500,7 @@ static void emit_missed_json(struct json_emit *e, const struct upatch_get_ctx *c
 	__u32 i;
 
 	if (!c->missed_ret && c->nr_progs)
-		json_kv_u64(e, "missed_runs", missed_total(c));
+		json_kv_u64(e, "missed_runs", c->missed);
 	else
 		json_kv_null(e, "missed_runs");
 	json_arr_open(e, "programs");
