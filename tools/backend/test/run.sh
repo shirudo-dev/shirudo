@@ -31,9 +31,10 @@
 
 set -eu
 
-CLICKHOUSE_IMAGE=${CLICKHOUSE_IMAGE:-docker.io/clickhouse/clickhouse-server@sha256:d426d2f612e1e189c90f9a3f8dcd85a03c6851273833817a296bb327e63aa7a7}
-
 repo=$(cd "$(dirname "$0")/.." && pwd)
+# shellcheck source=testing/vm/stack-lib.sh
+pinned=$(. "$repo/../../testing/vm/stack-lib.sh" && printf '%s' "$CLICKHOUSE_IMAGE")
+CLICKHOUSE_IMAGE=${CLICKHOUSE_IMAGE:-$pinned}
 checker=${SHIRUDO_QUOTE_CHECK:-$repo/test/stub-quote-check.sh}
 container=shirudo-backend-test-$$
 work=
