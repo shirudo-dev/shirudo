@@ -134,7 +134,14 @@ keys=$(realpath "$keys")
 
 mkdir "$work/out"
 while read -r beefile; do
-	built=$(cd "$work/out" && "$shirudo" bpm build "$(dirname "$beefile")" \
+	# A Java shield's source is a prebuilt .jar; its build.sh --jar-only
+	# makes it, where a BPF shield's source compiles in bpm build.
+	dir=$(dirname "$beefile")
+	if grep -q '^type = "java"' "$beefile" && [ -x "$dir/build.sh" ]; then
+		( cd "$dir" && ./build.sh --jar-only ) </dev/null ||
+			die "cannot build the jar of $beefile"
+	fi
+	built=$(cd "$work/out" && "$shirudo" bpm build "$dir" \
 		--file "$beefile" --version "$version" --keys-dir "$keys" </dev/null) ||
 		die "cannot build $beefile"
 	bee=$(basename "$(printf '%s\n' "$built" | tail -n 1)")

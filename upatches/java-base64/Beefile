@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+
+[package]
+name = "java-base64"
+description = "A Java agent that blocks the OpenJDK x64 Base64 decoder tail-underflow (CVE-2026-114938)"
+license = "BSD-2-Clause"
+authors = ["Authors of shirudo"]
+
+[[upatches]]
+type = "java"
+source = "java-base64.jar"
+
+[upatches.tree]
+id = "java-base64"
+fixes = ["CVE-2026-114938"]
+
+[upatches.tree.selector]
+architecture = ["x86_64"]
