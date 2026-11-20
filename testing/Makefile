@@ -223,6 +223,12 @@ xtop:
 	+$(Q)$(MAKE) -s -C $(ROOT)/tools/xtop
 	$(Q)$(ROOT)/testing/vm/stack.sh xtop
 
+# SHIELDS names Beefiles and directories of them, relative to the checkout
+# root unless absolute; without it, every shield under upatches/.
+shields:
+	$(Q)TEST_VM_HOST_PRIVATE_DIR="$(TEST_VM_HOST_PRIVATE_DIR)" $(ROOT)/testing/vm/stack.sh shields \
+		$(foreach shield,$(SHIELDS),'$(call root-path,$(shield))')
+
 define run-target-vm
 VM_MODE=$(or $(4),$(if $(filter $(1),$(VM_SERVE_SUITES)),serve,test)) \
 		TEST_VM_SUITE="$(1)" VM_VERBOSE="$(TEST_VM_VERBOSE)" VM_NAME="$(2)" VM_TENANT="$(VM_TENANT)" \
@@ -421,7 +427,7 @@ clean:
 			"$(abspath $(TEST_VM_HOST_PRIVATE_DIR))/operator-keys" \
 			$(ROOT)/build/test-vm/end2end
 
-.PHONY: oci telemetry stack-up stack-down xtop
+.PHONY: oci telemetry stack-up stack-down xtop shields
 stack-up: oci telemetry
 
 oci telemetry:

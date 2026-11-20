@@ -773,6 +773,48 @@ never updates: run ``trivy image --download-db-only`` first and whenever
 you want newer advisories. Run it again to rescan; an image already
 stored is left as it is. ``VM_NAME=<name>`` loads that VM's image alone.
 
+``make shields`` publishes every shield of :src:`upatches/`, the packages
+whose Beefile has an ``[upatches.tree]`` entry, to the stack's registry
+under ``oci://127.0.0.1:15444/shields``, so that xtop's shields view
+lists them as available. It runs :src:`tools/put-shields` with the VM
+bundle's operator key and the ``shirudo`` and ``shirudo-build`` of the
+checkout, then :doc:`/operate/backend/shields-put`, printing each
+command before it runs it:
+
+.. code-block:: console
+
+   $ make shields
+   $ tools/put-shields --version 1.0.1 --keys-dir /tmp/shirudo-test-vm-private-1000/operator-keys/keys --catalog build/test-vm/stack/shields.json --new-index oci://127.0.0.1:15444/shields
+   put-shields: pushed oci://127.0.0.1:15444/shields/cve-2025-71093-e1000-tbi-detector:1.0.1 sha256:1fdb…
+   shirudo bpm tree append oci://127.0.0.1:15444/shields/cve-2025-71093-e1000-tbi-detector:1.0.1 --package-digest sha256:1fdb… oci://<registry>/<tree> --tree-id <tree-id>
+   …
+   $ CLICKHOUSE_CLIENT='docker exec -i shirudo-dev-clickhouse clickhouse-client' tools/backend/jobs/shields-put build/test-vm/stack/shields.json
+   shields-put: oci://127.0.0.1:15444/shields/cve-2025-71093-e1000-tbi-detector:1.0.1 cve-2025-71093-e1000-tbi-detector (CVE-2025-71093)
+   …
+   shields-put: loaded shields: 3
+
+``SHIELDS`` publishes other shields instead: Beefiles, and directories
+in which every ``Beefile`` and ``*.bee`` with an ``[upatches.tree]``
+entry is one, relative to the checkout root unless absolute. Each is
+built where it is, with the ``vmlinux.h`` beside it:
+
+.. code-block:: console
+
+   $ make shields SHIELDS="upatches/kernel-cve/cve-2026-63984-rpl-detector.bee $HOME/my-shields"
+
+Each run pushes the next version, ``1.0.<n>``, counted in
+``build/test-vm/stack/shields-run``, since the index takes a version
+once and a new build is new content; the count goes with the registry at
+``make stack-down``. The first run starts the namespace's index. It needs
+what the other targets make and says which to run when one is missing:
+the operator key of a bundle from ``make vm``, the binaries from
+``make`` and ``make shirudo-build``, and the stack with its backend
+from ``make stack-up``. A stack started before
+``shirudo.shield_catalog`` was added lacks that table until ``make
+telemetry`` loads the schema again. Appending a shield
+to ``shirudo/local-tree`` with the command it prints and that key
+delivers it to the VMs.
+
 Without the checker, ``make telemetry`` starts the telemetry stack alone and says so. A
 stack started before the checker was built keeps its collector: run
 ``make stack-down``, which also removes the stack's data, before

@@ -22,7 +22,7 @@ fi
 exec 9>"$W/.lock"
 flock 9
 case "$TLS_DIR/" in "$REPO/"*) echo 'stack private keys must be outside the checkout' >&2; exit 1 ;; esac
-command=${1:?usage: stack.sh prepare|oci|telemetry|down|enroll|sbom|xtop|vm}
+command=${1:?usage: stack.sh prepare|oci|telemetry|down|enroll|sbom|shields|xtop|vm}
 shift
 prepare()
 {
@@ -109,6 +109,59 @@ sbom)
 	refresh='SYSTEM REFRESH VIEW shirudo.node_vulns_mv; SYSTEM WAIT VIEW shirudo.node_vulns_mv'
 	printf "\$ %s --query '%s'\n" "$client" "$refresh"
 	$client --query "$refresh" </dev/null
+	;;
+shields)
+	# Shown before they run, as for enroll: every shield of upatches/
+	# pushed to the stack's registry, at a version of its own for each
+	# run, as bpm push takes a version once, then the catalog of what was
+	# pushed loaded into the backend, where xtop lists the shields as
+	# available. The index of the namespace is started on the first run.
+	# The arguments name Beefiles and directories of them, every shield
+	# under upatches/ when there are none.
+	keys=${TEST_VM_HOST_PRIVATE_DIR:?}/operator-keys/keys
+	[ -s "$keys/signing_key.pem" ] ||
+		{ echo "no operator keys in $keys: run make vm first" >&2; exit 1; }
+	for name in registry clickhouse; do
+		[ "$(docker container inspect -f '{{.State.Running}}' "$STACK_NAME-$name" 2>/dev/null)" = true ] ||
+			{ echo 'the local stack is not up: run make stack-up' >&2; exit 1; }
+	done
+	stack_clickhouse_client "$STACK_NAME-clickhouse" --query \
+		"SELECT name FROM system.databases WHERE name = 'shirudo'" </dev/null | grep -q . ||
+		{ echo 'the stack has no backend: make quote-check, make stack-down, then make telemetry' >&2; exit 1; }
+	stack_clickhouse_client "$STACK_NAME-clickhouse" --query \
+		'EXISTS TABLE shirudo.shield_catalog' </dev/null | grep -qx 1 ||
+		{ echo 'the backend has no shirudo.shield_catalog: run make telemetry, which loads its schema' >&2; exit 1; }
+	for shield; do
+		[ -e "$shield" ] || { echo "no Beefile or directory $shield" >&2; exit 1; }
+		set -- "$@" "$(realpath "$shield")"
+		shift
+	done
+	export SHIRUDO="${SHIRUDO:-$REPO/shirudo}"
+	export SHIRUDO_BUILD="${SHIRUDO_BUILD:-$REPO/tools/shirudo-build/shirudo-build}"
+	[ -x "$SHIRUDO" ] && [ -x "$SHIRUDO_BUILD" ] ||
+		{ echo "no $SHIRUDO or $SHIRUDO_BUILD: run make and make shirudo-build" >&2; exit 1; }
+	cd "$REPO"
+	export BPM_OCI_CA_FILE="$W/ca.pem"
+	client="docker exec -i $STACK_NAME-clickhouse clickhouse-client"
+	catalog=$(realpath --relative-to="$REPO" "$W/shields.json")
+	# A package's member paths must fit in 99 bytes, which a long version
+	# breaks, so the version counts the runs. The count is kept beside the
+	# registry and goes with it, and is taken before the push, so that a
+	# run that fails part way never reuses the version it pushed.
+	run=$(($(cat "$W/shields-run" 2>/dev/null || echo 0) + 1))
+	printf '%d\n' "$run" >"$W/shields-run"
+	new_index=
+	curl -sf --cacert "$W/ca.pem" -o /dev/null \
+		-H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+		"https://$REGISTRY/v2/shields/bpm-index/manifests/stable" ||
+		new_index=--new-index
+	# shellcheck disable=SC2086 # --new-index or nothing
+	set -- --version "1.0.$run" --keys-dir "$keys" --catalog "$catalog" \
+		$new_index "oci://$REGISTRY/shields" "$@"
+	printf '$ tools/put-shields %s\n' "$*"
+	tools/put-shields "$@"
+	printf "\$ CLICKHOUSE_CLIENT='%s' tools/backend/jobs/shields-put %s\n" "$client" "$catalog"
+	CLICKHOUSE_CLIENT=$client tools/backend/jobs/shields-put "$catalog"
 	;;
 vm)
 	prepare
