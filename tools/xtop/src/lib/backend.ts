@@ -5,6 +5,7 @@
 
 import NODES_SQL from "../../sql/nodes.sql" with { type: "text" };
 import SHIELDS_SQL from "../../sql/shields.sql" with { type: "text" };
+import SHIELDS_AVAILABLE_SQL from "../../sql/shields-available.sql" with { type: "text" };
 import SBOM_SQL from "../../sql/sbom.sql" with { type: "text" };
 import SBOM_IMAGES_SQL from "../../sql/sbom-images.sql" with { type: "text" };
 import { queryRows, type ClickHouseConfig } from "./clickhouse.ts";
@@ -19,7 +20,17 @@ import {
   type NodeStatus,
   type Trust,
 } from "./fleet.ts";
-import { shieldStatus, worstSeverity, type Advisory, type Shield, type ShieldsReport } from "./shields.ts";
+import {
+  mostExposed,
+  shieldStatus,
+  worstSeverity,
+  type Advisory,
+  type AvailableAdvisory,
+  type AvailableReport,
+  type AvailableShield,
+  type Shield,
+  type ShieldsReport,
+} from "./shields.ts";
 import {
   EXPOSURES,
   IMAGE_STATES,
@@ -37,6 +48,8 @@ export interface Backend {
   getFleet(): Promise<FleetReport>;
   /** Every upatch of every tree in shirudo.tree_ops. */
   getShields(): Promise<ShieldsReport>;
+  /** The shields of shirudo.shield_catalog, each at the version put last. */
+  getAvailableShields(): Promise<AvailableReport>;
   /** Every finding of shirudo.node_vulns, with the nodes it affects. */
   getSbom(): Promise<SbomReport>;
   /** Every image of shirudo.sbom_images, and those nodes run without an SBOM. */
@@ -188,6 +201,47 @@ export function toShield(r: ShieldRow): Shield {
   };
 }
 
+/** A row of sql/shields-available.sql. */
+export type AvailableRow = {
+  id: string;
+  package: string;
+  version: string;
+  reference: string;
+  manifest_digest: string;
+  selector: string;
+  description: string;
+  put_ms: number;
+  versions: number;
+  /** (advisory, severity, package, source, exposed) */
+  advisories: [string, string, string, string, number][];
+  trees: string[];
+};
+
+export function toAvailableShield(r: AvailableRow): AvailableShield {
+  const advisories: AvailableAdvisory[] = r.advisories.map(([id, severity, pkg, source, exposed]) => ({
+    id,
+    severity,
+    package: pkg,
+    source: oneOf<Advisory["source"]>(["kernel", "sbom", ""], source, "advisory source"),
+    exposed,
+  }));
+  return {
+    id: r.id,
+    package: r.package,
+    version: r.version,
+    reference: r.reference,
+    manifestDigest: r.manifest_digest,
+    selector: r.selector,
+    description: r.description,
+    putAt: r.put_ms ? new Date(r.put_ms) : null,
+    versions: r.versions,
+    advisories,
+    trees: r.trees,
+    severity: worstSeverity(advisories),
+    exposed: mostExposed(advisories),
+  };
+}
+
 /** A row of sql/sbom.sql. */
 export type FindingRow = {
   vuln_id: string;
@@ -288,6 +342,11 @@ export class ClickHouseBackend implements Backend {
   async getShields(): Promise<ShieldsReport> {
     const rows = await queryRows<ShieldRow>(this.cfg, SHIELDS_SQL);
     return { generatedAt: new Date(), shields: rows.map(toShield) };
+  }
+
+  async getAvailableShields(): Promise<AvailableReport> {
+    const rows = await queryRows<AvailableRow>(this.cfg, SHIELDS_AVAILABLE_SQL);
+    return { generatedAt: new Date(), shields: rows.map(toAvailableShield) };
   }
 
   async getSbom(): Promise<SbomReport> {

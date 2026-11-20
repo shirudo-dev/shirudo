@@ -2,15 +2,19 @@
 // Copyright (c) 2026 Authors of shirudo
 //
 // Every upatch of every tree the backend has loaded, with what it fixes
-// and how its newest operation rolled out. Enter shows one.
+// and how its newest operation rolled out, and every shield published and
+// available to append. Enter shows one.
 
 import { useState } from "react";
 import { Box, Text, useInput } from "ink";
 import type { ReactNode } from "react";
 import type { Backend } from "../lib/backend.ts";
+import { ago } from "../lib/format.ts";
 import { useRefreshing } from "../lib/useRefreshing.ts";
 import {
   SHIELD_STATUS_RANK,
+  type AvailableReport,
+  type AvailableShield,
   severityRank,
   shieldTarget,
   targeted,
@@ -19,14 +23,20 @@ import {
   type ShieldStatus,
   type ShieldsReport,
 } from "../lib/shields.ts";
-import { DataTable, type Column } from "./DataTable.tsx";
+import { DataTable, Tabs, type Column } from "./DataTable.tsx";
 import { ViewMessage } from "./ViewMessage.tsx";
 import { MiniBar } from "./MiniBar.tsx";
 import { ShieldDetail } from "./ShieldDetail.tsx";
+import { AvailableDetail } from "./AvailableDetail.tsx";
 import { SHIELD_STATUS_COLOR, SeverityText } from "./style.tsx";
+
+/** The upatches of the trees, or the shields available to append. */
+export type ShieldsMode = "trees" | "available";
 
 type Props = {
   backend: Backend;
+  mode: ShieldsMode;
+  onModeChange: (mode: ShieldsMode) => void;
   /** Lines available inside the panel. */
   height: number;
   active: boolean;
@@ -139,13 +149,112 @@ const shieldFields = (s: Shield) =>
 // Ties: worst severity first, then name.
 const tiebreak = (a: Shield, b: Shield) => severityRank(a.severity) - severityRank(b.severity) || a.id.localeCompare(b.id);
 
-export function ShieldsView({ backend, height, active, onClose, onSearchingChange, onDetailChange }: Props) {
+// ---- available shields ----------------------------------------------------
+
+const AVAILABLE_COLUMNS: readonly Column<AvailableShield>[] = [
+  {
+    id: "severity",
+    title: "SEVERITY",
+    width: 10,
+    defaultDir: "asc",
+    sortKey: (s) => severityRank(s.severity),
+    render: (s) => <SeverityText severity={s.severity} />,
+  },
+  {
+    id: "name",
+    title: "SHIELD",
+    defaultDir: "asc",
+    sortKey: (s) => s.id,
+    render: (s) => <Text bold>{s.id}</Text>,
+  },
+  {
+    id: "fixes",
+    title: "FIXES",
+    width: 18,
+    defaultDir: "asc",
+    sortKey: (s) => s.advisories.map((a) => a.id).join(" "),
+    render: (s) =>
+      s.advisories.length === 0 ? (
+        <Text dimColor>—</Text>
+      ) : (
+        <>
+          <Text>{s.advisories[0]!.id}</Text>
+          {s.advisories.length > 1 && <Text dimColor> +{s.advisories.length - 1}</Text>}
+        </>
+      ),
+  },
+  {
+    id: "target",
+    title: "TARGET",
+    width: 12,
+    defaultDir: "asc",
+    sortKey: (s) => shieldTarget(s.advisories),
+    render: (s) => {
+      const t = shieldTarget(s.advisories);
+      return t ? <Text color={t === "kernel" ? "magenta" : "cyan"}>{t}</Text> : <Text dimColor>—</Text>;
+    },
+  },
+  {
+    id: "exposed",
+    title: "EXPOSED",
+    width: 8,
+    align: "right",
+    defaultDir: "desc",
+    sortKey: (s) => s.exposed,
+    render: (s) => (s.exposed ? <Text color="yellow">{s.exposed}</Text> : <Text dimColor>0</Text>),
+  },
+  {
+    id: "version",
+    title: "VERSION",
+    width: 16,
+    defaultDir: "desc",
+    sortKey: (s) => s.version,
+    render: (s) => <Text dimColor>{s.version}</Text>,
+  },
+  {
+    id: "trees",
+    title: "IN TREES",
+    width: 16,
+    defaultDir: "desc",
+    sortKey: (s) => s.trees.length,
+    render: (s) => (s.trees.length ? <Text color="green">{s.trees.join(", ")}</Text> : <Text dimColor>—</Text>),
+  },
+  {
+    id: "put",
+    title: "PUT",
+    width: 6,
+    align: "right",
+    defaultDir: "desc",
+    sortKey: (s) => s.putAt?.getTime() ?? 0,
+    render: (s) => (s.putAt ? <Text>{ago(s.putAt)}</Text> : <Text dimColor>—</Text>),
+  },
+];
+
+const availableFields = (s: AvailableShield) =>
+  [
+    s.id,
+    s.package,
+    s.version,
+    s.reference,
+    s.selector,
+    s.description,
+    ...s.advisories.flatMap((a) => [a.id, a.severity, a.package, a.source]),
+    ...s.trees,
+  ];
+
+// Ties: most nodes exposed first, then name.
+const availableTiebreak = (a: AvailableShield, b: AvailableShield) => b.exposed - a.exposed || a.id.localeCompare(b.id);
+
+// ---- view ------------------------------------------------------------------
+
+export function ShieldsView({ backend, mode, onModeChange, height, active, onClose, onSearchingChange, onDetailChange }: Props) {
   const [reload, setReload] = useState(0);
-  const query = useRefreshing<ShieldsReport>(true, reload, () => backend.getShields());
+  const trees = useRefreshing<ShieldsReport>(mode === "trees", reload, () => backend.getShields());
+  const available = useRefreshing<AvailableReport>(mode === "available", reload, () => backend.getAvailableShields());
   const [searching, setSearching] = useState(false);
+  const [onTabs, setOnTabs] = useState(false);
   const [detail, setDetail] = useState<string | null>(null);
   const keyOf = (s: Shield) => `${s.treeId}\0${s.id}`;
-  const detailShield = detail ? (query.data?.shields.find((s) => keyOf(s) === detail) ?? null) : null;
 
   const showDetail = (key: string | null) => {
     setDetail(key);
@@ -155,26 +264,93 @@ export function ShieldsView({ backend, height, active, onClose, onSearchingChang
     setSearching(s);
     onSearchingChange(s);
   };
+  const switchTo = (m: ShieldsMode, fromTabs = false) => {
+    setOnTabs(fromTabs);
+    showDetail(null);
+    onModeChange(m);
+  };
+  const modes: ShieldsMode[] = ["trees", "available"];
+  const tabs = {
+    labels: ["in trees", "available"],
+    selected: modes.indexOf(mode),
+    onSelect: (i: number) => switchTo(modes[i]!, true),
+  };
 
   useInput(
     (input) => {
+      if (input === "t") switchTo(mode === "trees" ? "available" : "trees");
       if (input === "r") setReload((r) => r + 1);
     },
     { isActive: active && !searching && !detail },
   );
 
+  const query = mode === "trees" ? trees : available;
   const message = (color: string | undefined, text: ReactNode) => (
-    <ViewMessage active={active && !searching} onClose={onClose} color={color}>
-      {text}
-    </ViewMessage>
+    <Box flexDirection="column">
+      <Tabs labels={tabs.labels} selected={tabs.selected} />
+      <ViewMessage active={active && !searching} onClose={onClose} color={color}>
+        {text}
+      </ViewMessage>
+    </Box>
   );
   if (!query.data)
-    return query.error ? message("red", `shields query failed: ${query.error}`) : message(undefined, "querying backend…");
-  const report = query.data;
+    return query.error ? message("red", `${mode} query failed: ${query.error}`) : message(undefined, "querying backend…");
+  const tableHeight = Math.max(4, height);
+  const failed = query.error && <Text color="red">refresh failed: {query.error} · </Text>;
+  const status = (generatedAt: Date) => (
+    <>
+      <Text dimColor> · as of {generatedAt.toTimeString().slice(0, 8)}</Text>
+      {query.loading && <Text dimColor> · querying…</Text>}
+    </>
+  );
+
+  if (mode === "available") {
+    const report = available.data!;
+    if (report.shields.length === 0)
+      return message(
+        undefined,
+        "no shield in shirudo.shield_catalog: run make shields, or tools/put-shields --catalog and tools/backend/jobs/shields-put",
+      );
+    const detailShield = detail ? (report.shields.find((s) => s.id === detail) ?? null) : null;
+    return (
+      <Box flexDirection="column">
+        {detail && <AvailableDetail shield={detailShield} height={tableHeight} active={active} onClose={() => showDetail(null)} />}
+        <Box flexDirection="column" display={detail ? "none" : "flex"}>
+          <DataTable
+            tabs={tabs}
+            startOnTabs={onTabs}
+            footerHint="t in trees · r refresh"
+            rows={report.shields}
+            columns={AVAILABLE_COLUMNS}
+            rowKey={(s) => s.id}
+            height={tableHeight}
+            active={active && !detail}
+            initialSort={{ col: "severity", dir: "asc" }}
+            tiebreak={availableTiebreak}
+            searchFields={availableFields}
+            onSearchingChange={reportSearching}
+            onClose={onClose}
+            onOpen={(s) => showDetail(s.id)}
+            summary={(rows, sortedBy) => (
+              <>
+                {failed}
+                <Text bold>{rows.length}</Text> available · <Text color="green">{rows.filter((s) => s.trees.length).length} in a tree</Text> ·{" "}
+                <Text color="yellow">{rows.filter((s) => s.exposed).length} fix exposed nodes</Text>
+                <Text dimColor> · sorted by {sortedBy}</Text>
+                {status(report.generatedAt)}
+              </>
+            )}
+          />
+        </Box>
+      </Box>
+    );
+  }
+
+  const report = trees.data!;
   if (report.shields.length === 0)
     return message(undefined, "no upatch in shirudo.tree_ops: load a tree with jobs/tree-ingest");
-  const tableHeight = Math.max(4, height);
-  const trees = new Set(report.shields.map((s) => s.treeId));
+  const detailShield = detail ? (report.shields.find((s) => keyOf(s) === detail) ?? null) : null;
+  const treeIds = new Set(report.shields.map((s) => s.treeId));
 
   return (
     <Box flexDirection="column">
@@ -182,6 +358,8 @@ export function ShieldsView({ backend, height, active, onClose, onSearchingChang
       {/* Hidden, not unmounted, so the table keeps its cursor, sort and search. */}
       <Box flexDirection="column" display={detail ? "none" : "flex"}>
         <DataTable
+          tabs={tabs}
+          startOnTabs={onTabs}
           rows={report.shields}
           columns={COLUMNS}
           rowKey={keyOf}
@@ -190,7 +368,7 @@ export function ShieldsView({ backend, height, active, onClose, onSearchingChang
           initialSort={{ col: "status", dir: "asc" }}
           tiebreak={tiebreak}
           searchFields={shieldFields}
-          footerHint="r refresh"
+          footerHint="t available · r refresh"
           onSearchingChange={reportSearching}
           onClose={onClose}
           onOpen={(s) => showDetail(keyOf(s))}
@@ -198,15 +376,14 @@ export function ShieldsView({ backend, height, active, onClose, onSearchingChang
             const count = (st: ShieldStatus) => rows.filter((s) => s.status === st).length;
             return (
               <>
-                {query.error && <Text color="red">refresh failed: {query.error} · </Text>}
+                {failed}
                 <Text bold>{rows.length}</Text> shields · <Text color="green">{count("deployed")} deployed</Text> ·{" "}
                 <Text color="yellow">{count("pending")} pending</Text> · <Text color="gray">{count("withdrawn")} withdrawn</Text>
                 <Text dimColor>
                   {" "}
-                  · {trees.size} tree{trees.size === 1 ? "" : "s"} · sorted by {sortedBy} · as of{" "}
-                  {report.generatedAt.toTimeString().slice(0, 8)}
+                  · {treeIds.size} tree{treeIds.size === 1 ? "" : "s"} · sorted by {sortedBy}
                 </Text>
-                {query.loading && <Text dimColor> · querying…</Text>}
+                {status(report.generatedAt)}
               </>
             );
           }}

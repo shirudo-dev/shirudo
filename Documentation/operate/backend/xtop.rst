@@ -14,7 +14,9 @@ sends :src:`tools/xtop/sql/nodes.sql`, over ``shirudo.node_status``,
 ``shirudo.latest`` and ``shirudo.node_vulns``, and shows one row per
 node, or one per image; Shields sends :src:`tools/xtop/sql/shields.sql`,
 over the tree tables, ``shirudo.node_ops`` and ``shirudo.node_vulns``,
-and shows one row per upatch; SBOM sends :src:`tools/xtop/sql/sbom.sql`,
+and shows one row per upatch, or, with
+:src:`tools/xtop/sql/shields-available.sql` over
+``shirudo.shield_catalog``, one per shield available to append; SBOM sends :src:`tools/xtop/sql/sbom.sql`,
 over ``shirudo.node_vulns``, and shows one row per finding, or, with
 :src:`tools/xtop/sql/sbom-images.sql` over ``shirudo.sbom_images``, one
 per image. It only reads: every query is sent with ``readonly=1``. It is a `Bun <https://bun.sh>`_ program built on
@@ -152,8 +154,17 @@ Detector hits are not shown: the collector of
 Read the shields
 ----------------
 
-Shields has one row per upatch of every tree the tree ingest job loaded
-(:doc:`tree-ingest`), from its newest operation in ``shirudo.tree_ops``.
+Shields has two tabs: ``in trees``, the upatches the trees carry, and
+``available``, the shields published to a registry that a tree can take.
+``t`` switches between them, as does ``k`` past the header to the tabs,
+``h`` or ``l`` and Enter. The tab stays chosen while xtop runs.
+
+In trees
+~~~~~~~~
+
+``in trees`` has one row per upatch of every tree the tree ingest job
+loaded (:doc:`tree-ingest`), from its newest operation in
+``shirudo.tree_ops``.
 
 .. list-table::
    :header-rows: 1
@@ -196,6 +207,60 @@ repository, advisories, packages and images.
 The rollout counts the nodes whose newest record names the tree; a node
 that moved to another tree leaves it. Detector hits are not shown,
 because the backend takes in no metrics.
+
+Available
+~~~~~~~~~
+
+``available`` has one row per shield of ``shirudo.shield_catalog``, at
+the version put last, which :src:`tools/put-shields` writes and
+:src:`tools/backend/jobs/shields-put` loads. It lists the shields
+before any tree takes them, so that you can choose which to append.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Column
+     - Value
+   * - ``SEVERITY``
+     - The worst severity of the advisories in the shield's ``fixes``,
+       as ``kernel_vulns`` or ``sbom_vulns`` give it; ``—`` when neither
+       knows them.
+   * - ``SHIELD``
+     - The id of its ``[upatches.tree]`` entry, which a tree operation
+       takes.
+   * - ``FIXES``
+     - The first advisory it fixes, and ``+N`` for the others.
+   * - ``TARGET``
+     - What those advisories are in: ``kernel``, or the packages of an
+       image's SBOM.
+   * - ``EXPOSED``
+     - The most nodes one of those advisories leaves exposed in
+       ``node_vulns`` now, whatever shields them later. A node exposed
+       to two of them counts once.
+   * - ``VERSION``
+     - The version of its package put last.
+   * - ``IN TREES``
+     - The trees whose newest operation of the shield is an ``add``;
+       ``—`` when no tree carries it.
+   * - ``PUT``
+     - How long ago that version was put.
+
+The table sorts by severity, then by the nodes exposed and the id. Enter
+on a shield shows its description, its package and version, the
+reference and manifest digest ``bpm tree append`` takes it by, its
+selector, when it was put and how many versions were, the trees that
+carry it, each advisory with its severity and the nodes it exposes, and
+the command that appends it, with the tree left to fill in:
+
+.. code-block:: none
+
+   shirudo bpm tree append oci://<registry>/<namespace>/<package>:<version> --package-digest sha256:<digest> oci://<registry>/<tree> --tree-id <tree-id>
+
+``/`` searches the id, package, version, reference, selector,
+description, advisories, severities, packages and trees. With no row in
+``shirudo.shield_catalog`` the tab says to run ``make shields`` on the
+local stack (:ref:`local-dev-stack`), or :src:`tools/put-shields` with
+``--catalog`` and then ``shields-put``.
 
 Read the SBOM findings
 ----------------------

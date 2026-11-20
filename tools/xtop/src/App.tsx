@@ -10,14 +10,14 @@ import { useMouse } from "./lib/useMouse.ts";
 import { Panel } from "./components/Panel.tsx";
 import { Sidebar, type MenuItem } from "./components/Sidebar.tsx";
 import { NodesView, type NodesMode } from "./components/NodesView.tsx";
-import { ShieldsView } from "./components/ShieldsView.tsx";
+import { ShieldsView, type ShieldsMode } from "./components/ShieldsView.tsx";
 import { SbomView, type SbomMode } from "./components/SbomView.tsx";
 
 type ViewId = "nodes" | "shields" | "sbom";
 
 const MENU: readonly (MenuItem & { id: ViewId; title: string })[] = [
   { id: "nodes", label: "Nodes", title: "nodes · status from shirudo.node_status" },
-  { id: "shields", label: "Shields", title: "shields · upatches of the trees in shirudo.tree_ops" },
+  { id: "shields", label: "Shields", title: "shields · in the trees of shirudo.tree_ops, and available in shirudo.shield_catalog" },
   { id: "sbom", label: "SBOM", title: "sbom · findings from shirudo.node_vulns, images from shirudo.sbom_images" },
 ];
 const SIDEBAR_WIDTH = 16;
@@ -28,7 +28,7 @@ const HINTS: Record<Focus, string> = {
   menu: "j/k menu · l/enter open · 1 nodes · 2 shields · 3 sbom · q quit",
   "menu-open": "j/k menu · l/enter open · tab back to view · esc close view · q quit",
   nodes: "j/k scroll · k past top → sort, then tabs · / search · enter node checks, image → nodes · t by image · r refresh · tab menu · esc close · q quit",
-  shields: "j/k scroll · k past top → sort · / search · enter details · r refresh · tab menu · esc close · q quit",
+  shields: "j/k scroll · k past top → sort, then tabs · / search · enter details · t trees/available · r refresh · tab menu · esc close · q quit",
   sbom: "j/k scroll · k past top → sort, then tabs · / search · enter finding nodes, image → findings · t images · r refresh · tab menu · esc close · q quit",
   detail: "esc back · q quit",
   search: "regexes, all must match · !re drops matches · enter keep · esc clear",
@@ -45,6 +45,7 @@ export function App({ backend }: { backend: Backend }) {
   // Kept while the app runs, so reopening Nodes keeps the toggle.
   const [nodesMode, setNodesMode] = useState<NodesMode>("nodes");
   const [sbomMode, setSbomMode] = useState<SbomMode>("findings");
+  const [shieldsMode, setShieldsMode] = useState<ShieldsMode>("trees");
 
   const open = (view: ViewId) => {
     setMenuCursor(MENU.findIndex((m) => m.id === view));
@@ -150,6 +151,8 @@ export function App({ backend }: { backend: Backend }) {
             ) : (
               <ShieldsView
                 backend={backend}
+                mode={shieldsMode}
+                onModeChange={setShieldsMode}
                 height={viewLines}
                 active={!menuFocused}
                 onClose={close}

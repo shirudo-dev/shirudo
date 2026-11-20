@@ -5,8 +5,16 @@
 // has them, turned into shields.
 
 import { describe, expect, test } from "bun:test";
-import { toShield, type ShieldRow } from "../src/lib/backend.ts";
-import { severityRank, shieldStatus, shieldTarget, targeted, worstSeverity } from "../src/lib/shields.ts";
+import { toAvailableShield, toShield, type AvailableRow, type ShieldRow } from "../src/lib/backend.ts";
+import {
+  appendCommand,
+  mostExposed,
+  severityRank,
+  shieldStatus,
+  shieldTarget,
+  targeted,
+  worstSeverity,
+} from "../src/lib/shields.ts";
 
 function row(over: Partial<ShieldRow>): ShieldRow {
   return {
@@ -114,5 +122,72 @@ describe("helpers", () => {
     expect(shieldStatus("add", r)).toBe("pending");
     expect(shieldStatus("add", { ...r, pending: 0 })).toBe("deployed");
     expect(shieldStatus("delete", r)).toBe("withdrawn");
+  });
+});
+
+function available(over: Partial<AvailableRow>): AvailableRow {
+  return {
+    id: "cve-2026-63984-rpl-detector",
+    package: "cve-2026-63984-rpl-detector",
+    version: "1.0.1795148004",
+    reference: "oci://127.0.0.1:15444/shields/cve-2026-63984-rpl-detector:1.0.1795148004",
+    manifest_digest: "23c4a6dcd8b4796af1e250257037dfbc65ecc6c8fb1dffe8b6491c4937add434",
+    selector: '{"architecture":["x86_64"],"kernel_release_prefix":["7.2"]}',
+    description: "Counts RPL source routing headers whose n + 1 exceeds 127, CVE-2026-63984",
+    put_ms: 1_795_148_004_000,
+    versions: 2,
+    advisories: [["CVE-2026-63984", "HIGH", "linux", "kernel", 3]],
+    trees: [],
+    ...over,
+  };
+}
+
+describe("toAvailableShield", () => {
+  test("keeps where the shield is and what it fixes", () => {
+    const s = toAvailableShield(available({}));
+    expect(s.reference).toBe("oci://127.0.0.1:15444/shields/cve-2026-63984-rpl-detector:1.0.1795148004");
+    expect(s.manifestDigest).toHaveLength(64);
+    expect(s.putAt).toEqual(new Date(1_795_148_004_000));
+    expect(s.versions).toBe(2);
+    expect(s.advisories).toEqual([
+      { id: "CVE-2026-63984", severity: "HIGH", package: "linux", source: "kernel", exposed: 3 },
+    ]);
+    expect(s.severity).toBe("HIGH");
+    expect(s.exposed).toBe(3);
+    expect(s.trees).toEqual([]);
+  });
+
+  test("an unknown advisory has no severity and exposes nobody", () => {
+    const s = toAvailableShield(available({ advisories: [["CVE-1", "", "", "", 0]], trees: ["fleet-base"] }));
+    expect(s.severity).toBe("");
+    expect(s.exposed).toBe(0);
+    expect(s.trees).toEqual(["fleet-base"]);
+  });
+
+  test("a put time that did not join reads as none", () => {
+    expect(toAvailableShield(available({ put_ms: 0 })).putAt).toBeNull();
+  });
+
+  test("refuses an advisory source it does not know", () => {
+    expect(() => toAvailableShield(available({ advisories: [["CVE-1", "HIGH", "x", "nvd", 0]] }))).toThrow(
+      'unknown advisory source "nvd"',
+    );
+  });
+});
+
+describe("mostExposed", () => {
+  test("a node exposed to two advisories counts once", () => {
+    expect(mostExposed([{ exposed: 3 }, { exposed: 5 }, { exposed: 0 }])).toBe(5);
+    expect(mostExposed([])).toBe(0);
+  });
+});
+
+describe("appendCommand", () => {
+  test("names the package by reference and digest, the tree left to fill in", () => {
+    expect(appendCommand(toAvailableShield(available({})))).toBe(
+      "shirudo bpm tree append oci://127.0.0.1:15444/shields/cve-2026-63984-rpl-detector:1.0.1795148004 " +
+        "--package-digest sha256:23c4a6dcd8b4796af1e250257037dfbc65ecc6c8fb1dffe8b6491c4937add434 " +
+        "oci://<registry>/<tree> --tree-id <tree-id>",
+    );
   });
 });

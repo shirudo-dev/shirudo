@@ -92,3 +92,41 @@ export function shieldTarget(advisories: readonly Pick<Advisory, "package" | "so
 
 /** Nodes the newest operation can still apply on: all but those it left out. */
 export const targeted = (r: Rollout) => r.nodes - r.notSelected;
+
+// ---- shields available to append -----------------------------------------
+
+/** An advisory an available shield fixes, and the nodes it leaves exposed now. */
+export type AvailableAdvisory = Pick<Advisory, "id" | "severity" | "package" | "source"> & { exposed: number };
+
+/** A shield of shirudo.shield_catalog, at the version put last. */
+export type AvailableShield = {
+  id: string;
+  package: string;
+  version: string;
+  /** oci://<registry>/<repository>:<version>, which bpm tree append takes. */
+  reference: string;
+  /** 64 hex digits, without "sha256:". */
+  manifestDigest: string;
+  selector: string;
+  description: string;
+  putAt: Date | null;
+  /** Versions put of it. */
+  versions: number;
+  advisories: AvailableAdvisory[];
+  /** Trees whose newest operation of it is an add. */
+  trees: string[];
+  /** The worst severity of its advisories, "" when none is known. */
+  severity: string;
+  /** The most nodes one of its advisories leaves exposed: a node exposed to two counts once. */
+  exposed: number;
+};
+
+export type AvailableReport = { generatedAt: Date; shields: AvailableShield[] };
+
+export const mostExposed = (advisories: readonly Pick<AvailableAdvisory, "exposed">[]) =>
+  advisories.reduce((most, a) => Math.max(most, a.exposed), 0);
+
+/** The bpm tree append that takes the shield, less the tree to fill in. */
+export const appendCommand = (s: Pick<AvailableShield, "reference" | "manifestDigest">) =>
+  `shirudo bpm tree append ${s.reference} --package-digest sha256:${s.manifestDigest} ` +
+  "oci://<registry>/<tree> --tree-id <tree-id>";
