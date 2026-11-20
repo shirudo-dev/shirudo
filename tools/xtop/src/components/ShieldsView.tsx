@@ -124,7 +124,7 @@ const COLUMNS: readonly Column<Shield>[] = [
   },
 ];
 
-const matches = (s: Shield, q: string) =>
+const shieldFields = (s: Shield) =>
   [
     s.id,
     s.treeId,
@@ -134,7 +134,7 @@ const matches = (s: Shield, q: string) =>
     s.repository,
     ...s.advisories.flatMap((a) => [a.id, a.package, a.source]),
     ...s.images,
-  ].some((x) => x.toLowerCase().includes(q));
+  ];
 
 // Ties: worst severity first, then name.
 const tiebreak = (a: Shield, b: Shield) => severityRank(a.severity) - severityRank(b.severity) || a.id.localeCompare(b.id);
@@ -189,7 +189,7 @@ export function ShieldsView({ backend, height, active, onClose, onSearchingChang
           active={active && !detail}
           initialSort={{ col: "status", dir: "asc" }}
           tiebreak={tiebreak}
-          matches={matches}
+          searchFields={shieldFields}
           footerHint="r refresh"
           onSearchingChange={reportSearching}
           onClose={onClose}

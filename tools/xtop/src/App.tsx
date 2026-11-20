@@ -31,7 +31,7 @@ const HINTS: Record<Focus, string> = {
   shields: "j/k scroll · k past top → sort · / search · enter details · r refresh · tab menu · esc close · q quit",
   sbom: "j/k scroll · k past top → sort, then tabs · / search · enter finding nodes, image → findings · t images · r refresh · tab menu · esc close · q quit",
   detail: "esc back · q quit",
-  search: "type to filter · enter keep · esc clear",
+  search: "regexes, all must match · !re drops matches · enter keep · esc clear",
 };
 
 export function App({ backend }: { backend: Backend }) {

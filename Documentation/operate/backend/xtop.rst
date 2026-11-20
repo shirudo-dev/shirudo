@@ -64,6 +64,15 @@ A view queries when it opens, every minute after that, as often as
 query that fails leaves the rows of the last one in place and says why
 at the start of the summary line.
 
+``/`` searches a table; each view below says which fields. The search is
+terms separated by blanks, all of which a row must meet. A term is a
+regular expression, of JavaScript's syntax and ignoring case, that one of
+the fields must match; after a leading ``!``, none may. A term that is
+no regular expression is matched as text, and the search line says so.
+In SBOM, ``!^linux`` leaves out the findings of the packages whose names
+start with ``linux``, and ``high !^linux`` keeps the high ones of the
+rest. Enter keeps the search, Esc clears it.
+
 Read the nodes
 --------------
 
@@ -222,7 +231,9 @@ kernel release (:doc:`exposure`).
 The summary line says when the findings come from a scan older than
 ``sbom_stale_seconds``. Enter on a finding shows its package, source and
 shield, and every node it affects with its exposure, image, installed
-version, the binding of its image to an SBOM and its status.
+version, the binding of its image to an SBOM and its status. ``/``
+searches the advisory, package, severity, source, shield, status, the
+installed versions, and the names and images of the nodes it affects.
 
 ``t`` switches to the images: every image of ``sbom_images`` at its
 newest scan, with its state (:doc:`sbom-scan`), ``stale`` when that scan

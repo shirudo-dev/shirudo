@@ -10,6 +10,7 @@ import { Box, Text, useInput } from "ink";
 import type { Backend } from "../lib/backend.ts";
 import { ago } from "../lib/format.ts";
 import { useRefreshing } from "../lib/useRefreshing.ts";
+import { literalSearch } from "../lib/search.ts";
 import {
   FINDING_STATUS_RANK,
   IMAGE_STATES,
@@ -128,7 +129,7 @@ const FINDING_COLUMNS: readonly Column<Finding>[] = [
   },
 ];
 
-const findingMatches = (f: Finding, q: string) =>
+const findingFields = (f: Finding) =>
   [
     f.vulnId,
     f.package,
@@ -138,7 +139,7 @@ const findingMatches = (f: Finding, q: string) =>
     f.status,
     ...f.installed,
     ...f.nodes.flatMap((n) => [n.name, `${n.imageId} ${n.imageVersion}`]),
-  ].some((s) => s.toLowerCase().includes(q));
+  ];
 
 const findingTiebreak = (a: Finding, b: Finding) =>
   severityRank(a.severity) - severityRank(b.severity) || b.affected - a.affected || a.vulnId.localeCompare(b.vulnId);
@@ -219,10 +220,8 @@ const IMAGE_COLUMNS: readonly Column<SbomImage>[] = [
   },
 ];
 
-const imageMatches = (i: SbomImage, q: string) =>
-  [imageKey(i), i.imageRoot, i.state, i.sbomSha256, i.dbVersion, i.stale ? "stale" : ""].some((s) =>
-    s.toLowerCase().includes(q),
-  );
+const imageFields = (i: SbomImage) =>
+  [imageKey(i), i.imageRoot, i.state, i.sbomSha256, i.dbVersion, i.stale ? "stale" : ""];
 
 // ---- view ------------------------------------------------------------------
 
@@ -299,12 +298,12 @@ export function SbomView({ backend, mode, onModeChange, height, active, onClose,
         active={active}
         initialSort={{ col: "state", dir: "asc" }}
         tiebreak={(a, b) => b.nodes - a.nodes || imageKey(a).localeCompare(imageKey(b))}
-        matches={imageMatches}
+        searchFields={imageFields}
         onSearchingChange={reportSearching}
         onClose={onClose}
         onOpen={(i) => {
           setOnTabs(false);
-          setDrill(imageKey(i));
+          setDrill(literalSearch(imageKey(i)));
           onModeChange("findings");
         }}
         summary={(rows, sortedBy) => {
@@ -344,7 +343,7 @@ export function SbomView({ backend, mode, onModeChange, height, active, onClose,
           initialSort={{ col: "status", dir: "asc" }}
           initialQuery={drill}
           tiebreak={findingTiebreak}
-          matches={findingMatches}
+          searchFields={findingFields}
           onSearchingChange={reportSearching}
           onClose={onClose}
           onOpen={(f) => showDetail(keyOf(f))}

@@ -27,6 +27,7 @@ import { NodeDetail } from "./NodeDetail.tsx";
 import { HealthCell } from "./MiniBar.tsx";
 import { ago } from "../lib/format.ts";
 import { useRefreshing } from "../lib/useRefreshing.ts";
+import { literalSearch } from "../lib/search.ts";
 import { STATUS_STYLE } from "./style.tsx";
 
 export type NodesMode = "nodes" | "images";
@@ -155,7 +156,7 @@ const NODE_COLUMNS: readonly Column<FleetNode>[] = [
   },
 ];
 
-const nodeMatches = (n: FleetNode, q: string) =>
+const nodeFields = (n: FleetNode) =>
   [
     n.name,
     n.hostName,
@@ -168,7 +169,7 @@ const nodeMatches = (n: FleetNode, q: string) =>
     n.failedCheck ? (n.log[n.failedCheck - 1] ?? "") : "",
     ...labelPairs(n.labels),
     n.labelConflicts.length ? "label conflict" : "",
-  ].some((s) => s.toLowerCase().includes(q));
+  ];
 
 // ---- per-image table -------------------------------------------------------
 
@@ -243,8 +244,8 @@ const IMAGE_COLUMNS: readonly Column<ImageGroup>[] = [
   },
 ];
 
-const imageMatches = (g: ImageGroup, q: string) =>
-  [g.key, g.status, g.kernel ?? "mixed", ...g.roles].some((s) => s.toLowerCase().includes(q));
+const imageFields = (g: ImageGroup) =>
+  [g.key, g.status, g.kernel ?? "mixed", ...g.roles];
 
 // ---- view ------------------------------------------------------------------
 
@@ -341,7 +342,7 @@ export function NodesView({ backend, mode, onModeChange, height, active, onClose
             initialSort={{ col: "status", dir: "asc" }}
             initialQuery={drill}
             tiebreak={(a, b) => b.failedCheck - a.failedCheck || a.name.localeCompare(b.name)}
-            matches={nodeMatches}
+            searchFields={nodeFields}
             onSearchingChange={reportSearching}
             onClose={onClose}
             onOpen={(n) => showDetail(n.akName)}
@@ -375,12 +376,12 @@ export function NodesView({ backend, mode, onModeChange, height, active, onClose
             active={active && !detail}
             initialSort={{ col: "status", dir: "asc" }}
             tiebreak={(a, b) => a.health - b.health || b.nodes - a.nodes}
-            matches={imageMatches}
+            searchFields={imageFields}
             onSearchingChange={reportSearching}
             onClose={onClose}
             onOpen={(g) => {
               setOnTabs(false);
-              setDrill(g.key);
+              setDrill(literalSearch(g.key));
               onModeChange("nodes");
             }}
             summary={(rows, sortedBy) => {

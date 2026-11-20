@@ -963,7 +963,8 @@ findings and images of their SBOMs (``test/xtop-nodes``,
 The unit tests of :src:`tools/xtop/test/` cover how xtop turns the rows
 of those queries into nodes, shields, findings and images, the health
 percent, the roll-up by image, the status and severity of a shield, the
-status of a finding and its ClickHouse client; ``make -C tools/xtop tests`` type-checks the
+status of a finding, the search of its tables and its ClickHouse client;
+``make -C tools/xtop tests`` type-checks the
 program and runs them (:ref:`testing-xtop`).
 
 Coverage by area

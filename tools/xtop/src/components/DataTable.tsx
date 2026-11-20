@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Box, Text, measureElement, useInput, usePaste, type DOMElement } from "ink";
 import { useMouse } from "../lib/useMouse.ts";
+import { parseSearch } from "../lib/search.ts";
 
 export type SortDir = "asc" | "desc";
 
@@ -32,8 +33,8 @@ type Props<T> = {
   tiebreak?: (a: T, b: T) => number;
   /** Line above the table; receives the visible (filtered, sorted) rows. */
   summary?: (rows: readonly T[], sortedBy: string) => ReactNode;
-  /** Enables `/` search; returns whether a row matches the lowercased query. */
-  matches?: (row: T, query: string) => boolean;
+  /** Enables `/` search (lib/search.ts) over the fields a row gives. */
+  searchFields?: (row: T) => readonly string[];
   /** Search text to start with (e.g. when drilling into a group). */
   initialQuery?: string;
   /**
@@ -105,7 +106,7 @@ export function DataTable<T>({
   initialSort,
   tiebreak,
   summary,
-  matches,
+  searchFields,
   initialQuery = "",
   tabs,
   startOnTabs = false,
@@ -127,17 +128,17 @@ export function DataTable<T>({
   useEffect(() => onSearchingChange?.(searching), [searching, onSearchingChange]);
   useEffect(() => () => onSearchingChange?.(false), [onSearchingChange]);
 
+  const search = useMemo(() => parseSearch(query), [query]);
   const rows = useMemo(() => {
     const col = columns.find((c) => c.id === sort.col) ?? columns[0]!;
     const sign = sort.dir === "asc" ? 1 : -1;
-    const q = query.trim().toLowerCase();
     return input
-      .filter((r) => !q || !matches || matches(r, q))
+      .filter((r) => !searchFields || search.test(searchFields(r)))
       .sort((a, b) => sign * compare(col.sortKey(a), col.sortKey(b)) || (tiebreak?.(a, b) ?? 0));
-  }, [input, columns, sort, query, matches, tiebreak]);
+  }, [input, columns, sort, search, searchFields, tiebreak]);
 
   // Tabs, summary, search, header and scroll footer each take a line.
-  const chrome = (tabs ? 1 : 0) + (summary ? 1 : 0) + (matches ? 1 : 0) + 2;
+  const chrome = (tabs ? 1 : 0) + (summary ? 1 : 0) + (searchFields ? 1 : 0) + 2;
   const visible = Math.max(1, height - chrome);
   const last = rows.length - 1;
 
@@ -209,7 +210,7 @@ export function DataTable<T>({
           else if (c === "k") move(-1);
           else if (c === "g") setCursor(0);
           else if (c === "G") setCursor(last);
-          else if (c === "/" && matches) setSearching(true);
+          else if (c === "/" && searchFields) setSearching(true);
         }
       }
     },
@@ -233,7 +234,7 @@ export function DataTable<T>({
         });
         if (i >= 0) return i !== tabs.selected && tabs.onSelect(i);
       }
-      if (matches && e.y === headerY - 1) return setSearching(true);
+      if (searchFields && e.y === headerY - 1) return setSearching(true);
       if (e.y === headerY) {
         const i = headerRefs.current.findIndex((el) => {
           if (!el) return false;
@@ -260,12 +261,13 @@ export function DataTable<T>({
     <Box flexDirection="column">
       {tabs && <Tabs labels={tabs.labels} selected={tabs.selected} focused={active && cursor === TABS ? tabFocus : null} tabRefs={tabRefs} />}
       {summary && <Text wrap="truncate-end">{summary(rows, sortedBy)}</Text>}
-      {matches && (
+      {searchFields && (
         <Text wrap="truncate-end">
           <Text color={searching ? "cyan" : "gray"}>/ </Text>
           {query ? <Text>{query}</Text> : !searching && <Text dimColor>search</Text>}
           {searching && <Text inverse> </Text>}
           {query && !searching && <Text dimColor>  esc clears</Text>}
+          {search.invalid.length > 0 && <Text color="yellow">  not a regex, taken as text: {search.invalid.join(" ")}</Text>}
         </Text>
       )}
       <Box>
