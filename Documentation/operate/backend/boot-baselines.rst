@@ -41,7 +41,9 @@ How a row is written and read
 - ``shirudo.boot_first_mv`` writes a row for every accepted record as it
   is ingested, keyed by the record's ``ak_name`` and ``boot_id``. The table
   is an AggregatingMergeTree: the rows of one boot merge into one, which
-  keeps the total of the earliest record.
+  keeps the total of the earliest record. The same row keeps when the
+  boot's newest record was first received, which check 2 reads for the
+  record's age (:doc:`status`).
 - The refresh of ``node_status`` joins a node's newest record to the row
   with the same ``ak_name`` and ``boot_id``, and check 3 compares the
   record's total with that baseline. A rise fails the check.

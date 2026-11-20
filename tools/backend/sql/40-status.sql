@@ -579,7 +579,8 @@ WITH
     ),
     boot AS
     (
-        SELECT ak_name, boot_id, argMinMerge(tamper_first) AS tamper_first
+        SELECT ak_name, boot_id, argMinMerge(tamper_first) AS tamper_first,
+               argMaxMerge(newest_received) AS newest_received
         FROM shirudo.boot_first
         GROUP BY ak_name, boot_id
     ),
@@ -604,13 +605,16 @@ WITH
     result AS
     (
         SELECT k.node_id AS node_id, k.ak_name AS ak_name, k.host_name AS host_name, k.trust AS trust,
-               k.received AS received, k.generation AS generation, k.last_seq AS last_seq,
+               -- A copy of the newest record has a later received and
+               -- the same order_key; the boot knows the first.
+               if(b.ak_name = '', k.received, least(k.received, b.newest_received)) AS received,
+               k.generation AS generation, k.last_seq AS last_seq,
                k.count AS count, k.set_sha256 AS set_sha256, k.verdict AS verdict, k.cond AS cond,
                k.flags AS flags, k.version_id AS version_id, k.projection_root AS projection_root,
                k.skip AS skip, k.newest AS newest, k.head AS head, k.p_last AS p_last,
                p.n AS n,
                r.rejected AS rejected,
-               dateDiff('second', k.received, now64(3)) AS age_s,
+               dateDiff('second', received, now64(3)) AS age_s,
                age_s > stale_after AS stale,
                -- A record that could not read its counters has no total
                -- to compare; flags bit 3 says so and fails the check.

@@ -6,8 +6,10 @@
 -- kept up to date as records arrive.
 
 -- The record with the highest order_key of each node, which is its
--- newest by the TPM's own counters. A record that arrives late or again
--- does not replace a newer one.
+-- newest by the TPM's own counters. A record that arrives late does not
+-- replace a newer one. The newest record sent again does replace itself,
+-- received included, which is why no check reads received here for the
+-- age of a record: boot_first has when it came first.
 CREATE TABLE IF NOT EXISTS shirudo.keepalive_latest
 (
     ak_name String,
@@ -55,6 +57,12 @@ WHERE reject = '';
 -- whose tamper is null has no total and does not set the baseline; it
 -- reads as an empty array here.
 --
+-- newest_received is when the boot's newest record, by order_key, was
+-- received first. Check 2 reads its age and not the age of the row in
+-- keepalive_latest, which a record sent again replaces with the time of
+-- the copy: whoever holds a node's last record could keep a node that
+-- sends no more from turning stale.
+--
 -- last_used is when a record of the boot was last received, or when
 -- boot_first_keep_mv last found the boot to be its node's current one,
 -- and a row leaves that long after it as the TTL says. The TTL here is
@@ -66,6 +74,7 @@ CREATE TABLE IF NOT EXISTS shirudo.boot_first
     boot_id String,
     first_order_key SimpleAggregateFunction(min, UInt64),
     tamper_first AggregateFunction(argMin, UInt64, UInt64),
+    newest_received AggregateFunction(argMax, DateTime64(3), Tuple(UInt64, Int64)),
     last_used SimpleAggregateFunction(max, DateTime)
 )
 ENGINE = AggregatingMergeTree
@@ -78,6 +87,7 @@ SELECT
     boot_id,
     min(order_key) AS first_order_key,
     argMinStateIf(arraySum(tamper), order_key, notEmpty(tamper)) AS tamper_first,
+    argMaxState(received, (order_key, -toUnixTimestamp64Milli(received))) AS newest_received,
     max(toDateTime(received)) AS last_used
 FROM shirudo.checked
 WHERE reject = ''
@@ -98,6 +108,7 @@ SELECT
     b.boot_id AS boot_id,
     min(b.first_order_key) AS first_order_key,
     argMinMergeState(b.tamper_first) AS tamper_first,
+    argMaxMergeState(b.newest_received) AS newest_received,
     now() AS last_used
 FROM shirudo.boot_first AS b
 INNER JOIN shirudo.keepalive_latest AS k FINAL ON k.ak_name = b.ak_name AND k.boot_id = b.boot_id

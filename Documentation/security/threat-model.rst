@@ -1767,7 +1767,10 @@ R17 Telemetry has no proof of origin
    ``attest``, created for each keepalive, over no PCR, and
    ``shirudo-quote-check`` verifies it without a TPM. A quote that
    checks proves that the body is unchanged since that key signed it,
-   and its clock orders the keepalives of one key. It does not prove
+   and its clock orders the keepalives of one key. A keepalive sent
+   again checks as it did the first time: a backend has to take a
+   record's age from when its clock first arrived, as the example
+   backend's check 2 does, or a silent node reads as alive. It does not prove
    that the key lives in a genuine TPM: only ``attest challenge`` ties
    the key to an endorsement key, and a backend treats every node as
    ``untrusted`` until a future workflow does that. Nor does it vouch

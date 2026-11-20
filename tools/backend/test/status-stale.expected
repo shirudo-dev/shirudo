@@ -1,7 +1,10 @@
+received again	1
 fresh	healthy	0	1	3 reported: pass, verdict ok, cond 0x1555, flags 0, tamper +0, build d6d918ad
+replayed	stale	2	0	3 reported: pass, verdict ok, cond 0x1555, flags 0, tamper +0, build d6d918ad
 silent	stale	2	0	3 reported: pass, verdict ok, cond 0x1555, flags 0, tamper +0, build d6d918ad
 silent-and-degraded	stale	2	0	3 reported: FAIL, verdict degraded, cond 0x1555, flags 0, tamper +0, build d6d918ad
 fresh	fresh	stale	untrusted	2	3	3	3	1
+replayed	replayed	stale	untrusted	2	3	3	3	1
 silent	silent	stale	untrusted	2	3	3	3	1
 silent-and-degraded	silent-and-degraded	stale	untrusted	2	3	3	3	1
 fresh	1 signed: pass, untrusted, 0 rejected in the last hour
@@ -10,4 +13,4 @@ fresh	3 reported: pass, verdict ok, cond 0x1555, flags 0, tamper +0, build d6d91
 fresh	4 chain: pass, root 15452248
 fresh	5 head: pass, seq 3 of 3, generation 3
 fresh	6 set: pass, 1 loaded
-fresh	7 peers: pass, 3 in group
+fresh	7 peers: pass, 4 in group

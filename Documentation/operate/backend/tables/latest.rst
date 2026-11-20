@@ -9,7 +9,8 @@ Latest state
 ============
 
 Small tables kept current on every insert so the checks never scan the audit
-store: each node's newest record, and each boot's first tamper total.
+store: each node's newest record, and each boot's first tamper total and when its
+newest record came first.
 
 Schema: :src:`tools/backend/sql/30-latest.sql`
 
@@ -44,16 +45,18 @@ shirudo.keepalive_latest
    :reference: ≈ 15 MB
    :bytes: 1.5e+07
 
-   The newest record of each node by the TPM's own counters. A late or
-   repeated record never replaces a newer one.
+   The newest record of each node by the TPM's own counters. A late
+   record never replaces a newer one; the newest one received again
+   replaces itself, with the time of the copy.
 
    - Read with FINAL.
    - Same columns as keepalive, minus quote, plus order_key.
 
    :ak_name: Node identity; the sort key.
    :order_key: reset_count << 40 \| clock. Highest wins.
-   :received: When the backend received the record. Freshness (check 2) and
-      retention count from it.
+   :received: When the backend received the record, or a copy of it. Retention
+      counts from it. Freshness (check 2) does not: it reads newest_received
+      of boot_first.
    :time: The OTLP Timestamp the target put on the log record. Not trusted for
       ordering.
    :host_name: host.name resource attribute: what the node claims to be called. Not
@@ -127,5 +130,8 @@ shirudo.boot_first
    :first_order_key: order_key of the boot's first record.
    :tamper_first: arraySum(tamper) at the lowest order_key with readable counters. Read
       with argMinMerge.
+   :newest_received: When the boot's record with the highest order_key was first
+      received. Check 2 reads the age of a node's newest record here, so that a
+      copy of it sent again does not make it fresh. Read with argMaxMerge.
    :last_used: Last record received for the boot, or last time the hourly job found
       it to be the node's current boot.

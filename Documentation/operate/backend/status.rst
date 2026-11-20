@@ -86,7 +86,7 @@ A UI reads ``node_status`` as often as it likes, as :doc:`xtop` does:
    * - ``log``
      - Seven lines, one per check in order.
    * - ``last_seen``
-     - When the newest record was received.
+     - When the newest record was first received.
    * - ``generation``, ``last_seq``
      - From the newest record; ``NULL`` for a node that follows no tree.
    * - ``head_seq``
@@ -101,11 +101,19 @@ Checks
 
 ``status`` is:
 
-- ``stale`` when the newest record was received more than ``stale_seconds``
-  ago, 10 minutes by default. It wins over everything else, because the
-  other lines then describe old data; the ``log`` still shows what that
-  record said. A node whose records are all refused gets no new record
-  and turns stale.
+- ``stale`` when the newest record was first received more than
+  ``stale_seconds`` ago, 10 minutes by default. It wins over everything
+  else, because the other lines then describe old data; the ``log`` still
+  shows what that record said. A node whose records are all refused gets
+  no new record and turns stale.
+
+  A record received again counts from when it came first. Its quote
+  still checks, so whoever holds a node's last record, a collector or a
+  reader of ``shirudo.keepalive``, can send it again, but a node that
+  sends nothing new turns stale all the same: only a quote with a later
+  ``clock`` or ``reset_count`` is news, and only the node's TPM signs
+  one. ``shirudo.boot_first`` keeps that first time for the newest
+  record of each boot.
 
   A node sends a record a minute, but not while it syncs its tree:
   every shirudo command on a target holds the config operation lock for
@@ -135,7 +143,7 @@ passed. Checks 3 to 6 have a section each below.
      - Never fails
    * - 2
      - ``2 fresh:``
-     - The newest record, by the quote's ``reset_count`` and ``clock``, was received at most ``stale_seconds`` ago.
+     - The newest record, by the quote's ``reset_count`` and ``clock``, was first received at most ``stale_seconds`` ago.
      - ``FAIL``
    * - 3
      - ``3 reported:``

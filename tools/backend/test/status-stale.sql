@@ -4,7 +4,9 @@
 -- A node whose newest record is older than stale_seconds is stale with
 -- failed_check 2, whatever that record says, and its log still shows what
 -- it said. The threshold comes from shirudo.settings, lowered here to four
--- seconds: a node turns stale while the test waits six.
+-- seconds: a node turns stale while the test waits six. A record sent
+-- again is no newer than it was: the node "replayed" sent its only record
+-- a minute ago, and the copy that arrives now leaves it stale.
 
 -- The publication of testing/fixtures/keepalive/tree-1.1.0.json, as the
 -- ingest job loads it: generation 3 with its three operations.
@@ -44,10 +46,18 @@ FROM
 (
     SELECT arrayJoin([
         ('silent', 'node-a-1.1.0', [('"flags":0', '"flags":0')]),
+        ('replayed', 'node-a-1.1.0', [('"flags":0', '"flags":0')]),
         ('silent-and-degraded', 'node-a-1.1.0', [('"verdict":"ok"', '"verdict":"degraded"')])
     ]) AS node
 ) AS n
 INNER JOIN fixture AS f ON f.name = node.2;
+
+INSERT INTO shirudo.checked (host_name, body, ok, ak_name, ak_public, reset_count, clock)
+SELECT 'replayed', body, 1, '000breplayed', 'QUtB', 1, 1000
+FROM fixture WHERE name = 'node-a-1.1.0';
+SELECT 'received again', dateDiff('second', received, now64(3)) < 30
+FROM shirudo.keepalive_latest FINAL WHERE ak_name = '000breplayed';
+
 SYSTEM REFRESH VIEW shirudo.node_status_mv;
 SYSTEM WAIT VIEW shirudo.node_status_mv;
 
