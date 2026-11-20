@@ -158,6 +158,57 @@ entries selectors that exclude each other, such as different values of
 one label, or append the ``delete`` of the earlier upatch first.
 :doc:`/reference/cli/bpm` has the exact rule.
 
+Publish every shield at once
+----------------------------
+
+A shield is a package whose Beefile has an ``[upatches.tree]`` entry,
+one that a tree can take. :src:`tools/put-shields` runs steps 1 and 3
+for every shield of the checkout, so that one namespace lists them all
+before you choose which to append:
+
+.. code-block:: console
+
+   operator$ tools/put-shields --version 1.0.0 --keys-dir <keys-dir> \
+       --new-index oci://<registry>/<namespace> >append.sh
+   put-shields: pushed oci://<registry>/<namespace>/cve-2025-71093-e1000-tbi-detector:1.0.0 sha256:b751…
+   put-shields: pushed oci://<registry>/<namespace>/cve-2026-31675-netem-detector:1.0.0 sha256:f369…
+   put-shields: pushed oci://<registry>/<namespace>/cve-2026-63984-rpl-detector:1.0.0 sha256:23c4…
+
+It builds every ``Beefile`` and ``*.bee`` under :src:`upatches/` that has
+an ``[upatches.tree]`` entry, or, when you name Beefiles and directories
+after the namespace, those Beefiles and the ones under those
+directories, each once, and pushes each package to
+``oci://<registry>/<namespace>/<package>``. Each entry of
+``<namespace>/bpm-index:stable`` then names a shield's repository,
+version and digests. Give ``--new-index`` for a namespace that has no
+index, and a new ``--version`` for every run after the first: ``bpm
+push`` refuses a version the index lists with other content, and a new
+build has other content. ``SHIRUDO`` names the ``shirudo`` binary, and
+the ``BPM_OCI_*`` variables reach the registry as they do for ``bpm
+push``.
+
+Keep the version short. A member path of a package,
+``<package>-<version>/upatches/<upatch>.unload.upatch``, holds at most 99
+bytes, which leaves the kernel-cve detectors 8 characters of version:
+past that, ``bpm build`` fails with ``File name too long``.
+
+It reports each push on standard error and writes to standard output,
+for each shield, the ``tree append`` command that takes it from the
+registry by its reference and manifest digest, with the tree left to
+fill in:
+
+.. code-block:: console
+
+   operator$ cat append.sh
+   shirudo bpm tree append oci://<registry>/<namespace>/cve-2025-71093-e1000-tbi-detector:1.0.0 --package-digest sha256:b751… oci://<registry>/<tree> --tree-id <tree-id>
+   shirudo bpm tree append oci://<registry>/<namespace>/cve-2026-31675-netem-detector:1.0.0 --package-digest sha256:f369… oci://<registry>/<tree> --tree-id <tree-id>
+   shirudo bpm tree append oci://<registry>/<namespace>/cve-2026-63984-rpl-detector:1.0.0 --package-digest sha256:23c4… oci://<registry>/<tree> --tree-id <tree-id>
+
+Run the lines of the shields you choose with your tree's repository and
+id, and ``--keys-dir``. The digest decides which package is appended:
+the registry can point the tag at another package your key signed, and
+``tree append`` refuses one whose manifest has another digest.
+
 Segments and registry retention
 -------------------------------
 

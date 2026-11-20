@@ -411,6 +411,10 @@ Project layout
      - The ``vmlinux.h`` generator.
    * - :src:`tools/bpf-deps/`
      - The script that refreshes :src:`vendor/libbpf`.
+   * - :src:`tools/put-shields`
+     - Builds every shield package under :src:`upatches/` and pushes it
+       to one registry namespace and its index, see
+       :doc:`/upatches/publish/publishing`.
    * - :src:`vendor/libbpf/`
      - Vendored libbpf and BPF UAPI headers.
    * - ``vendor/linux/``

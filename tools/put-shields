@@ -1,0 +1,143 @@
+#!/bin/sh
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+#
+# tools/put-shields -- build every shield package and push it to one
+# registry namespace, whose signed bpm-index then lists them all: each
+# entry names the repository, version and manifest digest that
+# `shirudo bpm tree append` takes a package by.
+#
+#   tools/put-shields --version <version> [--keys-dir <dir>] [--new-index]
+#                     oci://<registry>/<namespace> [<beefile>|<dir>...]
+#
+# A shield is a package whose Beefile has an [upatches.tree] entry. The
+# Beefiles are the ones given and, for each directory given, every
+# Beefile and *.bee under it that has one; without either, those under
+# upatches/. Each is built with `shirudo bpm build` at
+# <version> and pushed with `shirudo bpm push` to
+# oci://<registry>/<namespace>/<package>, which adds it to
+# <namespace>/bpm-index:stable, signed with the same keys. --new-index
+# starts that index with the first package, for a namespace that never
+# had one. The index lists a name and version once: push the next build
+# under a new version.
+#
+# Each push is reported on standard error, and standard output gets the
+# `shirudo bpm tree append` command that appends that shield by its
+# reference and manifest digest, less the tree to fill in.
+#
+#   SHIRUDO           the shirudo binary. Default: shirudo.
+#   SHIRUDO_KEYS_DIR  the keys directory when --keys-dir is not given.
+#   BPM_OCI_*         registry access, as for shirudo bpm push.
+#
+# Exit status: 0 when every package is pushed; 1 when a build or a push
+# fails, with the packages before it pushed; 2 for wrong usage.
+
+set -eu
+
+repo=$(cd "$(dirname "$0")/.." && pwd)
+shirudo=${SHIRUDO:-shirudo}
+keys=${SHIRUDO_KEYS_DIR:-}
+version=
+new_index=
+work=
+
+die()
+{
+	printf 'put-shields: %s\n' "$1" >&2
+	exit 1
+}
+
+usage()
+{
+	printf '%s\n' \
+		'usage: put-shields --version <version> [--keys-dir <dir>] [--new-index]' \
+		'                   oci://<registry>/<namespace> [<beefile>|<dir>...]' >&2
+	exit 2
+}
+
+cleanup()
+{
+	[ -z "$work" ] || rm -rf "$work"
+}
+
+is_shield()
+{
+	grep -q '^\[upatches\.tree\]' "$1"
+}
+
+# Every Beefile and *.bee under directory $1 with an [upatches.tree] entry.
+shields_under()
+{
+	found=$(find "$1" \( -name Beefile -o -name '*.bee' \) -type f | sort |
+		while read -r beefile; do
+			! is_shield "$beefile" || realpath "$beefile"
+		done)
+	[ -n "$found" ] || die "no Beefile under $1 has an [upatches.tree] entry"
+	printf '%s\n' "$found"
+}
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--version)
+		[ $# -ge 2 ] || usage
+		version=$2
+		shift 2
+		;;
+	--keys-dir)
+		[ $# -ge 2 ] || usage
+		keys=$2
+		shift 2
+		;;
+	--new-index)
+		new_index=--new-index
+		shift
+		;;
+	-*) usage ;;
+	*) break ;;
+	esac
+done
+[ -n "$version" ] && [ $# -ge 1 ] || usage
+[ -n "$keys" ] || keys=/var/lib/shirudo/keys
+case "$1" in
+oci://*/?*) namespace=${1%/} ;;
+*) usage ;;
+esac
+shift
+
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+work=$(mktemp -d)
+[ $# -gt 0 ] || set -- "$repo/upatches"
+for shield; do
+	if [ -d "$shield" ]; then
+		shields_under "$shield"
+	elif [ -f "$shield" ]; then
+		is_shield "$shield" || die "$shield has no [upatches.tree] entry"
+		realpath "$shield"
+	else
+		die "$shield is neither a Beefile nor a directory"
+	fi
+done >"$work/given"
+# A Beefile given twice, or in two directories given, is built once.
+awk '!seen[$0]++' "$work/given" >"$work/beefiles"
+keys=$(realpath "$keys")
+
+mkdir "$work/out"
+while read -r beefile; do
+	built=$(cd "$work/out" && "$shirudo" bpm build "$(dirname "$beefile")" \
+		--file "$beefile" --version "$version" --keys-dir "$keys" </dev/null) ||
+		die "cannot build $beefile"
+	bee=$(basename "$(printf '%s\n' "$built" | tail -n 1)")
+	name=$(basename "$bee" "-$version.bee")
+	# shellcheck disable=SC2086 # --new-index or nothing
+	pushed=$("$shirudo" bpm push "$work/out/$bee" "$namespace/$name" \
+		--keys-dir "$keys" $new_index </dev/null) ||
+		die "cannot push $name $version to $namespace/$name"
+	new_index=
+	printf 'put-shields: pushed %s\n' "$pushed" >&2
+	# shellcheck disable=SC2086 # the reference and its digest, to be split
+	set -- $pushed
+	printf 'shirudo bpm tree append %s --package-digest %s oci://<registry>/<tree> --tree-id <tree-id>\n' \
+		"$1" "$2"
+	rm -f "$work/out/$bee"
+done <"$work/beefiles"

@@ -76,7 +76,9 @@ Each Beefile builds a package named after its detector with one upatch
 and one ``[upatches.tree]`` entry of the same name. The entry's
 ``fixes`` names the detector's CVE, and its selector the kernel of the
 manifest: release prefix ``7.2``, its build ID, ``x86_64`` and the
-Kconfig option of the driver or protocol the detector watches.
+Kconfig option of the driver or protocol the detector watches. They are
+the shields :src:`tools/put-shields` publishes, as
+:doc:`/upatches/publish/publishing` shows.
 
 .. list-table::
    :header-rows: 1
