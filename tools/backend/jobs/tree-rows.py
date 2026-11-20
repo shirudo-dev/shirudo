@@ -21,29 +21,14 @@ import os
 import re
 import sys
 
+from common import Refused, strict_decoder, utf8_text, write_rows
+
 PROG = "tree-ingest"
 DIGEST = re.compile(r"sha256:([0-9a-f]{64})")
 ROOT = re.compile(r"[0-9a-f]{64}")
 TREE_ID = re.compile(r"[A-Za-z0-9._-]{1,255}")
 ZERO_ROOT = "0" * 64
 UINT64_MAX = 2**64 - 1
-
-
-class Refused(Exception):
-    pass
-
-
-def unique_keys(pairs):
-    seen = {}
-    for key, value in pairs:
-        if key in seen:
-            raise Refused("a key is given twice in one object")
-        seen[key] = value
-    return seen
-
-
-def not_a_number(name):
-    raise Refused("%s is not a JSON number" % name)
 
 
 def member(obj, key, kind, where):
@@ -225,12 +210,8 @@ def walk(shows):
 
 
 def parse(data):
-    try:
-        text = data.decode("utf-8")
-    except UnicodeDecodeError:
-        raise Refused("it is not UTF-8")
-    decoder = json.JSONDecoder(object_pairs_hook=unique_keys,
-                               parse_constant=not_a_number)
+    text = utf8_text(data, "it")
+    decoder = strict_decoder()
     shows = []
     end = 0
     while True:
@@ -242,12 +223,6 @@ def parse(data):
         except (ValueError, RecursionError):
             raise Refused("it is not a JSON value")
         shows.append(show)
-
-
-def write_rows(path, table):
-    with open(path, "w", encoding="ascii") as out:
-        for row in table:
-            out.write(json.dumps(row, separators=(",", ":")) + "\n")
 
 
 def main():

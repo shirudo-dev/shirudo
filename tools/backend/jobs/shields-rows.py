@@ -24,6 +24,8 @@ import json
 import re
 import sys
 
+from common import Refused, parse_json, printable
+
 PROG = "shields-put"
 # As BPM_BUILD_MAX_FIXES, TREE_STRING_MAX and BPM_FIX_ID_CHARS of
 # tools/shirudo-build/bpm.h, and the name rules of bpm-formats.rst.
@@ -40,41 +42,6 @@ REFERENCE = re.compile(r"oci://([A-Za-z0-9.-]+(?::[0-9]{1,5})?)/"
 CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 KEYS = {"id", "package", "version", "reference", "manifest_digest", "fixes",
         "selector", "description"}
-
-
-class Refused(Exception):
-    pass
-
-
-def unique_keys(pairs):
-    seen = {}
-    for key, value in pairs:
-        if key in seen:
-            raise Refused('the key "%s" is given twice in one object'
-                          % printable(key))
-        seen[key] = value
-    return seen
-
-
-def not_a_number(name):
-    raise Refused("%s is not a JSON number" % name)
-
-
-def printable(text):
-    return "".join(c if c.isprintable() else "?" for c in str(text))
-
-
-def parse(data):
-    try:
-        text = data.decode("utf-8")
-    except UnicodeDecodeError:
-        raise Refused("the file is not UTF-8")
-    decoder = json.JSONDecoder(object_pairs_hook=unique_keys,
-                               parse_constant=not_a_number)
-    try:
-        return decoder.decode(text)
-    except (ValueError, RecursionError):
-        raise Refused("the file is not a JSON value")
 
 
 def string(n, entry, key, pattern, form):
@@ -168,7 +135,7 @@ def main():
     path, rows, put_at = sys.argv[1], sys.argv[2], int(sys.argv[3])
     try:
         with open(path, "rb") as f:
-            shields = shields_of(parse(f.read()))
+            shields = shields_of(parse_json(f.read(), "the file"))
     except Refused as reason:
         print("%s: %s, nothing loaded" % (PROG, reason), file=sys.stderr)
         return 1

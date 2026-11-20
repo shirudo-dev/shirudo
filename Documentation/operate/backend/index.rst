@@ -96,6 +96,9 @@ Files
    * - :src:`tools/backend/jobs/sbom-scan`
      - Scans the SBOM of every image in the SBOM store and loads the
        outcome into ``sbom_images`` and ``sbom_vulns``.
+   * - :src:`tools/backend/jobs/job.sh`, :src:`tools/backend/jobs/common.py`
+     - What the jobs share and read from their own directory: a job is
+       installed with both and with its ``*-rows.py``.
    * - :src:`tools/backend/test/`
      - The SQL tests and their runner, ``test/run.sh``
        (:ref:`testing-backend`).

@@ -50,6 +50,8 @@ import os
 import re
 import sys
 
+from common import Refused, parse_json, printable, write_rows
+
 PROG = "sbom-scan"
 SEGMENT = re.compile(r"[A-Za-z0-9_~+-][A-Za-z0-9._~+-]{0,254}")
 HEX64 = re.compile(r"[0-9a-f]{64}")
@@ -57,40 +59,6 @@ BUILT_AT = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):(
 DEFAULT_FORMAT = "cyclonedx-json"
 UINT32_MAX = 2**32 - 1
 LEFT_OUT = 3
-
-
-class Refused(Exception):
-    pass
-
-
-def unique_keys(pairs):
-    seen = {}
-    for key, value in pairs:
-        if key in seen:
-            raise Refused("a key is given twice in one object")
-        seen[key] = value
-    return seen
-
-
-def not_a_number(name):
-    raise Refused("%s is not a JSON number" % name)
-
-
-def parse_json(data, what):
-    try:
-        text = data.decode("utf-8")
-    except UnicodeDecodeError:
-        raise Refused("%s is not UTF-8" % what)
-    decoder = json.JSONDecoder(object_pairs_hook=unique_keys,
-                               parse_constant=not_a_number)
-    try:
-        return decoder.decode(text)
-    except (ValueError, RecursionError):
-        raise Refused("%s is not a JSON value" % what)
-
-
-def printable(text):
-    return "".join(c if c.isprintable() else "?" for c in text)
 
 
 def text_of(obj, key, where, required=False):
@@ -333,12 +301,6 @@ def db_version(work):
     if type(database) is not dict or type(database.get("UpdatedAt")) is not str:
         return ""
     return database["UpdatedAt"]
-
-
-def write_rows(path, table):
-    with open(path, "w", encoding="ascii") as out:
-        for row in table:
-            out.write(json.dumps(row, separators=(",", ":")) + "\n")
 
 
 def rows_main(work, scanned_at):

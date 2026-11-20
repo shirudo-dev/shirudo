@@ -31,19 +31,15 @@
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
+prog=sbom-put
+# shellcheck source=tools/backend/jobs/job.sh
+. "$here/job.sh"
 store=${SBOM_STORE:-}
 image_id=
 image_version=
 image_root=-
 built_at=
 scan=0
-work=
-
-die()
-{
-	printf 'sbom-put: %s\n' "$1" >&2
-	exit 1
-}
 
 usage()
 {
@@ -52,17 +48,6 @@ usage()
 		'                [--image-root <root>] [--built-at <YYYY-MM-DDThh:mm:ssZ>]' \
 		'                [--scan] <sbom.cdx.json>' >&2
 	exit 2
-}
-
-cleanup()
-{
-	[ -z "$work" ] || rm -rf "$work"
-}
-
-s3()
-{
-	# shellcheck disable=SC2086 # a command with its options, to be split
-	${S3_CLIENT:-aws} "$@"
 }
 
 while [ $# -gt 0 ]; do
@@ -93,9 +78,7 @@ sbom=$1
 [ -n "$image_root" ] || image_root=-
 [ -n "$built_at" ] || built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-trap cleanup EXIT
-trap 'exit 1' HUP INT TERM
-work=$(mktemp -d)
+make_work
 mkdir "$work/new" "$work/old"
 
 python3 "$here/sbom-rows.py" put "$work/new" "$image_id" "$image_version" \

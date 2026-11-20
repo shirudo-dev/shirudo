@@ -23,47 +23,14 @@ import json
 import re
 import sys
 
+from common import Refused, parse_json, printable
+
 PROG = "enroll-put"
 # 000b, TPM_ALG_SHA256, and the SHA-256 of the public area, as
 # shirudo attest and shirudo-quote-check write a name.
 TPM_NAME = re.compile(r"000b[0-9a-f]{64}")
 TEXT = re.compile(r"[^\x00-\x1f\x7f]{1,255}")
 KEYS = {"ak_name", "ek_name", "node_id"}
-
-
-class Refused(Exception):
-    pass
-
-
-def unique_keys(pairs):
-    seen = {}
-    for key, value in pairs:
-        if key in seen:
-            raise Refused('the key "%s" is given twice in one object'
-                          % printable(key))
-        seen[key] = value
-    return seen
-
-
-def not_a_number(name):
-    raise Refused("%s is not a JSON number" % name)
-
-
-def printable(text):
-    return "".join(c if c.isprintable() else "?" for c in text)
-
-
-def parse(data):
-    try:
-        text = data.decode("utf-8")
-    except UnicodeDecodeError:
-        raise Refused("the file is not UTF-8")
-    decoder = json.JSONDecoder(object_pairs_hook=unique_keys,
-                               parse_constant=not_a_number)
-    try:
-        return decoder.decode(text)
-    except (ValueError, RecursionError):
-        raise Refused("the file is not a JSON value")
 
 
 def name_of(where, entry, key):
@@ -154,7 +121,7 @@ def main():
     path, enrolled_path, rows = sys.argv[1:]
     try:
         with open(path, "rb") as f:
-            source, bindings = bindings_of(parse(f.read()))
+            source, bindings = bindings_of(parse_json(f.read(), "the file"))
         new = check_against(bindings, enrolled_of(enrolled_path))
     except Refused as reason:
         print("%s: %s, nothing loaded" % (PROG, reason), file=sys.stderr)

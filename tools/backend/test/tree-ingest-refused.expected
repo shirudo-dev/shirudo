@@ -38,7 +38,7 @@ tree-ingest: input refused: the operation with seq 1 has no artifact
 no artifact: status 1
 tree-ingest: input refused: operations of the document is not an array
 operations: status 1
-tree-ingest: input refused: a key is given twice in one object
+tree-ingest: input refused: the key "generation" is given twice in one object
 key twice: status 1
 tree-ingest: input refused: base has no segment_manifest_digest
 segment: status 1
@@ -70,7 +70,7 @@ tree-ingest: input refused: segment 3 of the walk: seq of operation 1 of the doc
 operation below base: status 1
 tree-ingest: input refused: segment 3 of the walk: the document has no operations but its base.seq is above 0
 no operations: status 1
-tree-ingest: input refused: a key is given twice in one object
+tree-ingest: input refused: the key "generation" is given twice in one object
 key twice in a segment: status 1
 rows after the refusals:
 0	0	0

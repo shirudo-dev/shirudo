@@ -29,30 +29,15 @@
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
+prog=labels-put
+# shellcheck source=tools/backend/jobs/job.sh
+. "$here/job.sh"
 check=0
-work=
-
-die()
-{
-	printf 'labels-put: %s\n' "$1" >&2
-	exit 1
-}
 
 usage()
 {
 	printf '%s\n' 'usage: labels-put [--check] <sets.json>|-' >&2
 	exit 2
-}
-
-cleanup()
-{
-	[ -z "$work" ] || rm -rf "$work"
-}
-
-client()
-{
-	# shellcheck disable=SC2086 # a command with its options, to be split
-	${CLICKHOUSE_CLIENT:-clickhouse-client} "$@"
 }
 
 [ "${1:-}" = --check ] && { check=1; shift; }
@@ -62,9 +47,7 @@ case "$1" in
 -*) usage ;;
 esac
 
-trap cleanup EXIT
-trap 'exit 1' HUP INT TERM
-work=$(mktemp -d)
+make_work
 if [ "$1" = - ]; then
 	cat >"$work/sets.json"
 else

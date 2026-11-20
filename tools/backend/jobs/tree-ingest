@@ -31,18 +31,14 @@
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
+prog=tree-ingest
+# shellcheck source=tools/backend/jobs/job.sh
+. "$here/job.sh"
 shirudo=${SHIRUDO:-shirudo}
 repository=${TREE_REPOSITORY:-}
 reference=${TREE_REFERENCE:-}
 cert=${TREE_CERT:-}
 input=
-work=
-
-die()
-{
-	printf 'tree-ingest: %s\n' "$1" >&2
-	exit 1
-}
 
 usage()
 {
@@ -50,24 +46,6 @@ usage()
 		'usage: tree-ingest [--shirudo <path>] [--reference <ref>] [--cert <file>] [oci://<repository>]' \
 		'       tree-ingest --input <file>|-' >&2
 	exit 2
-}
-
-cleanup()
-{
-	[ -z "$work" ] || rm -rf "$work"
-}
-
-client()
-{
-	# shellcheck disable=SC2086 # a command with its options, to be split
-	${CLICKHOUSE_CLIENT:-clickhouse-client} "$@"
-}
-
-insert()
-{
-	[ -s "$work/new.$1.jsonl" ] || return 0
-	client --query "INSERT INTO shirudo.$2 FORMAT JSONEachRow" \
-		<"$work/new.$1.jsonl" || die "cannot insert into shirudo.$2"
 }
 
 while [ $# -gt 0 ]; do
@@ -89,9 +67,7 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
-trap cleanup EXIT
-trap 'exit 1' HUP INT TERM
-work=$(mktemp -d)
+make_work
 
 if [ "$input" = - ]; then
 	cat >"$work/show"
@@ -152,9 +128,9 @@ fi
 # The publications' own rows go last: they are what says a segment is
 # loaded, so a run that stops earlier is done again by the next one,
 # and no reader finds a publication without its operations.
-insert ops tree_ops
-insert fixes upatch_fixes
-insert pub tree_pubs
+insert tree_ops "$work/new.ops.jsonl"
+insert upatch_fixes "$work/new.fixes.jsonl"
+insert tree_pubs "$work/new.pub.jsonl"
 while IFS='	' read -r generation ops fixes; do
 	printf 'tree-ingest: loaded %s generation %s (operations: %d, fixes: %d)\n' \
 		"$tree_id" "$generation" "$ops" "$fixes"

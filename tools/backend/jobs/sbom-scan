@@ -30,47 +30,19 @@
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
+prog=sbom-scan
+# shellcheck source=tools/backend/jobs/job.sh
+. "$here/job.sh"
 store=${SBOM_STORE:-}
 trivy=${TRIVY:-trivy}
 cache=${TRIVY_CACHE_DIR:-}
 incomplete=0
-work=
-
-die()
-{
-	printf 'sbom-scan: %s\n' "$1" >&2
-	exit 1
-}
 
 usage()
 {
 	printf '%s\n' \
 		'usage: sbom-scan [--store <url>] [--trivy <path>] [--cache-dir <dir>]' >&2
 	exit 2
-}
-
-cleanup()
-{
-	[ -z "$work" ] || rm -rf "$work"
-}
-
-client()
-{
-	# shellcheck disable=SC2086 # a command with its options, to be split
-	${CLICKHOUSE_CLIENT:-clickhouse-client} "$@"
-}
-
-s3()
-{
-	# shellcheck disable=SC2086 # a command with its options, to be split
-	${S3_CLIENT:-aws} "$@"
-}
-
-insert()
-{
-	[ -s "$work/$1.jsonl" ] || return 0
-	client --query "INSERT INTO shirudo.$1 FORMAT JSONEachRow" \
-		<"$work/$1.jsonl" || die "cannot insert into shirudo.$1"
 }
 
 # step <step> <arguments>...: run a step of sbom-rows.py, where status 3
@@ -115,9 +87,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$store" ] || usage
 
-trap cleanup EXIT
-trap 'exit 1' HUP INT TERM
-work=$(mktemp -d)
+make_work
 
 case "$store" in
 file://?*)
@@ -167,7 +137,7 @@ step rows "$work" "$scanned_at"
 
 # The findings go first: a row of sbom_images is what makes a node read
 # them, and one without its findings would read as clean.
-insert sbom_vulns
-insert sbom_images
+insert sbom_vulns "$work/sbom_vulns.jsonl"
+insert sbom_images "$work/sbom_images.jsonl"
 cat "$work/summary"
 exit "$incomplete"
