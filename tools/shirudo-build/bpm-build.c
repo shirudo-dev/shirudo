@@ -2087,13 +2087,8 @@ out:
 	return ret;
 }
 
-/*
- * The package of the manifest whose digest the operator named: a tag is
- * the registry's to point at any package the key ever signed, an older
- * one included, whose loaders config update would sign as a new version.
- */
-static int build_download_package(const char *reference, const char *want,
-				  char *path)
+int build_download_package(const char *cmd, const char *reference,
+			   const char *want, char *path)
 {
 	struct bpm_oci_client client __cleanup(bpm_oci_client_clear) = {};
 	struct bpm_descriptor layers[8] = {};
@@ -2121,7 +2116,7 @@ static int build_download_package(const char *reference, const char *want,
 	if (ret)
 		goto out;
 	if (!bpm_digest_matches(want, digest)) {
-		pr_err("bpm config update: %s serves manifest sha256:%s, not %s",
+		pr_err("%s: %s serves manifest sha256:%s, not %s", cmd,
 		       reference, digest, want);
 		ret = -EKEYREJECTED;
 		goto out;
@@ -2250,8 +2245,8 @@ static int __build_bpm_config_update(int argc, const char **argv,
 		return -EINVAL;
 	}
 	if (base_digest) {
-		ret = build_download_package(base_arg, base_digest,
-					     base_package_tmp);
+		ret = build_download_package("bpm config update", base_arg,
+					     base_digest, base_package_tmp);
 		if (ret)
 			return ret;
 		if (strscpy(base_package, base_package_tmp,

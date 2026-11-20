@@ -145,6 +145,18 @@ int build_tree_fetch_sealed(struct bpm_oci_client *c, const char *repository,
 
 int build_check_keys(const char *pkey, const char *cert);
 
+/*
+ * Downloads the package layer of the manifest at reference, an
+ * oci://host/repository:tag, into a new file made from the mkstemp()
+ * template path, and checks it against want, the manifest digest the
+ * operator named: a tag is the registry's to point at any package the
+ * key ever signed, an older one included. Messages start with cmd. 0, or
+ * a negative errno with no file left behind; -EKEYREJECTED when the
+ * registry serves other bytes.
+ */
+int build_download_package(const char *cmd, const char *reference,
+			   const char *want, char *path);
+
 /* The file name of source less .bpf.c, .bpf.o or .o. 0 or -E2BIG. */
 int build_upatch_name(const char *source, char *out, size_t cap);
 
