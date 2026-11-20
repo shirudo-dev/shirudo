@@ -639,4 +639,51 @@ test_expect_success 'a wrong explicit predecessor certificate leaves the tree un
 	cmp "$REG/ns/tree/manifests/stable" "$WORK/rotated.manifest"
 '
 
+digest_of() {
+	printf 'sha256:%s' "$(sha256sum <"$REG/ns/t7005/manifests/$1" | cut -d" " -f1)"
+}
+
+test_expect_success 'bpm tree append takes a pushed package by its tag and manifest digest' '
+	"$S" bpm tree append "oci://$REGISTRY/ns/t7005:1.0.0" "oci://$REGISTRY/ns/tree-oci" \
+		--package-digest "$(digest_of 1.0.0)" --keys-dir "$WORK/keys" \
+		>"$WORK/append-oci.out" 2>&1 &&
+	grep -q "^oci://$REGISTRY/ns/tree-oci:stable sha256:" "$WORK/append-oci.out" &&
+	split_layers "$REG/ns/tree-oci/manifests/stable" "$REG/ns/tree-oci" "$WORK/tree-oci" &&
+	cms_verify "$WORK/tree-oci.sig" "$WORK/tree-oci.payload" &&
+	python3 - "$WORK/tree-oci.payload" "$WORK/load.json" <<"PYTEST"
+import json, pathlib, sys
+pub = json.loads(pathlib.Path(sys.argv[1]).read_bytes())
+load = json.load(open(sys.argv[2]))
+op = pub["operations"][0]
+assert pub["tree_id"] == "t7005" and len(pub["operations"]) == 1, pub
+assert op["op"] == "add" and op["id"] == "t7005", op
+assert op["artifact"]["payload_sha256"] == "sha256:" + load["payload_sha256"], op
+PYTEST
+'
+
+# A tag is the registry's to move to any package the key signed, an older
+# one included: the digest the operator names decides which is appended.
+test_expect_success 'bpm tree append refuses a tag that serves another manifest than the digest' '
+	! "$S" bpm tree append "oci://$REGISTRY/ns/t7005:1.0.0" "oci://$REGISTRY/ns/tree-moved" \
+		--package-digest "$(digest_of 0.9.0)" --keys-dir "$WORK/keys" \
+		>/dev/null 2>"$WORK/moved.err" &&
+	grep -q "serves manifest $(digest_of 1.0.0), not $(digest_of 0.9.0)" "$WORK/moved.err" &&
+	! test -e "$REG/ns/tree-moved"
+'
+
+usage_status() {
+	"$S" bpm tree append "$@" --keys-dir "$WORK/keys" >/dev/null 2>"$WORK/usage.err"
+	test $? -eq 2
+}
+
+test_expect_success 'bpm tree append takes --package-digest with an oci:// package alone' '
+	usage_status "oci://$REGISTRY/ns/t7005:1.0.0" "oci://$REGISTRY/ns/tree-oci" &&
+	grep -q "package-digest names the manifest of an oci:// package" "$WORK/usage.err" &&
+	usage_status "$WORK/t7005-1.0.0.bee" "oci://$REGISTRY/ns/tree-oci" \
+		--package-digest "$(digest_of 1.0.0)" &&
+	usage_status "oci://$REGISTRY/ns/t7005:1.0.0" "oci://$REGISTRY/ns/tree-oci" \
+		--package-digest sha256:ABC &&
+	grep -q "is not sha256:<64 lowercase hex>" "$WORK/usage.err"
+'
+
 test_done

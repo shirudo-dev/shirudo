@@ -602,7 +602,9 @@ signed config image.
        not trip, and of an entry no target would take,
        each before anything is uploaded, its refusal to extend a tree
        without ``--tree-id`` or with another tree's id, A-to-B tree
-       signing-key rotation with explicit predecessor verification
+       signing-key rotation with explicit predecessor verification, and
+       an ``oci://`` package taken by its tag and ``--package-digest``,
+       refused when the tag serves another manifest
    * - ``t7006-policy-labels``
      - Beefile policy declarations are serialized into the signed
        upatch section

@@ -265,6 +265,20 @@ package as the next operations of the signed tree at
      - Operations after which a segment is sealed, 1 to 512. Any other
        value is refused with ``bpm tree append: --segment-ops must be 1
        to 512``. It may differ from one append to the next.
+   * - ``--package-digest``
+     - none
+     - ``sha256:`` and 64 lowercase hex digits, the manifest digest of an
+       ``oci://`` package, as ``bpm push`` prints it and the repository
+       index lists it. Required with an ``oci://`` package and refused
+       with a package file.
+
+``<package>`` is a ``.bee`` file, or ``oci://<registry>/<repository>:<tag>``
+with ``--package-digest``. The append downloads that package to a file
+under ``/tmp``, which it removes when it ends, and refuses it with ``bpm
+tree append: <package> serves manifest sha256:<hex>, not <digest>`` when
+the tag names another manifest: a registry can point a tag at any package
+the key ever signed, an older one included. Either form without the
+other is a usage error.
 
 The existing publication must pass the checks ``tree sync`` makes before
 it applies anything: the sequence numbers, the ``base`` keys and every

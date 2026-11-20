@@ -14,6 +14,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <unistd.h>
 #include <curl/curl.h>
 
 #include <shirudo/misc.h>
@@ -54,6 +55,7 @@ enum tree_append_opt {
 	TREE_APPEND_REFERENCE,
 	TREE_APPEND_OP,
 	TREE_APPEND_SEGMENT_OPS,
+	TREE_APPEND_PACKAGE_DIGEST,
 };
 
 static const struct opt_spec tree_append_opts[] = {
@@ -75,6 +77,8 @@ static const struct opt_spec tree_append_opts[] = {
 		"seal a segment holding n operations and start the next, 1 to "
 		__stringify(TREE_MAX_OPS) " (default "
 		__stringify(TREE_SEGMENT_OPS) ")" },
+	[TREE_APPEND_PACKAGE_DIGEST] = { "--package-digest", 0, 0,
+		"<sha256:hex>", "the manifest digest of an oci:// package" },
 };
 
 static const struct help_section tree_append_sections[] = {
@@ -82,12 +86,13 @@ static const struct help_section tree_append_sections[] = {
 };
 
 static const struct help tree_append_help = {
-	.usage	    = "shirudo bpm tree append <package-file> <repository> "
-		      "[options]",
+	.usage	    = "shirudo bpm tree append <package-file|oci://host/repo:tag> "
+		      "<repository> [options]",
 	.summary    = "Publish the [upatches.tree] entries of a built package "
 		      "as the next\noperations of the signed tree at "
 		      "<repository>:<ref>. The key defaults to\n--keys-dir, "
-		      KEYS_DIR_ENV " or " KEYS_DIR ".",
+		      KEYS_DIR_ENV " or " KEYS_DIR ". An oci:// package needs "
+		      "--package-digest,\nthe digest of its manifest.",
 	.sections   = tree_append_sections,
 	.n_sections = ARRAY_SIZE(tree_append_sections),
 };
@@ -1204,9 +1209,15 @@ static int tree_new_id(const char *tree_id, const char *package,
 	return 0;
 }
 
+#define TREE_APPEND_DOWNLOAD	"/tmp/shirudo-bpm-append-XXXXXX"
+
 /* One bpm tree append, filled in by its steps in turn. */
 struct tree_append {
 	const char		*package;
+	const char		*package_digest;
+	const char		*package_file;
+	char			download[sizeof(TREE_APPEND_DOWNLOAD)];
+	bool			downloaded;
 	const char		*raw_repository;
 	const char		*keys_dir_arg;
 	const char		*key;
@@ -1242,6 +1253,17 @@ struct tree_append {
 	__u8			*sig;
 	size_t			sig_len;
 };
+
+static bool package_digest_ok(const char *digest)
+{
+	char canonical[SHA256_DIGEST_STR_SIZE];
+	__u8 raw[CRYPTO_SHA256_LEN];
+
+	if (sha256_digest_decode(digest, raw))
+		return false;
+	sha256_digest_encode(raw, canonical);
+	return !strcmp(digest, canonical);
+}
 
 /*
  * 0, or EXIT_USAGE for a usage error, reported, or OPT_DONE where help
@@ -1289,6 +1311,14 @@ static int tree_append_parse(struct tree_append *ta, int argc,
 				return EXIT_USAGE;
 			ta->segment_ops = (int)n_ops;
 			break;
+		case TREE_APPEND_PACKAGE_DIGEST:
+			if (!package_digest_ok(p.value)) {
+				opt_usage(&p, "--package-digest %s is not sha256:<64 lowercase hex>",
+					  p.value);
+				return EXIT_USAGE;
+			}
+			ta->package_digest = p.value;
+			break;
 		case OPT_ARG:
 			if (ta->raw_repository) {
 				opt_usage(&p, "unexpected argument '%s'",
@@ -1308,6 +1338,10 @@ static int tree_append_parse(struct tree_append *ta, int argc,
 	}
 	if (!ta->package || !ta->raw_repository) {
 		opt_usage(&p, "takes <package-file> and <repository>");
+		return EXIT_USAGE;
+	}
+	if (!!str_has_prefix(ta->package, "oci://") != !!ta->package_digest) {
+		opt_usage(&p, "--package-digest names the manifest of an oci:// package, and one needs it");
 		return EXIT_USAGE;
 	}
 	ta->unload = op_delete;
@@ -1350,14 +1384,31 @@ static int tree_append_trim_repository(struct tree_append *ta)
 	return 0;
 }
 
+static int tree_append_fetch_package(struct tree_append *ta)
+{
+	int ret;
+
+	ta->package_file = ta->package;
+	if (!ta->package_digest)
+		return 0;
+	memcpy(ta->download, TREE_APPEND_DOWNLOAD, sizeof(ta->download));
+	ret = build_download_package("bpm tree append", ta->package,
+				     ta->package_digest, ta->download);
+	if (ret)
+		return ret;
+	ta->downloaded = true;
+	ta->package_file = ta->download;
+	return 0;
+}
+
 static int tree_append_read_package(struct tree_append *ta)
 {
 	int ret;
 
-	ret = bpm_pkg_load_info(ta->package, &ta->info);
+	ret = bpm_pkg_load_info(ta->package_file, &ta->info);
 	if (ret)
 		return ret;
-	ret = bpm_pkg_read_member_in(ta->package, "Beefile", NULL,
+	ret = bpm_pkg_read_member_in(ta->package_file, "Beefile", NULL,
 				     ta->package_dir, sizeof(ta->package_dir),
 				     &ta->beefile, &ta->beefile_len,
 				     4u * 1024u * 1024u);
@@ -1571,7 +1622,7 @@ static int tree_append_entry(struct tree_append *ta,
 		return -EOVERFLOW;
 	}
 	member = ta->unload ? u->tree.unload_artifact : u->tree.load_artifact;
-	ret = bpm_pkg_read_member_in(ta->package, member, ta->package_dir,
+	ret = bpm_pkg_read_member_in(ta->package_file, member, ta->package_dir,
 				     NULL, 0, &body, &body_len,
 				     UPATCH_FILE_MAX);
 	if (ret) {
@@ -1707,6 +1758,8 @@ static int tree_append_run(struct tree_append *ta)
 	if (!ret)
 		ret = tree_append_trim_repository(ta);
 	if (!ret)
+		ret = tree_append_fetch_package(ta);
+	if (!ret)
 		ret = tree_append_read_package(ta);
 	if (!ret)
 		ret = tree_append_head(ta);
@@ -1741,6 +1794,8 @@ static void tree_append_free(struct tree_append *ta)
 	xfree(ta->beefile, ta->beefile_len + 1);
 	xfree(ta->info.cert, ta->info.cert_len + 1);
 	bpm_oci_client_clear(&ta->c);
+	if (ta->downloaded)
+		unlink(ta->download);
 }
 
 static int cmd_bpm_tree_append(int argc, const char **argv)
