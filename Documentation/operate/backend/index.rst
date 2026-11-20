@@ -8,19 +8,20 @@
 Backend
 =======
 
-The pages of :doc:`/operate/integrations/index` provides export targets
-shirudo can use and alert on. This describes a reference backend: it checks
+The pages of :doc:`/operate/integrations/index` describe export targets
+shirudo can use and alert on. This section describes a reference backend: it checks
 every keepalive's TPM quote and compares what each target reports with the
 upatch tree it follows. It lives in :src:`tools/backend/`: an OpenTelemetry Collector
 configuration, a ClickHouse schema, the jobs that load trees and SBOMs,
-and their tests. It also provides the end-to-end tester of shirudo itself,
-at the scale of many nodes and many upatches. This allows us to validate the
-event structure and workflows at scale with a viable backend.
+and their tests. It is also what the end-to-end tests of shirudo itself
+run against, at the scale of many nodes and many upatches, which
+validates the event structure and the workflows with a working backend.
 
-A Shirudo target only sends its keepalive to the collector it is configured
-with, and nothing on the target depends on the backend. However, it does
-enable testing many nodes and validate resource requirements. Start from it
-and adapt retention, access control, sizing and features for your deployment.
+A target only sends its keepalive to the collector it is configured
+with, and nothing on the target depends on the backend. The backend does
+make it possible to test many nodes and to validate resource
+requirements. Start from it and adapt retention, access control, sizing
+and features for your deployment.
 
 What it does
 ------------
@@ -40,12 +41,12 @@ What it does
   check: the record is fresh, the target reports no problem, its mask
   and roots match the tree, it is at the head of the tree or still
   within the time a rollout may take, the upatches it has loaded are
-  from the published tree, and its outcomes match the nodes expected
-  results.
+  from the published tree, and its outcomes match the results
+  expected of the node.
 - A table, ``node_vulns``, refreshed every five minutes, that says
   which advisories affect each node's image and kernel and whether a
-  published upatch shields it. Which can be used to match vulnerabilities
-  to nodes using a standard SBOM.
+  published upatch shields it, which matches vulnerabilities to nodes
+  from a standard SBOM.
 
 ``shirudo-quote-check`` and ``shirudo bpm tree show`` come with the
 operator package, :doc:`/reference/cli/quote-check` and

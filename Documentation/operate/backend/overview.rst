@@ -29,8 +29,8 @@ by the host name it claims, and its records are ordered by the quote's
 How a keepalive moves through the schema
 ----------------------------------------
 
-A keepalive sent from Shirudo enters the backend at :table:`otel.otel_logs`, is checked once on its way
-into :table:`checked`, and from there fans out on insert to
+A keepalive that a target sends enters the backend at
+:table:`otel.otel_logs`, is checked once on its way into :table:`checked`, and from there fans out on insert to
 :table:`keepalive`, :table:`rejected`, :table:`nodes`,
 :table:`keepalive_latest` and :table:`boot_first`. Refreshed views then
 build :table:`node_ops`, :table:`history_contradictions` and
