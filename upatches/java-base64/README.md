@@ -49,6 +49,26 @@ Shields view of `tools/xtop` lists `java-base64` as available, its
 `TARGET` the jar it guards and its `FIXES` CVE-2026-114938. Appending it
 to a tree with `shirudo bpm tree append` moves it to the "in trees" tab.
 
+## Check that the guard is in a JVM
+
+`upatches/test/build.sh` builds `upatches/test/badDecoder.jar`, which
+decodes an input of the shape the guard refuses and says who refused it.
+It exits with 0 when the guard did and with 1 in a JVM without it, where
+the JDK's own decoder refuses the input:
+
+```sh
+upatches/test/build.sh
+java -jar upatches/test/badDecoder.jar
+```
+
+A test VM sees the checkout at `/mnt/shirudo-src`, so the jar built on
+the host runs there, in a JVM that a user manager starts after the
+upatch is loaded:
+
+```sh
+java -jar /mnt/shirudo-src/upatches/test/badDecoder.jar
+```
+
 ## Try it against the Elasticsearch lab
 
 The Elasticsearch compose lab is a JVM that shirudo does not manage, so
