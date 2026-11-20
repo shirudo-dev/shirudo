@@ -957,14 +957,18 @@ test_expect_success 'the runners split the tests by number' '
 	test -e end2end/t9110-keepalive-history.sh &&
 	test -e end2end/t9111-pipeline-segments.sh &&
 	test -e end2end/t9112-activation.sh &&
+	test -e end2end/t9113-shield-rollout.sh &&
 	grep -Fqx "	end2end/t9109-pipeline.sh | end2end/t9110-keepalive-history.sh) continue ;;" \
 		run-target-tests.sh &&
 	grep -Fqx "	end2end/t9111-pipeline-segments.sh | end2end/t9112-activation.sh) continue ;;" \
 		run-target-tests.sh &&
 	grep -Fqx "host_test t9109-pipeline" end2end/host.sh &&
 	grep -Fqx "host_test t9110-keepalive-history" end2end/host.sh &&
+	grep -Fqx "	end2end/t9113-shield-rollout.sh) continue ;;" \
+		run-target-tests.sh &&
 	grep -Fqx "host_test t9111-pipeline-segments" end2end/host.sh &&
-	grep -Fqx "host_test t9112-activation" end2end/host.sh
+	grep -Fqx "host_test t9112-activation" end2end/host.sh &&
+	grep -Fqx "	host_test t9113-shield-rollout" end2end/host.sh
 '
 
 test_expect_success 'test-vm rejects unknown policy modes before boot' '

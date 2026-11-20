@@ -13,23 +13,27 @@
       text opacity=1, rounded corners=3bp},
     bar/.style={box, rounded corners=3bp},
     phase/.style={draw=fig-grid, thin, dash pattern=on 3bp off 2.25bp}]
-  \useasboundingbox (0,0) rectangle (840,330);
+  \useasboundingbox (0,0) rectangle (1016,372);
 
   % Phase boundaries; lanes start at y = 34 and are 42 high.
-  \foreach \x in {218, 314, 398, 476, 572, 666, 754}
-    \draw[phase] (\x,8) -- (\x,328);
-  \draw[axis] (118,30) -- (838,30);
+  \foreach \x in {218, 314, 398, 476, 572, 666, 754, 842,
+      930}
+    \draw[phase] (\x,8) -- (\x,370);
+  \draw[axis] (118,30) -- (1014,30);
 
   % host
   \draw[run] (121,37) rectangle (166,73);
   \draw[bar] (221,37) rectangle (311,73);
   \draw[bar] (479,37) rectangle (569,73);
   \draw[run] (575,37) rectangle (663,73);
-  \draw[run] (757,37) rectangle (835,73);
+  \draw[run] (757,37) rectangle (839,73);
+  \draw[run] (933,37) rectangle (1011,73);
   % containers
   \draw[bar] (172,79) rectangle (663,115);
   \draw[bar] (669,79) rectangle (751,115);
-  \draw[bar] (757,79) rectangle (835,115);
+  \draw[bar] (757,79) rectangle (839,115);
+  \draw[bar] (845,79) rectangle (927,115);
+  \draw[bar] (933,79) rectangle (1011,115);
   % operator VM
   \draw[bar] (221,121) rectangle (473,157);
   % node A
@@ -39,15 +43,18 @@
   % fresh edge node
   \draw[bar] (479,247) rectangle (663,283);
   % second pair
-  \draw[bar] (669,289) rectangle (835,325);
+  \draw[bar] (669,289) rectangle (839,325);
+  % third edge node
+  \draw[bar] (845,331) rectangle (1011,367);
 
   \begin{scope}[every node/.append style={anchor=base}]
     \foreach \x/\n in {168/1, 266/2, 356/3, 437/4, 524/5, 619/6,
-        710/7, 796/8}
+        710/7, 798/8, 886/9, 972/10}
       \node[font=\figbody\bfseries, color=fig-muted] at (\x,22) {\n};
 
     \foreach \y/\t in {61/host, 103/containers, 145/operator VM,
-        187/node A, 229/node B, 271/edge node, 313/second pair}
+        187/node A, 229/node B, 271/edge node, 313/second pair,
+        355/third node}
       \node[anchor=base west] at (0,\y) {\t};
 
     \begin{scope}[small]
@@ -58,15 +65,18 @@
       \node at (524,66.5) {checks node B};
       \node at (619,52) {t9109, t9110,};
       \node at (619,66.5) {t9112};
-      \node at (796,52) {t9111,};
-      \node at (796,66.5) {teardown};
+      \node at (798,59.5) {t9111};
+      \node at (972,52) {t9113,};
+      \node at (972,66.5) {teardown};
 
       \node at (417.5,101.5) {registry, two collectors, two ClickHouse
         servers};
       \node at (710,94) {registry};
       \node at (710,108.5) {empty again};
-      \node at (796,94) {stop at};
-      \node at (796,108.5) {the end};
+      \node at (886,94) {registry};
+      \node at (886,108.5) {empty again};
+      \node at (972,94) {stop at};
+      \node at (972,108.5) {the end};
 
       \node at (266,136) {operator.sh};
       \node at (266,150.5) {publishes};
@@ -85,6 +95,9 @@
 
       \node at (752,304) {fresh edge node and};
       \node at (752,318.5) {node B boot};
+
+      \node at (928,346) {fresh edge node boots,};
+      \node at (928,360.5) {on x86-64 only};
     \end{scope}
   \end{scope}
 \end{tikzpicture}

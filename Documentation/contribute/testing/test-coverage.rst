@@ -834,6 +834,17 @@ signed config image.
        challenge refused by another node, the answer verified with
        ``--expect-credential``, and the key moving from ``untrusted`` to
        ``enrolled`` in the backend
+   * - ``t9113-shield-rollout``
+     - A shield rolled out and taken back, run by ``host.sh`` last, on
+       x86-64, on a third fresh edge node and an empty registry:
+       ``put-shields`` and ``shields-put`` listing ``java-base64`` in
+       ``shield_catalog``, ``bpm tree append`` by reference and
+       ``--package-digest`` creating the tree, the node installing the
+       agent at seq 1, a JVM its user manager starts refusing
+       ``badDecoder.jar``'s input by the guard, then ``--op delete``, the
+       agent retired at seq 2 and a JVM started after it without the
+       guard, with ``5 head`` and ``6 set`` of the node's status at each
+       step
 
 Unit suites and fuzz targets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

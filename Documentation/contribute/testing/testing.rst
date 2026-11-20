@@ -194,9 +194,9 @@ a Python companion with the same stem, such as
 before ``init``. They skip on the build host and run in a separate VM
 that the ``tpm`` family boots without the production initrd.
 
-``t9109`` to ``t9112`` carry target numbers but run on the host:
+``t9109`` to ``t9113`` carry target numbers but run on the host:
 :src:`testing/end2end/host.sh` runs them after node A's suite, ``t9109``,
-``t9110``, ``t9112`` and then ``t9111``, against other nodes (see
+``t9110``, ``t9112``, ``t9111`` and then ``t9113``, against other nodes (see
 :ref:`testing-two-nodes`), and node A's runner leaves them out.
 
 Run the tests
@@ -869,15 +869,17 @@ by digest, and the registry and collectors use a throwaway CA. Figure 1
 shows the run in order.
 
 .. figure:: /images/contribute-end2end-run.svg
-   :alt: Eight phases in order, one lane each for the host, the
-         containers, the operator VM, node A, node B, the fresh edge node
-         and the second pair. 1: t9001 on the host, then the containers
+   :alt: Ten phases in order, one lane each for the host, the
+         containers, the operator VM, node A, node B, the fresh edge node,
+         the second pair and the third node. 1: t9001 on the host, then the containers
          start. 2: the operator VM publishes, the host loads the example
          tree. 3: node A runs its tests while node B boots. 4: the
          operator verifies node A and stops. 5: the edge node boots while
          the host runs check-otlp and checks node B. 6: t9109, t9110 and
          t9112 on the host. 7: the registry starts again empty and the
-         second pair boots. 8: t9111 on the host, then teardown.
+         second pair boots. 8: t9111 on the host. 9, on x86-64 only: the
+         registry starts again empty and a third fresh edge node boots.
+         10: t9113 on the host, then teardown.
 
    Figure 1. The end-to-end run in order, not to scale. Tinted bars run
    tests.
@@ -913,8 +915,11 @@ shows the run in order.
    edge node and node B.
 #. Both nodes stop, the registry starts again without a volume, and a
    second fresh edge node and node B boot.
-#. ``t9111`` runs on the host against the second pair. Then the nodes
-   and the containers stop.
+#. ``t9111`` runs on the host against the second pair, which then
+   stops.
+#. On x86-64, the registry starts again without a volume and a third
+   fresh edge node boots alone; ``t9113`` runs on the host against it
+   (:ref:`testing-shield`). Then the nodes and the containers stop.
 
 The operator VM boots from the runtime image with clang 23 and the build
 dependencies of the operator package added, which the runner prepares
@@ -929,7 +934,7 @@ from the files git sees in the checkout and installs it. The operator VM
 and node A name the registry ``registry.test``, at QEMU's address for
 the host, so the tree names it as node A reaches it. The host's own
 build and the operator key it keeps still play the operator for the
-keepalive backend's example tree and for ``t9109`` to ``t9112``, which
+keepalive backend's example tree and for ``t9109`` to ``t9113``, which
 run on the host.
 
 To check the collector, :src:`testing/end2end/check-otlp.py` relies on
@@ -974,9 +979,10 @@ operator key and loads it with the backend's tree ingest job, which runs
 ``bpm tree show``. In the guest, ``t9107`` sends the example keepalives
 with their recorded quotes through that collector and queries
 ClickHouse, both through QEMU's address for the host. After node A,
-``host.sh`` runs ``t9109`` to ``t9112`` against the same backend, see
+``host.sh`` runs ``t9109`` to ``t9113`` against the same backend, see
 :ref:`testing-pipeline`, :ref:`testing-history`,
-:ref:`testing-activation` and :ref:`testing-walk`. ``host.sh`` writes
+:ref:`testing-activation`, :ref:`testing-walk` and
+:ref:`testing-shield`. ``host.sh`` writes
 the example tree's digest to ``build/test-vm/end2end/backend-tree.digest``
 when it publishes the tree, and removes it when the backend's tree
 ingest job does not load the tree and when ``host.sh`` stops. Without
@@ -1284,6 +1290,57 @@ both nodes are ``healthy`` with ``4 chain: pass``, ``5 head: pass, seq 5
 of 5`` and ``6 set: pass``. :src:`testing/end2end/pipeline-lib.sh` holds
 what ``t9109`` to ``t9112`` do to the nodes, the registry and
 ClickHouse.
+
+.. _testing-shield:
+
+A shield rolled out and taken back
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``t9113`` follows one shield from its publication to a node and back, as
+an operator rolls a fix out for an advisory against a platform and takes
+it back once the platform is fixed. The shield is ``java-base64`` of
+:src:`upatches/java-base64/`, a Java agent, whose selector names
+``x86_64``, so ``host.sh`` runs the test on x86-64 alone: last, against
+a third fresh edge node, which has followed no tree, a registry that
+holds none, and the same backend. Its output is
+``build/test-vm/end2end/t9113.log``. The host has no JDK to rely on, so
+the operator VM builds the agent's jar and ``badDecoder.jar`` of
+:src:`upatches/test/` while it publishes, and ``host.sh`` copies both to
+``build/test-vm/end2end/shield/``. The test:
+
+#. checks that the node has no tree state and that the registry holds
+   neither the tree nor an index of shields, and empties the keepalive
+   backend;
+#. runs ``badDecoder.jar`` in the node with
+   :src:`testing/end2end/guarded-jvm.sh`, which starts the node's user
+   manager again and the JVM as a service of it, the way a JVM gets its
+   agents from ``environment.d``: the JDK refuses the input itself, exit
+   status 1;
+#. publishes the shield with :src:`tools/put-shields`, from a copy of
+   the package without its ``build.sh``, so that the jar of the operator
+   VM is the one signed, loads the catalog with
+   :doc:`/operate/backend/shields-put`, and checks its row in
+   ``shield_catalog``;
+#. creates ``shirudo/pipeline-tree`` with ``bpm tree append`` of the
+   shield by the reference and manifest digest ``put-shields`` printed,
+   which is what xtop runs to create a tree, and loads it with the
+   ingest job;
+#. syncs the node, which reaches seq 1 with one ``tree_op`` event,
+   installs the package's jar as ``/run/shirudo-java/java-base64.jar``
+   and names it in
+   ``/run/environment.d/shirudo.conf``, and runs ``badDecoder.jar``
+   again: the guard refuses the input, exit status 0;
+#. sends a keepalive and checks ``5 head: pass, seq 1 of 1`` and ``6
+   set: pass, 1 loaded`` in the node's status;
+#. appends the shield again with ``--op delete``, loads the tree, syncs
+   the node, which reaches seq 2, replaces the jar with one whose agent
+   does nothing and takes it out of ``shirudo.conf``, and runs
+   ``badDecoder.jar`` a third time, which the JDK refuses again;
+#. sends a keepalive and checks ``seq 2 of 2`` and ``0 loaded``.
+
+It does not check that the node is ``healthy``: a user manager tries
+``bpf()`` as it starts, which shirudo refuses and counts, and check 3
+fails a node whose tamper counters rose since its first record.
 
 Select test scripts
 ~~~~~~~~~~~~~~~~~~~

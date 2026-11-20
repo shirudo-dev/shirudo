@@ -10,7 +10,9 @@
 # collector and node B. A fresh edge node boots in node A's place and t9109,
 # t9110 and t9112 run here against it and node B. A second fresh edge node
 # and node B then take their place, on a registry that holds no tree, and
-# t9111 runs against them.
+# t9111 runs against them. On x86-64, which the java-base64 shield
+# selects, a third fresh edge node takes theirs, the registry empty again,
+# and t9113 runs against it.
 
 set -eu
 
@@ -147,11 +149,12 @@ PY
 }
 
 # Run the test end2end/$1.sh on the host against the fresh edge node and
-# node B, with the keepalive backend, into $W/<number>.log. t9110 continues
+# node B, or the edge node alone, with the keepalive backend, into
+# $W/<number>.log. t9110 continues
 # what t9109 left in both nodes and the tree, so they run in that order.
 host_test() {
 	log=$W/${1%%-*}.log
-	say "${1%%-*}, on the host, against the fresh edge node and node B"
+	say "${1%%-*}, on the host, against the nodes of this round"
 	rc=0
 	(cd testing && E2E=$W END2END_BACKEND=$BACKEND END2END_KEYS=$KEYS \
 		NODES_DIR=$NODES_DIR NODES_HOST=$NODES_HOST \
@@ -188,6 +191,22 @@ second_pair() {
 	[ "$(node_sh edge cat /run/shirudo/config/etc/shirudo/node.labels)" = role=edge ] &&
 	[ "$(node_sh b cat /run/shirudo/config/etc/shirudo/node.labels)" = role=core ] ||
 		die "the second pair is not labelled role=edge and role=core"
+}
+
+# Boot a third fresh edge node for t9113, alone, once the second pair has
+# stopped. It follows the same tree as the others, so the registry starts
+# again and holds neither that tree nor a shield.
+third_node() {
+	NODE_ROUND=-3
+	rm -rf -- "$NODES_DIR/node-edge" "$NODES_DIR/node-b"
+	docker rm -fv "$STACK_NAME-registry" >/dev/null 2>&1 || :
+	stack_oci || die "the registry did not come up a third time"
+	say "a third fresh edge node, in $E2E_VM$NODE_ROUND-end2end-edge"
+	node_boot edge
+	node_wait edge 0 || {
+		tail -n 40 "$W/node-edge$NODE_ROUND.log" >&2
+		die "the third edge node did not boot; see $W/node-edge$NODE_ROUND.log"
+	}
 }
 
 # Publish the example tree of the keepalive fixtures, signed with the
@@ -250,6 +269,10 @@ if [ $# -eq 1 ]; then
 	say "the operator builds, pushes and publishes kernel-obs"
 	operator "$OPERATOR_SH" publish
 	operator cat "$OPERATOR_OUT/nonce" >"$W/nonce"
+	mkdir -p "$W/shield"
+	for jar in java-base64.jar badDecoder.jar; do
+		operator cat "$OPERATOR_OUT/shield/$jar" >"$W/shield/$jar"
+	done
 	say "the keepalive backend of tools/backend loads the example tree"
 	operator cat "$OPERATOR_OUT/pkg/kernel-obs-1.0.0.bee" >"$BEE"
 	publish_document shirudo/fleet-base >"$W/backend-tree.digest" ||
@@ -384,5 +407,12 @@ node_down edge ""
 node_clean edge
 node_down b ""
 node_clean b
+
+if [ "$(uname -m)" = x86_64 ]; then
+	third_node
+	host_test t9113-shield-rollout
+	node_down edge ""
+	node_clean edge
+fi
 
 say "ok"

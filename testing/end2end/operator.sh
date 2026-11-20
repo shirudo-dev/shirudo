@@ -61,6 +61,18 @@ publish_java() {
 	payload "$W/pkg/e2e-java-1.0.0/upatches/e2e-java.upatch" >"$W/java-payload"
 }
 
+# The jars of t9113, built here because javac is here: the agent of the
+# java-base64 shield, which the host signs into its package, and the
+# program that shows whether a JVM runs it.
+build_shield_jars() {
+	say "build the java-base64 agent and badDecoder"
+	"$REPO/upatches/java-base64/build.sh" --jar-only
+	"$REPO/upatches/test/build.sh"
+	mkdir -p "$W/shield"
+	cp "$REPO/upatches/java-base64/java-base64.jar" \
+		"$REPO/upatches/test/badDecoder.jar" "$W/shield/"
+}
+
 publish() {
 	[ -s "$BPM_OCI_CA_FILE" ] || die "no CA of the registry: $BPM_OCI_CA_FILE"
 	[ -s "$POLICY_FIXTURE" ] || die "no policy exec graph fixture: $POLICY_FIXTURE"
@@ -85,6 +97,7 @@ role = ["edge"]' "$W/pkg/kernel-obs/Beefile"
 	tar --no-same-owner -xzf "$bee" -C "$W/pkg"
 	payload "$W/pkg/kernel-obs-1.0.0/upatches/kernel-obs.upatch" >"$W/payload"
 	publish_java
+	build_shield_jars
 	payload "$POLICY_FIXTURE" >"$W/policy-payload"
 	openssl rand -hex 16 >"$W/nonce"
 }
