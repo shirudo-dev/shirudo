@@ -291,6 +291,28 @@ forward_stack_registry()
 	systemctl enable --now shirudo-stack-registry.socket
 }
 
+# A local-stack VM is there to try a tree on: it looks for a new
+# operation and reports what it applied every 10 seconds, where a target
+# does each every minute.
+quicken_local_stack_timers()
+{
+	install -d /etc/systemd/system/shirudo-bpm-tree-sync.timer.d \
+		/etc/systemd/system/shirudo-keepalive.timer.d
+	cat >/etc/systemd/system/shirudo-bpm-tree-sync.timer.d/local-stack.conf <<-'EOF'
+	[Timer]
+	OnBootSec=
+	OnUnitActiveSec=
+	OnBootSec=10s
+	OnUnitActiveSec=10s
+	EOF
+	cat >/etc/systemd/system/shirudo-keepalive.timer.d/local-stack.conf <<-'EOF'
+	[Timer]
+	OnUnitInactiveSec=
+	OnUnitInactiveSec=10s
+	EOF
+	systemctl daemon-reload
+}
+
 write_target_test_env()
 {
 	{
@@ -545,6 +567,7 @@ if [[ "${TEST_VM_LOCAL_STACK:-0}" == 1 ]]; then
 	printf '%s\n' 'BPM_OCI_CA_FILE=/usr/local/share/ca-certificates/shirudo-oci-ca.crt' \
 		>/etc/shirudo/bpm/environment
 	forward_stack_registry
+	quicken_local_stack_timers
 fi
 
 if [[ -n "${TEST_VM_BPM_TREE_INPUT:-}" ]]; then
