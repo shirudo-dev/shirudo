@@ -6,7 +6,9 @@
 -- binding: a root other than the SBOM's is root_mismatch and keeps its
 -- rows; an image whose state is not ok, or that has no row, is no_sbom,
 -- which keeps the kernel rows and is unknown without any. Of two builds
--- of one version a node gets its own root's, else the newest one's.
+-- of one version a node gets its own root's, else the newest one's that
+-- has an SBOM: a newer build whose scan failed is no_sbom only for the
+-- node that booted it.
 -- A package of the kernel and the findings of an older scan are left
 -- out, and an image without findings gives none.
 --
@@ -105,7 +107,8 @@ SELECT 'fleet-os', '2026.11.4', 'a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3
 SELECT 'fleet-os', '2026.11.5', 'a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c', 'spdx-json', '', 'unsupported_format', '2026-11-06 08:00:00', '2', at FROM scan UNION ALL
 SELECT 'fleet-os', '2026.11.6', '6666666666666666666666666666666666666666666666666666666666666666', 'cyclonedx-json', '6666666666666666666666666666666666666666666666666666666666666666', 'ok', '2026-11-07 08:00:00', '2', at FROM scan UNION ALL
 SELECT 'fleet-os', '2026.11.7', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'cyclonedx-json', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'ok', '2026-11-08 08:00:00', '2', at FROM scan UNION ALL
-SELECT 'fleet-os', '2026.11.7', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'cyclonedx-json', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'ok', '2026-11-09 08:00:00', '2', at FROM scan;
+SELECT 'fleet-os', '2026.11.7', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'cyclonedx-json', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'ok', '2026-11-09 08:00:00', '2', at FROM scan UNION ALL
+SELECT 'fleet-os', '2026.11.7', 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd', 'cyclonedx-json', '', 'missing', '2026-11-10 08:00:00', '2', at FROM scan;
 INSERT INTO shirudo.sbom_vulns (sbom_sha256, vuln_id, package, installed, fixed, severity, scanned_at)
 SELECT '5b0e2c8a4f6d1e3b7a9c0d2e4f6a8b1c3d5e7f9a0b2c4d6e8f1a3b5c7d9e91d4', 'EXAMPLE-0202', 'openssl', '3.5.1-1', '3.5.1-2', 'HIGH', at FROM scan UNION ALL
 SELECT '5b0e2c8a4f6d1e3b7a9c0d2e4f6a8b1c3d5e7f9a0b2c4d6e8f1a3b5c7d9e91d4', 'EXAMPLE-0101', 'linux-image-7.4.2', '7.4.2-1', '7.4.5-1', 'CRITICAL', at FROM scan UNION ALL
@@ -130,6 +133,7 @@ FROM
         ('build-own-root', [('"image_version":"2026.11.1"', '"image_version":"2026.11.7"'), ('"image_root":"a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c"', '"image_root":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"'), ('"kernel_release":"7.4.2"', '"kernel_release":"6.18.9"')]),
         ('build-other-root', [('"image_version":"2026.11.1"', '"image_version":"2026.11.7"'), ('"image_root":"a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c"', '"image_root":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"'), ('"kernel_release":"7.4.2"', '"kernel_release":"6.18.9"')]),
         ('build-no-root', [('"image_version":"2026.11.1"', '"image_version":"2026.11.7"'), ('"image_root":"a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c"', '"image_root":null'), ('"kernel_release":"7.4.2"', '"kernel_release":"6.18.9"')]),
+        ('build-scan-failed', [('"image_version":"2026.11.1"', '"image_version":"2026.11.7"'), ('"image_root":"a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c"', '"image_root":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"'), ('"kernel_release":"7.4.2"', '"kernel_release":"6.18.9"')]),
         ('kernel-fixed', [('"image_version":"2026.11.1"', '"image_version":"2026.11.6"'), ('"image_root":"a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c"', '"image_root":"6666666666666666666666666666666666666666666666666666666666666666"'), ('"kernel_release":"7.4.2"', '"kernel_release":"7.4.5"')]),
         ('kernel-unreadable', [('"image_version":"2026.11.1"', '"image_version":"2026.11.6"'), ('"image_root":"a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c"', '"image_root":"6666666666666666666666666666666666666666666666666666666666666666"'), ('"kernel_release":"7.4.2"', '"kernel_release":"next-20261111"')]),
         ('old-at-0', [('"image_version":"2026.11.1"', '"image_version":"2026.11.6"'), ('"image_root":"a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c"', '"image_root":"6666666666666666666666666666666666666666666666666666666666666666"'), ('"tree_id":"fleet-base"', '"tree_id":"fleet-old"'), ('"last_seq":3', '"last_seq":0'), ('"mask":"VA=="', '"mask":"AA=="')]),

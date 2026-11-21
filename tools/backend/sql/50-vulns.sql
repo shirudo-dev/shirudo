@@ -175,7 +175,9 @@ WITH
         FROM shirudo.latest
     ),
     -- The SBOM of each node's image: the one with the node's own root
-    -- when there is one, else the newest build of that id and version.
+    -- when there is one, else the newest build of that id and version
+    -- that has one: a build whose scan failed does not hide an older
+    -- build's findings.
     img AS
     (
         SELECT n.ak_name AS ak_name, i.sbom_sha256 AS sbom_sha256, i.scanned_at AS scanned_at,
@@ -189,7 +191,8 @@ WITH
         FROM node AS n
         LEFT JOIN shirudo.sbom_images AS i FINAL
             ON i.image_id = n.image_id AND i.image_version = n.image_version
-        ORDER BY n.ak_name, i.image_root = n.image_root DESC, i.built_at DESC, i.image_root
+        ORDER BY n.ak_name, i.image_root = n.image_root DESC,
+                 i.state = 'ok' AND i.sbom_sha256 != '' DESC, i.built_at DESC, i.image_root
         LIMIT 1 BY n.ak_name
     ),
     kmatch AS

@@ -173,9 +173,9 @@ from "no data".
    * - ``declared``
      - Matched on ``image_id`` and ``image_version`` only, because the node or the image has no root. Root on the node can edit ``os-release``.
    * - ``root_mismatch``
-     - Same id and version, another root: a rebuild that kept its version, or a modified image. The rows are those of the newest build; flag them.
+     - Same id and version, another root: a rebuild that kept its version, or a modified image. The rows are those of the newest build that has an SBOM; flag them.
    * - ``no_sbom``
-     - The node names an image that has no row in ``sbom_images``, or one whose ``state`` is not ``ok``. Kernel rows still appear.
+     - The node names an image that has no row in ``sbom_images``, or one whose ``state`` is not ``ok``: the build with the node's own root, or without such a build every build of that id and version. Kernel rows still appear.
    * - ``no_image``
      - The node reports no image. Kernel rows still appear.
 

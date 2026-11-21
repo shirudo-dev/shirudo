@@ -34,6 +34,7 @@ binding-root-mismatch	root_mismatch	kernel	EXAMPLE-0606	linux	7.4.2		exposed_no_
 build-no-root	declared	sbom	EXAMPLE-0808	curl	8.1-2		exposed_no_shield		0		0		false	none
 build-other-root	root_mismatch	sbom	EXAMPLE-0808	curl	8.1-2		exposed_no_shield		0		0		false	none
 build-own-root	verified	sbom	EXAMPLE-0707	curl	8.1-1		exposed_no_shield		0		0		false	none
+build-scan-failed	no_sbom	none					unknown		0		0		false	none
 kernel-fixed	verified	kernel	EXAMPLE-0303	linux	7.4.5		shielded	xfs-fix	3	add	3	add	true	manual
 kernel-fixed	verified	kernel	EXAMPLE-0606	linux	7.4.5		exposed_no_shield		0		0		false	none
 kernel-unreadable	verified	none					none		0		0		false	none
@@ -67,7 +68,7 @@ shield-live-before-withdrawn	verified	kernel	EXAMPLE-0606	linux	7.4.2		exposed_n
 shield-no-tree	verified	kernel	EXAMPLE-0101	linux	7.4.2	7.4.5	exposed_no_shield		0		0		false	none
 shield-no-tree	verified	kernel	EXAMPLE-0303	linux	7.4.2		exposed_no_shield		0		0		false	none
 shield-no-tree	verified	kernel	EXAMPLE-0606	linux	7.4.2		exposed_no_shield		0		0		false	none
-nodes	29	29
+nodes	30	30
 shielded now, delete coming
 old-at-1	EXAMPLE-0101	old-fix	1	2
 shielded now, add coming

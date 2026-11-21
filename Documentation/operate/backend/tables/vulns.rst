@@ -54,7 +54,7 @@ shirudo.sbom_images
 
    - Only an image with state ok has findings in sbom_vulns.
    - A node's SBOM is the one with the node's own image_root if present,
-     else the newest build of that id and version.
+     else the newest build of that id and version that has one.
 
    :image_id: Image name, e.g. fleet-os.
    :image_version: e.g. 2026.11.1.
