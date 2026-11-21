@@ -19,7 +19,7 @@ and shows one row per upatch, or, with
 ``shirudo.shield_catalog``, one per shield available to append; SBOM sends :src:`tools/xtop/sql/sbom.sql`,
 over ``shirudo.node_vulns``, and shows one row per finding, or, with
 :src:`tools/xtop/sql/sbom-images.sql` over ``shirudo.sbom_images``, one
-per image. Every query is sent with ``readonly=1``, and it changes nothing unless it is given the operator's keys to create a tree with. It is a `Bun <https://bun.sh>`_ program built on
+per image. Every query is sent with ``readonly=1``, or without it to a user whose profile is read-only at another level and may not set it, and it changes nothing unless it is given the operator's keys to create a tree with. It is a `Bun <https://bun.sh>`_ program built on
 Ink and React, and runs on an operator's host, never on a target.
 
 Build and run

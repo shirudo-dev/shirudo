@@ -37,27 +37,41 @@ export function configFromEnv(env: Record<string, string | undefined> = process.
   };
 }
 
+// The servers whose user is read-only by its profile at another level
+// than 1, readonly=2: such a user may not set readonly, and needs no one
+// to.
+const readOnlyByProfile = new WeakSet<ClickHouseConfig>();
+const READONLY_REFUSED = /Cannot modify 'readonly' setting in readonly mode/;
+
 /** Runs one SELECT and returns its rows as objects keyed by column name. */
 export async function queryRows<T>(
   cfg: ClickHouseConfig,
   sql: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<T[]> {
-  const url = new URL(cfg.url);
-  url.searchParams.set("default_format", "JSONEachRow");
-  url.searchParams.set("output_format_json_quote_64bit_integers", "0");
-  url.searchParams.set("readonly", "1");
   const headers: Record<string, string> = { "Content-Type": "text/plain" };
   if (cfg.user) headers["X-ClickHouse-User"] = cfg.user;
   if (cfg.password) headers["X-ClickHouse-Key"] = cfg.password;
 
-  const res = await fetchImpl(url, {
-    method: "POST",
-    headers,
-    body: sql,
-    signal: AbortSignal.timeout(cfg.timeoutMs),
-  });
-  const text = await res.text();
+  const post = async () => {
+    const url = new URL(cfg.url);
+    url.searchParams.set("default_format", "JSONEachRow");
+    url.searchParams.set("output_format_json_quote_64bit_integers", "0");
+    if (!readOnlyByProfile.has(cfg)) url.searchParams.set("readonly", "1");
+    const res = await fetchImpl(url, {
+      method: "POST",
+      headers,
+      body: sql,
+      signal: AbortSignal.timeout(cfg.timeoutMs),
+    });
+    return { ok: res.ok, status: res.status, text: await res.text() };
+  };
+  let res = await post();
+  if (!res.ok && !readOnlyByProfile.has(cfg) && READONLY_REFUSED.test(res.text)) {
+    readOnlyByProfile.add(cfg);
+    res = await post();
+  }
+  const { text } = res;
   if (!res.ok) throw new Error(`${res.status} ${text.trim().split("\n")[0]?.slice(0, 300) ?? ""}`);
   return text
     .split("\n")
