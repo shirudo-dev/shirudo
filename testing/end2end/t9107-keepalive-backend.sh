@@ -68,16 +68,18 @@ print("000b" + hashlib.sha256(base64.b64decode(sys.argv[1])).hexdigest())' \
 		"$(quote_field "$1" 4)"
 }
 
-# The TPM clock the quote of fixture body $1 was taken at: the u64 of
-# TPMS_ATTEST's clockInfo, after the magic, the type, qualifiedSigner and
-# extraData. Each capture of the quotes takes another.
-clock_of() {
+# Field $2 of the clockInfo the quote of fixture body $1 was taken at,
+# 0 the TPM clock and 1 the reset count: the u64 and the u32 that follow
+# the magic, the type, qualifiedSigner and extraData of TPMS_ATTEST. Each
+# capture of the quotes takes others.
+clock_info_of() {
 	python3 -c 'import base64, struct, sys
 a = base64.b64decode(sys.argv[1])
 o = 6
 for _ in range(2):
     o += 2 + struct.unpack_from(">H", a, o)[0]
-print(struct.unpack_from(">Q", a, o)[0])' "$(quote_field "$1" 2)"
+print(struct.unpack_from(">QI", a, o)[int(sys.argv[2])])' \
+		"$(quote_field "$1" 2)" "$2"
 }
 
 # Send the body file $2 with the quote of fixture body $3 through the
@@ -99,8 +101,10 @@ refresh() {
 
 AK_A=$(ak_of node-a-1.1.0.json)
 AK_B=$(ak_of node-b-1.1.0.json)
-CLOCK_A=$(clock_of node-a-1.1.0.json)
-CLOCK_B=$(clock_of node-b-1.1.0.json)
+CLOCK_A=$(clock_info_of node-a-1.1.0.json 0)
+CLOCK_B=$(clock_info_of node-b-1.1.0.json 0)
+RESET_A=$(clock_info_of node-a-1.1.0.json 1)
+RESET_B=$(clock_info_of node-b-1.1.0.json 1)
 DIGEST=$(cat "$E2E/backend-tree.digest")
 PARENT=4ee49208ad87695d862c8cc976d1c910170a3de611cfcee2ce181efd8e0a2942
 VERSION_ID=d6d918ad22ff597579e6678bef75adca84d30f9661e0b7bbdbf534eebc138c1f
@@ -164,9 +168,9 @@ test_expect_success 'the checker accepts the keepalives of node A and node B' '
 	send edge-01 "$FIX/node-a-1.1.0.json" node-a-1.1.0.json &&
 	send core-01 "$FIX/node-b-1.1.0.json" node-b-1.1.0.json &&
 	ch_wait "$Q_RECORDS" 2 &&
-	printf "core-01\t%s\t0\t%s\t%s\nedge-01\t%s\t0\t%s\t%s\n" \
-		"$AK_B" "$CLOCK_B" "$(quote_field node-b-1.1.0.json 5)" \
-		"$AK_A" "$CLOCK_A" "$(quote_field node-a-1.1.0.json 5)" \
+	printf "core-01\t%s\t%s\t%s\t%s\nedge-01\t%s\t%s\t%s\t%s\n" \
+		"$AK_B" "$RESET_B" "$CLOCK_B" "$(quote_field node-b-1.1.0.json 5)" \
+		"$AK_A" "$RESET_A" "$CLOCK_A" "$(quote_field node-a-1.1.0.json 5)" \
 		>"$W/keepalive" &&
 	ch_cmp "$Q_KEEPALIVE" "$W/keepalive" &&
 	test "$(ch "SELECT count() FROM shirudo.rejected")" = 0
