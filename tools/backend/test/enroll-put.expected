@@ -4,7 +4,7 @@ enroll-put: loaded bindings: 2
 first put: status 0
 enroll-put: 000baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa (ek_name 000beeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee, node_id edge-01): already enrolled
 enroll-put: 000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb (ek_name none, node_id none): already enrolled
-enroll-put: loaded bindings: 2
+enroll-put: loaded bindings: 0
 again: status 0
 enroll-put: 000baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa is enrolled with ek_name 000beeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee, node_id edge-01, not ek_name 000beeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee, node_id edge-09, nothing loaded
 rebound: status 1

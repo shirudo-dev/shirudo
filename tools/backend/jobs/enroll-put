@@ -77,4 +77,4 @@ if [ -s "$work/rows.jsonl" ]; then
 		die 'the keys are enrolled, but their bindings are not recorded; run it again'
 fi
 cat "$work/summary"
-printf 'enroll-put: loaded bindings: %d\n' "$(wc -l <"$work/rows.jsonl")"
+printf 'enroll-put: loaded bindings: %d\n' "$(grep -c '"new":1}$' "$work/rows.jsonl" || :)"
