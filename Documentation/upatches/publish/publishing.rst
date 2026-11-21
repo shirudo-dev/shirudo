@@ -211,7 +211,9 @@ the registry can point the tag at another package your key signed, and
 
 ``--catalog <file>`` also writes the shields it pushed, with their fixes
 and selectors, for the keepalive backend to list as available
-(:doc:`/operate/backend/shields-put`).
+(:doc:`/operate/backend/shields-put`). When a build or a push fails, the
+file holds the shields pushed before it: load it, and push the rest
+under the same version, naming their Beefiles.
 
 Segments and registry retention
 -------------------------------

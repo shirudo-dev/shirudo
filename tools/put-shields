@@ -27,7 +27,8 @@
 # reference and manifest digest, less the tree to fill in. --catalog
 # writes the shields pushed, with their fixes and selectors, as
 # jobs/shields-put of tools/backend loads them, so that the backend lists
-# them as available.
+# them as available. When a build or a push fails it holds the shields
+# pushed before, which the index does not take a second time.
 #
 #   SHIRUDO           the shirudo binary. Default: shirudo.
 #   SHIRUDO_KEYS_DIR  the keys directory when --keys-dir is not given.
@@ -63,6 +64,24 @@ usage()
 cleanup()
 {
 	[ -z "$work" ] || rm -rf "$work"
+}
+
+# The shields pushed so far, for --catalog: none pushed writes nothing.
+write_catalog()
+{
+	[ -n "$catalog" ] && [ -s "$work/entries" ] || return 0
+	{
+		printf '{"shields": [\n'
+		paste -sd, "$work/entries"
+		printf ']}\n'
+	} >"$catalog" || die "cannot write $catalog"
+}
+
+# A build or a push failed: what is pushed stays pushed, so it is listed.
+fail()
+{
+	write_catalog
+	die "$1"
 }
 
 is_shield()
@@ -139,17 +158,17 @@ while read -r beefile; do
 	dir=$(dirname "$beefile")
 	if grep -q '^type = "java"' "$beefile" && [ -x "$dir/build.sh" ]; then
 		( cd "$dir" && ./build.sh --jar-only ) </dev/null ||
-			die "cannot build the jar of $beefile"
+			fail "cannot build the jar of $beefile"
 	fi
 	built=$(cd "$work/out" && "$shirudo" bpm build "$dir" \
 		--file "$beefile" --version "$version" --keys-dir "$keys" </dev/null) ||
-		die "cannot build $beefile"
+		fail "cannot build $beefile"
 	bee=$(basename "$(printf '%s\n' "$built" | tail -n 1)")
 	name=$(basename "$bee" "-$version.bee")
 	# shellcheck disable=SC2086 # --new-index or nothing
 	pushed=$("$shirudo" bpm push "$work/out/$bee" "$namespace/$name" \
 		--keys-dir "$keys" $new_index </dev/null) ||
-		die "cannot push $name $version to $namespace/$name"
+		fail "cannot push $name $version to $namespace/$name"
 	new_index=
 	printf 'put-shields: pushed %s\n' "$pushed" >&2
 	# shellcheck disable=SC2086 # the reference and its digest, to be split
@@ -157,13 +176,7 @@ while read -r beefile; do
 	printf 'shirudo bpm tree append %s --package-digest %s oci://<registry>/<tree> --tree-id <tree-id>\n' \
 		"$1" "$2"
 	python3 "$repo/tools/shield-entries.py" "$beefile" "$1" "$2" "$version" \
-		>>"$work/entries" || die "cannot read the tree entries of $beefile"
+		>>"$work/entries" || fail "cannot read the tree entries of $beefile"
 	rm -f "$work/out/$bee"
 done <"$work/beefiles"
-if [ -n "$catalog" ]; then
-	{
-		printf '{"shields": [\n'
-		paste -sd, "$work/entries"
-		printf ']}\n'
-	} >"$catalog" || die "cannot write $catalog"
-fi
+write_catalog
