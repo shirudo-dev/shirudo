@@ -4,9 +4,21 @@ edge-02	edge-02	healthy	untrusted	0	3	3	3	1
 edge-03	edge-03	healthy	untrusted	0	3	3	3	1
 edge-04	edge-04	unhealthy	untrusted	7	3	3	3	0
 edge-on-another-kernel	edge-on-another-kernel	healthy	untrusted	0	3	3	3	1
+enrolled-01	enrolled-01	healthy	enrolled	0	3	3	3	1
+enrolled-02	enrolled-02	healthy	enrolled	0	3	3	3	1
+enrolled-deviating	enrolled-deviating	unhealthy	enrolled	7	3	3	3	0
+made-up-01	made-up-01	healthy	untrusted	0	3	3	3	0
+made-up-02	made-up-02	healthy	untrusted	0	3	3	3	0
+made-up-03	made-up-03	healthy	untrusted	0	3	3	3	0
 core-01	7 peers: no peers, 1 in group
 edge-01	7 peers: pass, 4 in group
 edge-02	7 peers: pass, 4 in group
 edge-03	7 peers: pass, 4 in group
 edge-04	7 peers: FAIL outlier, 4 in group
 edge-on-another-kernel	7 peers: no peers, 1 in group
+enrolled-01	7 peers: pass, 3 in group
+enrolled-02	7 peers: pass, 3 in group
+enrolled-deviating	7 peers: FAIL outlier, 3 in group
+made-up-01	7 peers: pass, 6 in group
+made-up-02	7 peers: pass, 6 in group
+made-up-03	7 peers: pass, 6 in group

@@ -80,7 +80,7 @@ A UI reads ``node_status`` as often as it likes, as :doc:`xtop` does:
    * - ``status``
      - ``stale``, ``unhealthy`` or ``healthy``, see below.
    * - ``trust``
-     - The node's ``trust`` from ``shirudo.nodes``: ``untrusted``, or ``enrolled`` once the operator has recorded its key as a TPM's (:doc:`maintain`). It is never part of ``status``: a healthy node is one whose records are consistent and match the tree, an enrolled one is one whose key is known to live in a TPM. Show both.
+     - The node's ``trust`` from ``shirudo.nodes``: ``untrusted``, or ``enrolled`` once the operator has recorded its key as a TPM's (:doc:`maintain`). A node's own ``trust`` never decides its ``status``: a healthy node is one whose records are consistent and match the tree, an enrolled one is one whose key is known to live in a TPM. Show both. Check 7 reads it only to choose whom a node is compared with.
    * - ``failed_check``
      - The first check that failed: 2 for ``stale``, 3 to 7 for ``unhealthy``, 0 for ``healthy``.
    * - ``log``
@@ -163,12 +163,19 @@ passed. Checks 3 to 6 have a section each below.
      - ``FAIL drift``
    * - 7
      - ``7 peers:``
-     - The node's ``base_root`` and its mask up to ``last_seq`` are the most common pair among the nodes with the same ``tree_id``, ``base_seq``, ``last_seq``, ``config_root`` and ``kernel_release``, or one of several equally common ones. Alone in its group it has ``no peers``.
+     - The node's ``base_root`` and its mask up to ``last_seq`` are the most common pair among the nodes with the same ``tree_id``, ``base_seq``, ``last_seq``, ``config_root`` and ``kernel_release``, or one of several equally common ones. An enrolled node is compared with the enrolled nodes of that group only, an untrusted one with all of them. Alone in its group it has ``no peers``.
      - ``FAIL outlier``
 
 An outlier is a reason to attest a node, not an alarm by itself: a node
 whose labels changed partway through a tree differs from its peers for
 a good reason.
+
+Whoever can post to the collector can make keys, as many as it takes to
+be the most common pair of a group. Untrusted keys therefore have no
+say about an enrolled node: they can neither make it an outlier nor
+hide one among them. Among untrusted nodes they can do both, so enroll
+the nodes whose check 7 you rely on (:doc:`maintain`). The line's count
+is that of the nodes the node was compared with, itself included.
 
 Three kinds of node are not held against the tree. Checks 4 to 7 pass
 for them and their lines say why:

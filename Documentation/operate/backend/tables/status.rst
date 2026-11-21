@@ -193,6 +193,8 @@ shirudo.node_status
 
    - Checks: 1 signed, 2 fresh, 3 reported, 4 chain, 5 head, 6 set, 7 peers.
      Each only means something if the ones before it passed.
+   - Check 7 compares an enrolled node with enrolled nodes only: untrusted
+     keys cost nothing to make.
    - Checks 4–7 pass with a reason when the node cannot be held against a
      tree: no tree, no mask, or publication unknown (ingest is behind).
    - A node behind the head is healthy until stuck_seconds after the

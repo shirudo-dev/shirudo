@@ -368,8 +368,9 @@ WHERE (ak_name, tree_id) NOT IN (SELECT ak_name, tree_id FROM shirudo.history_co
 -- stale_seconds, whatever it says, else unhealthy when one of checks 3
 -- to 7 fails and healthy otherwise. failed_check is the first check that
 -- fails, 2 for stale and 0 for none, and log has one line per check, 1
--- to 7. trust is not part of status. head_seq is the head of the newest
--- publication known for the node's tree.
+-- to 7. A node's trust does not decide its status; check 7 reads it to
+-- choose the node's peers. head_seq is the head of the newest publication
+-- known for the node's tree.
 CREATE TABLE IF NOT EXISTS shirudo.node_status
 (
     node_id String,
@@ -563,19 +564,30 @@ WITH
         )
         GROUP BY ak_name
     ),
+    -- Anyone who can post to the collector can make keys, and as many
+    -- of them as it takes to be the most common path of a group. An
+    -- enrolled node is therefore held against the enrolled nodes of its
+    -- group alone; an untrusted one against all of them.
     peers AS
     (
-        SELECT ak_name, n, same,
-               max(same) OVER (PARTITION BY p_tree, p_base, p_last, p_config, kernel_release) AS most
+        SELECT ak_name,
+               if(enrolled, n_enrolled, n_all) AS n,
+               if(enrolled, same_enrolled, same_all) AS same,
+               if(enrolled, max(same_enrolled) OVER grp, max(same_all) OVER grp) AS most
         FROM
         (
             SELECT ak_name, p_tree, p_base, p_last, p_config, kernel_release,
-                   count() OVER (PARTITION BY p_tree, p_base, p_last, p_config, kernel_release) AS n,
-                   count() OVER (PARTITION BY p_tree, p_base, p_last, p_config, kernel_release, p_root, walked)
-                       AS same
+                   trust = 'enrolled' AS enrolled,
+                   count() OVER grp AS n_all,
+                   countIf(enrolled) OVER grp AS n_enrolled,
+                   count() OVER path AS same_all,
+                   countIf(enrolled) OVER path AS same_enrolled
             FROM node
             WHERE skip = ''
+            WINDOW grp AS (PARTITION BY p_tree, p_base, p_last, p_config, kernel_release),
+                   path AS (PARTITION BY p_tree, p_base, p_last, p_config, kernel_release, p_root, walked)
         )
+        WINDOW grp AS (PARTITION BY p_tree, p_base, p_last, p_config, kernel_release)
     ),
     boot AS
     (
