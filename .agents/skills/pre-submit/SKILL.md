@@ -61,15 +61,19 @@ make -B && make -B shirudo-build && make -B quote-check &&
 make -B CC=clang && make -B CC=clang shirudo-build &&
 	make -B CC=clang quote-check &&
 	make -B -f Makefile.shirudo CC=clang test-helpers
-make tests VM=0 SANITIZE=address,undefined           # CC=gcc and CC=clang,
+make tests VM=0 BACKEND=0 SANITIZE=address,undefined # CC=gcc and CC=clang,
                                                      # one worktree each
-make tests VM=0 SANITIZE=thread CC=clang             # and TSan in a third
+make tests VM=0 BACKEND=0 SANITIZE=thread CC=clang   # and TSan in a third
 sh .github/scripts/msan-deps.sh &&                   # MSan, a worktree of
 	sh .github/scripts/msan-tests.sh 60          # its own
 make -C testing fuzz FUZZ_SECONDS=60
 make proofs-cbmc CHANGED=$range                      # the proofs that read
 make proofs-lean4                                    # what the series changed
 make -C testing functional/<family>                  # each family it touches
+make -C testing backend                              # after a change to
+                                                     # tools/backend
+make -C tools/xtop tests                             # after one to tools/xtop;
+                                                     # not in make tests
 ```
 
 A warning fails every build. Fix it rather than silence it; `WERROR=0`

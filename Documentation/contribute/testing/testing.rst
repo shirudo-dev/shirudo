@@ -107,11 +107,13 @@ Test tiers
    * - Backend
      - :src:`tools/backend/test/`
      - On the build host, against a ClickHouse container
-     - ``make -C tools/backend tests``
+     - ``make -C testing backend``
 
 ``make tests`` in the checkout root, or ``make -C testing``, runs the
-unit, CI check, functional and end-to-end tiers in that order. The fuzz
-targets, the proofs and the backend tests run on their own. CI runs the
+unit, CI check, functional, end-to-end and backend tiers in that order.
+``BACKEND=0`` leaves out the backend tier, which needs docker or podman
+and reads no C: the sanitizer runs pass it. The fuzz targets and the
+proofs run on their own. CI runs the
 proofs only after a push to main, in the ``Proofs`` workflow, never on a
 pull request: :doc:`proofs` says which to run for a change.
 

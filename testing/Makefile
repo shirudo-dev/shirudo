@@ -27,7 +27,7 @@ test-vm-arch = $(shell TEST_VM_ARCH='$(TEST_VM_ARCH)'; \
 	. $(ROOT)/testing/vm/arch.sh && printf '%s' "$$$(1)")
 
 .DEFAULT_GOAL := all
-.PHONY: all help clean unit ci-checks functional end2end build-operator build-unit kernel-btf \
+.PHONY: all help clean unit ci-checks functional end2end backend build-operator build-unit kernel-btf \
 	test-helpers \
 	fuzz afl bundle test-vm-bundle require-vm-kernel vm vm-console vm-ssh vm-enroll vm-sbom vm-stop vm-clean \
 	vm-operator-end2end
@@ -260,8 +260,10 @@ endef
 # a target number (t?1??) runs in a VM its family boots from the bundle, so
 # no test finds what another family left behind; tpm boots a second VM
 # before init, without the initrd, for the TPM register tests. VM=0 leaves
-# out every test that boots a VM.
+# out every test that boots a VM. BACKEND=0 leaves out the SQL tests of
+# tools/backend, which need docker or podman and read no C.
 VM ?= 1
+BACKEND ?= 1
 UNIT_SUITES := $(sort $(basename $(notdir $(filter-out %/unit.c, \
 	$(wildcard $(ROOT)/testing/unit/*.c)))))
 family-list = $(shell cd $(ROOT)/testing/functional && \
@@ -281,9 +283,13 @@ all:
 	+$(Q)$(MAKE) ci-checks
 	+$(Q)$(MAKE) functional
 	+$(Q)$(MAKE) end2end
+	+$(Q)$(MAKE) backend
 
 unit: build-unit
 	$(Q)$(ROOT)/testing/run-tests.sh unit
+
+backend:
+	+$(Q)$(if $(filter 0,$(BACKEND)),:,$(MAKE) -C $(ROOT)/tools/backend tests)
 
 $(addprefix unit/,$(UNIT_SUITES)): unit/%: build-unit
 	$(Q)$(ROOT)/testing/run-tests.sh unit/$*
@@ -422,9 +428,11 @@ help:
 	  '  make -C testing ci-checks               the scripts CI runs' \
 	  '  make -C testing functional[/<family>]   families: $(FAMILIES)' \
 	  '  make -C testing end2end' \
+	  '  make -C testing backend                 the SQL tests of tools/backend' \
 	  '  TEST_FILTER=<regex> selects test filenames (empty runs everything).' \
 	  '  VM=0 leaves out the tests that boot a VM, which need root;' \
 	  '  make -j boots several at once.' \
+	  '  BACKEND=0 leaves out the backend tests, which need docker or podman.' \
 	  '  make -C testing fuzz [FUZZ_SECONDS=60] [FUZZ_CORPUS=<dir>] [FUZZERS=<target>...]' \
 	  '  make -C testing afl [AFL_SECONDS=600] [FUZZ_CORPUS=<dir>] [FUZZERS=<target>...]' \
 	  '  make -C testing vm, vm-console, vm-ssh, vm-enroll, vm-sbom, vm-stop, or vm-clean' \

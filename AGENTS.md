@@ -346,7 +346,10 @@ one usually still compiles and passes tests.
   by `testing/unit/<m>.c`, a parser of input from outside the host has a
   fuzz target, and a shell test `t<F><K><NN>` lives in its family's
   directory (`Documentation/contribute/testing/testing.rst`). The
-  `testing` and `fuzz-target` skills say how to run and add them.
+  `testing` and `fuzz-target` skills say how to run and add them. Its
+  last tier is the SQL tests of `tools/backend`, which need docker or
+  podman (`BACKEND=0` leaves them out). The tests of xtop are not part
+  of it: `make -C tools/xtop tests`, which needs bun, runs them.
 - `make proofs` runs the CBMC proofs of `testing/proofs/cbmc/`, which
   check parsers and emitters for every input within a bound, and the Lean
   4 proofs of `testing/proofs/lean4/`, which prove models of algorithms

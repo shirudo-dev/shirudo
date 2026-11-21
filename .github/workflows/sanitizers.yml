@@ -87,7 +87,7 @@ jobs:
             make -j4 SANITIZE=${{ matrix.sanitize }}
             make SANITIZE=${{ matrix.sanitize }} shirudo-build
             make -C testing SANITIZE=${{ matrix.sanitize }} test-helpers
-            make tests VM=0 SANITIZE=${{ matrix.sanitize }}
+            make tests VM=0 BACKEND=0 SANITIZE=${{ matrix.sanitize }}
 
       - name: Save the sanitizer OpenSSL build
         if: always() && steps.sanitizer-openssl.outputs.cache-hit != 'true' && hashFiles('build/sanitizer-openssl/lib/libcrypto.so') != ''
