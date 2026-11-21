@@ -47,6 +47,9 @@ nodes AS
     WHERE r.image_root = i.image_root OR r.image_root = ''
     GROUP BY image_id, image_version, image_root
 )
+SELECT *
+FROM
+(
 SELECT
     i.image_id AS image_id,
     i.image_version AS image_version,
@@ -88,4 +91,5 @@ WHERE (r.image_id, r.image_version, r.image_root) NOT IN (SELECT image_id, image
       AND (r.image_root != ''
            OR (r.image_id, r.image_version) NOT IN (SELECT image_id, image_version FROM images))
 GROUP BY r.image_id, r.image_version, r.image_root
+)
 ORDER BY image_id, image_version, image_root
