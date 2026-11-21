@@ -44,9 +44,16 @@ describe("parseSearch", () => {
 describe("literalSearch", () => {
   test("finds the text as it is", () => {
     const query = literalSearch("fleet-os 1.0+b1");
-    expect(query).toBe("fleet-os 1\\.0\\+b1");
+    expect(query).toBe("^fleet-os\\s1\\.0\\+b1$");
     expect(parseSearch(query).test(["fleet-os 1.0+b1"])).toBe(true);
     expect(parseSearch(query).test(["fleet-os 1x00b1"])).toBe(false);
+  });
+
+  test("finds a whole field, not words spread over several or a part of one", () => {
+    const search = parseSearch(literalSearch("web 1.2"));
+    expect(search.test(["web-07", "api 3.0", "6.1.2"])).toBe(false);
+    expect(search.test(["edge-01", "web 1.2.1"])).toBe(false);
+    expect(search.test(["edge-01", "web 1.2"])).toBe(true);
   });
 
   test("a word starting with ! is searched for, not excluded", () => {

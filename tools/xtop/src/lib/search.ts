@@ -36,10 +36,10 @@ export const parseSearch = (query: string): Search => {
   };
 };
 
-/** A search for the words of text as they are, such as a name to drill into. */
+/**
+ * A search for the rows with a field that is text and nothing else, such as
+ * a name to drill into: one term, since separate words could each match
+ * another field, or only a part of one.
+ */
 export const literalSearch = (text: string) =>
-  text
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word) => escapeRegExp(word).replace(/^!/, "\\!"))
-    .join(" ");
+  `^${text.trim().split(/\s+/).filter(Boolean).map(escapeRegExp).join("\\s")}$`;
