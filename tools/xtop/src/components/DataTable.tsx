@@ -140,7 +140,11 @@ export function DataTable<T>({
   // Tabs, summary, search, header and scroll footer each take a line.
   const chrome = (tabs ? 1 : 0) + (summary ? 1 : 0) + (searchFields ? 1 : 0) + 2;
   const visible = Math.max(1, height - chrome);
-  const last = rows.length - 1;
+  // 0 without rows too, where -1 would be the header.
+  const last = Math.max(0, rows.length - 1);
+
+  // A refresh or a search may leave fewer rows than the cursor is at.
+  useEffect(() => setCursor((c) => Math.min(c, last)), [last]);
 
   useEffect(() => {
     const c = Math.max(0, cursor);
