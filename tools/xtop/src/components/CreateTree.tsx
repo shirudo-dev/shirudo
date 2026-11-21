@@ -5,7 +5,7 @@
 // with, and the commands that publish it, which xtop runs when it has the
 // operator's keys.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { createTreeCommands, type AvailableShield } from "../lib/shields.ts";
 import { run, type Operator } from "../lib/operator.ts";
@@ -19,7 +19,7 @@ type Props = {
   onCreated: () => void;
   height: number;
   active: boolean;
-  /** The repository field takes every key while it is edited. */
+  /** The form takes every key while its repository is edited and while its commands run. */
   onEditingChange: (editing: boolean) => void;
   onClose: () => void;
 };
@@ -33,29 +33,48 @@ const STEP_MARK = { running: "…", ok: "✓", failed: "✗" } as const;
 const STEP_COLOR = { running: "yellow", ok: "green", failed: "red" } as const;
 const FAILURE_LINES = 6;
 
+const stepKey = (argv: readonly string[]) => argv.join("\0");
+
+// What ran without ending in a tree, kept past the form: closing it after
+// a failure and starting over must not append again what is published.
+const unfinished: Record<string, Step> = {};
+
 export function CreateTree({ shields, operator, onCreated, height, active, onEditingChange, onClose }: Props) {
   const [repository, setRepository] = useState("");
   const [editing, setEditingState] = useState(true);
   const [cursor, setCursor] = useState(0);
   const [picked, setPicked] = useState<readonly string[]>([]);
 
-  // One per command started, in order: a failure stops the rest.
-  const [steps, setSteps] = useState<readonly Step[]>([]);
-  const running = steps.some((s) => s.state === "running");
+  // One per command started, by the command: a failure stops the rest.
+  const [steps, setSteps] = useState<Readonly<Record<string, Step>>>(() => ({ ...unfinished }));
+  const running = Object.values(steps).some((s) => s.state === "running");
 
   const runAll = async (commands: readonly string[][]) => {
-    // A retry leaves out what succeeded: an append run twice is two operations.
-    const done = steps.filter((s) => s.state === "ok");
-    for (const argv of commands.slice(done.length)) {
-      setSteps([...done, { state: "running", output: "" }]);
+    // A retry leaves out what succeeded, whatever was picked since: an
+    // append run twice is two operations.
+    const started = { ...steps };
+    // Leaving or quitting now would stop the tree half way.
+    onEditingChange(true);
+    for (const argv of commands) {
+      const key = stepKey(argv);
+      if (started[key]?.state === "ok") continue;
+      started[key] = { state: "running", output: "" };
+      setSteps({ ...started });
       const result = await run(argv);
-      done.push({ state: result.ok ? "ok" : "failed", output: result.output });
-      setSteps([...done]);
-      if (!result.ok) return;
+      unfinished[key] = started[key] = { state: result.ok ? "ok" : "failed", output: result.output };
+      setSteps({ ...started });
+      if (!result.ok) return onEditingChange(false);
     }
+    for (const argv of commands) delete unfinished[stepKey(argv)];
     onCreated();
     close();
   };
+
+  // The form opens in its repository field.
+  useEffect(() => {
+    onEditingChange(true);
+    return () => onEditingChange(false);
+  }, []);
 
   const setEditing = (e: boolean) => {
     setEditingState(e);
@@ -77,10 +96,7 @@ export function CreateTree({ shields, operator, onCreated, height, active, onEdi
         if (key.escape) return repository ? setEditing(false) : close();
         if (key.return || key.tab || key.downArrow) return setEditing(false);
         if (key.backspace || key.delete) return setRepository((r) => r.slice(0, -1));
-        if (REPOSITORY_CHARS.test(input)) {
-          setRepository((r) => r + input);
-          setSteps([]);
-        }
+        if (REPOSITORY_CHARS.test(input)) setRepository((r) => r + input);
         return;
       }
       if (key.escape || input === "h" || key.leftArrow) return close();
@@ -89,10 +105,8 @@ export function CreateTree({ shields, operator, onCreated, height, active, onEdi
       if (input === "k" || key.upArrow) return setCursor((c) => Math.max(c - 1, 0));
       const id = shields[cursor]?.id;
       if (input === "x" && runnable) return void runAll(commands);
-      if (id && (input === " " || key.return)) {
-        setSteps([]);
+      if (id && (input === " " || key.return))
         setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
-      }
     },
     { isActive: active },
   );
@@ -127,11 +141,11 @@ export function CreateTree({ shields, operator, onCreated, height, active, onEdi
         {chosen.length === 0 ? (
           <Text dimColor>pick a shield to see the commands</Text>
         ) : (
-          commands.map((argv, i) => {
-            const step = steps[i];
+          commands.map((argv) => {
+            const step = steps[stepKey(argv)];
             const output = step?.output.split("\n") ?? [];
             return (
-              <Box key={argv.join(" ")} flexDirection="column">
+              <Box key={stepKey(argv)} flexDirection="column">
                 <Text wrap="wrap">
                   {step ? <Text color={STEP_COLOR[step.state]}>{STEP_MARK[step.state]}</Text> : "$"} {argv.join(" ")}
                 </Text>
