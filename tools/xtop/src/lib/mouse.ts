@@ -60,8 +60,10 @@ export function createMouseInput(source: NodeJS.ReadStream, stdout: NodeJS.Write
     text = text.replace(SGR_MOUSE, (_m, b: string, x: string, y: string, t: string) => {
       const code = Number(b);
       const pos = { x: Number(x) - 1, y: Number(y) - 1 };
-      if (code & 64) events.emit("mouse", { kind: "wheel", direction: code & 1 ? "down" : "up", ...pos });
-      else if (!(code & 32)) {
+      if (code & 64) {
+        // 66 and 67 are the wheel tilted left and right, which scroll nothing here.
+        if (!(code & 2)) events.emit("mouse", { kind: "wheel", direction: code & 1 ? "down" : "up", ...pos });
+      } else if (!(code & 32)) {
         const button = BUTTONS[code & 3];
         if (button) events.emit("mouse", { kind: t === "M" ? "press" : "release", button, ...pos });
       }
