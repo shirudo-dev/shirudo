@@ -31,6 +31,7 @@
 # pushed before, which the index does not take a second time.
 #
 #   SHIRUDO           the shirudo binary. Default: shirudo.
+#   SHIRUDO_BUILD     its helper, as shirudo reads it.
 #   SHIRUDO_KEYS_DIR  the keys directory when --keys-dir is not given.
 #   BPM_OCI_*         registry access, as for shirudo bpm push.
 #
@@ -150,6 +151,17 @@ done >"$work/given"
 # A Beefile given twice, or in two directories given, is built once.
 awk '!seen[$0]++' "$work/given" >"$work/beefiles"
 keys=$(realpath "$keys")
+# The builds run in a directory of their own, where a relative path to
+# the binary or its helper would name nothing.
+case "$shirudo" in
+*/*) shirudo=$(realpath "$shirudo") || die "no shirudo at $shirudo" ;;
+esac
+case "${SHIRUDO_BUILD:-}" in
+*/*)
+	SHIRUDO_BUILD=$(realpath "$SHIRUDO_BUILD") || die "no helper at $SHIRUDO_BUILD"
+	export SHIRUDO_BUILD
+	;;
+esac
 
 mkdir "$work/out"
 while read -r beefile; do
