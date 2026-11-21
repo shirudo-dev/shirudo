@@ -101,9 +101,12 @@ parser of input from outside the host gets a target in `testing/fuzz/`.
 
 - `vm`, `test-vm-bundle` and every family with target tests require the
   kernel artifact from `shirudo-dev/kernel` under
-  `artifacts/bpf-next-kernel-debs/`. The CI workflow pins a kernel run
-  and its setup script stages that artifact. Local runs need the same
-  artifact; they do not build a kernel from this checkout.
+  `artifacts/bpf-next-kernel-debs/`. `testing/vm/kernel-artifact.sh`
+  pins a kernel run; the CI setup script stages its artifact, and a
+  local VM goal that finds no kernel there downloads and stages it with
+  `gh` (`testing/vm/kernel-artifact.sh fetch`). A kernel already staged
+  is left alone: remove the directory to get the pinned one. No goal
+  builds a kernel from this checkout.
 - The bundle builds in the build container (`testing/container/`) from
   a copy of the files git sees in the checkout, tracked and untracked but
   not ignored, so uncommitted changes are tested; edit nothing until the

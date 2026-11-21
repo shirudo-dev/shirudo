@@ -632,7 +632,13 @@ test_expect_success 'test VMs require a kernel project artifact' '
 	grep -q "github.com/shirudo-dev/kernel" ../testing/Makefile &&
 	grep -q "^require-vm-kernel:" ../testing/Makefile &&
 	! grep -q "build-kernel.sh\|KERNEL_CONFIG\|KERNEL_PATCHES" ../testing/Makefile &&
-	grep -q "KERNEL_CI_ARTIFACT_DIR" ../.github/scripts/tests.sh
+	grep -q "KERNEL_CI_ARTIFACT_DIR" ../.github/scripts/tests.sh &&
+	grep -q "kernel-artifact.sh fetch" ../testing/Makefile &&
+	id=$(vm/kernel-artifact.sh run-id) &&
+	test "$(KERNEL_RUN_ID=12 vm/kernel-artifact.sh run-id)" = 12 &&
+	test "$id" -gt 0 &&
+	! KERNEL_RUN_ID=1x vm/kernel-artifact.sh run-id 2>/dev/null &&
+	grep -q "kernel-artifact.sh run-id" ../.github/workflows/tests.yml
 '
 test_expect_success 'prepared VM runtime includes ripgrep' '
 	grep -qx "ripgrep" vm/runtime-packages &&

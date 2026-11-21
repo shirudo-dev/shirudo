@@ -27,7 +27,7 @@ test-vm-arch = $(shell TEST_VM_ARCH='$(TEST_VM_ARCH)'; \
 	. $(ROOT)/testing/vm/arch.sh && printf '%s' "$$$(1)")
 
 .DEFAULT_GOAL := all
-.PHONY: all help clean unit ci-checks functional end2end build-operator build-unit \
+.PHONY: all help clean unit ci-checks functional end2end build-operator build-unit kernel-btf \
 	test-helpers \
 	fuzz afl bundle test-vm-bundle require-vm-kernel vm vm-console vm-ssh vm-enroll vm-sbom vm-stop vm-clean \
 	vm-operator-end2end
@@ -169,11 +169,16 @@ $(TEST_VM_BUNDLE_STAMP): $(TEST_VM_BUNDLE_INPUTS)
 		BPF_VMLINUX_BTF="$(abspath $(VM_KERNEL_ARTIFACT_DIR)/vmlinux.btf)" \
 		flock $(BUILD_LOCK) $(ROOT)/testing/vm/build-bundle.sh
 
+# A bpf-next kernel that is not staged is downloaded, the run the CI suite
+# pins; one that is staged is left as it is, whatever run it came from.
 require-vm-kernel:
 	$(Q)test -s "$(VM_KERNEL_IMAGE)" -a -s "$(VM_KERNEL_STAMP)" -a \
 		-s "$(VM_KERNEL_ARTIFACT_DIR)/vmlinux.btf" -a \
 		-s "$(VM_KERNEL_ARTIFACT_DIR)/kernel.config" -a \
 		-d "$(VM_KERNEL_ARTIFACT_DIR)/lib/modules" || { \
+		[ "$(VM_KERNEL)" = bpf-next ] && \
+			$(ROOT)/testing/vm/kernel-artifact.sh fetch; \
+	} || { \
 		echo "kernel artifact is missing; use github.com/shirudo-dev/kernel packages in $(VM_KERNEL_ARTIFACT_DIR)" >&2; \
 		exit 1; \
 	}
@@ -359,12 +364,23 @@ build-operator: build-unit
 	+$(Q)flock $(BUILD_LOCK) $(MAKE) -C $(ROOT) quote-check
 	+$(Q)flock $(BUILD_LOCK) $(MAKE) -C $(ROOT) -f Makefile.shirudo test-helpers
 
-build-unit:
+# The BPF objects are compiled against the BTF of the test kernel, which
+# has the signed-loader types a host's own kernel seldom has. Without one
+# staged, and without a BTF or a vmlinux.h the caller names, the pinned
+# kernel is downloaded; where that fails the build takes the BTF of the
+# running kernel, as it did.
+kernel-btf:
+	$(Q)[ -n "$(BPF_VMLINUX_BTF)$(BPF_VMLINUX_H)" ] || \
+		[ -s "$(ROOT)/artifacts/bpf-next-kernel-debs/vmlinux.btf" ] || \
+		VM="$(VM)" $(ROOT)/testing/vm/kernel-artifact.sh fetch || \
+		echo "no kernel artifact: building against the BTF of the running kernel" >&2
+
+build-unit: | kernel-btf
 	$(Q)mkdir -p $(dir $(BUILD_LOCK))
 	+$(Q)flock $(BUILD_LOCK) $(MAKE) -C $(ROOT) all
 	+$(Q)flock $(BUILD_LOCK) $(MAKE) -C $(ROOT) -f Makefile.shirudo unit-tests
 
-test-helpers:
+test-helpers: | kernel-btf
 	+$(Q)$(MAKE) -C $(ROOT) config
 	+$(Q)$(MAKE) -C $(ROOT) -f Makefile.shirudo test-helpers
 
@@ -375,7 +391,7 @@ test-helpers:
 FUZZ_SECONDS ?= 60
 FUZZERS ?=
 
-fuzz:
+fuzz: | kernel-btf
 	+$(Q)$(MAKE) -C $(ROOT) config
 	+$(Q)$(MAKE) -C $(ROOT) -f Makefile.shirudo fuzz-targets
 	$(Q)sh $(ROOT)/testing/fuzz/run.sh $(FUZZ_SECONDS) $(FUZZERS)
@@ -388,7 +404,7 @@ fuzz:
 AFL_CC ?= afl-clang-fast
 AFL_SECONDS ?= 600
 
-afl:
+afl: | kernel-btf
 	+$(Q)$(MAKE) -C $(ROOT) config
 	+$(Q)$(MAKE) -C $(ROOT) -f Makefile.shirudo fuzz-targets \
 		FUZZ_CC=$(AFL_CC) FUZZ_OUT=build/fuzz-afl
@@ -412,7 +428,8 @@ help:
 	  '  make -C testing fuzz [FUZZ_SECONDS=60] [FUZZ_CORPUS=<dir>] [FUZZERS=<target>...]' \
 	  '  make -C testing afl [AFL_SECONDS=600] [FUZZ_CORPUS=<dir>] [FUZZERS=<target>...]' \
 	  '  make -C testing vm, vm-console, vm-ssh, vm-enroll, vm-sbom, vm-stop, or vm-clean' \
-	  '  VM_KERNEL=bpf-next (default) selects the shirudo-dev/kernel artifact' \
+	  '  VM_KERNEL=bpf-next (default) selects the shirudo-dev/kernel artifact,' \
+	  '  downloaded with gh when artifacts/bpf-next-kernel-debs has none' \
 	  '  make -C testing bundle or test-helpers' \
 	  '  make -C testing stack-up, oci, telemetry, xtop or stack-down' \
 	  '  make -C testing clean'

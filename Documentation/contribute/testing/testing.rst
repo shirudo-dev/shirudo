@@ -55,7 +55,7 @@ Before you begin
 The ``CI suite`` workflow uses the x86-64 CI kernel package from
 ``shirudo-dev/kernel`` for every trigger: the
 ``kernel-packages-x86-64-ci`` artifact of the run that
-:src:`.github/workflows/tests.yml` pins, so that a new build of the
+:src:`testing/vm/kernel-artifact.sh` pins, so that a new build of the
 kernel does not change what a series is tested on. For a manual run,
 set ``kernel_run_id`` to select another run. The run must contain that
 artifact. The ``KERNEL_REPO_READ_TOKEN`` secret needs Actions read
@@ -447,15 +447,31 @@ Use a kernel project artifact
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The kernel project publishes the kernel image, BTF, configuration and
-modules together. Download the ``kernel-packages-x86-64-ci`` artifact
-from the run pinned in :src:`.github/workflows/tests.yml` and pass its
-directory to the setup script:
+modules together, as the ``kernel-packages-x86-64-ci`` artifact of a
+run of its package workflow. :src:`testing/vm/kernel-artifact.sh` pins
+the run the tests use, and a goal of ``make -C testing`` that finds no
+kernel under ``artifacts/bpf-next-kernel-debs/`` downloads and stages
+that one: a target VM goal for the kernel it boots, and every goal that
+builds for the BTF the BPF objects are compiled against, unless
+``BPF_VMLINUX_BTF`` or ``BPF_VMLINUX_H`` names another. It
+needs ``gh``, logged in with read access to the kernel repository:
+
+.. code-block:: console
+
+   $ testing/vm/kernel-artifact.sh fetch
+
+``KERNEL_RUN_ID=<run>`` takes another run. A kernel that is staged is
+left as it is, whatever run it came from, and
+``artifacts/bpf-next-kernel-debs/kernel-run-id`` names the run of one
+that was fetched: remove the directory to get the pinned kernel after
+the pin moved. An artifact downloaded by other means is staged with
+``testing/vm/kernel-artifact.sh stage <dir>``, which the setup script
+of the CI runner calls with ``KERNEL_CI_ARTIFACT_DIR``:
 
 .. code-block:: console
 
    $ KERNEL_CI_ARTIFACT_DIR=$HOME/Downloads/kernel-packages-x86-64-ci .github/scripts/tests.sh setup
 
-Setup stages the kernel under ``artifacts/bpf-next-kernel-debs/``.
 Target VM goals require this artifact; they do not build a kernel from
 this checkout.
 

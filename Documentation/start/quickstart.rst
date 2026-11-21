@@ -28,7 +28,7 @@ Before you begin
   changing the host's dracut.
 - Network access. The first boot downloads an Ubuntu cloud image. Get
   the test kernel package artifact from the pinned run in
-  ``.github/workflows/tests.yml`` before building the target binary.
+  ``testing/vm/kernel-artifact.sh`` before building the target binary.
 - To build shirudo: a C toolchain with ``make`` and ``pkg-config``, a
   clang and LLVM 23 with the BPF target, ``clang`` installed as
   ``/usr/bin/clang``, and the development files of OpenSSL 3.5 or later,
@@ -52,7 +52,7 @@ Use the test kernel artifact
 ----------------------------
 
 Download the ``kernel-packages-x86-64-ci`` artifact from the run pinned
-in ``.github/workflows/tests.yml``. Stage it and prepare the test host:
+in ``testing/vm/kernel-artifact.sh``. Stage it and prepare the test host:
 
 .. code-block:: console
 

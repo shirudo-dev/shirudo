@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       kernel_run_id:
-        description: Optional override; defaults to kernel run 44367017434
+        description: Optional override; defaults to the run testing/vm/kernel-artifact.sh pins
         required: false
         type: string
 
@@ -49,14 +49,7 @@ jobs:
           GH_TOKEN: ${{ secrets.KERNEL_REPO_READ_TOKEN }}
           REQUESTED_RUN_ID: ${{ inputs.kernel_run_id }}
         run: |
-          if [ -n "$REQUESTED_RUN_ID" ]; then
-            case "$REQUESTED_RUN_ID" in
-              *[!0-9]*) echo "kernel_run_id must be numeric" >&2; exit 1 ;;
-            esac
-            run_id="$REQUESTED_RUN_ID"
-          else
-            run_id=44367017434
-          fi
+          run_id=$(KERNEL_RUN_ID="$REQUESTED_RUN_ID" testing/vm/kernel-artifact.sh run-id)
           echo "Using kernel package run $run_id"
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
