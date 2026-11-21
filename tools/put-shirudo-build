@@ -62,7 +62,12 @@ version_id_of()
 	if is_version_id "$1"; then
 		printf '%s\n' "$1"
 	elif [ -f "$1" ] && [ -x "$1" ]; then
-		id=$("$1" version --version-id 2>/dev/null) && is_version_id "$id" ||
+		# A name without a slash would run what PATH has, not this file.
+		case "$1" in
+		*/*) binary=$1 ;;
+		*) binary=./$1 ;;
+		esac
+		id=$("$binary" version --version-id 2>/dev/null) && is_version_id "$id" ||
 			die "$1 does not give a version_id, nothing loaded"
 		printf '%s\n' "$id"
 	else

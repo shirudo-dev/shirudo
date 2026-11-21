@@ -4,7 +4,8 @@
 #
 # tools/put-shirudo-build: allows builds given by version_id and by a
 # binary that prints its own, once each; a build already allowed is left
-# as it is. Then what it refuses, each with a message and nothing loaded:
+# as it is; a binary named without a slash is the file of that name, not
+# the one PATH has. Then what it refuses, each with a message and nothing loaded:
 # an argument that is neither, a binary that gives no version_id, a note
 # with a control character and wrong usage.
 
@@ -37,6 +38,13 @@ chmod +x "$work/shirudo" "$work/broken"
 
 run 'first put' "$helper" --note 'test-vm build' "$a" "$work/shirudo" "$a"
 run 'again' "$helper" "$a" "$c"
+d=$(printf '%064d' 0 | tr 0 d)
+e=$(printf '%064d' 0 | tr 0 e)
+mkdir "$work/path"
+printf '#!/bin/sh\necho %s\n' "$d" >"$work/path/mine"
+printf '#!/bin/sh\necho %s\n' "$e" >"$work/mine"
+chmod +x "$work/path/mine" "$work/mine"
+(cd "$work" && PATH="$work/path:$PATH" && run 'by its bare name' "$helper" mine)
 run 'neither' "$helper" "$(printf '%063d' 0)"
 run 'upper' "$helper" "$(printf '%064d' 0 | tr 0 A)"
 (cd "$work" && run 'no build from it' "$helper" ./broken)

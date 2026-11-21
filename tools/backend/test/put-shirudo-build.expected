@@ -4,6 +4,8 @@ first put: status 0
 put-shirudo-build: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: already allowed
 put-shirudo-build: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc: allowed
 again: status 0
+put-shirudo-build: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee: allowed
+by its bare name: status 0
 put-shirudo-build: 000000000000000000000000000000000000000000000000000000000000000 is neither a version_id nor a shirudo binary, nothing loaded
 neither: status 1
 put-shirudo-build: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA is neither a version_id nor a shirudo binary, nothing loaded
@@ -19,3 +21,4 @@ no argument: status 2
 aaaa	test-vm build
 bbbb	test-vm build
 cccc	
+eeee	
