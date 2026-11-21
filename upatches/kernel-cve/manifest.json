@@ -6,7 +6,11 @@
     "upatches_included": false
   },
   "collateral": {
-    "beefile": "kernel-cve/kernel-cve.bee",
+    "beefiles": [
+      "kernel-cve/cve-2025-71093-e1000-tbi-detector.bee",
+      "kernel-cve/cve-2026-31675-netem-detector.bee",
+      "kernel-cve/cve-2026-63984-rpl-detector.bee"
+    ],
     "manifest": "kernel-cve/manifest.json",
     "per_entry_source_dirs": "kernel-cve/sources/"
   },
