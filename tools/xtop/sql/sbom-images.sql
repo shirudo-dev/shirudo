@@ -5,8 +5,10 @@
 -- every image in sbom_images, its findings and the nodes that run it,
 -- and, as no_sbom, every image a node runs that sbom_images does not
 -- have. A node that reports no image root runs an image of its id and
--- version, as node_vulns reads it. Times are epoch milliseconds; a
--- no_sbom row has 0 for them.
+-- version, as node_vulns reads it; one that reports a root sbom_images
+-- has not for that id and version runs a build of its own, a no_sbom row
+-- with that root, so that every node is counted on a row. Times are
+-- epoch milliseconds; a no_sbom row has 0 for them.
 
 WITH
 running AS
@@ -82,6 +84,8 @@ SELECT
     toUInt64(0),
     uniq(r.ak_name)
 FROM running AS r
-LEFT ANTI JOIN images AS i ON i.image_id = r.image_id AND i.image_version = r.image_version
+WHERE (r.image_id, r.image_version, r.image_root) NOT IN (SELECT image_id, image_version, image_root FROM images)
+      AND (r.image_root != ''
+           OR (r.image_id, r.image_version) NOT IN (SELECT image_id, image_version FROM images))
 GROUP BY r.image_id, r.image_version, r.image_root
 ORDER BY image_id, image_version, image_root

@@ -347,4 +347,7 @@ is older than ``sbom_stale_seconds``, the nodes that run it, its
 findings with how many are critical and high, how long ago it was
 scanned and the version of the matcher's database. An image a node runs
 that has no SBOM in the store reads ``no_sbom``: store one with
-:doc:`sbom-put`. Enter on an image shows its findings.
+:doc:`sbom-put`. So does a build a node runs whose root the store does
+not have for that id and version, on a row of its own with that root:
+``node_vulns`` binds such a node ``root_mismatch``. Enter on an image
+shows its findings.
