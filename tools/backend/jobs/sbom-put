@@ -134,4 +134,5 @@ s3://?*)
 esac
 
 [ "$scan" -eq 1 ] || exit 0
-exec "$here/sbom-scan" --store "$store"
+# Not exec: the trap that removes the work directory runs at exit.
+"$here/sbom-scan" --store "$store"
