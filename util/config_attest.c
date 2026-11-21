@@ -240,7 +240,7 @@ int config_evidence_parse(const char *evidence, size_t length,
 			goto fail;
 		}
 	if (schema != 1 || reset < 0 || reset > UINT32_MAX || restart < 0 ||
-	    restart > UINT32_MAX || pcr < 0 || pcr > 15 ||
+	    restart > UINT32_MAX || pcr < 0 || pcr > UINT32_MAX ||
 	    config_measure_pcr_valid(pcr) || strlen(initial) != 64 ||
 	    hex_decode(initial, out->initial_pcr, 32)) {
 		ret = -EINVAL;
@@ -262,10 +262,12 @@ fail:
 int config_evidence_verify(const struct config_evidence *view,
 			   __u32 quote_mask, __u32 reset,
 			   const __u8 pcrs[24][32],
+			   const __u8 *nvpcr_value,
 			   const __u8 *expected_root,
 			   int expected_pcr, const char **reason)
 {
-	__u8 value[32];
+	__u8 value[32], initial[32];
+	const __u8 *live;
 	int ret;
 
 	*reason = "config root history matches the quoted PCR";
@@ -274,10 +276,34 @@ int config_evidence_verify(const struct config_evidence *view,
 		return expected_root || expected_pcr >= 0 ? -EKEYREJECTED : 0;
 	}
 	if (config_measure_pcr_valid(view->pcr) ||
-	    !(quote_mask & (1u << view->pcr)) ||
 	    (expected_pcr >= 0 && view->pcr != (__u32)expected_pcr)) {
 		*reason = "config PCR is unquoted or unexpected";
 		return -EKEYREJECTED;
+	}
+	if (config_measure_nvpcr(view->pcr)) {
+		*reason = "config root history matches the certified NvPCR";
+		if (!nvpcr_value) {
+			*reason = "config NvPCR is not certified";
+			return -EKEYREJECTED;
+		}
+		/*
+		 * The NvPCR holds a known value after systemd initializes it,
+		 * so the history cannot choose where it starts.
+		 */
+		ret = config_measure_nvpcr_initial(initial);
+		if (ret)
+			return ret;
+		if (memcmp(view->initial_pcr, initial, 32)) {
+			*reason = "config history does not start at the NvPCR's initial value";
+			return -EKEYREJECTED;
+		}
+		live = nvpcr_value;
+	} else {
+		if (!(quote_mask & (1u << view->pcr))) {
+			*reason = "config PCR is unquoted or unexpected";
+			return -EKEYREJECTED;
+		}
+		live = pcrs[view->pcr];
 	}
 	if (view->reset_count != reset) {
 		*reason = "config history belongs to another TPM boot";
@@ -288,8 +314,10 @@ int config_evidence_verify(const struct config_evidence *view,
 		return -EKEYREJECTED;
 	}
 	ret = replay(view, value);
-	if (ret || memcmp(value, pcrs[view->pcr], 32)) {
-		*reason = "config history does not match the quoted PCR";
+	if (ret || memcmp(value, live, 32)) {
+		*reason = config_measure_nvpcr(view->pcr) ?
+				  "config history does not match the certified NvPCR" :
+				  "config history does not match the quoted PCR";
 		return ret ? ret : -EKEYREJECTED;
 	}
 	if (expected_root && memcmp(view->events[view->n_events - 1].root_hash,

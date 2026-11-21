@@ -44,6 +44,7 @@ int config_evidence_parse(const char *evidence, size_t length,
 int config_evidence_verify(const struct config_evidence *view,
 			   __u32 quote_mask, __u32 reset,
 			   const __u8 pcrs[24][32],
+			   const __u8 *nvpcr_value,
 			   const __u8 *expected_root,
 			   int expected_pcr, const char **reason);
 

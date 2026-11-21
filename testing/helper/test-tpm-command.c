@@ -65,6 +65,17 @@ int main(void)
 		access = shirudo_tpm_access(command, 18, 13);
 		failures += check(access, SHIRUDO_TPM_RUNTIME, "register NV mutation");
 		failures += check_runtime_only(access, "register NV mutation");
+		/* The config NvPCR: every mutation, extension included. */
+		put32(command + 14, 0x01818e04);
+		access = shirudo_tpm_access(command, 18, 0x01818e04);
+		failures += check(access, SHIRUDO_TPM_RUNTIME, "config NvPCR mutation");
+		failures += check_runtime_only(access, "config NvPCR mutation");
+		failures += check(shirudo_tpm_access(command, 18, 13),
+				  SHIRUDO_TPM_RUNTIME,
+				  "config NvPCR stays reserved with a config PCR");
+		put32(command + 14, 0x01818e05);
+		failures += check(shirudo_tpm_access(command, 18, 0x01818e04),
+				  SHIRUDO_TPM_PUBLIC, "NV mutation past the reserved block");
 		put32(command + 14, 0x01500000);
 		failures += check(shirudo_tpm_access(command, 18, 13),
 				  SHIRUDO_TPM_PUBLIC, "unrelated NV mutation");
@@ -112,6 +123,9 @@ int main(void)
 		put32(command + 10, 13);
 		failures += check(shirudo_tpm_access(command, 14, 16),
 				  SHIRUDO_TPM_PUBLIC, "PCR 13 with another config PCR");
+		/* With the config NvPCR, PCR 13 is systemd-stub's again. */
+		failures += check(shirudo_tpm_access(command, 14, 0x01818e04),
+				  SHIRUDO_TPM_PUBLIC, "PCR 13 with the config NvPCR");
 	}
 	packet(command, 0x11f, 18);
 	put32(command + 10, 0x01818e00);
@@ -134,6 +148,9 @@ int main(void)
 	put32(command + 18, 0x01d10202);
 	failures += check(shirudo_tpm_access(command, 32, 13),
 			  SHIRUDO_TPM_RUNTIME, "systemd NvPCR redefinition");
+	put32(command + 18, 0x01818e04);
+	failures += check(shirudo_tpm_access(command, 32, 0x01818e04),
+			  SHIRUDO_TPM_RUNTIME, "config NvPCR redefinition");
 	packet(command, 0x12a, 45);
 	command[1] = 2;
 	put32(command + 10, 0x4000000c);

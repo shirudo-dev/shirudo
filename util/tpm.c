@@ -891,6 +891,77 @@ int tpm_nv_extend_first(struct tpm *t, __u32 index,
 	return err;
 }
 
+/* PPWRITE, OWNERWRITE, AUTHWRITE; POLICYWRITE; the TPM_NT field. */
+#define NVPCR_WRITE_AUTH	0x00000007u
+#define NVPCR_POLICY_WRITE	0x00000008u
+#define NVPCR_TYPE_MASK		0x000000f0u
+#define NVPCR_TYPE_EXTEND	0x00000040u
+
+/*
+ * Extend a systemd NvPCR after systemd initialized it. Its write policy is
+ * PolicyOR(authorize, PolicyNvWritten(YES)), authorize being the branch
+ * signed by the UKI's PCR key that systemd records for runtime extends. The
+ * index must be an initialized extend index writable only under exactly
+ * that policy.
+ */
+int tpm_nvpcr_extend(struct tpm *t, __u32 index,
+		     const __u8 authorize[TPM_DIGEST_LEN],
+		     const __u8 event[TPM_DIGEST_LEN])
+{
+	__u8 zero[TPM_DIGEST_LEN] = {}, written[TPM_DIGEST_LEN];
+	TPML_DIGEST branches = { .count = 2 };
+	ESYS_TR session = ESYS_TR_NONE;
+	__u8 policy[TPM_DIGEST_LEN];
+	TPM2B_DIGEST *digest = NULL;
+	struct tpm_nv_info nv;
+	TSS2_RC ret;
+	int err;
+
+	err = tpm_nv_info(t, index, &nv);
+	if (!err)
+		err = tpm_policy_nv_written(zero, true, written);
+	if (!err)
+		err = tpm_policy_or(authorize, written, policy);
+	if (err)
+		return err;
+	if (!nv.defined || !nv.written || nv.data_size != TPM_DIGEST_LEN ||
+	    (nv.attrs & NVPCR_WRITE_AUTH) || !(nv.attrs & NVPCR_POLICY_WRITE) ||
+	    (nv.attrs & NVPCR_TYPE_MASK) != NVPCR_TYPE_EXTEND ||
+	    memneq_explicit(nv.policy, policy, sizeof(policy))) {
+		pr_err("tpm: 0x%08x is not the initialized NvPCR its write "
+		       "policy names", index);
+		return -EACCES;
+	}
+	err = tpm_policy_session_start(t, &session);
+	if (err)
+		return err;
+	ret = Esys_PolicyNvWritten(t->esys, session, ESYS_TR_NONE, ESYS_TR_NONE,
+				   ESYS_TR_NONE, TPM2_YES);
+	if (ret == TSS2_RC_SUCCESS) {
+		branches.digests[0].size = TPM_DIGEST_LEN;
+		memcpy(branches.digests[0].buffer, authorize, TPM_DIGEST_LEN);
+		branches.digests[1].size = TPM_DIGEST_LEN;
+		memcpy(branches.digests[1].buffer, written, TPM_DIGEST_LEN);
+		ret = Esys_PolicyOR(t->esys, session, ESYS_TR_NONE,
+				    ESYS_TR_NONE, ESYS_TR_NONE, &branches);
+	}
+	if (ret == TSS2_RC_SUCCESS)
+		ret = Esys_PolicyGetDigest(t->esys, session, t->session,
+					   ESYS_TR_NONE, ESYS_TR_NONE, &digest);
+	if (ret != TSS2_RC_SUCCESS || !digest ||
+	    digest->size != TPM_DIGEST_LEN ||
+	    memcmp(digest->buffer, policy, TPM_DIGEST_LEN)) {
+		pr_err("tpm: NvPCR 0x%08x policy assertion: rc=0x%08x", index,
+		       (__u32)ret);
+		err = -EACCES;
+	}
+	Esys_Free(digest);
+	if (!err)
+		err = nv_extend_session(t, index, session, event);
+	session_flush(t, session);
+	return err;
+}
+
 int tpm_nv_extend(struct tpm *t, __u32 index,
 		  const __u8 branch_written[32],
 		  const __u8 branch_init[32],

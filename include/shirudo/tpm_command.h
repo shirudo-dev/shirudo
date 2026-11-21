@@ -50,8 +50,11 @@ static __always_inline bool shirudo_tpm_nvpcr(__u32 index)
 static __always_inline enum shirudo_tpm_access
 shirudo_tpm_nv(__u32 index, bool extend)
 {
-	/* 0x01818e00 is Shirudo's measurement register (NV_INDEX). */
-	if (index == 0x01818e00u)
+	/*
+	 * 0x01818e00 is Shirudo's measurement register (NV_INDEX), 0x01818e04
+	 * the config NvPCR: its extensions are config events.
+	 */
+	if (index == 0x01818e00u || index == 0x01818e04u)
 		return SHIRUDO_TPM_RUNTIME;
 	if (shirudo_tpm_nvpcr(index) && !extend)
 		return SHIRUDO_TPM_RUNTIME;

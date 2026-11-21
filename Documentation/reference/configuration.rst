@@ -112,8 +112,13 @@ Bootstrap keys
    * - ``config.pcr``
      - Decimal integer, 0 to 15, not 9 or 11
      - Allowed
-     - Required
+     - Required, or ``config.nvpcr``
      - PCR that config activation extends
+   * - ``config.nvpcr``
+     - ``shirudo-config``
+     - Allowed
+     - Required, or ``config.pcr``
+     - Extend the config NvPCR, NV index ``0x01818E04``, instead of a PCR
 
 The runtime bootstrap's ``config.*`` values are the ones in effect: the
 root file system's run of ``init`` and every later command read only the

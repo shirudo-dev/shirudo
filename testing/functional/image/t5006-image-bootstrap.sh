@@ -108,6 +108,17 @@ test_expect_success 'config PCR rejects boot PCRs and resettable PCRs' '
 	done
 '
 
+test_expect_success 'the config NvPCR replaces the config PCR, as the runtime image says' '
+	cp "$WORK/runtime.conf" "$WORK/nvpcr.conf" &&
+	printf "config.nvpcr = shirudo-config\n" >>"$WORK/nvpcr.conf" &&
+	"$H" bootstrap "$WORK/initrd.conf" "$WORK/nvpcr.conf" >"$WORK/result" &&
+	grep -qx "pcr=25267716" "$WORK/result" &&
+	for value in other shirudo-config- 0x01818e04 ""; do
+		printf "config.nvpcr = %s\n" "$value" >"$WORK/bad.conf" &&
+		! "$H" bootstrap "$WORK/initrd.conf" "$WORK/bad.conf" || exit 1
+	done
+'
+
 test_expect_success 'unknown image settings and malformed lines are rejected' '
 	for setting in "runtime.unknown = value" "config.unknown = value" "missing equals"; do
 		printf "%s\n" "$setting" >"$WORK/bad.conf" &&

@@ -3,6 +3,7 @@
 
 #include <shirudo/misc.h>
 #include <shirudo/string.h>
+#include <shirudo/tpm.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -116,6 +117,13 @@ static int bootstrap_parse(FILE *file, struct image_bootstrap *boot,
 				ret = -EINVAL;
 			} else {
 				boot->pcr = pcr;
+				boot->have_pcr = true;
+			}
+		} else if (!strcmp(key, "config.nvpcr")) {
+			if (strcmp(value, TPM_CONFIG_NVPCR_NAME)) {
+				ret = -EINVAL;
+			} else {
+				boot->pcr = TPM_CONFIG_NVPCR_INDEX;
 				boot->have_pcr = true;
 			}
 		} else if (str_has_prefix(key, "config.") ||

@@ -579,6 +579,18 @@ register. The runtime image's bootstrap settings choose it with
 ``config.pcr``: any static SHA-256 PCR from 0 to 15 except 9 and 11. A
 config image cannot change the choice.
 
+``config.nvpcr = shirudo-config`` chooses the config NvPCR instead, NV
+index ``0x01818E04``, and leaves every PCR to its usual owner. systemd
+defines the NvPCR in the initrd from a ``shirudo-config.nvpcr``
+definition, before the guards attach, initializes it to
+``SHA256(0^64)`` and anchors its name in PCR 9. Its write policy is
+``PolicyOR`` of the UKI's signed PCR 11 policy under the ``initrd``
+reference and ``PolicyNvWritten``; shirudo asserts the second branch,
+with the first read from ``/run/systemd/nvpcr/shirudo-config.auth``,
+after checking that the index is an initialized extend index writable
+only under exactly that policy. The events and their digests are the
+same; only the register differs.
+
 Each event is ``SHA256("shirudo-config-root-v1\0" || kind ||
 root_hash)``, with the kind as a big-endian 32-bit number, 1 for the boot
 event and 2 for a live update, and the 32-byte binary root hash. The
@@ -595,6 +607,13 @@ event followed by updates in sequence for the quote's reset count, a
 replay from ``initial_pcr`` that reaches the quoted PCR value, and the
 expected root as the selection. The restart count the history carries is
 not compared.
+With the config NvPCR (``config.nvpcr``) the evidence includes, instead of
+the config PCR, a ``config_nvpcr`` object: the index's name and an
+AK-signed ``TPM2_NV_Certify`` of its contents under the same nonce.
+``verify`` requires that certification from the quote's TPM boot, a history
+that starts at ``SHA256(0^64)``, and a replay that reaches the certified
+contents; ``--expect-config-nvpcr=<name>`` pins the index's name, which the
+platform computes from its PCR public key.
 
 Limits
 ------
@@ -631,11 +650,11 @@ The verifier checks what it is asked to check.
     initrd binding. ``--allow-runtime-events`` accepts any well-formed
     events after boot.
 
-The config PCR has no writer restriction.
-    Any process that can send ``TPM2_PCR_Extend`` can extend the config
-    PCR, and then every target command except ``shirudo status`` and
-    ``shirudo image status`` refuses until a reboot because the PCR no
-    longer replays.
+A config PCR is a shared register.
+    The guard reserves the configured PCR, but it is also a PCR other
+    software may expect to own, and its value at the first event is
+    whatever it held. The config NvPCR is Shirudo's alone and starts at a
+    known value.
 
 PCR 11 needs a measured UKI boot.
     systemd measures the initrd phases only on a measured UKI boot.
@@ -680,6 +699,9 @@ The policy is frozen during authenticated initialization:
   names.
 * Every other PCR stays the platform's. systemd's ``systemd-pcrmachine`` and
   ``systemd-pcrfs`` extend PCR 15 as root, for example.
+* The config NvPCR ``0x01818E04`` is Shirudo's: every mutation, extensions
+  included, needs the full role. With it, the config PCR is free, so PCR 13
+  is systemd-stub's again.
 * Hierarchy changes, clear, global write locks, shutdown and other
   measurement-affecting administration need the full role, as do unknown and
   vendor commands. ``TPM2_Startup`` stays available: systemd probes a TPM that

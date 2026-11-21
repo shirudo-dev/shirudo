@@ -2,6 +2,7 @@
 /* Copyright (c) 2026 Authors of shirudo */
 
 #include <shirudo/misc.h>
+#include <shirudo/tpm.h>
 
 #include <errno.h>
 #include <string.h>
@@ -9,9 +10,24 @@
 #include "config_measure.h"
 #include "crypto.h"
 
+/* A config register is a static PCR or the config NvPCR's index. */
 int config_measure_pcr_valid(__u32 pcr)
 {
-	return pcr < 16 && pcr != 9 && pcr != 11 ? 0 : -EINVAL;
+	return (pcr < 16 && pcr != 9 && pcr != 11) ||
+	       pcr == TPM_CONFIG_NVPCR_INDEX ? 0 : -EINVAL;
+}
+
+bool config_measure_nvpcr(__u32 pcr)
+{
+	return pcr == TPM_CONFIG_NVPCR_INDEX;
+}
+
+/* systemd's unlogged initializing write extends a zero digest. */
+int config_measure_nvpcr_initial(__u8 out[32])
+{
+	__u8 zero[64] = {};
+
+	return sha256_buffer(zero, sizeof(zero), out);
 }
 
 int config_measure_event(enum config_event_kind kind,

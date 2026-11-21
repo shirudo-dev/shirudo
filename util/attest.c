@@ -25,6 +25,7 @@
 #include "chain.h"
 #include "crypto.h"
 #include "config_attest.h"
+#include "config_measure.h"
 #include "eventlog.h"
 #include "hex.h"
 #include "io.h"
@@ -165,9 +166,10 @@ int attest_evidence_config(const __u8 *nonce, size_t nonce_len,
 	struct tpm_key ak = { .handle = 0 }, ek = { .handle = 0 };
 	struct tpm_key ak_copy = {}, ek_copy = {};
 	struct tpm_attestation quote = {}, certify = {};
+	struct tpm_attestation config_certify = {};
 	struct config_evidence config = {};
-	struct tpm_attest quoted;
-	struct tpm_nv_info nv;
+	struct tpm_attest quoted, certified;
+	struct tpm_nv_info nv, config_nv = {};
 	struct tpm *tpm = NULL;
 	struct json_emit e;
 	__u8 values[24][32] = {};
@@ -178,7 +180,7 @@ int attest_evidence_config(const __u8 *nonce, size_t nonce_len,
 	char ts[32], boot_id[64], nv_index[16], nonce_hex[2 * 64 + 1];
 	struct stat st;
 	__u32 i, attempt;
-	bool ek_cert_rsa = false, ek_rsa;
+	bool ek_cert_rsa = false, ek_rsa, nvpcr;
 	int ret;
 
 	*out = NULL;
@@ -191,7 +193,8 @@ int attest_evidence_config(const __u8 *nonce, size_t nonce_len,
 	ret = config_evidence_collect(update, &config);
 	if (ret)
 		return ret;
-	if (config.present)
+	nvpcr = config.present && config_measure_nvpcr(config.pcr);
+	if (config.present && !nvpcr)
 		pcr_mask |= 1u << config.pcr;
 	ret = tpm_open(&tpm);
 	if (ret) {
@@ -235,10 +238,28 @@ int attest_evidence_config(const __u8 *nonce, size_t nonce_len,
 	    (tpm_attest_parse(quote.attest, quote.attest_len,
 				      &quoted) ||
 	     quoted.reset_count != config.reset_count ||
-	     memcmp(values[config.pcr],
-		    config.value, 32))) {
+	     (!nvpcr && memcmp(values[config.pcr],
+			       config.value, 32)))) {
 		ret = -EUCLEAN;
 		goto out;
+	}
+	/* The quote does not cover an NV index: certify the config NvPCR. */
+	if (nvpcr) {
+		ret = tpm_nv_info(tpm, config.pcr, &config_nv);
+		if (!ret)
+			ret = tpm_nv_certify(tpm, &ak, config.pcr, nonce,
+					     nonce_len, &config_certify);
+		if (ret)
+			goto out;
+		if (tpm_attest_parse(config_certify.attest,
+				     config_certify.attest_len, &certified) ||
+		    certified.reset_count != config.reset_count ||
+		    certified.restart_count != config.restart_count ||
+		    certified.offset != 0 || certified.nv_len != 32 ||
+		    memcmp(certified.nv_data, config.value, 32)) {
+			ret = -EUCLEAN;
+			goto out;
+		}
 	}
 	ret = tpm_nv_certify(tpm, &ak, NV_INDEX, nonce,
 			     nonce_len, &certify);
@@ -364,6 +385,15 @@ int attest_evidence_config(const __u8 *nonce, size_t nonce_len,
 	emit_hex(&e, "attest", certify.attest, certify.attest_len);
 	emit_hex(&e, "signature", certify.signature, certify.signature_len);
 	json_obj_close(&e);
+	if (nvpcr) {
+		json_obj_open_key(&e, "config_nvpcr");
+		emit_hex(&e, "name", config_nv.name, config_nv.name_len);
+		emit_hex(&e, "attest", config_certify.attest,
+			 config_certify.attest_len);
+		emit_hex(&e, "signature", config_certify.signature,
+			 config_certify.signature_len);
+		json_obj_close(&e);
+	}
 	json_arr_open(&e, "eventlog");
 	/*
 	 * A boot without an init record has no record to carry, which
@@ -461,6 +491,9 @@ struct init_record {
 
 struct parse {
 	char		writer_public_hex[2 * TPM_NV_RSA_BYTES + 1];
+	char nvpcr_name_hex[69];
+	char nvpcr_attest_hex[2 * TPM_ATTEST_MAX + 1];
+	char nvpcr_sig_hex[2 * TPM_SIGNATURE_MAX + 1];
 	char		nonce_hex[2 * ATTEST_NONCE_MAX + 1];
 	__s64		pcr_mask;
 	char		ak_public_hex[2 * TPM_PUBLIC_MAX + 1];
@@ -722,14 +755,17 @@ struct verify {
 	struct config_evidence		config;
 	bool				have_ek;
 	bool				have_cred;
+	bool				have_nvpcr;
+	bool				have_nvpcr_value;
+	__u8				nvpcr_value[32];
 	__u8				nonce[ATTEST_NONCE_MAX];
 	size_t				nonce_len;
 	struct tpm_ecc_public		ak_pub;
 	__u8				ak_name[TPM_NAME_LEN];
 	/*
 	 * check_signed() decodes each attestation here, the register's
-	 * over the quote's: certify's pointers stay valid, the quote's do
-	 * not.
+	 * over the quote's and the config NvPCR's over the register's: the
+	 * pointers of only the last one decoded stay valid.
 	 */
 	__u8				attest[TPM_ATTEST_MAX];
 	struct tpm_attest		quote;
@@ -825,6 +861,14 @@ static int evidence_parse(struct verify *v, const char *evidence, size_t len)
 		{ "signature", JSON_T_STRING, p->reg_sig_hex,
 		  sizeof(p->reg_sig_hex), 0, NULL, 0 },
 	};
+	struct json_field nvpcr_sub[] = {
+		{ "name", JSON_T_STRING, p->nvpcr_name_hex,
+		  sizeof(p->nvpcr_name_hex), 0, NULL, 0 },
+		{ "attest", JSON_T_STRING, p->nvpcr_attest_hex,
+		  sizeof(p->nvpcr_attest_hex), 0, NULL, 0 },
+		{ "signature", JSON_T_STRING, p->nvpcr_sig_hex,
+		  sizeof(p->nvpcr_sig_hex), 0, NULL, 0 },
+	};
 	struct json_field upatch_sub[] = {
 		{ "name", JSON_T_STRING, p->upatch_name,
 		  sizeof(p->upatch_name), 0, NULL, 0 },
@@ -907,6 +951,8 @@ static int evidence_parse(struct verify *v, const char *evidence, size_t len)
 		  ARRAY_SIZE(ek_sub) },
 		{ "credential", JSON_T_OBJECT, NULL, 0, 0,
 		  cred_sub, ARRAY_SIZE(cred_sub) },
+		{ "config_nvpcr", JSON_T_OBJECT, NULL, 0, 0,
+		  nvpcr_sub, ARRAY_SIZE(nvpcr_sub) },
 	};
 	int ret;
 
@@ -920,6 +966,10 @@ static int evidence_parse(struct verify *v, const char *evidence, size_t len)
 		return -EINVAL;
 	v->have_ek = ek_sub[0].seen && ek_sub[1].seen && ek_sub[2].seen;
 	v->have_cred = cred_sub[0].seen;
+	v->have_nvpcr = top[ARRAY_SIZE(top) - 1].seen;
+	if (v->have_nvpcr && (!nvpcr_sub[0].seen || !nvpcr_sub[1].seen ||
+			      !nvpcr_sub[2].seen))
+		return -EINVAL;
 	return 0;
 }
 
@@ -1129,6 +1179,53 @@ static int verify_register(struct verify *v)
 	return 0;
 }
 
+/* The quote does not cover an NV index: the config NvPCR is certified. */
+static int verify_config_nvpcr(struct verify *v)
+{
+	const struct attest_expect *expect = v->expect;
+	const struct tpm_attest *quote = &v->quote;
+	struct reporter *rep = &v->rep;
+	struct tpm_attest nvpcr = {};
+	struct parse *p = v->p;
+	__u8 name[34];
+	bool contents;
+	int ret;
+
+	if (!v->have_nvpcr) {
+		if (expect->have_config_nvpcr_name)
+			say(rep, false, "config NvPCR: certification missing");
+		return 0;
+	}
+	if (hex_decode(p->nvpcr_name_hex, name, sizeof(name)))
+		return -EINVAL;
+	ret = check_signed(v, "config NvPCR", p->nvpcr_attest_hex,
+			   p->nvpcr_sig_hex, &nvpcr);
+	if (ret == -EINVAL)
+		return ret;
+	contents = !ret && nvpcr.type == TPM_ST_ATTEST_NV &&
+		   nvpcr.index_name_len == sizeof(name) &&
+		   !memneq_explicit(nvpcr.index_name, name, sizeof(name)) &&
+		   nvpcr.offset == 0 && nvpcr.nv_len == 32;
+	say(rep, contents, "config NvPCR: certified name and contents");
+	say(rep, !ret && !v->qrc &&
+	    nvpcr.reset_count == quote->reset_count &&
+	    nvpcr.restart_count == quote->restart_count &&
+	    nvpcr.firmware_version == quote->firmware_version,
+	    "config NvPCR: same TPM boot as quote");
+	if (expect->have_config_nvpcr_name)
+		say(rep, !memneq_explicit(name, expect->config_nvpcr_name,
+					  sizeof(name)),
+		    "config NvPCR: the operator-pinned index");
+	else
+		note(rep, "config NvPCR has no operator pin; use "
+		     "--expect-config-nvpcr");
+	if (contents) {
+		memcpy(v->nvpcr_value, nvpcr.nv_data, 32);
+		v->have_nvpcr_value = true;
+	}
+	return 0;
+}
+
 static void verify_config(struct verify *v)
 {
 	const struct attest_expect *expect = v->expect;
@@ -1145,8 +1242,9 @@ static void verify_config(struct verify *v)
 	pcr = expect->have_config_pcr ? (int)expect->config_pcr : -1;
 	ret = config_evidence_verify(&v->config, quote->pcr_mask,
 				     quote->reset_count,
-				     v->p->pcrs, root, pcr,
-				     &reason);
+				     v->p->pcrs,
+				     v->have_nvpcr_value ? v->nvpcr_value : NULL,
+				     root, pcr, &reason);
 	say(rep, !ret, "config: %s", reason);
 	if (v->config.present && !expect->have_config_root)
 		note(rep, "config root has no operator approval; use "
@@ -1418,6 +1516,9 @@ static int verify_document(struct verify *v, const char *evidence,
 	if (ret)
 		return ret;
 	ret = verify_register(v);
+	if (ret)
+		return ret;
+	ret = verify_config_nvpcr(v);
 	if (ret)
 		return ret;
 	verify_config(v);

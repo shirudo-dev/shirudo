@@ -128,12 +128,13 @@ static int read_document(const char *path, char **out, size_t *length)
 int main(int argc, char **argv)
 {
 	struct config_evidence config = {};
-	__u8 pcrs[24][32] = {}, root[32];
+	__u8 pcrs[24][32] = {}, root[32], certified[32];
 	const char *reason = NULL;
 	const __u8 *expected;
 	__u32 mask, reset;
 	char *document = NULL;
 	size_t length = 0;
+	bool nvpcr;
 	int pcr, ret;
 
 	if (argc == 4 && !strcmp(argv[1], "render")) {
@@ -150,19 +151,22 @@ int main(int argc, char **argv)
 	if (ret)
 		goto out;
 	if (argc == 8 && !strcmp(argv[1], "replay")) {
+		/* The last argument is the quoted PCR or the certified NvPCR. */
 		pcr = !strcmp(argv[4], "-") ? -1 : atoi(argv[4]);
-		if (config.pcr >= 24 ||
+		nvpcr = config_measure_nvpcr(config.pcr);
+		if ((!nvpcr && config.pcr >= 24) ||
 		    (!strcmp(argv[3], "-") ?
 			     0 :
 			     hex_decode(argv[3], root, 32)) ||
-		    hex_decode(argv[7], pcrs[config.pcr], 32)) {
+		    hex_decode(argv[7], nvpcr ? certified : pcrs[config.pcr], 32)) {
 			ret = -EINVAL;
 			goto out;
 		}
-		mask = 1u << (pcr < 0 ? config.pcr : (__u32)pcr);
+		mask = nvpcr ? 0 : 1u << (pcr < 0 ? config.pcr : (__u32)pcr);
 		reset = strtoul(argv[5], NULL, 10);
 		expected = !strcmp(argv[3], "-") ? NULL : root;
 		ret = config_evidence_verify(&config, mask, reset, pcrs,
+					     nvpcr ? certified : NULL,
 					     expected, pcr, &reason);
 	} else if (strcmp(argv[1], "parse")) {
 		ret = -EINVAL;

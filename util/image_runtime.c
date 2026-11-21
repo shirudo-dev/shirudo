@@ -28,6 +28,7 @@
 #include "../builtin.h"
 #include "config.h"
 #include "config_image.h"
+#include "config_measure.h"
 #include "config_update.h"
 #include "crypto.h"
 #include "dm_verity.h"
@@ -500,14 +501,48 @@ static int pcr_read(void *ctx, __u32 pcr, __u8 out[32])
 {
 	struct image_context *current = ctx;
 
+	if (config_measure_nvpcr(pcr))
+		return tpm_nv_read(current->tpm, pcr, out);
 	return tpm_pcr_read(current->tpm, pcr, out);
+}
+
+/*
+ * The branch is read from systemd's record and only selects which policy
+ * the session asserts: the TPM, and tpm_nvpcr_extend() against the index's
+ * own policy, decide whether it is the right one.
+ */
+static int nvpcr_authorize(__u8 out[32])
+{
+	char *data = NULL, hex[65] = {};
+	size_t length = 0;
+	int ret;
+
+	ret = read_file(CONFIG_NVPCR_AUTH_PATH, 65, &data, &length);
+	if (ret)
+		return ret;
+	if ((length == 64 || (length == 65 && data[64] == '\n')))
+		memcpy(hex, data, 64);
+	xfree(data, length + 1);
+	if (strlen(hex) != 64 || hex_decode(hex, out, 32))
+		return -EBADMSG;
+	return 0;
 }
 
 static int pcr_extend(void *ctx, __u32 pcr, const __u8 event[32])
 {
 	struct image_context *current = ctx;
+	__u8 authorize[32];
+	int ret;
 
-	return tpm_pcr_extend(current->tpm, pcr, event);
+	if (!config_measure_nvpcr(pcr))
+		return tpm_pcr_extend(current->tpm, pcr, event);
+	ret = nvpcr_authorize(authorize);
+	if (ret) {
+		pr_err("image: config NvPCR policy branch %s: %s",
+		       CONFIG_NVPCR_AUTH_PATH, strerror(-ret));
+		return ret;
+	}
+	return tpm_nvpcr_extend(current->tpm, pcr, authorize, event);
 }
 
 static int collect_mapping(const char *name, dev_t device, void *ctx)

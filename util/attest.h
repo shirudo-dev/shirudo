@@ -99,6 +99,8 @@ struct attest_expect {
 	__u8		config_root[32];
 	bool		have_config_pcr;
 	__u32		config_pcr;
+	bool		have_config_nvpcr_name;
+	__u8		config_nvpcr_name[34];
 };
 
 /*

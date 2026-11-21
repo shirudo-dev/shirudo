@@ -77,7 +77,7 @@ file refuses none of the runtime image's keys.
      - ``config.image``, the initial config prefix;
        ``config.verification_key``, one or more certificate paths under
        ``/run/shirudo/runtime/``; ``config.pcr``, a PCR from 0 to 15
-       other than 9 and 11
+       other than 9 and 11, or ``config.nvpcr``, the config NvPCR
      - ``tpm.tcti``, ``tpm.owner_auth``, ``tls.classical_hosts``. Any
        ``runtime.*`` key is refused.
 

@@ -157,6 +157,11 @@
  */
 #ifndef NV_INDEX
 #define NV_INDEX		0x01818E00u
+/*
+ * The PCR-key branch of the config NvPCR's write policy, which
+ * systemd-tpm2-setup records when it initializes the NvPCR.
+ */
+#define CONFIG_NVPCR_AUTH_PATH	"/run/systemd/nvpcr/shirudo-config.auth"
 #endif
 
 /* Site config. */

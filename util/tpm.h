@@ -77,6 +77,10 @@ int tpm_nv_define(struct tpm *t, __u32 index,
 		  const void *owner_auth, size_t owner_auth_len);
 int tpm_nv_undefine(struct tpm *t, __u32 index,
 		    const void *owner_auth, size_t owner_auth_len);
+/* Extend an initialized systemd NvPCR; authorize is its PCR-key branch. */
+int tpm_nvpcr_extend(struct tpm *t, __u32 index,
+		     const __u8 authorize[TPM_DIGEST_LEN],
+		     const __u8 event[TPM_DIGEST_LEN]);
 /* -ENOENT: not defined; -ENODATA: defined but not written this boot. */
 int tpm_nv_read(struct tpm *t, __u32 index,
 		__u8 out[TPM_DIGEST_LEN]);

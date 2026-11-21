@@ -25,7 +25,8 @@ Usage
                          [--cert=<certificate>]... [--upatch=<file>]...
                          [--expect=[java:]<name>=<digest>]... [--tree-root=<digest>]
                          [--expect-chain=<register>] [--allow-runtime-events]
-                         [--expect-config-root=<root> --expect-config-pcr=<pcr>]
+                         [--expect-config-root=<root>
+                          (--expect-config-pcr=<pcr> | --expect-config-nvpcr=<name>)]
                          [--expect-pcr=<pcr>=<value>]...
                          [--expect-bind-pcr=<pcr>=<value>]...
                          [--strict-anchor] [--require-initrd] [--json]
@@ -123,10 +124,14 @@ Options
    * - ``--expect-config-root``
      - ``<root>``, 64 hex characters
      - The approved config image root hash. Needs
-       ``--expect-config-pcr``.
+       ``--expect-config-pcr`` or ``--expect-config-nvpcr``.
    * - ``--expect-config-pcr``
      - ``<pcr>``, 0 to 15, not 9 or 11
      - The PCR the config activation extends.
+   * - ``--expect-config-nvpcr``
+     - ``<name>``, 68 hex characters
+     - The TPM name of the config NvPCR the config activation extends,
+       in place of ``--expect-config-pcr``. The evidence must certify it.
    * - ``--expect-pcr``
      - ``<pcr>=<value>``, PCR 0 to 23
      - A PCR value the quote must carry. Repeatable.

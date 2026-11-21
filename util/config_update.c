@@ -105,7 +105,7 @@ static int record_decode(const char *data, size_t length, bool state,
 			return -EBADMSG;
 	if (schema != 1 || sequence <= 0 || reset < 0 ||
 	    reset > UINT32_MAX || restart < 0 || restart > UINT32_MAX ||
-	    pcr < 0 || pcr > 15 || config_measure_pcr_valid(pcr) ||
+	    pcr < 0 || pcr > UINT32_MAX || config_measure_pcr_valid(pcr) ||
 	    (kind != CONFIG_EVENT_BOOT &&
 	     kind != CONFIG_EVENT_UPDATE) ||
 	    hex_decode(root, record->target.root_hash, 32) ||

@@ -1647,7 +1647,10 @@ R4 Config PCR writers are not authenticated
    nothing but refusals. The Lean proofs of the activation that count
    extensions or explain a refusal assume neither
    (``Shirudo.ConfigActivation``). Detection: none reliable. Mitigation:
-   D1.
+   D1. ``config.nvpcr``
+   narrows it: the config NvPCR is extended only by the full role and
+   starts at a known value, which the verifier requires; that an
+   activation completed is still not proven.
 
 R5 The boot chain and process memory stay trusted
    dm-verity verifies runtime blocks as they are read. It does not

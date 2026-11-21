@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include <shirudo/misc.h>
+#include <shirudo/tpm.h>
 #include <shirudo/string.h>
 
 #include "builtin.h"
@@ -77,6 +78,7 @@ enum verify_opt {
 	VERIFY_EXPECT_CHAIN,
 	VERIFY_EXPECT_CONFIG_ROOT,
 	VERIFY_EXPECT_CONFIG_PCR,
+	VERIFY_EXPECT_CONFIG_NVPCR,
 	VERIFY_EXPECT_PCR,
 	VERIFY_ALLOW_RUNTIME_EVENTS,
 	VERIFY_JSON,
@@ -108,6 +110,8 @@ static const struct opt_spec verify_opts[] = {
 		"approved config image hash" },
 	[VERIFY_EXPECT_CONFIG_PCR] = { "--expect-config-pcr", 0, 0, "<n>",
 		"reserved config PCR number" },
+	[VERIFY_EXPECT_CONFIG_NVPCR] = { "--expect-config-nvpcr", 0, 0, "<name>",
+		"the config NvPCR's TPM name" },
 	[VERIFY_EXPECT_PCR] = { "--expect-pcr", 0, OPT_REPEAT, "<n>=<hex>",
 		"a PCR value the quote must carry (repeatable)" },
 	[VERIFY_ALLOW_RUNTIME_EVENTS] = { "--allow-runtime-events", 0, 0, NULL,
@@ -686,6 +690,15 @@ static int cmd_attest_verify(int argc, const char **argv)
 			x.have_config_pcr = true;
 			break;
 		}
+		case VERIFY_EXPECT_CONFIG_NVPCR:
+			if (hex_decode(p.value, x.config_nvpcr_name, 34)) {
+				opt_usage(&p, "--expect-config-nvpcr must be 68 hex characters");
+				goto out;
+			}
+			x.config_pcr = TPM_CONFIG_NVPCR_INDEX;
+			x.have_config_pcr = true;
+			x.have_config_nvpcr_name = true;
+			break;
 		case VERIFY_EXPECT_CHAIN:
 			if (parse_hex32("--expect-chain", p.value, x.chain))
 				goto out;
@@ -756,8 +769,15 @@ static int cmd_attest_verify(int argc, const char **argv)
 			goto out;
 		}
 	}
+	if (opt_given(&p, VERIFY_EXPECT_CONFIG_PCR) &&
+	    opt_given(&p, VERIFY_EXPECT_CONFIG_NVPCR)) {
+		opt_usage(&p, "--expect-config-pcr and --expect-config-nvpcr "
+			  "exclude each other");
+		goto out;
+	}
 	if (x.have_config_root && !x.have_config_pcr) {
-		opt_usage(&p, "--expect-config-root requires --expect-config-pcr");
+		opt_usage(&p, "--expect-config-root requires --expect-config-pcr "
+			  "or --expect-config-nvpcr");
 		goto out;
 	}
 	if (!evidence_path || !have_nonce) {
