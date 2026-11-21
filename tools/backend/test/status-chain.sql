@@ -4,7 +4,10 @@
 -- Check 4 folds the operations a mask marks as chained from base_root and
 -- holds the result against projection_root. A mask that contradicts the
 -- root, one that leaves an operation up to last_seq unreached and a record
--- whose tree keys cannot be read fail it; a mask with an operation whose
+-- whose tree keys cannot be read fail it, and so does a window at seq 0
+-- that starts from another root than the zero one, though its mask folds
+-- from that root to its projection_root: the history, which starts every
+-- tree from zero, would never hold it; a mask with an operation whose
 -- attach module was missing chains it and loads nothing; that node runs
 -- another kernel, so it is nobody's peer here. A record without
 -- a mask on a node that follows a tree fails check 3 by its flag, and
@@ -43,6 +46,7 @@ FROM
         ('no-mask', 'node-a-1.1.0', [('"flags":0', '"flags":4'), ('"base_root":"0000000000000000000000000000000000000000000000000000000000000000"', '"base_root":null'), ('"mask":"VA=="', '"mask":null')]),
         ('mask-not-base64', 'node-a-1.1.0', [('"mask":"VA=="', '"mask":"!!!!"')]),
         ('root-too-long', 'node-a-1.1.0', [('"base_root":"0000', '"base_root":"00000000')]),
+        ('base-root-at-seq-0', 'node-a-1.1.0', [('"base_root":"0000000000000000000000000000000000000000000000000000000000000000"', '"base_root":"1111111111111111111111111111111111111111111111111111111111111111"'), ('"projection_root":"154522480ff8884daa95589e80f26f20248bbf9c192dfbb3cee04e03b4f136a1"', '"projection_root":"086d7c7b43990572ed048a537f0864ff1e81ed81e693e66e75f30916abefe6f5"')]),
         ('root-not-hex', 'node-a-1.1.0', [('"projection_root":"1545', '"projection_root":"zzzz')]),
         ('no-last-seq', 'node-a-1.1.0', [('"last_seq":3', '"last_seq":null')]),
         ('past-the-head', 'node-a-1.1.0', [('"last_seq":3', '"last_seq":9')])

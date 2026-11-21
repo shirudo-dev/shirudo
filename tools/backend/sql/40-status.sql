@@ -441,8 +441,12 @@ WITH
                ifNull(l.base_root, '') AS p_root,
                ifNull(l.mask, '') AS p_mask,
                ifNull(l.config_root, '') AS p_config,
+               -- A tree starts from the zero root: node_ops_mv folds a
+               -- window at seq 0 from it, whatever base_root the record
+               -- names, so another one there has no history to agree with.
                l.base_seq IS NOT NULL AND l.last_seq IS NOT NULL AND p_last >= p_base
                    AND match(p_root, '^[0-9a-f]{64}$')
+                   AND (p_base > 0 OR p_root = repeat('0', 64))
                    AND match(ifNull(l.projection_root, ''), '^[0-9a-f]{64}$') AS well_formed,
                -- The pairs up to last_seq: what peers at the same point
                -- of a tree have in common, whatever head each has seen.

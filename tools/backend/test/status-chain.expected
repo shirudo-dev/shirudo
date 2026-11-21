@@ -3,6 +3,7 @@ applied-too	healthy	0	4 chain: pass, root 15452248	6 set: pass, 1 loaded
 module-missing	healthy	0	4 chain: pass, root 15452248	6 set: pass, 0 loaded
 passed-over	healthy	0	4 chain: pass, root 00000000	6 set: pass, 0 loaded
 no-mask	unhealthy	3	4 chain: no mask	6 set: no mask
+base-root-at-seq-0	unhealthy	4	4 chain: FAIL, root 086d7c7b	6 set: FAIL drift, 1 loaded
 mask-not-base64	unhealthy	4	4 chain: FAIL, root 15452248	6 set: FAIL drift, 1 loaded
 no-last-seq	unhealthy	4	4 chain: FAIL, root 15452248	6 set: FAIL drift, 1 loaded
 past-the-head	unhealthy	4	4 chain: FAIL, root 15452248	6 set: pass, 1 loaded

@@ -259,6 +259,9 @@ digest. It passes when all of these hold:
   ``tree_ops``;
 - ``base_seq``, ``last_seq``, ``base_root`` and ``projection_root`` are
   present and well formed;
+- when ``base_seq`` is 0, ``base_root`` is the zero root every tree
+  starts from: the history is folded from it, so a window that starts
+  anywhere else at seq 0 would pass with nothing stored for it;
 - when ``base_seq`` is above 0, ``base_root`` is the root the node's
   history has at ``base_seq``, see `Gaps`_;
 - at every operation of the window the history reaches, the code and the
