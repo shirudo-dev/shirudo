@@ -210,6 +210,13 @@ counter.
        without runtime authority, or a command too short to inspect
        from any caller
      - ``EACCES``
+   * - ``TpmWrite``
+     - protected TPM mutation by an unauthorized task
+     - ``lsm/tpm_command``: from a task without runtime authority, a
+       mutation of shirudo's register or the config PCR, a mutation other
+       than an extension of a systemd NvPCR, a hierarchy or clear
+       command, or an unknown or malformed command
+     - ``EACCES``
    * - ``ObjGet``
      - pin, map, link or XDP program opened by another executable
      - ``lsm/bpf``: ``BPF_OBJ_GET``, ``BPF_MAP_GET_FD_BY_ID``,

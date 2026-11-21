@@ -34,6 +34,7 @@ enum fixture {
 	KEYRING_TYPE_WIDTH,
 	NO_VERDICT,
 	VERDICT_SIGNED,
+	NO_TPM_COMMAND,
 	TRAILING_DRIFT,
 };
 
@@ -132,6 +133,13 @@ static struct btf *make_fixture(enum fixture fixture)
 	if (fixture == TRAILING_DRIFT &&
 	    btf__add_field(btf, "future_aux_field", u32, 64, 0) < 0)
 		goto err;
+	if (fixture != NO_TPM_COMMAND) {
+		ret = btf__add_func_proto(btf, s32);
+		if (ret < 0 ||
+		    btf__add_func(btf, "bpf_lsm_tpm_command", BTF_FUNC_GLOBAL,
+				  ret) < 0)
+			goto err;
+	}
 	return btf;
 
 err:
@@ -399,7 +407,13 @@ static void lsm_hooks_need_btf(void)
 	EXPECT_TRUE(strstr(detail, "kernel BTF is unavailable"));
 }
 
+static void needs_tpm_command(void)
+{
+	check(NO_TPM_COMMAND, 0, "tpm_command LSM hook is missing");
+}
+
 static const struct unit_case cases[] = {
+	UNIT_CASE(needs_tpm_command),
 	UNIT_CASE(accepts_the_required_prefix),
 	UNIT_CASE(accepts_fields_past_the_prefix),
 	UNIT_CASE(needs_struct_bpf_map),

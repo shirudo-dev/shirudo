@@ -1241,3 +1241,8 @@ int image_stage_cancel(void)
 	ret = current_config();
 	return ret ? ret : config_update_clear_staged(&image.update);
 }
+
+__u32 shirudo_image_config_pcr(void)
+{
+	return image.bootstrap.pcr;
+}

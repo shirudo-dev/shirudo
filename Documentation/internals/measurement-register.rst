@@ -645,3 +645,40 @@ Related
 - :doc:`/concepts/measurement-register` for the concept
 - :doc:`/operate/run/attest` for attesting a target
 - :doc:`/reference/eventlog` for the eventlog format
+
+TPM command authority
+======================
+
+The kernel ``tpm_command`` LSM hook runs after the TPM driver copies a
+userspace command into its buffer and before it submits the command. The BPF
+guard therefore checks every write to the raw and resource-manager devices,
+including writes through a descriptor another task opened. It does not inspect
+kernel-internal TPM commands. The classifier is ``include/shirudo/tpm_command.h``;
+the BPF program and the unit test include the same code.
+
+The policy is frozen during authenticated initialization:
+
+* Only the full Shirudo task role may mutate the measurement register
+  ``0x01818E00``: definition, deletion, extension, writes, increments, bit
+  changes, authorization changes and read/write locks.
+* Only the full role may extend, reset or change the authorization of the
+  configured config PCR.
+* systemd defines its NvPCRs in the UAPI.19 Linux range
+  (``0x01D10200`` to ``0x01D105FF``) from the initrd, before the guards attach,
+  and anchors each in PCR 9. Afterwards it only extends them. Extensions stay
+  available; every other mutation of an index in that range needs the full
+  role, so no root process can delete and recreate an NvPCR that its anchor
+  names.
+* Every other PCR stays the platform's. systemd's ``systemd-pcrmachine`` and
+  ``systemd-pcrfs`` extend PCR 15 as root, for example.
+* Hierarchy changes, clear, global write locks, shutdown and other
+  measurement-affecting administration need the full role, as do unknown and
+  vendor commands. ``TPM2_Startup`` stays available: systemd probes a TPM that
+  the firmware already initialized. Malformed headers and handle encodings are
+  refused.
+* Known read, attestation, session and cryptographic commands stay available.
+  Unrelated NV indices keep their normal TPM authorization.
+
+Denials increment ``TpmWrite`` in the tamper counters. ABI pre-flight rejects a
+kernel without the hook. ``testing/helper/test-tpm-command`` covers the
+classifier and ``testing/fuzz/fuzz-tpm-command`` fuzzes it.

@@ -104,6 +104,8 @@ static const struct {
 		"XFS attribute change by file handle, which passes no xattr hook" },
 	[TAMPER_SEAL_RLIMIT] = { "SealRlimit",
 		"resource limit of a shirudo task changed by another task" },
+	[SHIRUDO_TAMPER_TPM_WRITE] = { "TpmWrite",
+		"protected TPM mutation by an unauthorized task" },
 };
 
 const char *tamper_name(enum tamper_point point)

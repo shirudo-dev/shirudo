@@ -602,6 +602,7 @@ static const char * const tamper_order[] = {
 	"SealPerf", "ExecTraced", "SealEntry", "PerfAttach", "PinEntry",
 	"SealCopyUp", "Kexec", "TpmExtend", "ObjGet", "SealSignal",
 	"SealCoreDump", "SealUprobe", "ExecShared", "XattrHandle", "SealRlimit",
+	"TpmWrite",
 };
 
 /* The same for enum integrity_point. */
@@ -617,10 +618,10 @@ static void tamper_counters_keep_their_places(void)
 {
 	size_t i;
 
-	ASSERT_EQ(ARRAY_SIZE(tamper_order), 42);
+	ASSERT_EQ(ARRAY_SIZE(tamper_order), 43);
 	ASSERT_EQ(TAMPER_MAX, ARRAY_SIZE(tamper_order));
 	EXPECT_EQ(TAMPER_LOAD_NOT_LOADER, 0);
-	EXPECT_EQ(TAMPER_SEAL_RLIMIT, TAMPER_MAX - 1);
+	EXPECT_EQ(SHIRUDO_TAMPER_TPM_WRITE, TAMPER_MAX - 1);
 	for (i = 0; i < ARRAY_SIZE(tamper_order); i++)
 		EXPECT_STREQ(tamper_name(i), tamper_order[i]);
 }
@@ -657,7 +658,7 @@ static void body_lists_the_counters_in_enum_order(void)
 	in.integrity = integrity;
 	expect_member(&in, ",\"tamper\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,"
 		      "16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,"
-		      "34,35,36,18446744073709551615,38,39,40,41,42],"
+		      "34,35,36,18446744073709551615,38,39,40,41,42,43],"
 		      "\"integrity\":[100,101,102,103,104,105,106,107,108,109,"
 		      "110,111,112,113,114,115,116,117,118,"
 		      "18446744073709551615,120,121],\"tree_id\":");
@@ -784,7 +785,7 @@ static void body_of_the_largest_values_fits(void)
 	in.integrity = integrity;
 
 	ASSERT_EQ(keepalive_emit(&in, body, sizeof(body), &whole), 0);
-	EXPECT_EQ(whole, 3879);
+	EXPECT_EQ(whole, 3900);
 	EXPECT_LT(whole, KEEPALIVE_BODY_MAX);
 	EXPECT_EQ(keepalive_emit(&in, body, whole, &len), -ENOSPC);
 	EXPECT_EQ(keepalive_emit(&in, body, whole + 1, &len), 0);

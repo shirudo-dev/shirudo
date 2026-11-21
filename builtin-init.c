@@ -693,6 +693,7 @@ static int identity_build(struct identity *id)
 
 	memcpy(id->runtime_root, image_runtime_root(), 32);
 	id->nv_index = NV_INDEX;
+	id->config_pcr = shirudo_image_config_pcr();
 
 	err = bpf_anchor(id);
 	if (err)

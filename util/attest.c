@@ -1153,7 +1153,7 @@ static void verify_config(struct verify *v)
 		     "--expect-config-root with --expect-config-pcr");
 	if (v->config.present)
 		note(rep, "config records a selection; "
-		     "direct TPM writer protection is deferred");
+		     "operation completion depends on trusted runtime guards");
 }
 
 static int register_written_name(struct verify *v, __u8 name[TPM_NAME_LEN])

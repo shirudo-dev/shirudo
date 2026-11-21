@@ -1042,8 +1042,13 @@ signature alone does not change the register: the TPM must receive the
 command written to ``/dev/tpm0`` or ``/dev/tpmrm0`` before the driver
 queues it, and refuses an ``NV_Extend`` of shirudo's frozen index from a
 task without authority, through inherited and nonblocking descriptors
-too (``TpmExtend``). Other NV indices, PCR extensions and TPM signing
-stay open to everyone.
+too (``TpmExtend``). The same hook classifies every other command
+(:doc:`/internals/measurement-register`, TPM command authority). Only shirudo may
+mutate its register, extend or reset the config PCR, change the
+hierarchies or send an unknown command. systemd's NvPCRs accept
+extensions only, so no root process can delete and recreate one that its
+PCR 9 anchor names. Every refusal counts as ``TpmWrite``. Other NV
+indices, other PCRs and TPM signing stay open to everyone.
 
 The order of the steps decides what a crash or a stopped process
 leaves, and Figure 3 in :ref:`register-lock` draws it for a load, an
@@ -1095,8 +1100,8 @@ tree operations run without it.
 :Enforced at: ``lsm/tpm_command``
 :Refusal: ``EACCES`` from ``write(2)`` on the TPM device; ``tampered``,
    ``tpm_error`` and ``eventlog_full`` from shirudo
-:Counters: ``TpmExtend``
-:Tests: ``t4002``, ``t4003``, ``t4102``, ``t4103``, ``t6115``,
+:Counters: ``TpmExtend``, ``TpmWrite``
+:Tests: ``t0057``, ``t4002``, ``t4003``, ``t4102``, ``t4103``, ``t6115``,
    ``t6122``, ``t6128``, ``t6143``, ``t6144``, ``t6147``
 :Proofs: ``Shirudo.Chain``, ``Shirudo.Events``, ``Shirudo.Measured``,
    ``Shirudo.UpatchLoad``, ``chain-events``, ``measured-fold-model``,
@@ -1507,8 +1512,8 @@ driver; sessions do not prevent denial of service by dropping requests.
 :Enforced at: ``lsm/tpm_command`` for commands that reach the driver;
    pinned-key and session-response checks in userspace
 :Refusal: the TPM operation fails; measuring commands refuse
-:Counters: ``TpmExtend`` for a refused extension; none for a
-   substituted device
+:Counters: ``TpmExtend`` for a refused extension, ``TpmWrite`` for any
+   refused command; none for a substituted device
 :Tests: ``t4005``, ``t4103``, ``t6125``
 :Proofs: ``tpm-public``, ``tpm-kdf``
 :Residual: trusted bootstrap (A1, A6, A8); denial of service

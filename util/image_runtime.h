@@ -34,4 +34,6 @@ int image_status(bool json);
  */
 int image_config_state(__u8 root[32]);
 
+__u32 shirudo_image_config_pcr(void);
+
 #endif /* SHIRUDO_IMAGE_RUNTIME_H */

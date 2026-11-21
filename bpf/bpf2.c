@@ -344,37 +344,6 @@ int BPF_PROG(shirudo_lsm_key_permission, key_ref_t key_ref,
 }
 
 /*
- * A TPM signature alone cannot change shirudo's NV register. Restrict
- * extension of its frozen index while leaving unrelated TPM signing alone.
- */
-SEC("lsm/tpm_command")
-int BPF_PROG(shirudo_lsm_tpm_command, struct file *file,
-	     const __u8 *command, size_t command_len, int ret)
-{
-	struct sb_id *id;
-	__u32 code, index;
-
-	if (ret)
-		return ret;
-	if (command_len < 10 ||
-	    bpf_probe_read_kernel(&code, sizeof(code), command + 6))
-		return shirudo_tamper_deny(TAMPER_TPM_EXTEND,
-					   -EACCES);
-	if (bpf_ntohl(code) != TPM_CC_NV_EXTEND)
-		return 0;
-	if (command_len < 18 ||
-	    bpf_probe_read_kernel(&index, sizeof(index), command + 14))
-		return shirudo_tamper_deny(TAMPER_TPM_EXTEND,
-					   -EACCES);
-	id = shirudo_policy();
-	if (!id || (bpf_ntohl(index) == id->nv_index &&
-		    !shirudo_task_is_self(id)))
-		return shirudo_tamper_deny(TAMPER_TPM_EXTEND,
-					   -EACCES);
-	return 0;
-}
-
-/*
  * Inside shirudo's bpffs: only an authorized caller may unlink
  * (the `upatch unload` path). Every other caller -- including root
  * `rm` -- is denied, so the LSM link cannot be detached by removing
@@ -1164,4 +1133,35 @@ int BPF_PROG(shirudo_lsm_file_ioctl_compat, struct file *file,
 	     unsigned int cmd, unsigned long arg, int ret)
 {
 	return shirudo_ioctl(file, cmd, ret);
+}
+
+#define SHIRUDO_TPM_COPY(out, in, size) bpf_probe_read_kernel(out, size, in)
+#include "../include/shirudo/tpm_command.h"
+#undef SHIRUDO_TPM_COPY
+
+/* Inspect each submitted command, including writes through inherited FDs. */
+SEC("lsm/tpm_command")
+int BPF_PROG(shirudo_lsm_tpm_command, struct file *file,
+	     const __u8 *command, __u64 length, int ret)
+{
+	struct sb_id *id = shirudo_policy();
+	enum shirudo_tpm_access access;
+
+	if (ret)
+		return ret;
+	if (!id || length > 4096)
+		return -EPERM;
+	access = shirudo_tpm_access(command, length, id->config_pcr);
+	if (shirudo_tpm_allowed(access, shirudo_task_is_self(id)))
+		return 0;
+	if (length >= 18) {
+		__u32 code, index;
+
+		if (!bpf_probe_read_kernel(&code, sizeof(code), command + 6) &&
+		    !bpf_probe_read_kernel(&index, sizeof(index), command + 14) &&
+		    bpf_ntohl(code) == TPM_CC_NV_EXTEND &&
+		    bpf_ntohl(index) == id->nv_index)
+			shirudo_tamper_count(TAMPER_TPM_EXTEND);
+	}
+	return shirudo_tamper_deny(SHIRUDO_TAMPER_TPM_WRITE, -EACCES);
 }

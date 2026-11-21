@@ -115,7 +115,7 @@ test_expect_success 'without operator approval the report names its limit explic
 		--ak-name="$(field "$WORK/b.json" ak.name)" --expect-chain="$CHAIN" \
 		>"$WORK/unapproved" &&
 	grep -q "^  NOTE  config root has no operator approval" "$WORK/unapproved" &&
-	grep -q "direct TPM writer protection is deferred" "$WORK/unapproved"
+	grep -q "operation completion depends on trusted runtime guards" "$WORK/unapproved"
 '
 
 python3 - "$WORK/b.json" "$WORK" <<'PY'

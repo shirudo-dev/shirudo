@@ -193,6 +193,9 @@ int kernel_abi_validate_btf(const struct btf *btf,
 	if (!verdict || !is_unsigned_int(member_type, 1))
 		return abi_fail(detail, detail_sz,
 				"struct bpf_prog_aux.sig.verdict must have type u8");
+	if (btf__find_by_name_kind(btf, "bpf_lsm_tpm_command", BTF_KIND_FUNC) < 0)
+		return abi_fail(detail, detail_sz,
+				"tpm_command LSM hook is missing; boot a Shirudo-patched kernel");
 
 	return 0;
 }

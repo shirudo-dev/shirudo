@@ -782,6 +782,7 @@ TEST_HELPERS := $(VERITY_TEST_HELPERS) \
                 testing/helper/test-config-image \
                 testing/helper/test-config-update \
                 testing/helper/test-config-attest \
+                testing/helper/test-tpm-command \
                 testing/helper/test-image-keys \
                 testing/helper/test-conditions \
                 testing/helper/test-config-image \
@@ -1043,6 +1044,10 @@ testing/helper/test-config-update: testing/helper/test-config-update.c \
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(REGISTER_LIBS)
 
+testing/helper/test-tpm-command: testing/helper/test-tpm-command.c include/shirudo/tpm_command.h
+	@printf '  CC      $@\n'
+	$(Q)$(CC) $(CFLAGS) -o $@ $<
+
 testing/helper/test-config-attest: testing/helper/test-config-attest.c \
 		util/attest.o util/upatch.o $(REGISTER_OBJS)
 	@printf '  CC      $@\n'
@@ -1185,6 +1190,9 @@ FUZZ_PACKAGE := util/bpm_package.c util/bpm_tree.c util/chain_history.c \
 
 FUZZ_TARGETS := $(patsubst testing/fuzz/%.c,$(FUZZ_OUT)/%, \
                 $(wildcard testing/fuzz/fuzz-*.c))
+
+$(FUZZ_OUT)/fuzz-tpm-command: testing/fuzz/fuzz-tpm-command.c $(FUZZ_BASE) \
+                               include/shirudo/tpm_command.h
 
 $(FUZZ_OUT)/fuzz-json: testing/fuzz/fuzz-json.c $(FUZZ_BASE)
 $(FUZZ_OUT)/fuzz-oci-manifest: testing/fuzz/fuzz-oci-manifest.c \

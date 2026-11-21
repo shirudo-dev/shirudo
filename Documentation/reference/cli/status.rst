@@ -333,7 +333,7 @@ Print the keepalive body of the same target, which follows no tree:
 .. code-block:: console
 
    target# shirudo status --keepalive
-   {"schema":"shirudo.keepalive/1","boot_id":"82639935-1127-4dab-91b5-f818eabc7f13","version_id":"d0d7aa800303439023907d1979d917d46a21bec21f816689c138728a28e84af9","config_root":"6d5ed552f448a1c07e3b9d24f5a86c1e0b7d93f2c4e5a6b7180c9d2e3f4a5b6c","kernel_release":"7.3.0-bpf-next+","image_id":null,"image_version":null,"image_root":null,"verdict":"ok","cond":5461,"flags":0,"tamper":[15,0,0,0,0,1,0,0,0,0,0,8,0,0,0,0,0,1,0,0,1,0,0,0,0,0,7,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0],"integrity":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"tree_id":null,"generation":null,"base_seq":null,"last_seq":null,"base_root":null,"projection_root":null,"mask":null,"set_sha256":"5f0c2e8b7a1d4c3f9e6b2a0d8c7f1e3b5a9d4c2e6f8b0a1d3c5e7f9b2d4a6c8e","count":1,"not_ok":0}
+   {"schema":"shirudo.keepalive/1","boot_id":"82639935-1127-4dab-91b5-f818eabc7f13","version_id":"d0d7aa800303439023907d1979d917d46a21bec21f816689c138728a28e84af9","config_root":"6d5ed552f448a1c07e3b9d24f5a86c1e0b7d93f2c4e5a6b7180c9d2e3f4a5b6c","kernel_release":"7.3.0-bpf-next+","image_id":null,"image_version":null,"image_root":null,"verdict":"ok","cond":5461,"flags":0,"tamper":[15,0,0,0,0,1,0,0,0,0,0,8,0,0,0,0,0,1,0,0,1,0,0,0,0,0,7,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0],"integrity":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"tree_id":null,"generation":null,"base_seq":null,"last_seq":null,"base_root":null,"projection_root":null,"mask":null,"set_sha256":"5f0c2e8b7a1d4c3f9e6b2a0d8c7f1e3b5a9d4c2e6f8b0a1d3c5e7f9b2d4a6c8e","count":1,"not_ok":0}
 
 Add this boot's eventlog to the report:
 
