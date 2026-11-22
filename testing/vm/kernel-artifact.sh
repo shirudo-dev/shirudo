@@ -25,7 +25,7 @@ set -eu
 
 # The run every trigger of the CI suite tests on, so that a new build of
 # the kernel does not change what a series is tested on.
-PINNED_RUN_ID=44367017434
+PINNED_RUN_ID=45057179917
 ARTIFACT=kernel-packages-x86-64-ci
 REPOSITORY=shirudo-dev/kernel
 
