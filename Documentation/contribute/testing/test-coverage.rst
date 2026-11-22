@@ -933,6 +933,18 @@ signed config image.
        guard, with ``5 head`` and ``6 set`` of the node's status at each
        step
 
+Quickstart and quick guides
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:src:`.github/scripts/check-guides.py` runs the Linux quickstart and
+quick guides against one interactive VM. It checks that the target is
+ready, denies the documented operations, and loads and unloads a signed
+upatch. It checks that the TPM answers a credential challenge and that
+the evidence matches the predicted register. The remaining guides check
+an upatch's map counter and install and remove a package through a local
+OCI registry. The macOS workflow checks the Lima template with
+``limactl validate``.
+
 Unit suites and fuzz targets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

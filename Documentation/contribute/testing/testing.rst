@@ -77,6 +77,36 @@ successful run ID. The prerelease ``test-kernel-<run-id>`` includes both
 bundle ZIPs, their matching ``kernel-ci-source.tar.zst`` and
 ``SHA256SUMS``. Verify the public downloads against ``SHA256SUMS``.
 
+Check the quickstart and quick guides
+-------------------------------------
+
+The ``Linux quickstart`` workflow runs on manual dispatch. It runs the
+console examples from :doc:`/start/quickstart` and the three
+:doc:`/start/guides/index` on one interactive x86-64 test VM. It uses the
+same kernel pin as the ``CI suite`` workflow. It runs the attestation
+tutorial before the other guides change the register. The log gives the
+page and line for each command. If a guide fails, CI uploads the QEMU
+console.
+
+Run the examples on a disposable Linux host from a fresh checkout after
+staging the kernel and preparing the operator environment as the
+quickstart describes. To see the commands without running them, add
+``--list``:
+
+.. code-block:: console
+
+   $ python3 .github/scripts/check-guides.py
+
+A reStructuredText comment of the form ``.. guide-check: match REGEX``
+checks the last command's output in the next console block. Use
+``fail REGEX`` for an expected failure, ``capture NAME`` for a hex value
+a later command uses as ``<NAME>``, and ``write PATH`` to save the next
+code block as a file. The other console commands must succeed.
+
+Manually dispatch the ``macOS quickstart`` workflow to check the Lima
+template from :doc:`/start/quickstart-macos` on a GitHub-hosted Apple
+silicon runner. It runs ``limactl validate``.
+
 Test tiers
 ----------
 

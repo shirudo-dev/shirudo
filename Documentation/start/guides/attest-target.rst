@@ -54,6 +54,8 @@ Take the first evidence
 
 2. Make a nonce:
 
+   .. guide-check: capture nonce1
+
    .. code-block:: console
 
       operator$ NONCE1=$(openssl rand -hex 32)
@@ -88,6 +90,8 @@ Challenge the attestation key
 -----------------------------
 
 1. Make a credential challenge for the attestation key:
+
+   .. guide-check: capture credential
 
    .. code-block:: console
 
@@ -131,6 +135,8 @@ Answer the challenge on the target
 
 1. Make a second nonce on the operator host:
 
+   .. guide-check: capture nonce2
+
    .. code-block:: console
 
       operator$ NONCE2=$(openssl rand -hex 32)
@@ -156,6 +162,8 @@ Verify the enrollment
 
 1. Verify the evidence with both key names, the credential and the
    enrolled certificates:
+
+   .. guide-check: match activated the credential
 
    .. code-block:: console
 
@@ -217,6 +225,8 @@ Predict the register
 
 2. Add the events since boot, in their order:
 
+   .. guide-check: capture register-after-events
+
    .. code-block:: console
 
       operator$ shirudo attest predict --cert="$KEYS/cert.der" --cert="$OWN" --event=load:basic="$PAYLOAD" --event=unload:basic="$PAYLOAD"
@@ -237,6 +247,8 @@ Verify evidence
 
 1. Make a fresh nonce:
 
+   .. guide-check: capture nonce3
+
    .. code-block:: console
 
       operator$ NONCE3=$(openssl rand -hex 32)
@@ -249,6 +261,8 @@ Verify evidence
       target# shirudo attest --nonce=<nonce3> --output=/mnt/shirudo-out/ev.json
 
 3. Verify it with the pinned key and the predicted register:
+
+   .. guide-check: match ^verdict: ok$
 
    .. code-block:: console
 
@@ -270,6 +284,8 @@ Verify evidence
 ``--ak-name`` it warns ``attest verify: no --ak-name; the signer is not
 pinned``. Without a state expectation it checks no state at all, yet
 still reports ``verdict: ok``:
+
+.. guide-check: match ^verdict: ok$
 
 .. code-block:: console
 

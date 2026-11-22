@@ -1,0 +1,24 @@
+name: macOS quickstart
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-quickstart
+
+jobs:
+  lima:
+    name: Validate Lima template
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate Lima template
+        run: sh .github/scripts/guides-ci.sh validate-lima

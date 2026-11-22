@@ -62,6 +62,8 @@ Use the test kernel artifact
 
 From the checkout root, download and stage the CI kernel for your host:
 
+.. guide-check: skip
+
 .. code-block:: console
 
    operator$ testing/vm/kernel-artifact.sh fetch
@@ -110,6 +112,8 @@ Boot a test target
 
 1. Boot a test VM named ``quickstart``:
 
+   .. guide-check: boot
+
    .. code-block:: console
 
       operator$ make -C testing vm VM_NAME=quickstart
@@ -138,6 +142,8 @@ Boot a test target
 
 2. Open a root shell on the target:
 
+   .. guide-check: connect
+
    .. code-block:: console
 
       operator$ make -C testing vm-ssh VM_NAME=quickstart
@@ -156,6 +162,8 @@ Boot a test target
    tasks that executed that binary from the runtime image. The test VM
    keeps an identical copy under ``/usr/local/bin``. That copy prints its
    version, but every command that reads shirudo's state stops:
+
+   .. guide-check: fail Permission denied
 
    .. code-block:: console
 
@@ -176,6 +184,8 @@ Check enforcement
 -----------------
 
 1. Read the status report:
+
+   .. guide-check: match ^Status:\s+ok$
 
    .. code-block:: console
 
@@ -261,6 +271,8 @@ Check enforcement
    entry, the boot event.
 
 3. Try to read one of shirudo's pins as root:
+
+   .. guide-check: fail Permission denied
 
    .. code-block:: console
 
@@ -396,6 +408,8 @@ Load it
 
 2. List the upatches:
 
+   .. guide-check: match ^\s+basic\s+yes\s
+
    .. code-block:: console
 
       target# shirudo upatch list
@@ -435,6 +449,8 @@ nothing but the evidence, your certificates and your artifacts.
 
 1. Make a fresh nonce on the operator host:
 
+   .. guide-check: capture nonce
+
    .. code-block:: console
 
       operator$ NONCE=$(openssl rand -hex 32)
@@ -462,6 +478,8 @@ nothing but the evidence, your certificates and your artifacts.
 
 4. Predict the register from what you know:
 
+   .. guide-check: capture register-after-events
+
    .. code-block:: console
 
       operator$ shirudo attest predict --cert="$KEYS/cert.der" --cert="$OWN" --event=load:basic="$PAYLOAD"
@@ -479,6 +497,8 @@ nothing but the evidence, your certificates and your artifacts.
    ``set_digest`` is the SHA-256 of empty input.
 
 5. Verify the evidence against the prediction:
+
+   .. guide-check: match ^verdict: ok$
 
    .. code-block:: console
 
@@ -534,6 +554,8 @@ Unload it
 
 1. Unload the upatch:
 
+   .. guide-check: match basic detached and unpinned
+
    .. code-block:: console
 
       target# shirudo upatch unload basic.unload.upatch
@@ -546,6 +568,8 @@ Unload it
    the one it names, measured the unload, then detached the program.
 
 2. List the upatches:
+
+   .. guide-check: match ^\s+none$
 
    .. code-block:: console
 
@@ -567,11 +591,15 @@ them.
 
 1. Leave the target shell:
 
+   .. guide-check: guides
+
    .. code-block:: console
 
       target# exit
 
 2. Stop the VM:
+
+   .. guide-check: stop
 
    .. code-block:: console
 

@@ -39,6 +39,8 @@ Start a registry
 
 1. Run a registry on the host's loopback interface:
 
+   .. guide-check: registry
+
    .. code-block:: console
 
       operator$ docker run -d --name shirudo-registry -p 127.0.0.1:5000:5000 docker.io/library/registry:3
@@ -69,6 +71,8 @@ Build the package
 
 3. Write ``~/hello/Beefile``:
 
+   .. guide-check: write ~/hello/Beefile
+
    .. code-block:: toml
 
       [package]
@@ -83,6 +87,8 @@ Build the package
    name, ``hello``, from the file name.
 
 4. Write ``~/hello/README.md``:
+
+   .. guide-check: write ~/hello/README.md
 
    .. code-block:: markdown
 
@@ -157,6 +163,8 @@ none, so here the target installs by direct reference.
 
 2. List the installed packages:
 
+   .. guide-check: match ^\s+hello\s+1\.0\.0\s+direct$
+
    .. code-block:: console
 
       target# shirudo bpm list
@@ -168,6 +176,8 @@ none, so here the target installs by direct reference.
    registered repository.
 
 3. Check that its upatch is loaded:
+
+   .. guide-check: match ^\s+hello\s+yes\s
 
    .. code-block:: console
 
@@ -181,6 +191,8 @@ Remove it
 
 1. Uninstall the package on the target:
 
+   .. guide-check: match hello detached and unpinned
+
    .. code-block:: console
 
       target# shirudo bpm uninstall hello
@@ -193,7 +205,17 @@ Remove it
    The target runs the unload directives that shipped in the package and
    removes the package. ``shirudo bpm list`` no longer lists it.
 
+   .. guide-check: match ^\s+none$
+
+   .. code-block:: console
+
+      target# shirudo bpm list
+      Installed packages:
+        none
+
 2. Stop the registry on the host:
+
+   .. guide-check: remove
 
    .. code-block:: console
 

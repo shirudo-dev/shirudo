@@ -41,6 +41,8 @@ Write the program
 
 2. Write ``build/tutorial/sleep-count.bpf.c``:
 
+   .. guide-check: write build/tutorial/sleep-count.bpf.c
+
    .. code-block:: c
 
       // SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
@@ -157,6 +159,8 @@ Load it and read the map
 
 4. Read the map:
 
+   .. guide-check: match ^\s*->\s+([3-9]|[1-9][0-9]+)$
+
    .. code-block:: console
 
       target# shirudo upatch map sleep-count calls
@@ -182,6 +186,8 @@ Unload it
 
 1. Unload the upatch:
 
+   .. guide-check: match sleep-count detached and unpinned
+
    .. code-block:: console
 
       target# shirudo upatch unload /workspace/shirudo/build/tutorial/sleep-count.unload.upatch
@@ -191,6 +197,8 @@ Unload it
       upatch unload: sleep-count detached and unpinned
 
 2. Check that the map is gone:
+
+   .. guide-check: match ^Pinned maps \(0\):$
 
    .. code-block:: console
 
