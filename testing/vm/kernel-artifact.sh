@@ -5,16 +5,18 @@
 # testing/vm/kernel-artifact.sh -- the test VM's kernel, which
 # github.com/shirudo-dev/kernel builds and this checkout does not.
 #
-#   kernel-artifact.sh fetch         download the kernel-packages-x86-64-ci
-#                                    artifact of the pinned run and stage it
+#   kernel-artifact.sh fetch         download and stage the CI artifact for
+#                                    the test VM architecture
 #   kernel-artifact.sh stage <dir>   stage an artifact already downloaded
 #   kernel-artifact.sh run-id        print the pinned run
 #
-# Staging extracts the image and headers packages, checks the BTF for the
-# signed-loader ABI and every LSM hook a program of bpf/ attaches to, and
-# puts image, BTF, configuration and modules under
-# artifacts/bpf-next-kernel-debs/, where testing/Makefile looks for them.
-# With VM=0 it stages the BTF alone, which a build needs.
+# Staging extracts the image package and the matching headers package
+# when present. It checks the BTF for the signed-loader ABI and every
+# LSM hook a program in bpf/ attaches to. It puts the image, BTF,
+# configuration and modules under artifacts/bpf-next-kernel-debs/,
+# where testing/Makefile looks for them.
+# With VM=0 it stages the BTF alone and invalidates the staged VM kernel
+# if the BTF changes.
 #
 #   KERNEL_RUN_ID   another run of the kernel project's package workflow
 #                   than the pinned one.
@@ -25,8 +27,7 @@ set -eu
 
 # The run every trigger of the CI suite tests on, so that a new build of
 # the kernel does not change what a series is tested on.
-PINNED_RUN_ID=45057179917
-ARTIFACT=kernel-packages-x86-64-ci
+PINNED_RUN_ID=45062075601
 REPOSITORY=shirudo-dev/kernel
 
 # A directory named from where the caller stands.
@@ -91,28 +92,50 @@ validate_kernel_install() {
 	return 0
 }
 
+clear_kernel_stamps() {
+	rm -f "$kernel/bzImage.sha256sum" "$kernel/Image.sha256sum" \
+		"$kernel/vmlinux.btf.sha256sum" "$kernel/kernel-run-id"
+}
+
 stage_kernel_install() {
+	clear_kernel_stamps || return 1
 	rm -rf "$kernel/lib/modules" || return 1
 	mkdir -p "$kernel/lib/modules" || return 1
-	cp "$image" "$kernel/bzImage" || return 1
+	cp "$image" "$kernel/$kernel_image_name" || return 1
 	cp "$btf" "$kernel/vmlinux.btf" || return 1
 	cp "$config" "$kernel/kernel.config" || return 1
 	cp -a "$modules" "$kernel/lib/modules/" || return 1
 	(
 		cd "$kernel" || exit 1
-		sha256sum bzImage > bzImage.sha256sum || exit 1
 		sha256sum vmlinux.btf > vmlinux.btf.sha256sum || exit 1
+		sha256sum "$kernel_image_name" > "$kernel_image_name.sha256sum"
 	) || return 1
 }
 
 stage_kernel_ci_artifact() {
 	artifact_dir="$1"
-	set -- "$artifact_dir"/*/linux-image-*_amd64.deb
+	expected_arch="${2:-}"
+	set -- "$artifact_dir"/*/linux-image-*.deb
+	[ -e "$1" ] || set -- "$artifact_dir"/linux-image-*.deb
 	[ "$#" -eq 1 ] && [ -s "$1" ] || {
-		echo "expected one x86-64 kernel image package in $artifact_dir" >&2
+		echo "expected one kernel image package in $artifact_dir" >&2
 		return 1
 	}
 	image_package="$1"
+	package_arch=${image_package##*_}
+	package_arch=${package_arch%.deb}
+	if [ -n "$expected_arch" ] && [ "$package_arch" != "$expected_arch" ]; then
+		echo "expected a $expected_arch kernel image package: $image_package" >&2
+		return 1
+	fi
+	case "$package_arch" in
+	amd64) kernel_image_name=bzImage ;;
+	arm64) kernel_image_name=Image ;;
+	*)
+		echo "expected an x86-64 or arm64 kernel image package: $image_package" >&2
+		return 1
+		;;
+	esac
 	package_dir=${image_package%/*}
 	release=${image_package##*/linux-image-}
 	release=${release%%_*}
@@ -121,25 +144,34 @@ stage_kernel_ci_artifact() {
 		echo "kernel CI artifact lacks BTF for $release" >&2
 		return 1
 	}
-	mkdir -p "$kernel" || return 1
-	cp "$btf" "$kernel/vmlinux.btf" || return 1
-	[ "${VM:-1}" != 0 ] || return 0
+	if [ "${VM:-1}" = 0 ]; then
+		cmp -s "$btf" "$kernel/vmlinux.btf" && return 0
+		mkdir -p "$kernel" || return 1
+		clear_kernel_stamps || return 1
+		cp "$btf" "$kernel/vmlinux.btf" || return 1
+		return 0
+	fi
 
-	set -- "$package_dir"/linux-headers-"$release"_*_amd64.deb
-	[ "$#" -eq 1 ] && [ -s "$1" ] || {
+	set -- "$package_dir"/linux-headers-"$release"_*_"$package_arch".deb
+	headers_package=
+	if [ "$#" -eq 1 ] && [ -s "$1" ]; then
+		headers_package="$1"
+	elif [ "$#" -gt 1 ] || [ -e "$1" ]; then
 		echo "expected headers package for kernel $release in $package_dir" >&2
 		return 1
-	}
+	fi
 	config="$package_dir/config-$release"
 	[ -s "$config" ] || {
 		echo "kernel CI artifact lacks config for $release" >&2
 		return 1
 	}
 	install_root="$PWD/build/kernel-ci-extract"
-	rm -rf "$install_root"
+	rm -rf "$install_root" || return 1
 	mkdir -p "$install_root" || return 1
 	dpkg-deb -x "$image_package" "$install_root" || return 1
-	dpkg-deb -x "$1" "$install_root" || return 1
+	if [ -n "$headers_package" ]; then
+		dpkg-deb -x "$headers_package" "$install_root" || return 1
+	fi
 	image="$install_root/boot/vmlinuz-$release"
 	modules="$install_root/lib/modules/$release"
 	cp "$btf" "$install_root/boot/btf-$release" || return 1
@@ -165,24 +197,30 @@ run_id() {
 
 fetch() {
 	id=$(run_id) || return 1
-	[ "$(uname -m)" = x86_64 ] || {
-		echo "the kernel project publishes a CI kernel for x86-64 only" >&2
+	# shellcheck source=testing/vm/arch.sh
+	. testing/vm/arch.sh
+	[ "$TEST_VM_ARCH_SUPPORTED" = 1 ] || {
+		echo "no CI kernel artifact for $TEST_VM_ARCH" >&2
 		return 1
 	}
+	artifact="$TEST_VM_ARCH_CI_ARTIFACT"
 	command -v gh >/dev/null 2>&1 || {
-		echo "gh is needed to download $ARTIFACT of $REPOSITORY run $id" >&2
+		echo "gh is needed to download $artifact of $REPOSITORY run $id" >&2
 		return 1
 	}
 	download=build/kernel-ci-artifact
 	rm -rf "$download"
 	mkdir -p "$download" || return 1
-	echo "downloading $ARTIFACT of $REPOSITORY run $id" >&2
-	gh run download "$id" --repo "$REPOSITORY" --name "$ARTIFACT" \
+	echo "downloading $artifact of $REPOSITORY run $id" >&2
+	gh run download "$id" --repo "$REPOSITORY" --name "$artifact" \
 		--dir "$download" || {
-		echo "cannot download $ARTIFACT of $REPOSITORY run $id" >&2
+		echo "cannot download $artifact of $REPOSITORY run $id" >&2
 		return 1
 	}
-	stage_kernel_ci_artifact "$download" || return 1
+	stage_kernel_ci_artifact "$download" "$TEST_VM_ARCH_DEB" || return 1
+	if [ "${VM:-1}" = 0 ] && [ -s "$kernel/$kernel_image_name.sha256sum" ]; then
+		return 0
+	fi
 	printf '%s\n' "$id" >"$kernel/kernel-run-id"
 }
 

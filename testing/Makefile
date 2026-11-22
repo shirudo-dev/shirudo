@@ -150,7 +150,9 @@ TEST_VM_BUNDLE_INPUTS := $(sort \
 $(ROOT)/config.mk: $(ROOT)/Makefile.config
 	+$(Q)$(MAKE) -C $(ROOT) config
 
-test-vm-bundle: require-vm-kernel $(TEST_VM_BUNDLE_STAMP)
+# Read the bundle prerequisites after staging can create the kernel stamp.
+test-vm-bundle: require-vm-kernel
+	+$(Q)$(MAKE) -f "$(ROOT)/testing/Makefile" "$(TEST_VM_BUNDLE_STAMP)"
 
 $(TEST_VM_BUNDLE_STAMP): $(TEST_VM_BUNDLE_INPUTS)
 	$(Q)mkdir -p $(dir $(BUILD_LOCK))

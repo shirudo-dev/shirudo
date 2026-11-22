@@ -27,8 +27,7 @@ Before you begin
   needed; the test VM builds its initrd with dracut as you, without
   changing the host's dracut.
 - Network access. The first boot downloads an Ubuntu cloud image. Get
-  the test kernel package artifact from the pinned run in
-  ``testing/vm/kernel-artifact.sh`` before building the target binary.
+  the test kernel artifact before building the target binary.
 - To build shirudo: a C toolchain with ``make`` and ``pkg-config``, a
   clang and LLVM 23 with the BPF target, ``clang`` installed as
   ``/usr/bin/clang``, and the development files of OpenSSL 3.5 or later,
@@ -36,8 +35,11 @@ Before you begin
   and ``tss2-tctildr``) and LuaJIT.
 - OpenSSL 3.5 or newer (``openssl version``). If it reports an older
   version, follow :ref:`the developer guide's steps <dev-openssl>` first.
+- ``dpkg-deb`` to extract the test kernel, and Docker or Podman to build
+  the test VM bundle.
 - For the test VM, with their Debian and Ubuntu names: QEMU
   (``qemu-system-x86`` or ``qemu-system-arm``), ``qemu-utils``, ``swtpm``,
+  ``swtpm-tools``, ``tpm2-tools``, ``libtss2-tcti-swtpm0t64``,
   ``cloud-image-utils``, ``libguestfs-tools``, ``dracut-core``,
   ``cryptsetup-bin``, ``e2fsprogs``, ``openssh-client``, ``iproute2``,
   ``isc-dhcp-client``, ``curl``, ``kmod`` and ``file``, and the static
@@ -48,16 +50,24 @@ Before you begin
 
 :doc:`/operate/plan/system-requirements` lists the requirements in full.
 
+.. _quickstart-kernel-artifact:
+
 Use the test kernel artifact
 ----------------------------
 
-Download the ``kernel-packages-x86-64-ci`` artifact from the run pinned
-in ``testing/vm/kernel-artifact.sh``. Stage it and prepare the test host:
+From the checkout root, download and stage the CI kernel for your host:
 
 .. code-block:: console
 
-   operator$ KERNEL_CI_ARTIFACT_DIR=$HOME/Downloads/kernel-packages-x86-64-ci \
-      .github/scripts/tests.sh setup
+   operator$ testing/vm/kernel-artifact.sh fetch
+
+``fetch`` needs ``gh`` logged in with read access to the kernel
+repository. It selects ``kernel-packages-x86-64-ci`` or
+``kernel-packages-arm64-ci`` from the run pinned in
+:src:`testing/vm/kernel-artifact.sh`. Use ``KERNEL_RUN_ID=<run>`` to
+select another run that publishes the CI artifact for your architecture.
+If you downloaded the artifact separately, run
+``testing/vm/kernel-artifact.sh stage <artifact-dir>``.
 
 The artifact includes the kernel, its BTF, configuration and modules.
 shirudo compiles its embedded BPF objects against that BTF.

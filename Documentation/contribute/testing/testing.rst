@@ -59,8 +59,8 @@ The ``CI suite`` workflow uses the x86-64 CI kernel package from
 kernel does not change what a series is tested on. For a manual run,
 set ``kernel_run_id`` to select another run. The run must contain that
 artifact. The ``KERNEL_REPO_READ_TOKEN`` secret needs Actions read
-access to the kernel repository. Setup extracts the image and headers
-packages, checks BTF for the signed-loader ABI and every LSM hook a
+access to the kernel repository. Setup extracts the packages,
+checks BTF for the signed-loader ABI and every LSM hook a
 program of ``bpf/`` attaches to, and stages the result for the test VM.
 The kernel project owns the kernel source, configuration and patch
 application. Changes to those inputs need a successful kernel project
@@ -450,21 +450,21 @@ interactive VM stays up until you stop it.
 Use a kernel project artifact
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The kernel project publishes the kernel image, BTF, configuration and
-modules together, as the ``kernel-packages-x86-64-ci`` artifact of a
-run of its package workflow. :src:`testing/vm/kernel-artifact.sh` pins
-the run the tests use, and a goal of ``make -C testing`` that finds no
-kernel under ``artifacts/bpf-next-kernel-debs/`` downloads and stages
-that one: a target VM goal for the kernel it boots, and every goal that
-builds for the BTF the BPF objects are compiled against, unless
-``BPF_VMLINUX_BTF`` or ``BPF_VMLINUX_H`` names another. It
-needs ``gh``, logged in with read access to the kernel repository:
+The kernel CI artifacts contain the kernel image, BTF, configuration and
+modules. :src:`testing/vm/kernel-artifact.sh` pins the run the tests use.
+A goal of ``make -C testing`` that finds no kernel under
+``artifacts/bpf-next-kernel-debs/`` downloads and stages the CI artifact
+for the VM architecture. A target VM goal uses its kernel image, and a
+build uses its BTF unless ``BPF_VMLINUX_BTF`` or ``BPF_VMLINUX_H`` names
+another source. Fetching needs ``gh`` logged in with read access to the
+kernel repository:
 
 .. code-block:: console
 
    $ testing/vm/kernel-artifact.sh fetch
 
-``KERNEL_RUN_ID=<run>`` takes another run. A kernel that is staged is
+``KERNEL_RUN_ID=<run>`` takes another run that publishes the CI artifact
+for the architecture. A kernel that is staged is
 left as it is, whatever run it came from, and
 ``artifacts/bpf-next-kernel-debs/kernel-run-id`` names the run of one
 that was fetched: remove the directory to get the pinned kernel after
@@ -476,8 +476,8 @@ of the CI runner calls with ``KERNEL_CI_ARTIFACT_DIR``:
 
    $ KERNEL_CI_ARTIFACT_DIR=$HOME/Downloads/kernel-packages-x86-64-ci .github/scripts/tests.sh setup
 
-Target VM goals require this artifact; they do not build a kernel from
-this checkout.
+Target VM goals require a kernel artifact; they do not build a kernel
+from this checkout.
 
 Build the bundle
 ~~~~~~~~~~~~~~~~
