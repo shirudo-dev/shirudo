@@ -38,12 +38,19 @@ in_trees AS
 ),
 known AS
 (
-    SELECT vuln_id, any(severity) AS severity, 'linux' AS package, 'kernel' AS source
-    FROM shirudo.kernel_vulns FINAL
-    GROUP BY vuln_id
-    UNION ALL
-    SELECT vuln_id, any(severity) AS severity, any(package) AS package, 'sbom' AS source
-    FROM shirudo.sbom_vulns
+    -- An advisory both tables know is the kernel's.
+    SELECT vuln_id, argMin(severity, rank) AS severity, argMin(package, rank) AS package,
+           argMin(source, rank) AS source
+    FROM
+    (
+        SELECT vuln_id, any(severity) AS severity, 'linux' AS package, 'kernel' AS source, 0 AS rank
+        FROM shirudo.kernel_vulns FINAL
+        GROUP BY vuln_id
+        UNION ALL
+        SELECT vuln_id, any(severity) AS severity, any(package) AS package, 'sbom' AS source, 1 AS rank
+        FROM shirudo.sbom_vulns
+        GROUP BY vuln_id
+    )
     GROUP BY vuln_id
 ),
 exposure AS

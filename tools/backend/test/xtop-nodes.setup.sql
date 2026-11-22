@@ -46,6 +46,11 @@ FROM scan;
 INSERT INTO shirudo.sbom_vulns (sbom_sha256, vuln_id, package, installed, fixed, severity, scanned_at)
 SELECT '5b0e2c8a4f6d1e3b7a9c0d2e4f6a8b1c3d5e7f9a0b2c4d6e8f1a3b5c7d9e91d4', 'EXAMPLE-0202', 'openssl', '3.5.1-1', '3.5.1-2', 'HIGH', at
 FROM scan;
+-- The scan of an SBOM no image here has knows the kernel advisory too:
+-- the shields views list it once, as the kernel's.
+INSERT INTO shirudo.sbom_vulns (sbom_sha256, vuln_id, package, installed, fixed, severity, scanned_at)
+SELECT repeat('0', 64), 'EXAMPLE-0101', 'linux-image', '7.4.2-1', '7.4.5-1', 'HIGH', at
+FROM scan;
 INSERT INTO shirudo.kernel_vulns (vuln_id, introduced, fixed, severity) VALUES
 ('EXAMPLE-0101', [7, 0], [7, 4, 5], 'CRITICAL');
 
