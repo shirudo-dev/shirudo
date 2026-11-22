@@ -25,9 +25,9 @@ The agent reaches a JVM two ways:
   that a systemd user manager starts after the upatch is loaded; root
   can start a JVM without it. It is a mitigation inside the application,
   not a boundary against root.
-- For a JVM that shirudo does not start, such as the Elasticsearch lab
-  below, the same jar attaches to a running process:
-  `java -jar java-base64.jar <pid>`.
+- For a JVM that shirudo does not start, such as one in a container,
+  which never reads shirudo's `environment.d`, the same jar attaches to
+  a running process: `java -jar java-base64.jar <pid>`.
 
 ## Build
 
@@ -47,7 +47,9 @@ member paths within the 99 bytes a `.bee` archive allows.
 `make shields` builds and pushes every shield of `upatches/`, including
 this one, to the local stack's registry and loads the catalog, so the
 Shields view of `tools/xtop` lists `java-base64` as available, its
-`TARGET` the jar it guards and its `FIXES` CVE-2026-114938. Appending it
+`FIXES` CVE-2026-114938. Its `TARGET` is the package a scan names for
+that advisory, and `—` until an SBOM scan or the kernel's advisories know
+it. Appending it
 to a tree with `shirudo bpm tree append` moves it to the "in trees" tab.
 
 ## Check that the guard is in a JVM
@@ -69,14 +71,3 @@ upatch is loaded:
 ```sh
 java -jar /mnt/shirudo-src/upatches/test/badDecoder.jar
 ```
-
-## Try it against the Elasticsearch lab
-
-The Elasticsearch compose lab is a JVM that shirudo does not manage, so
-xtop shows `java-base64` as a published shield while the lab shows it
-applied: copy the signed jar into the container and attach it to the
-Elasticsearch JVM. Before, a crafted Base64 request drives the decoder
-path; after, the same request gets the guard's rejection. Because the
-lab is a container and not a shirudo target, it never reads shirudo's
-`environment.d`; the agent is applied by dynamic attach, not by
-`-javaagent`.
