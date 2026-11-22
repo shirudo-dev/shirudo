@@ -38,7 +38,8 @@ with `javac` and `jar` on `PATH`:
 upatches/java-base64/build.sh 0.1.0 --keys-dir <keys>
 ```
 
-It writes `java-base64-0.1.0.bee`. A short version keeps the package's
+It writes `java-base64-0.1.0.bee` into the current directory, where a
+relative `--keys-dir` is looked up too. A short version keeps the package's
 member paths within the 99 bytes a `.bee` archive allows.
 
 ## Publish and view in xtop

@@ -21,6 +21,7 @@ if [ "$jar_only" -eq 0 ]; then
 	shift
 fi
 pkg=$(cd "$(dirname "$0")" && pwd)
+start=$PWD
 
 cd "$pkg"
 rm -rf target
@@ -41,4 +42,5 @@ MF
 jar cfm java-base64.jar target/MANIFEST.MF -C target/stage .
 
 [ "$jar_only" -eq 0 ] || exit 0
+cd "$start"
 exec shirudo bpm build "$pkg" --version "$version" "$@"
