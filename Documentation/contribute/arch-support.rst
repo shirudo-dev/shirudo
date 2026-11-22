@@ -10,10 +10,11 @@ Arch support
 
 shirudo targets x86-64, arm64 and riscv64, and its code is written for
 all three. The project is under heavy development, and the three are not
-at the same stage yet: CI builds and tests x86-64, the test VM also runs
-on arm64 but CI does not, and no riscv64 target has booted shirudo so
-far. Some of the gaps are in shirudo, others in the kernel. This page
-lists both for anyone who wants to help close them.
+at the same stage yet: CI builds and tests x86-64, including tests that
+boot the test VM. On arm64, CI runs host tests and the test VM runs
+locally. No riscv64 target has booted shirudo so far. Some of the gaps
+are in shirudo, others in the kernel. This page lists both for anyone
+who wants to help close them.
 
 Kernel facts on this page come from the bpf-next tree the test kernel
 builds. A later kernel can differ.
@@ -31,7 +32,7 @@ Comparison
      - riscv64
    * - CI
      - Every tier on every push
-     - None
+     - Unit tests, ``ci-checks``, and host functional tests (``VM=0``)
      - None
    * - Test VM
      - Boots on x86-64 hosts
@@ -95,8 +96,6 @@ x86-64
 arm64
 -----
 
-- CI does not run on arm64, so nothing catches a regression there before
-  someone boots the test VM on an arm64 host.
 - The arena tables of ``kernel-obs`` count and link their records with
   atomic fetch-and-add and compare-and-exchange on arena memory. The arm64
   JIT translates those only with the LSE atomics of ARMv8.1, so the
@@ -135,8 +134,7 @@ Open work
 shirudo
 ~~~~~~~
 
-- Run the CI tiers on arm64, with the test VM booting on an arm64
-  runner.
+- Boot the test VM on an arm64 CI runner.
 - Add riscv64 to the test VM in :src:`testing/vm/arch.sh`, and boot a
   first riscv64 target with a TPM.
 - Build the target binary and the packages for arm64 and riscv64 in CI.
