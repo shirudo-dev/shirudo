@@ -61,6 +61,50 @@ publish_java() {
 	payload "$W/pkg/e2e-java-1.0.0/upatches/e2e-java.upatch" >"$W/java-payload"
 }
 
+# The precise CVE-2026-31431 mitigation, a BPF kernel-bugfix upatch built
+# and signed here as an operator would, pushed and appended to the tree
+# after kernel-obs, for the same nodes: the delivery path carries a kernel
+# fix as well as the observability package and the Java agent.
+publish_cve() {
+	cve=$W/pkg/cve-2026-31431-alg-splice-block
+	src=$REPO/upatches/kernel-cve/sources/cve-2026-31431-crypto-algif-aead-copy-fail/mitigation
+	mkdir -p "$cve"
+	say "build the precise CVE-2026-31431 mitigation and sign it into a package"
+	cp "$src/cve-2026-31431-alg-splice-block.bpf.c" "$cve/"
+	# The node is selected by its role, as kernel-obs and e2e-java are, so
+	# the delivery is deterministic; the shipped Beefile selects the
+	# kernel config the fix needs instead.
+	cat >"$cve/Beefile" <<-'EOF'
+	[package]
+	name = "cve-2026-31431-alg-splice-block"
+	description = "Refuses zero-copy splice into AF_ALG sockets, CVE-2026-31431"
+	license = "GPL-2.0 OR BSD-2-Clause"
+	authors = ["Authors of shirudo"]
+
+	[[upatches]]
+	source = "cve-2026-31431-alg-splice-block.bpf.c"
+
+	[upatches.tree]
+	id = "cve-2026-31431-alg-splice-block"
+	fixes = ["CVE-2026-31431"]
+
+	[upatches.tree.selector.labels]
+	role = ["edge"]
+	EOF
+	(cd "$W/pkg" && shirudo bpm build cve-2026-31431-alg-splice-block \
+		--version 1.0.0 --keys-dir "$KEYS")
+	bee=$W/pkg/cve-2026-31431-alg-splice-block-1.0.0.bee
+	say "push it to oci://$REGISTRY and append it to the upatch tree"
+	shirudo bpm push "$bee" \
+		"oci://$REGISTRY/shirudo/cve-2026-31431-alg-splice-block" \
+		--keys-dir "$KEYS"
+	shirudo bpm tree append "$bee" "oci://$REGISTRY/shirudo/end2end-tree" \
+		--keys-dir "$KEYS" --tree-id kernel-obs
+	tar --no-same-owner -xzf "$bee" -C "$W/pkg"
+	payload "$W/pkg/cve-2026-31431-alg-splice-block-1.0.0/upatches/cve-2026-31431-alg-splice-block.upatch" \
+		>"$W/cve-payload"
+}
+
 # The jars of t9113, built here because javac is here: the agent of the
 # java-base64 shield, which the host signs into its package, and the
 # program that shows whether a JVM runs it.
@@ -97,6 +141,7 @@ role = ["edge"]' "$W/pkg/kernel-obs/Beefile"
 	tar --no-same-owner -xzf "$bee" -C "$W/pkg"
 	payload "$W/pkg/kernel-obs-1.0.0/upatches/kernel-obs.upatch" >"$W/payload"
 	publish_java
+	publish_cve
 	build_shield_jars
 	payload "$POLICY_FIXTURE" >"$W/policy-payload"
 	openssl rand -hex 16 >"$W/nonce"
@@ -119,10 +164,11 @@ verify() {
 	# and tree operation they name are the target's.
 	python3 - "$W/evidence.json" "$(cat "$W/payload")" \
 		"$(cat "$W/policy-payload")" "$BPM_OCI_CA_FILE" "$REGISTRY" \
-		"$(cat "$W/java-payload")" <<'PY' ||
+		"$(cat "$W/java-payload")" "$(cat "$W/cve-payload")" <<'PY' ||
 import json, ssl, sys, urllib.request
 
-evidence, payload, policy_payload, ca, registry, java_payload = sys.argv[1:7]
+(evidence, payload, policy_payload, ca, registry, java_payload,
+ cve_payload) = sys.argv[1:8]
 ctx = ssl.create_default_context(cafile=ca)
 
 
@@ -148,6 +194,8 @@ assert published, "no publication in the tree"
 records = json.load(open(evidence))["eventlog"]
 loads = [r["upatch"] for r in records if r["type"] == "upatch_load"]
 assert {"name": "kernel-obs", "payload_sha256": payload} in loads, loads
+assert {"name": "cve-2026-31431-alg-splice-block",
+        "payload_sha256": cve_payload} in loads, loads
 assert loads[-1] == {"name": "policy-exec-graph",
                      "payload_sha256": policy_payload}, loads[-1]
 java_loads = [r["upatch"] for r in records if r["type"] == "java_load"]

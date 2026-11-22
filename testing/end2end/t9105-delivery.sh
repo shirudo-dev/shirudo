@@ -4,13 +4,16 @@
 #
 # t9105 -- the delivery path end to end. The operator VM built kernel-obs
 # into a package, pushed it to an OCI registry and appended it to a signed
-# upatch tree, then did the same with the Java agent e2e-java it compiled,
-# and an OpenTelemetry Collector listens (end2end/host.sh). The target
-# activates the signed config that points at both, and the units it ships
-# pull the tree, verify and load both packages, and export what it
-# observes; a JVM a user manager starts picks up the agent from the sealed
-# jar; the TPM-signed evidence goes back to the operator, which checks it
-# against what it published.
+# upatch tree, then did the same with the Java agent e2e-java it compiled
+# and with the precise CVE-2026-31431 kernel-bugfix upatch, and an
+# OpenTelemetry Collector listens (end2end/host.sh). The target activates
+# the signed config that points at them, and the units it ships pull the
+# tree, verify and load every package, and export what it observes; a JVM
+# a user manager starts picks up the agent from the sealed jar; the
+# shipped CVE reproducer, which reached the zero-copy splice into an
+# AF_ALG socket before the sync, is refused once the delivered mitigation
+# is loaded; the TPM-signed evidence goes back to the operator, which
+# checks it against what it published.
 
 cd "$(dirname "$0")/.."
 . ./integration-lib.sh
@@ -20,6 +23,9 @@ command -v python3 >/dev/null 2>&1 || test_skip_all "no python3"
 E2E=$PWD/../build/test-vm/end2end
 CONFIG=/var/lib/shirudo/images/config-end2end
 PIN=/run/shirudo/bpffs/upatches/kernel-obs/link_0
+CVE=cve-2026-31431-alg-splice-block
+PIN_CVE=/run/shirudo/bpffs/upatches/$CVE/link
+PROBE=${SHIRUDO_TEST_FIXTURES_DIR:-}/cve-2026-31431-splice-probe.py
 OUT=/mnt/shirudo-out/end2end
 JAR=/run/shirudo-java/e2e-java.jar
 JAVA_USER=shirudo-e2e-java
@@ -27,7 +33,17 @@ JAVA_USER=shirudo-e2e-java
 	test_skip_all "no registry and collector: run make -C testing end2end"
 [ -s "$CONFIG.img" ] || test_skip_all "missing config-end2end image"
 [ ! -e "$PIN" ] || test_skip_all "kernel-obs is loaded"
+[ ! -e "$PIN_CVE" ] || test_skip_all "the CVE mitigation is loaded"
 mkdir -p "$OUT"
+
+# The shipped probe reaches the zero-copy splice into an AF_ALG socket
+# (SPLICE_OK) until the delivered mitigation refuses it (SPLICE_BLOCKED);
+# UNSUPPORTED is a kernel with no AF_ALG aead interface to exercise. It is
+# read before the sync, while no mitigation is loaded.
+BEFORE=UNSUPPORTED
+if [ -s "$PROBE" ]; then
+	BEFORE=$(python3 "$PROBE" 2>/dev/null </dev/null)
+fi
 # The tree names the registry as the operator pushed to it, at QEMU's
 # address for the host.
 sed -E -i '/^[^#]*[[:space:]]registry\.test([[:space:]]|$)/d' /etc/hosts
@@ -96,6 +112,19 @@ test_expect_success 'the tree sync unit pulls, verifies and loads the package' '
 	[ -e "$PIN" ] &&
 	"$SHIRUDO_BIN" status --json >"$OUT/status.json"
 '
+
+test_expect_success 'the same sync delivered and pinned the CVE mitigation' '
+	[ -e "$PIN_CVE" ]
+'
+
+# The effect is exercised only where the kernel offers the AF_ALG aead
+# path; the delivery above holds either way. SPLICE_OK before the sync
+# proves the probe reached the splice the mitigation now refuses.
+if [ "$BEFORE" = SPLICE_OK ]; then
+	test_expect_success 'the delivered mitigation blocks the zero-copy splice' '
+		[ "$(python3 "$PROBE" 2>/dev/null </dev/null)" = SPLICE_BLOCKED ]
+	'
+fi
 
 test_expect_success 'the sync installs the Java agent and names it in JAVA_TOOL_OPTIONS' '
 	[ "$(stat -c %a "$JAR")" = 644 ] &&
