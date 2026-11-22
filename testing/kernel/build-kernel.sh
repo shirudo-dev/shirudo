@@ -27,8 +27,8 @@ usage: ${0##*/} [options]
                          are installed, otherwise gcc)
   -b, --base BASE        defconfig (default) or a path to a .config to
                          start from instead of the arch defconfig
-      --profile PROFILE   full (default) hardened packages or ci (small
-                         VM-test kernel)
+      --profile PROFILE   full (default) hardened packages or ci
+                         (VM-test kernel for x86-64 or arm64)
       --localversion S   use S verbatim as CONFIG_LOCALVERSION instead of
                          the kernel.conf value plus -YYYYMMDD (build day)
       --module-key PEM   sign modules with this key+certificate PEM
@@ -150,9 +150,12 @@ full)
 	BLACKLIST="$REPO/blacklist.conf"
 	;;
 ci)
-	[ "$ARCH" = x86-64 ] || die "--profile ci supports only --arch x86-64"
+	case "$ARCH" in
+	x86-64|arm64) ;;
+	*) die "--profile ci supports only --arch x86-64 or arm64" ;;
+	esac
 	[ "$BASE" = defconfig ] || die "--base cannot be combined with --profile ci"
-	FRAGMENTS=("$REPO/kernel-ci.conf")
+	FRAGMENTS=("$REPO/kernel-ci.conf" "$REPO/kernel-ci.$ARCH.conf")
 	BLACKLIST=""
 	;;
 *) die "unsupported --profile $PROFILE (full, ci)" ;;
