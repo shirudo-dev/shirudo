@@ -7,7 +7,8 @@
 
 import { describe, expect, test } from "bun:test";
 import { toFinding, toSbomImage, type FindingRow, type ImageRow } from "../src/lib/backend.ts";
-import { findingStatus } from "../src/lib/sbom.ts";
+import { findingStatus, imageKey } from "../src/lib/sbom.ts";
+import { literalSearch, parseSearch } from "../src/lib/search.ts";
 
 const ROOT = "a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c";
 
@@ -100,6 +101,15 @@ describe("findingStatus", () => {
     expect(findingStatus({ upatchId: "u", affected: 2, shielded: 1, pending: 1 })).toBe("pending");
     expect(findingStatus({ upatchId: "u", affected: 2, shielded: 1, pending: 0 })).toBe("partial");
     expect(findingStatus({ upatchId: "u", affected: 2, shielded: 2, pending: 0 })).toBe("shielded");
+  });
+});
+
+describe("imageKey", () => {
+  test("an image without a version is found by the search that drills into it", () => {
+    const bare = { imageId: "fleet-os", imageVersion: "" };
+    expect(imageKey(bare)).toBe("fleet-os");
+    expect(parseSearch(literalSearch(imageKey(bare))).test([imageKey(bare)])).toBe(true);
+    expect(imageKey({ imageId: "fleet-os", imageVersion: "2026.11.1" })).toBe("fleet-os 2026.11.1");
   });
 });
 

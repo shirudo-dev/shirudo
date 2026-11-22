@@ -6,7 +6,7 @@
 
 import type { ReactNode } from "react";
 import { Box, Text, useInput } from "ink";
-import type { Exposure, Finding } from "../lib/sbom.ts";
+import { imageKey, type Exposure, type Finding } from "../lib/sbom.ts";
 import { FINDING_STATUS_STYLE, SeverityText } from "./style.tsx";
 
 type Props = {
@@ -92,7 +92,7 @@ export function FindingDetail({ finding: f, height, active, onClose }: Props) {
               <Text key={n.akName} wrap="truncate-end">
                 <Text bold>{n.name.padEnd(14)}</Text>
                 <Text color={e.color}>{e.text.padEnd(22)}</Text>
-                <Text color="cyan">{`${n.imageId} ${n.imageVersion}`.trim().padEnd(22)}</Text>
+                <Text color="cyan">{imageKey(n).padEnd(22)}</Text>
                 {n.installed.padEnd(12)}
                 <Text dimColor>{n.binding.padEnd(14)}</Text>
                 {n.status}

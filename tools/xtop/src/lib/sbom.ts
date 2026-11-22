@@ -113,4 +113,6 @@ export function findingStatus(f: Pick<Finding, "upatchId" | "affected" | "shield
   return f.pending ? "pending" : "partial";
 }
 
-export const imageKey = (i: Pick<SbomImage, "imageId" | "imageVersion">) => `${i.imageId} ${i.imageVersion}`;
+/** "id version", or the id alone for an image without a version, as literalSearch finds it. */
+export const imageKey = (i: Pick<SbomImage, "imageId" | "imageVersion">) =>
+  i.imageVersion ? `${i.imageId} ${i.imageVersion}` : i.imageId;

@@ -138,7 +138,7 @@ const findingFields = (f: Finding) =>
     f.upatchId,
     f.status,
     ...f.installed,
-    ...f.nodes.flatMap((n) => [n.name, `${n.imageId} ${n.imageVersion}`]),
+    ...f.nodes.flatMap((n) => [n.name, imageKey(n)]),
   ];
 
 const findingTiebreak = (a: Finding, b: Finding) =>
