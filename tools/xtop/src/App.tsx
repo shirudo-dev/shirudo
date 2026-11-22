@@ -51,7 +51,8 @@ export function App({ backend }: { backend: Backend }) {
     setMenuCursor(MENU.findIndex((m) => m.id === view));
     setOpenView(view);
     setMenuFocused(false);
-    setDetail(false);
+    // The view already open stays mounted, and so does its detail.
+    if (view !== openView) setDetail(false);
   };
   const close = () => {
     setOpenView(null);
