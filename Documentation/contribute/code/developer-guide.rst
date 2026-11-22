@@ -424,7 +424,8 @@ Project layout
        by CI. See :doc:`/internals/kernel-patches`.
    * - :src:`upatches/`
      - The shipped packages: ``kernel-obs`` with its Beefile, and the
-       three ``kernel-cve`` detectors, each with its own.
+       three ``kernel-cve`` detectors and the ``kernel-cve``
+       mitigation, each with its own.
    * - :src:`systemd/`
      - Unit and timer templates for the target.
    * - :src:`completion/`

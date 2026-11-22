@@ -1056,8 +1056,9 @@ config image, as ``t9105`` configures node A:
    * - ``config-end2end``
      - ``role=edge``
      - The tree ``shirudo/end2end-tree`` and the test's collector. Node
-       A activates it in ``t9105``, and the ``kernel-obs`` and
-       ``e2e-java`` operations select ``role=edge``.
+       A activates it in ``t9105``, and the ``kernel-obs``, ``e2e-java``
+       and ``cve-2026-31431-alg-splice-block`` operations select
+       ``role=edge``.
    * - ``config-edge``
      - ``role=edge``
      - The tree ``shirudo/pipeline-tree`` on the test's registry and the

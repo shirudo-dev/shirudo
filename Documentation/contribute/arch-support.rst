@@ -89,8 +89,8 @@ x86-64
   ``CONFIG_CC_OPTIMIZE_FOR_SIZE=y``, can crash when a BPF trampoline is
   updated. :doc:`/operate/plan/system-requirements` says which
   kernels need it.
-- ``kernel-cve`` defines ``__TARGET_ARCH_x86`` for its ``kprobe``
-  programs and loads on x86-64 only.
+- The ``kernel-cve`` detectors define ``__TARGET_ARCH_x86`` for their
+  ``kprobe`` programs and load on x86-64 only.
 
 arm64
 -----
@@ -146,7 +146,7 @@ shirudo
   against the 512 bytes of riscv64.
 - Let ``kprobe`` upatches build for more than one architecture.
   ``shirudo build`` passes no ``__TARGET_ARCH_*`` define, so the source
-  picks one, as ``kernel-cve`` picks x86-64.
+  picks one, as the ``kernel-cve`` detectors pick x86-64.
 
 Linux kernel
 ~~~~~~~~~~~~

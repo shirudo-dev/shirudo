@@ -290,6 +290,14 @@ signed config image.
        admit, and a BPF unload directive that names the agent are
        refused; the unload removes options and archive, measures a
        ``java_unload`` and leaves a jar whose agent does nothing
+   * - ``t3115-af-alg-block``
+     - The CVE-2026-31431 mitigation of ``upatches/kernel-cve``, built
+       from its shipped source, driven by the shipped reproducer against
+       the ``AF_ALG`` aead interface the CI kernel enables: the probe
+       reaches the ``algif_aead`` decrypt before the load (``SAFE`` or
+       ``BROKEN``), is refused (``BLOCKED``) while the mitigation is
+       loaded with no ``AF_UNIX`` socket refused, and reaches the path
+       again after the unload
 
 ``tpm`` (4)
 ~~~~~~~~~~~
@@ -807,12 +815,15 @@ signed config image.
      - DNS over loopback in maps, OTLP and ClickHouse
    * - ``t9105-delivery``
      - The operator package built and installed in an operator VM
-       without a TPM, which publishes ``kernel-obs`` and the Java agent
-       ``e2e-java`` it compiles, and verifies the evidence, its
-       ``java_load`` included; registry, tree sync, load, export and
-       attestation on the target, and a JVM a user manager starts
-       picking up ``JAVA_TOOL_OPTIONS`` and running the agent from its
-       sealed jar
+       without a TPM, which publishes ``kernel-obs``, the Java agent
+       ``e2e-java`` it compiles and the precise CVE-2026-31431 mitigation
+       ``cve-2026-31431-alg-splice-block``, and verifies the evidence,
+       its ``java_load`` and the mitigation's load included; registry,
+       tree sync, load, export and attestation on the target, a JVM a
+       user manager starts picking up ``JAVA_TOOL_OPTIONS`` and running
+       the agent from its sealed jar, and the shipped CVE probe, which
+       reached the zero-copy splice into an AF_ALG socket before the
+       sync, refused once the delivered mitigation is loaded
    * - ``t9106-policy-exec-graph``
      - A signed SHPL section labels five executables; its BPF policy
        allows unlabeled tasks to exec unlabeled files and 0x1, allows
