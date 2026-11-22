@@ -55,15 +55,17 @@ down)
 	//:* | *://) echo 'refusing to remove a stack at /' >&2; exit 1 ;;
 	esac
 	stack_down
-	# What the containers wrote is theirs, not ours to remove: a
-	# container removes it, and then the stack's directory goes.
-	if [ -d "$W" ]; then
-		docker run --rm -v "$W:/stack" --entrypoint sh "$CLICKHOUSE_IMAGE" \
-			-c 'rm -rf /stack/clickhouse /stack/registry /stack/out' ||
-			{ echo "cannot remove the data under $W" >&2; exit 1; }
-	fi
-	rm -rf -- "$W" "$TLS_DIR"
+	# The keys go first, so that nothing below leaves them behind.
+	rm -rf -- "$TLS_DIR"
 	rmdir -- "$(dirname "$TLS_DIR")" 2>/dev/null || :
+	# What the containers wrote may be theirs, not ours to remove: only
+	# then does a container remove it, before the stack's directory goes.
+	if ! rm -rf -- "$W" 2>/dev/null; then
+		docker run --rm -v "$W:/stack" --entrypoint sh "$CLICKHOUSE_IMAGE" \
+			-c 'rm -rf /stack/clickhouse /stack/registry /stack/out' &&
+			rm -rf -- "$W" ||
+			{ echo "removed the stack and its CA, but cannot remove the data under $W" >&2; exit 1; }
+	fi
 	printf 'removed the stack, its data and its CA: %s\n' "$W"
 	;;
 enroll)
