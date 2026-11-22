@@ -47,9 +47,10 @@ Take the first evidence
    .. code-block:: console
 
       operator$ OWN=build/test-vm/host-bundle-bpf-next-verity/fixtures/own.der
-      operator$ RESULT=build/test-vm/vms/quickstart/result
+      operator$ RESULT=$(realpath build/test-vm/vms/quickstart/result)
 
-   The guest sees ``$RESULT`` as ``/mnt/shirudo-out``.
+   ``realpath`` resolves any symlinks in the path so shirudo can write
+   the challenge. The guest sees ``$RESULT`` as ``/mnt/shirudo-out``.
 
 2. Make a nonce:
 
@@ -95,7 +96,7 @@ Challenge the attestation key
         OK    endorsement key: name matches its public area
         OK    endorsement key: TCG default template under the endorsement policy
         NOTE  no endorsement certificate: the endorsement key is trusted as presented
-      challenge: build/test-vm/vms/quickstart/result/challenge.json
+      challenge: .../vms/quickstart/result/challenge.json
       credential: b17d3f29447eaf539bcffa2556b010082a7a10e2b7ab60746c485d176b7a40cc
 
    The challenge holds a random credential, encrypted to the endorsement
