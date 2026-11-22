@@ -64,7 +64,7 @@ log-escape		--unwind 7 LEN=0-5
 json-emit-string	--unwind 5 --unwindset json_string.0:27,put_string_n.0:5,put_raw.0:7,well_formed.0:27,replaced.0:5,memchr.0:9,memcmp.0:13 LEN=0-4
 json-emit-buffer	--unwind 1 --unwindset json_raw_value.0:5,harness.0:5 --malloc-may-fail --malloc-fail-null LEN=0-4
 json-emit-nest		--object-bits 12 --unwind 1 --unwindset json_text.0:57,sequences.0:4,sequences.1:5,any_depth.0:4,any_depth.1:4,strcmp.0:12,memchr.0:9,put_string_n.0:2,put_string_n.1:2,put_raw.0:8,json_kv_raw.0:3,json_raw_value.0:3,json_raw.0:5,strlen.0:3,vsnprintf.2:5,vsnprintf.0:2,format_number.0:3,format_number.2:5,format_number.3:3
-keepalive-emit		--object-bits 12 --max-field-sensitivity-array-size 960 --unwind 1 --unwindset json_members.0:961,power_of_ten.0:6,put_string_n.0:5,put_string_n.1:66,put_raw.0:7,strlen.0:66,hex_is_lower.0:66,kv_counters.0:43,kv_no_tree.0:8,json_raw_value.0:21,vsnprintf.2:4,vsnprintf.0:2,format_number.0:21,format_number.2:5,format_number.3:21,ends_in_any_number.0:6,ends_in_any_number.1:961,ends_in_any_number.2:5 LEN=0-3
+keepalive-emit		--object-bits 12 --max-field-sensitivity-array-size 960 --unwind 1 --unwindset json_members.0:961,power_of_ten.0:6,put_string_n.0:5,put_string_n.1:66,put_raw.0:7,strlen.0:66,hex_is_lower.0:66,kv_counters.0:44,kv_no_tree.0:8,json_raw_value.0:21,vsnprintf.2:4,vsnprintf.0:2,format_number.0:21,format_number.2:5,format_number.3:21,ends_in_any_number.0:6,ends_in_any_number.1:961,ends_in_any_number.2:5 LEN=0-3
 keepalive-snapshot	--unwind 4 --unwindset strcmp.0:2
 keepalive-quote		--unwind 24 LEN=1,19,20,21
 json-string		--unwind 5 --unwindset json_string.0:7,parse_string.0:5,parse_string.1:7,memchr.0:9,memcmp.0:7,harness.0:8 LEN=0-6
