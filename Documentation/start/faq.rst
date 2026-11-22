@@ -118,9 +118,9 @@ test VM also runs on arm64, and no riscv64 target has booted yet.
 Can I try shirudo on macOS?
 ---------------------------
 
-Not natively: shirudo is Linux only. On an Apple M3 or later with macOS
-15 or later, :doc:`/start/quickstart-macos` runs the quickstart in a
-Lima VM, with the test VM nested inside it.
+shirudo runs only on Linux. On an Apple M3 or later with macOS 15 or
+later, :doc:`set up a Lima VM </start/quickstart-macos>` to run the
+quickstart. The test VM runs inside the Lima VM.
 
 How much does shirudo cost on a target, and how far does it scale?
 ------------------------------------------------------------------

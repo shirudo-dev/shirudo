@@ -60,14 +60,14 @@ provision:
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
     apt-get install -y --no-install-recommends \
-      build-essential pkg-config python3 git curl ca-certificates gpg jq \
+      build-essential pkg-config python3 git gh curl ca-certificates gpg jq \
       openssl libssl-dev libcurl4-openssl-dev libelf-dev libluajit-5.1-dev \
       libtpms-dev libtss2-dev zlib1g-dev libzstd-dev \
       autoconf autoconf-archive automake libtool libltdl-dev \
       bc bison flex cpio debhelper dpkg-dev fakeroot kmod libdw-dev \
       libncurses-dev pahole rsync xz-utils zstd \
-      qemu-system-arm qemu-utils swtpm swtpm-tools cloud-image-utils \
-      libguestfs-tools dracut-core cryptsetup-bin e2fsprogs file \
+      qemu-system-arm qemu-utils swtpm swtpm-tools tpm2-tools libtss2-tcti-swtpm0t64 \
+      cloud-image-utils libguestfs-tools dracut-core cryptsetup-bin e2fsprogs file \
       openssh-client iproute2 isc-dhcp-client docker.io
 - mode: system
   script: |
@@ -107,12 +107,9 @@ probes:
   hint: See /var/log/cloud-init-output.log in the guest.
 
 message: |
-  Build and boot the test target as Documentation/start/quickstart.rst
-  describes, in your checkout, which limactl shell opens in when you run
-  it from there:
+  From your checkout, open a shell in the Lima VM:
   ------
   limactl shell {{.Name}}
-  make -C testing kernel
-  make && make shirudo-build
-  make -C testing vm VM_NAME=quickstart
   ------
+  Follow the test kernel artifact steps in Documentation/start/quickstart.rst
+  before building shirudo and booting the test target.

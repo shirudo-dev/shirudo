@@ -5,8 +5,8 @@
 :page-type: How-to
 :audience: First-time users
 
-Run the quickstart on macOS
-===========================
+Set up a Linux host on macOS
+============================
 
 shirudo builds and runs on Linux only, and its test VM needs KVM. On a
 Mac, a Lima VM takes the place of the Linux host the
@@ -63,8 +63,7 @@ Create the VM
           infra/lima/shirudo.yaml
 
    The VM takes 8 GiB of memory and Lima's default of at most 4 CPUs.
-   More CPUs shorten the kernel build; add ``--cpus=<count>`` to the
-   command to give more.
+   Add ``--cpus=<count>`` to give the VM more CPUs.
 
 2. From your checkout, open a shell in the VM:
 
@@ -91,9 +90,8 @@ Create the VM
 Continue with the quickstart
 ----------------------------
 
-From here, follow the :doc:`/start/quickstart` from its section "Build a
-target kernel" in the VM shell. Every
-``operator$`` command runs in the Lima VM. The quick guides and
+In the VM shell, start the quickstart at :ref:`quickstart-kernel-artifact`.
+Every ``operator$`` command runs in the Lima VM. The quick guides and
 :doc:`/contribute/code/develop-locally` work the same way; the VM has
 Docker for the registry and the collector of the latter.
 

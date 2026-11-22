@@ -16,12 +16,17 @@ target's TPM what the target runs, and unload it again.
 Your host plays the operator. The test VM plays the target: it boots the
 way a production target does and enforces the same policy.
 
+.. toctree::
+   :hidden:
+
+   quickstart-macos
+
 Before you begin
 ----------------
 
 - A Linux host on x86-64 or arm64 with KVM. ``/dev/kvm`` must be readable
-  and writable. On a Mac, :doc:`/start/quickstart-macos` sets up such
-  a host in a Lima VM.
+  and writable. On a Mac, :doc:`use a Lima VM as your Linux host
+  </start/quickstart-macos>`.
 - A locked-memory limit of ``unlimited`` (``ulimit -l``): the shirudo
   binaries lock their memory and refuse to run without it. Root is not
   needed; the test VM builds its initrd with dracut as you, without

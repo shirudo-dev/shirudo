@@ -21,6 +21,5 @@ attesting a target.
    who-is-shirudo-for
    how-it-works
    install
-   quickstart-macos
    guides/index
    faq
