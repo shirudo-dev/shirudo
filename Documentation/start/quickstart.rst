@@ -16,6 +16,9 @@ target's TPM what the target runs, and unload it again.
 Your host plays the operator. The test VM plays the target: it boots the
 way a production target does and enforces the same policy.
 
+To try shirudo in a browser, open the `online getting-started lab
+<https://labs.isovalent.com/#/lab/shirudo-getting-started>`__.
+
 .. toctree::
    :hidden:
 

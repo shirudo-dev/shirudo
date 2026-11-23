@@ -2,6 +2,7 @@
   <source media="(prefers-color-scheme: dark)" srcset="Documentation/logos/shirudo-horizontal-for-dark-back.png">
   <img src="Documentation/logos/shirudo-horizontal-for-light-back.png" width="350" alt="shirudo">
 </picture>
+<br/><br/>
 
 shirudo is a BPF-based security platform for Linux. After boot-time
 initialization, it restricts BPF program loads from userspace to signed
@@ -13,7 +14,6 @@ shirudo (Japanese シールド, pronounced “shee-roo-doh”) means “shield�
 
 ## Quickstart
 
-- [Open the online getting-started lab](https://labs.isovalent.com/#/lab/shirudo-getting-started).
 - [Try shirudo in a local VM](https://docs.shirudo.dev/start/quickstart.html).
   The VM uses a software TPM.
 - [Read the documentation](https://docs.shirudo.dev/).
@@ -53,7 +53,7 @@ The operator and target may use different architectures. See
 - **TPM measurement.** Changes to the loaded upatch set extend a
   per-boot TPM register. `shirudo attest` returns evidence that
   operators can verify offline.
-- Upatches are small logically contained programs that engineers and
+- **Upatches** are small logically contained programs that engineers and
   agents can read, generate and maintain. Commands take and produce
   structured data.
 - **Pull-based delivery.** Targets use one-shot commands to pull packages
