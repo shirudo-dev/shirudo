@@ -12,6 +12,7 @@ on:
 # Only the newest push is worth a scan, as each replaces the last.
 concurrency:
   group: ${{ github.workflow }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
