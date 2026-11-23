@@ -298,6 +298,13 @@ signed config image.
        ``BROKEN``), is refused (``BLOCKED``) while the mitigation is
        loaded with no ``AF_UNIX`` socket refused, and reaches the path
        again after the unload
+   * - ``t3117-copyfail-detector``
+     - The CVE-2026-31431 copy-failure detector of ``upatches/kernel-cve``,
+       built from its shipped source: ``socket_sendmsg`` marks an ``AF_ALG``
+       socket whose send carried a zero-copy splice, ``aead_recvmsg`` counts
+       every op as ``activity`` and, for a marked socket whose op failed, a
+       ``hit``. A spliced failing decrypt moves both counters; an ordinary
+       copying failing decrypt moves only ``activity``; the unload removes it
 
 ``tpm`` (4)
 ~~~~~~~~~~~

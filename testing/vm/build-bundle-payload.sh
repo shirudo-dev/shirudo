@@ -754,6 +754,24 @@ build_alg_splice_block_fixture()
 	)
 }
 
+build_copyfail_detector_fixture()
+{
+	local source_dir="$REPO_ROOT/upatches/kernel-cve/sources/cve-2026-31431-crypto-algif-aead-copy-fail"
+	local keys_dir="$1"
+
+	(
+		cd "$REPO_ROOT"
+		"$REPO_ROOT/tools/shirudo-build/shirudo-build" \
+			"$source_dir/observability/cve-2026-31431-copyfail-detector.bpf.c" \
+			-o "$TMP_DIR/fixtures/cve-2026-31431-copyfail-detector.upatch" \
+			--name cve-2026-31431-copyfail-detector \
+			--vmlinux "$REPO_ROOT/vendor/linux/vmlinux.h" \
+			--extra-cflags "-I$REPO_ROOT/vendor/libbpf" \
+			--key "$keys_dir/signing_key.pem" \
+			--cert "$keys_dir/cert.der"
+	)
+}
+
 build_policy_labels_fixture()
 {
 	local source_dir="$FIXTURE_WORK/policy-labels"
@@ -850,6 +868,7 @@ queue_fixture build_policy_exec_graph_fixture
 queue_fixture build_obs_fixture "$FIXTURE_WORK/trusted"
 queue_fixture build_af_alg_block_fixture "$FIXTURE_WORK/trusted"
 queue_fixture build_alg_splice_block_fixture "$FIXTURE_WORK/trusted"
+queue_fixture build_copyfail_detector_fixture "$FIXTURE_WORK/trusted"
 queue_fixture build_java_fixture
 wait_fixture_jobs
 
@@ -903,6 +922,9 @@ af_alg_block_payload="$($REPO_ROOT/shirudo upatch info \
 	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
 alg_splice_block_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/cve-2026-31431-alg-splice-block.upatch" --json |
+	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+copyfail_detector_payload="$($REPO_ROOT/shirudo upatch info \
+	"$TMP_DIR/fixtures/cve-2026-31431-copyfail-detector.upatch" --json |
 	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
 observability_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/kernel-obs.upatch" --json |
@@ -961,6 +983,7 @@ shirudo-test-arena-tree $arena_tree_payload shirudo-test-arena-tree.unload.upatc
 kernel-obs $observability_payload kernel-obs.unload.upatch
 cve-2026-31431-af-alg-block $af_alg_block_payload cve-2026-31431-af-alg-block.unload.upatch
 cve-2026-31431-alg-splice-block $alg_splice_block_payload cve-2026-31431-alg-splice-block.unload.upatch
+cve-2026-31431-copyfail-detector $copyfail_detector_payload cve-2026-31431-copyfail-detector.unload.upatch
 kernel-obs $observability_anomaly_payload kernel-obs-cred-anomaly.unload.upatch
 shirudo-test-uprobe-multi $uprobe_payload shirudo-test-uprobe-multi.unload.upatch
 shirudo-test-uretprobe-multi $uretprobe_payload shirudo-test-uretprobe-multi.unload.upatch
