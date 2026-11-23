@@ -59,6 +59,8 @@ jobs:
               echo 'kernel BTF lacks bpf_attr.signature_size; needs a signed-BPF capable bpf-next kernel' >&2
               exit 1
             }
+            # LVH's SSH probe can succeed before the guest mounts /host.
+            systemctl start host.mount
             cd /host
 
             apt-get update
