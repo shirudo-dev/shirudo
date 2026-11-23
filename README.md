@@ -12,6 +12,10 @@ and verify a target's measured upatch state with TPM-signed evidence.
 
 shirudo (Japanese シールド, pronounced “shee-roo-doh”) means “shield”.
 
+Read the announcements of shirudo on the blogs of
+[OpenAI](https://openai.com/index/introducing-shirudo/) and
+[Cisco](https://isovalent.com/blog/post/cisco-openai-shirudo/).
+
 ## Quickstart
 
 - [Try shirudo in a local VM](https://docs.shirudo.dev/start/quickstart.html).
