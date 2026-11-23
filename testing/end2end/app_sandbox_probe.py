@@ -69,7 +69,10 @@ def checks(work):
         return os.path.join(work, "files", name)
 
     return [
-        ("exec-helper", lambda: execute(os.path.join(work, "helper"))),
+        ("exec-helper-a", lambda: execute(os.path.join(work, "helper-a"))),
+        ("exec-helper-b", lambda: execute(os.path.join(work, "helper-b"))),
+        ("exec-helper-link",
+         lambda: execute(os.path.join(work, "helper-link"))),
         ("exec-other", lambda: execute(os.path.join(work, "other"))),
         ("connect-loopback", lambda: connect(socket.AF_INET, "127.0.0.1")),
         ("connect-loopback-v6", lambda: connect(socket.AF_INET6, "::1")),

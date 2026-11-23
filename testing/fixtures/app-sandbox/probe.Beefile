@@ -21,7 +21,7 @@ paths = ["/tmp/shirudo-app-sandbox/app"]
 [[upatches.policy]]
 id = "probe-helpers"
 bit = 0x2
-paths = ["/tmp/shirudo-app-sandbox/helper"]
+paths = ["/tmp/shirudo-app-sandbox/helper*"]
 
 [upatches.tree]
 id = "app-sandbox"

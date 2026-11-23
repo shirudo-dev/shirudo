@@ -32,6 +32,10 @@ bit = 0x1
 paths = ["/usr/sbin/apache2", "/usr/sbin/httpd"]
 ```
 
+The last component of a path may be a pattern, as in
+`/usr/sbin/php-fpm*` for the PHP-FPM of any version: the target labels
+every regular file of the directory that matches it.
+
 `sandbox.toml` gives the rules of the sandbox of that name:
 
 ```toml
@@ -121,7 +125,7 @@ Every refusal is `EACCES`.
 
 - A path that does not exist at the load is not labeled, and a file
   that replaces a labeled one, as a package upgrade does, is a new file
-  without the label. Load the upatch again after the application is
+  without the label, whether a path or a pattern named it. Load the upatch again after the application is
   installed or upgraded.
 - The file rules name files, not their contents: a descriptor that was
   open for writing before the task entered the sandbox, or that another

@@ -945,7 +945,8 @@ signed config image.
        sandbox without a ``[[upatches.policy]]`` table, ``put-shields``
        and ``shields-put``, ``bpm tree append`` by reference and
        ``--package-digest``, the node loading it at seq 1 and labeling
-       the sandbox's files, a labeled program denied the executions,
+       the sandbox's files, those a pattern of the Beefile matches and
+       not the target of a symbolic link it matches, a labeled program denied the executions,
        connections, datagrams, raw socket and ``.php`` creations,
        renames and writes its sandbox rules out and allowed the rest, an
        unlabeled program denied nothing, then ``--op delete`` and the

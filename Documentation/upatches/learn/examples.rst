@@ -143,7 +143,8 @@ app-sandbox
    * - Policy labels
      - one ``[[upatches.policy]]`` table per sandbox, ``apache`` and
        ``php-fpm``, each a bit and the executables that put a task in
-       the sandbox
+       the sandbox, those of PHP-FPM by the pattern
+       ``/usr/sbin/php-fpm*``
    * - Generated data
      - ``sandbox_policy``, which ``gen_policy.py`` writes from
        ``sandbox.toml`` and the policy bits of the Beefile

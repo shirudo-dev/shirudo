@@ -1400,16 +1400,19 @@ it publishes is the shipped one with ``probe.Beefile`` as its Beefile
 and the rules of :src:`testing/fixtures/app-sandbox/`, whose one
 sandbox, ``probe``,
 labels a file of the test: a copy of the node's ``python3`` at
-``/tmp/shirudo-app-sandbox/app``. It may execute the file labeled
-``probe-helpers`` beside it, reach the loopback networks, and not
-create, rename or write ``*.php``. That copy runs
-:src:`testing/end2end/app_sandbox_probe.py`, which tries 26 operations
+``/tmp/shirudo-app-sandbox/app``. It may execute the files labeled
+``probe-helpers`` beside it, which the Beefile names by the pattern
+``helper*``, reach the loopback networks, and not create, rename or
+write ``*.php``. That copy runs
+:src:`testing/end2end/app_sandbox_probe.py`, which tries 28 operations
 and prints which of them the kernel denied. The test:
 
 #. checks that the node has no tree state and that the registry holds
    neither the tree nor an index, and empties the keepalive backend;
-#. copies the application, a program it may execute and one it may not
-   to the node, and runs the probe: nothing is denied;
+#. copies the application, two programs it may execute, ``helper-a``
+   and ``helper-b``, and one it may not, ``other``, to the node, with a
+   symbolic link ``helper-link`` to the last, and runs the probe:
+   nothing is denied;
 #. builds the package as it ships and reads the rules of its two
    sandboxes back with ``bpm info data``, and checks that ``bpm build``
    fails for rules that name a sandbox the Beefile has no policy for;
@@ -1421,13 +1424,15 @@ and prints which of them the kernel denied. The test:
    reads it back with ``bpm tree show`` and loads it with the ingest
    job;
 #. syncs the node, which reaches seq 1, pins the upatch and labels the
-   application with policy bit ``0x1`` and the program it may execute
-   with ``0x2``;
-#. runs the probe in the application: 16 operations are denied, the
-   other program, the connections and datagrams to addresses outside
-   the loopback networks, a raw socket and each way to create, rename,
-   write or truncate a ``.php`` file, and 10 are allowed, among them the
-   helper, the loopback and reading a ``.php`` file;
+   application with policy bit ``0x1`` and both programs the pattern
+   matches with ``0x2``, and not ``other``, though the link to it
+   matches too;
+#. runs the probe in the application: 17 operations are denied, the
+   other program by its name and by the link, the connections and
+   datagrams to addresses outside the loopback networks, a raw socket
+   and each way to create, rename, write or truncate a ``.php`` file,
+   and 11 are allowed, among them both helpers, the loopback and reading
+   a ``.php`` file;
 #. runs the probe with the node's own ``python3``, which no policy
    labels: nothing is denied;
 #. sends a keepalive and checks ``5 head: pass, seq 1 of 1`` and ``6

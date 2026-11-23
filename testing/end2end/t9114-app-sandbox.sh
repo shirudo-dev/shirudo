@@ -5,7 +5,7 @@
 # t9114 -- the app-sandbox upatch through the whole pipeline. The
 # operator builds the package of upatches/app-sandbox, with probe.Beefile
 # and the rules of fixtures/app-sandbox, which sandbox a program of this
-# test, publishes it to a namespace, where the backend lists it as
+# test and name the programs it may execute by a pattern, publishes it to a namespace, where the backend lists it as
 # available, and appends it to a new tree by its reference and digest.
 # The node pulls it, and the program then executes, connects and writes
 # only what its sandbox allows, while a program outside it is left
@@ -65,11 +65,11 @@ stage() {
 
 # Run the probe in the node with the interpreter $1 and write the checks
 # the kernel denied it to $W/denied, one name per line. The probe makes
-# 26 checks.
+# 28 checks.
 probe() {
 	on edge "python3 $PROBE setup $APP_DIR && $1 $PROBE run $APP_DIR" \
 		>"$W/probe" &&
-	test "$(wc -l <"$W/probe")" = 26 &&
+	test "$(wc -l <"$W/probe")" = 28 &&
 	sed -n "s/ denied\$//p" "$W/probe" >"$W/denied"
 }
 
@@ -110,12 +110,16 @@ test_expect_success 'the node trusts the CA and reaches the registry' '
 '
 
 # The application is a copy of the interpreter, so that the label goes on
-# a file of this test and python3 itself stays outside the sandbox.
+# a file of this test and python3 itself stays outside the sandbox. The
+# pattern helper* matches the name of the link too, whose file it must
+# not label.
 test_expect_success 'the node has the application and the programs it may and may not execute' '
 	on edge "rm -rf $APP_DIR && mkdir $APP_DIR &&
 		cp -L /usr/bin/python3 $APP_DIR/app &&
-		cp -L /usr/bin/true $APP_DIR/helper &&
-		cp -L /usr/bin/true $APP_DIR/other"
+		cp -L /usr/bin/true $APP_DIR/helper-a &&
+		cp -L /usr/bin/true $APP_DIR/helper-b &&
+		cp -L /usr/bin/true $APP_DIR/other &&
+		ln -s other $APP_DIR/helper-link"
 '
 
 test_expect_success 'without the sandbox, the application is denied nothing' '
@@ -169,17 +173,19 @@ test_expect_success 'the operator creates the tree with the package' '
 		ORDER BY seq" "$W/ops"
 '
 
-test_expect_success 'the node pulls the tree, loads the upatch and labels the files of the sandbox' '
+test_expect_success 'the node pulls the tree, loads the upatch and labels the files its paths and pattern name' '
 	sync_to 1 1 &&
 	on edge "[ -d $PINS ]" &&
 	test "$(policy_bits "$APP_DIR/app")" = 0x1 &&
-	test "$(policy_bits "$APP_DIR/helper")" = 0x2 &&
+	test "$(policy_bits "$APP_DIR/helper-a")" = 0x2 &&
+	test "$(policy_bits "$APP_DIR/helper-b")" = 0x2 &&
 	test "$(policy_bits "$APP_DIR/other")" = none
 '
 
 test_expect_success 'the application executes, connects and writes only what its sandbox allows' '
 	probe "$APP_DIR/app" &&
 	cat >"$W/expected" <<-\EOT &&
+	exec-helper-link
 	exec-other
 	connect-remote
 	connect-remote-v6

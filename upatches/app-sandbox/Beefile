@@ -29,7 +29,7 @@ paths = ["/usr/sbin/apache2", "/usr/sbin/httpd", "/usr/local/apache2/bin/httpd"]
 [[upatches.policy]]
 id = "php-fpm"
 bit = 0x2
-paths = ["/usr/sbin/php-fpm8.2", "/usr/sbin/php-fpm8.3", "/usr/sbin/php-fpm8.4", "/usr/local/sbin/php-fpm"]
+paths = ["/usr/sbin/php-fpm*", "/usr/local/sbin/php-fpm"]
 
 [upatches.tree]
 id = "app-sandbox"
