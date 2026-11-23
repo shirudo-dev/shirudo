@@ -15,6 +15,7 @@ names=$2
 ek_ca=$3
 enroll=$4
 node_id=$5
+openssl_library_path=${HOST_LD_LIBRARY_PATH-${LD_LIBRARY_PATH-}}
 work=$(mktemp -d)
 
 # swtpm drops the lock on the state directory only when it exits, and the
@@ -71,10 +72,15 @@ printf '{"source": "test-vm", "nodes": [{"ak_name": "%s", "ek_name": "%s", "node
 # EK credential profile, written under the platform hierarchy the firmware
 # has not yet locked; the CA's key is thrown away with $work.
 tpm2_print -t TPM2B_PUBLIC -f pem ek.pub >ek.pem
-openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
-	-keyout ca.key -out ca.pem -days 3650 \
-	-subj "/CN=shirudo test endorsement CA $(od -An -N8 -tx1 /dev/urandom | tr -d ' ')" \
-	2>/dev/null
+if ! LD_LIBRARY_PATH="$openssl_library_path" \
+	openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+		-keyout ca.key -out ca.pem -days 3650 \
+		-subj "/CN=shirudo test endorsement CA $(od -An -N8 -tx1 /dev/urandom | tr -d ' ')" \
+		2>openssl-req.log; then
+	cat openssl-req.log >&2
+	exit 1
+fi
+LD_LIBRARY_PATH="$openssl_library_path" \
 openssl x509 -new -subj "/CN=shirudo test endorsement key" \
 	-force_pubkey ek.pem -CA ca.pem -CAkey ca.key -days 3650 \
 	-outform DER -out ek.der

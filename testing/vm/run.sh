@@ -620,6 +620,7 @@ start_swtpm()
 	# operator trusts, which records the names of its keys before the guest
 	# boots, and carries an endorsement certificate from its maker's CA.
 	if vm_has_builder; then
+		HOST_LD_LIBRARY_PATH="$HOST_LD_LIBRARY_PATH" \
 		"$REPO_ROOT/testing/vm/tpm-builder.sh" "$RUN_DIR/tpm" "$RUN_DIR/tpm-names" \
 			"$RUN_DIR/ek-ca.pem" "$RUN_DIR/enroll.json" "$VM_NAME" \
 			>>"$RUN_DIR/swtpm.log" 2>&1 ||
