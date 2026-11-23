@@ -9,11 +9,12 @@
 # unit, ci-checks, functional and end2end tests, each family of target tests
 # in a VM of its own, or one part of them: unit runs the unit and
 # ci-checks tests, functional and end2end the tier of that name.
+# functional-ci-N runs shard N of the functional tests.
 # With VM=0, setup installs only host test dependencies using the kernel
 # CI artifact's BTF, and run leaves out target VMs. CI supplies this artifact
 # built from testing/kernel.
 #
-#   .github/scripts/tests.sh setup|run [unit|functional|end2end]
+#   .github/scripts/tests.sh setup|run [unit|functional|functional-ci-[1-4]|end2end]
 #
 # Runs as a user with passwordless sudo, from the checkout.
 
@@ -117,7 +118,7 @@ setup() {
 case "${1:-}" in
 setup|run) ;;
 *)
-	echo "usage: $0 setup|run [unit|functional|end2end]" >&2
+	echo "usage: $0 setup|run [unit|functional|functional-ci-[1-4]|end2end]" >&2
 	exit 2
 	;;
 esac
@@ -126,8 +127,9 @@ case "${2:-}" in
 '') goals=tests ;;
 unit) goals='-C testing unit ci-checks' ;;
 functional|end2end) goals="-C testing $2" ;;
+functional-ci-[1-4]) goals="-C testing -k $2" ;;
 *)
-	echo "usage: $0 setup|run [unit|functional|end2end]" >&2
+	echo "usage: $0 setup|run [unit|functional|functional-ci-[1-4]|end2end]" >&2
 	exit 2
 	;;
 esac

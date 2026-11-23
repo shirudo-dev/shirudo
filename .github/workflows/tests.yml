@@ -56,12 +56,34 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: CI tests
+          - name: CI unit tests
+            runner: ubuntu-latest
+            vm: '0'
+            suite: unit
+          - name: CI functional tests (shard 1)
             runner: ubuntu-latest
             vm: '1'
+            suite: functional-ci-1
+          - name: CI functional tests (shard 2)
+            runner: ubuntu-latest
+            vm: '1'
+            suite: functional-ci-2
+          - name: CI functional tests (shard 3)
+            runner: ubuntu-latest
+            vm: '1'
+            suite: functional-ci-3
+          - name: CI functional tests (shard 4)
+            runner: ubuntu-latest
+            vm: '1'
+            suite: functional-ci-4
+          - name: CI end-to-end tests
+            runner: ubuntu-latest
+            vm: '1'
+            suite: end2end
           - name: CI host tests (arm64)
             runner: ubuntu-24.04-arm
             vm: '0'
+            suite: host
     env:
       VM: ${{ matrix.vm }}
 
@@ -118,7 +140,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/test-vm/cache
-          key: test-vm-images-${{ hashFiles('testing/vm/runtime-packages', 'testing/vm/operator-packages', 'testing/vm/prepare-runtime.sh', 'testing/vm/build-bundle.sh', 'testing/vm/arch.sh', '.github/scripts/install-clang.sh', '.github/scripts/install-static-libcrypto-deps.sh', 'testing/container/Containerfile', 'testing/container/packages', 'Makefile.target-deps') }}
+          key: test-vm-runtime-and-operator-${{ hashFiles('testing/vm/runtime-packages', 'testing/vm/operator-packages', 'testing/vm/prepare-runtime.sh', 'testing/vm/build-bundle.sh', 'testing/vm/arch.sh', '.github/scripts/install-clang.sh', '.github/scripts/install-static-libcrypto-deps.sh', 'testing/container/Containerfile', 'testing/container/packages', 'Makefile.target-deps') }}
 
       - name: Prepare the test environment
         id: setup
@@ -127,44 +149,25 @@ jobs:
         run: .github/scripts/tests.sh setup
 
       - name: Run unit tests
-        id: unit
+        if: matrix.suite == 'unit' || matrix.suite == 'host'
         run: .github/scripts/tests.sh run unit
 
-      - name: Upload unit guest logs
-        if: always() && steps.unit.outcome == 'failure'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: guest-logs-unit
-          path: |
-            build/test-vm/vms/*/result
-            build/test-vm/vms/*/console.log
-          if-no-files-found: ignore
-
-      - name: Run functional tests
-        id: functional
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+      - name: Run host functional tests
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.suite == 'host' }}
         run: .github/scripts/tests.sh run functional
 
-      - name: Upload functional guest logs
-        if: always() && steps.functional.outcome == 'failure'
+      - name: Run selected test suite
+        if: matrix.vm == '1'
+        id: suite
+        env:
+          TEST_SUITE: ${{ matrix.suite }}
+        run: .github/scripts/tests.sh run "$TEST_SUITE"
+
+      - name: Upload guest logs
+        if: always() && steps.suite.outcome == 'failure'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: guest-logs-functional
-          path: |
-            build/test-vm/vms/*/result
-            build/test-vm/vms/*/console.log
-          if-no-files-found: ignore
-
-      - name: Run end-to-end tests
-        id: end2end
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.vm == '1' }}
-        run: .github/scripts/tests.sh run end2end
-
-      - name: Upload end-to-end guest logs
-        if: always() && steps.end2end.outcome == 'failure'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: guest-logs-end2end
+          name: guest-logs-${{ matrix.suite }}
           path: |
             build/test-vm/vms/*/result
             build/test-vm/vms/*/console.log
@@ -193,11 +196,10 @@ jobs:
           path: build/host-libtpms
           key: ${{ steps.host-libtpms.outputs.cache-primary-key }}
 
-      # hashFiles reads every byte it matches and gives up after two
-      # minutes, too short for an image; the key file beside one is
-      # written once the image is complete.
+      # Only end-to-end builds the operator image. Save the shared cache
+      # from that job once the image's key file marks it complete.
       - name: Save the VM images
-        if: always() && matrix.vm == '1' && steps.images.outputs.cache-hit != 'true' && hashFiles('build/test-vm/cache/runtime/.*.key') != ''
+        if: always() && matrix.suite == 'end2end' && steps.images.outputs.cache-hit != 'true' && hashFiles('build/test-vm/cache/runtime/.operator-*.key') != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/test-vm/cache

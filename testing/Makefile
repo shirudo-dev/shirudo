@@ -280,11 +280,14 @@ family-list = $(shell cd $(ROOT)/testing/functional && \
 	ls */t[0-9]$(1)[0-9][0-9]-*.sh | \
 	awk -F/ '{ print substr($$2, 2, 1), $$1 }' | sort -u | cut -d' ' -f2)
 FAMILIES := $(call family-list,[0-9])
+CI_BPM_FAMILIES := $(filter bpm bpm-%,$(FAMILIES))
 VM_SUITES := $(call family-list,1) end2end
 # The host runs the end-to-end VM's target tests over SSH, where it can act
 # between them; the families' VMs run theirs themselves.
 VM_SERVE_SUITES := end2end
-vm-tests = $(if $(filter 0,$(VM)),:,$(MAKE) $(addprefix vm-test-,$(1)))
+vm-tests = $(if $(strip $(1)),$(if $(filter 0,$(VM)),:,\
+	$(MAKE) $(addprefix vm-test-,$(1))),:)
+.PHONY: functional-ci-1 functional-ci-2 functional-ci-3 functional-ci-4
 .PHONY: $(addprefix unit/,$(UNIT_SUITES)) $(addprefix functional/,$(FAMILIES)) \
 	$(addprefix vm-test-,register $(VM_SUITES)) vm-node-end2end
 
@@ -315,6 +318,13 @@ functional: build-operator
 $(addprefix functional/,$(FAMILIES)): functional/%: build-operator
 	$(Q)$(ROOT)/testing/run-tests.sh functional/$*
 	+$(Q)$(call vm-tests,$(filter $*,$(VM_SUITES)))
+
+# Keep the slow upatch and tamperproof VMs on their own runners. The last
+# shard also picks up new families outside BPM.
+functional-ci-1: functional/upatch
+functional-ci-2: functional/tamperproof
+functional-ci-3: $(addprefix functional/,$(CI_BPM_FAMILIES))
+functional-ci-4: $(addprefix functional/,$(filter-out upatch tamperproof $(CI_BPM_FAMILIES),$(FAMILIES)))
 
 # The end-to-end test boots the operator VM, which builds the operator
 # package and alone gets the signing key on its own disk; while it serves,
@@ -439,6 +449,7 @@ help:
 	  '  make -C testing unit[/<suite>]          suites: $(UNIT_SUITES)' \
 	  '  make -C testing ci-checks               the scripts CI runs' \
 	  '  make -C testing functional[/<family>]   families: $(FAMILIES)' \
+	  '  make -C testing functional-ci-<1-4>    one CI functional shard' \
 	  '  make -C testing end2end' \
 	  '  make -C testing backend                 the SQL tests of tools/backend' \
 	  '  TEST_FILTER=<regex> selects test filenames (empty runs everything).' \

@@ -549,11 +549,14 @@ the commit at ``HEAD`` alone without them.
        ``shirudo-gen-runtime`` holds the target binary, and how much
        space it leaves. When it fails, raise ``size=`` in
        :src:`tools/gen-image/shirudo-gen-runtime`.
-   * - ``tests.sh setup|run [unit|functional|end2end]``
+   * - ``tests.sh setup|run [unit|functional|functional-ci-N|end2end]``
      - Prepares a CI runner as the VM host and runs ``make tests``, or
        one part of it: ``unit`` runs the unit and ``ci-checks`` tests,
-       ``functional`` and ``end2end`` the tier of that name. The ``CI
-       suite`` workflow runs the three parts as checks of their own.
+       ``functional`` and ``end2end`` the tier of that name.
+       ``functional-ci-N`` runs one of the four functional shards,
+       where ``N`` is 1 through 4. The ``CI suite`` workflow runs
+       the unit and script checks, functional shards, and end-to-end
+       tests in parallel on x86-64.
        With ``VM=0``, setup uses the kernel CI artifact's BTF and installs
        only host test dependencies. The arm64 job uses this to run unit,
        ``ci-checks`` and host functional tests without target VMs.

@@ -52,6 +52,12 @@ Before you begin
   operator's build dependencies, a JDK among them, to the image of the
   operator VM.
 
+The ``CI suite`` workflow runs the x86-64 unit and script checks,
+four functional shards, and the end-to-end tests in parallel jobs.
+The functional shards run upatch, tamperproof, the BPM families, and
+the remaining families. The arm64 host job runs unit, script, and host
+functional tests together.
+
 The ``CI suite`` workflow uses the x86-64 CI kernel package.
 :src:`testing/vm/kernel-artifact.sh` pins its build run ID and checksums.
 When a change touches the kernel build inputs, CI builds packages for
