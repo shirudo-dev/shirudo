@@ -6,7 +6,9 @@
 # pipeline, t9109 to t9112, do to the nodes, the registry and the
 # backend's ClickHouse. A test sets W, CHECKS, STATE, RUNTIME, E2E and
 # STACK_NAME, and TREE_ID and WINDOW where it uses them, and sources
-# node-lib.sh and stack-lib.sh first.
+# node-lib.sh and stack-lib.sh first. t9113 and t9114, which roll one
+# package out to the edge node and take it back, also set S, KEYS,
+# BACKEND, REGISTRY and TREE for the functions at the end.
 
 # Run the query $1 on the backend's ClickHouse and print its result.
 ch() {
@@ -159,4 +161,53 @@ registry_mark() {
 # repository's.
 requests() {
 	stack_oci_log | python3 "$CHECKS" requests "$1" "$2" "$3"
+}
+
+# Append the package put-shields pushed to the tree, by the reference and
+# digest of the command it printed to $W/append, as an add or with $1 as
+# --op.
+tree_append_pushed() {
+	read -r _shirudo _bpm _tree _append reference _option digest _rest \
+		<"$W/append" &&
+	"$S" bpm tree append "$reference" --package-digest "$digest" "$TREE" \
+		--keys-dir "$KEYS" --tree-id "$TREE_ID" ${1:+--op "$1"} >&2
+}
+
+tree_ingest() {
+	"$BACKEND/jobs/tree-ingest" --shirudo "$S" --cert "$KEYS/cert.der" \
+		"$TREE" >&2
+}
+
+# The status the registry answers a GET of the manifest $1 with.
+manifest_status() {
+	curl -s -o /dev/null -w "%{http_code}" --cacert "$E2E/ca.pem" \
+		-H "Accept: application/vnd.oci.image.manifest.v1+json" \
+		"https://$REGISTRY/v2/$1"
+}
+
+# Sync the edge node and check that it is at seq $1 of $1 with tree_op
+# events $2 in its eventlog.
+sync_to() {
+	unit_ok edge shirudo-bpm-tree-sync.service &&
+	on edge cat "$STATE/state.json" >"$W/state.json" &&
+	test "$(python3 -c "import json, sys
+state = json.load(open(sys.argv[1]))
+print(state[\"last_seq\"], state[\"head_seq\"])" "$W/state.json")" = "$1 $1" &&
+	on edge "$RUNTIME attest --nonce=$(openssl rand -hex 16)" >"$W/evidence" &&
+	test "$(python3 "$CHECKS" tree-events "$W/evidence")" = "$2"
+}
+
+# Send a keepalive from the edge node, refresh the backend's status and
+# check the node's lines 5 and 6 of it: seq $1 of $1 at generation $1, $2
+# upatches loaded. Not its health: a user manager tries bpf() as it
+# starts, which shirudo refuses and counts, and check 3 fails a node whose
+# tamper counters rose.
+head_report() {
+	unit_ok edge shirudo-keepalive.service &&
+	ch_wait "SELECT last_seq FROM shirudo.keepalive_latest FINAL" "$1" &&
+	test "$(ch "SELECT count() FROM shirudo.rejected")" = 0 &&
+	refresh node_status_mv &&
+	ch "SELECT line FROM shirudo.node_status ARRAY JOIN log AS line" >"$W/log" &&
+	grep -qx "5 head: pass, seq $1 of $1, generation $1" "$W/log" &&
+	grep -qx "6 set: pass, $2 loaded" "$W/log"
 }

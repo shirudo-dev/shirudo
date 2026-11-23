@@ -1326,7 +1326,7 @@ holds the three segments, ``tree_ops`` the five operations and
 ``node_ops`` each node from seq 1, with no contradiction marked, and
 both nodes are ``healthy`` with ``4 chain: pass``, ``5 head: pass, seq 5
 of 5`` and ``6 set: pass``. :src:`testing/end2end/pipeline-lib.sh` holds
-what ``t9109`` to ``t9112`` do to the nodes, the registry and
+what ``t9109`` to ``t9113`` do to the nodes, the registry and
 ClickHouse.
 
 .. _testing-shield:

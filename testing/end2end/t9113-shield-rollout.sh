@@ -53,39 +53,6 @@ trap 'rm -rf "$W"' EXIT
 # The node mounts the checkout, and E2E with it.
 NODE_JAR=/mnt/shirudo-src/${E2E#"$REPO"/}/shield/badDecoder.jar
 
-# Append the shield to the tree by the reference and digest of the command
-# put-shields printed, as an add or with $1 as --op.
-append() {
-	read -r _shirudo _bpm _tree _append reference _option digest _rest \
-		<"$W/append" &&
-	"$S" bpm tree append "$reference" --package-digest "$digest" "$TREE" \
-		--keys-dir "$KEYS" --tree-id "$TREE_ID" ${1:+--op "$1"} >&2
-}
-
-ingest() {
-	"$BACKEND/jobs/tree-ingest" --shirudo "$S" --cert "$KEYS/cert.der" \
-		"$TREE" >&2
-}
-
-# The status the registry answers a GET of the manifest $1 with.
-manifest_status() {
-	curl -s -o /dev/null -w "%{http_code}" --cacert "$E2E/ca.pem" \
-		-H "Accept: application/vnd.oci.image.manifest.v1+json" \
-		"https://$REGISTRY/v2/$1"
-}
-
-# Sync the node and check that it is at seq $1 of $1 with tree_op events
-# $2 in its eventlog.
-sync_to() {
-	unit_ok edge shirudo-bpm-tree-sync.service &&
-	on edge cat "$STATE/state.json" >"$W/state.json" &&
-	test "$(python3 -c "import json, sys
-state = json.load(open(sys.argv[1]))
-print(state[\"last_seq\"], state[\"head_seq\"])" "$W/state.json")" = "$1 $1" &&
-	on edge "$RUNTIME attest --nonce=$(openssl rand -hex 16)" >"$W/evidence" &&
-	test "$(python3 "$CHECKS" tree-events "$W/evidence")" = "$2"
-}
-
 # The SHA-256 of the jar the node has installed for the shield.
 agent_sha256() {
 	on edge "sha256sum $AGENT" | cut -d " " -f 1
@@ -96,20 +63,6 @@ agent_sha256() {
 jvm() {
 	on edge "sh /workspace/shirudo/testing/end2end/guarded-jvm.sh $NODE_JAR" \
 		>"$W/jvm"
-}
-
-# Send a keepalive, refresh the backend's status and check the node's
-# lines 5 and 6 of it: seq $1 of $1 at generation $1, $2 upatches loaded.
-# Not its health: a user manager tries bpf() as it starts, which shirudo
-# refuses and counts, and check 3 fails a node whose tamper counters rose.
-report() {
-	unit_ok edge shirudo-keepalive.service &&
-	ch_wait "SELECT last_seq FROM shirudo.keepalive_latest FINAL" "$1" &&
-	test "$(ch "SELECT count() FROM shirudo.rejected")" = 0 &&
-	refresh node_status_mv &&
-	ch "SELECT line FROM shirudo.node_status ARRAY JOIN log AS line" >"$W/log" &&
-	grep -qx "5 head: pass, seq $1 of $1, generation $1" "$W/log" &&
-	grep -qx "6 set: pass, $2 loaded" "$W/log"
 }
 
 test_expect_success 'the node has followed no tree, and the registry holds no tree and no shield' '
@@ -161,9 +114,9 @@ test_expect_success 'the operator publishes the shield, and the backend lists it
 '
 
 test_expect_success 'the operator creates the tree with the shield' '
-	append &&
+	tree_append_pushed &&
 	test "$(manifest_status "$REPOSITORY/manifests/stable")" = 200 &&
-	ingest &&
+	tree_ingest &&
 	printf "%s\t1\tadd\t%s\n" "$TREE_ID" "$SHIELD" >"$W/ops" &&
 	ch_cmp "SELECT tree_id, seq, op, id FROM shirudo.tree_ops FINAL
 		ORDER BY seq" "$W/ops"
@@ -184,12 +137,12 @@ test_expect_success 'a JVM a user manager starts refuses the crafted input by th
 '
 
 test_expect_success 'the backend sees the node at the head of the tree, the shield loaded' '
-	report 1 1
+	head_report 1 1
 '
 
 test_expect_success 'the operator deletes the shield from the tree' '
-	append delete &&
-	ingest &&
+	tree_append_pushed delete &&
+	tree_ingest &&
 	printf "%s\t1\tadd\t%s\n%s\t2\tdelete\t%s\n" "$TREE_ID" "$SHIELD" \
 		"$TREE_ID" "$SHIELD" >"$W/ops" &&
 	ch_cmp "SELECT tree_id, seq, op, id FROM shirudo.tree_ops FINAL
@@ -214,7 +167,7 @@ test_expect_success 'a JVM started after it runs without the guard' '
 '
 
 test_expect_success 'the backend sees the node at the delete, nothing loaded' '
-	report 2 0
+	head_report 2 0
 '
 
 test_done
