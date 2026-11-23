@@ -31,7 +31,8 @@ Report the problem
 1. Do not open a public issue, discussion or pull request about it.
 2. Open the shirudo repository on GitHub,
    https://github.com/shirudo-dev/shirudo, and go to its Security tab.
-3. Select Report a vulnerability.
+3. Select Report a vulnerability, which opens the private report form,
+   https://github.com/shirudo-dev/shirudo/security/advisories/new.
 4. Describe the problem: what an attacker needs, the steps that
    reproduce it, what it breaks, and the IDs of the goals, assumptions
    or threats in the :doc:`threat-model` it affects.

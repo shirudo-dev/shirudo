@@ -1,7 +1,9 @@
 # Security Policy
 
 Please do not report security vulnerabilities in public issues or discussions.
-Instead, use GitHub’s **Report a vulnerability** feature.
+Instead, use GitHub’s
+[**Report a vulnerability**](https://github.com/shirudo-dev/shirudo/security/advisories/new)
+feature.
 
 ## Project status and scope
 
