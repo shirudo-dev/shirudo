@@ -25,3 +25,8 @@ paths = ["/tmp/shirudo-policy-label-test/ordinary"]
 id = "socket-check"
 bit = 0x10
 paths = ["/tmp/shirudo-policy-label-test/socket-executable"]
+
+[[upatches.policy]]
+id = "matched"
+bit = 0x20
+paths = ["/tmp/shirudo-policy-label-test/match-*"]

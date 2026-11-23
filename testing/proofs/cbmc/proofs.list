@@ -18,7 +18,7 @@ attest-name-digest-long	--unwind 72 --unwindset any_spec.0:323,harness.0:323,har
 paths-bpffs-name	--unwind 18
 upatch-header		--unwind 2 --unwindset memchr.0:257
 upatch-decoders		--unwind 2 --unwindset memchr.0:65,parse_decoders.0:3,harness.0:3
-upatch-policy-labels	--unwind 3 LEN=0,19,20,4187,4188,4189,8356
+upatch-policy-labels	--unwind 3 --unwindset policy_path_valid.0:257,path_valid.0:257 LEN=0,19,20,4187,4188,4189,8356
 upatch-name		--unwind 33 --unwindset upatch_name_valid.0:251,long_name_valid.1:251
 upatch-signed-sections	--refine-arithmetic --unwind 2 --unwindset parse_signed_sections.0:4,directory_broken.0:4,parse_decoders.0:0,parse_policy_labels.0:0 LEN=15,16,40,64
 upatch-signed-name	--refine-arithmetic --unwind 2 --unwindset parse_signed_sections.0:2,directory_broken.0:2,parse_decoders.0:2,parse_policy_labels.0:0 LEN=288

@@ -198,6 +198,20 @@ static inline bool kind_is_kprobe_multi(__u32 kind)
 }
 
 /*
+ * Whether the size bytes at path hold a string that a policy label can
+ * name files with: an absolute path of at most UPATCH_POLICY_PATH_LEN_MAX
+ * bytes that does not end in '/', with '*' and '?' in its last component
+ * alone.
+ */
+bool policy_path_valid(const char *path, size_t size);
+
+/*
+ * The last component of a path policy_path_valid() took where it is a
+ * pattern for name_glob_match(), else NULL: the path then names one file.
+ */
+const char *policy_path_pattern(const char *path);
+
+/*
  * Whether the len bytes at sym can be one name of a kprobe multi target:
  * 1 to UPATCH_KPROBE_SYM_MAX - 1 printable ASCII bytes, none of them a
  * space or one of the list and glob characters ",*?|".

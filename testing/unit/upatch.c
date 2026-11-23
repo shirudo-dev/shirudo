@@ -162,6 +162,56 @@ static void kprobe_multi_block_is_exact(void)
 	EXPECT_EQ(parse_one(buf, len), -EINVAL);
 }
 
+static bool path_valid(const char *path)
+{
+	return policy_path_valid(path, strlen(path) + 1);
+}
+
+static void policy_path_takes_a_wildcard_in_its_last_component(void)
+{
+	EXPECT_TRUE(path_valid("/usr/sbin/httpd"));
+	EXPECT_TRUE(path_valid("/httpd"));
+	EXPECT_TRUE(path_valid("/usr/sbin/php-fpm*"));
+	EXPECT_TRUE(path_valid("/usr/sbin/*fpm?.?"));
+	EXPECT_TRUE(path_valid("/*"));
+	EXPECT_FALSE(path_valid(""));
+	EXPECT_FALSE(path_valid("usr/sbin/httpd"));
+	EXPECT_FALSE(path_valid("/"));
+	EXPECT_FALSE(path_valid("/usr/sbin/"));
+	EXPECT_FALSE(path_valid("/usr/sbin/php-fpm*/"));
+	EXPECT_FALSE(path_valid("/opt/*/bin/app"));
+	EXPECT_FALSE(path_valid("/opt/app?/bin/app"));
+	EXPECT_FALSE(path_valid("/*/*"));
+}
+
+static void policy_path_ends_within_its_field_and_its_limit(void)
+{
+	char path[UPATCH_POLICY_PATH_MAX];
+
+	memset(path, 'a', sizeof(path));
+	path[0] = '/';
+	EXPECT_FALSE(policy_path_valid(path, sizeof(path)));
+	EXPECT_FALSE(policy_path_valid(path, 0));
+	path[UPATCH_POLICY_PATH_LEN_MAX] = '\0';
+	EXPECT_TRUE(policy_path_valid(path, sizeof(path)));
+	EXPECT_FALSE(policy_path_valid(path, UPATCH_POLICY_PATH_LEN_MAX));
+	path[UPATCH_POLICY_PATH_LEN_MAX] = 'a';
+	path[UPATCH_POLICY_PATH_LEN_MAX + 1] = '\0';
+	EXPECT_FALSE(policy_path_valid(path, sizeof(path)));
+}
+
+static void policy_path_pattern_is_the_last_component_with_a_wildcard(void)
+{
+	static const char literal[] = "/usr/sbin/httpd";
+	static const char pattern[] = "/usr/sbin/php-fpm*";
+	static const char in_root[] = "/v?";
+
+	EXPECT_TRUE(!policy_path_pattern(literal));
+	EXPECT_STREQ(policy_path_pattern(pattern), "php-fpm*");
+	EXPECT_TRUE(policy_path_pattern(pattern) == pattern + 10);
+	EXPECT_STREQ(policy_path_pattern(in_root), "v?");
+}
+
 static void kprobe_sym_is_one_plain_name(void)
 {
 	char name[UPATCH_KPROBE_SYM_MAX + 1];
@@ -510,6 +560,9 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(kprobe_multi_names_are_parsed_in_order),
 	UNIT_CASE(kprobe_multi_refuses_a_malformed_list),
 	UNIT_CASE(kprobe_multi_block_is_exact),
+	UNIT_CASE(policy_path_takes_a_wildcard_in_its_last_component),
+	UNIT_CASE(policy_path_ends_within_its_field_and_its_limit),
+	UNIT_CASE(policy_path_pattern_is_the_last_component_with_a_wildcard),
 	UNIT_CASE(kprobe_sym_is_one_plain_name),
 	UNIT_CASE(header_name_is_terminated),
 	UNIT_CASE(prog_name_is_what_the_kernel_takes),

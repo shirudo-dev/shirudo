@@ -270,14 +270,16 @@ static int expect_policy_labels(const struct upatch *u)
 {
 	static const char *const policies[] = {
 		"executable", "ordinary-a", "ordinary-b", "socket-check",
+		"matched",
 	};
 	static const char *const paths[] = {
 		"/tmp/shirudo-policy-label-test/executable",
 		"/tmp/shirudo-policy-label-test/ordinary",
 		"/tmp/shirudo-policy-label-test/ordinary",
 		"/tmp/shirudo-policy-label-test/socket-executable",
+		"/tmp/shirudo-policy-label-test/match-*",
 	};
-	static const __u64 bits[] = { 1, 2, 4, 16 };
+	static const __u64 bits[] = { 1, 2, 4, 16, 32 };
 	struct upatch_policy_label_entry entry;
 	struct upatch_policy_label_header header;
 	const __u8 *raw, *cursor;

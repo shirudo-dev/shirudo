@@ -2076,6 +2076,114 @@ static void close_loader_fds(const struct loader_ctx *cx,
 	}
 }
 
+/* OR the entry's bit into the policy label of the file fd is open on. */
+static void label_fd(int fd, const char *path,
+		     const struct upatch_policy_label_entry *entry)
+{
+	__u64 current = 0;
+	ssize_t n;
+
+	n = fgetxattr(fd, XATTR_POLICY, &current, sizeof(current));
+	if (n < 0 && (errno == ENODATA || errno == EOPNOTSUPP)) {
+		current = 0;
+	} else if (n != (ssize_t)sizeof(current)) {
+		pr_warn("upatch: cannot read policy label on %s: %s", path,
+			n < 0 ? strerror(errno) : "invalid length");
+		return;
+	}
+	current |= le64_to_cpu(entry->bit);
+	if (fsetxattr(fd, XATTR_POLICY, &current, sizeof(current), 0))
+		pr_warn("upatch: cannot set policy label on %s: %s", path,
+			strerror(errno));
+}
+
+static void label_path(const struct upatch_policy_label_entry *entry)
+{
+	int fd;
+
+	fd = open(entry->path, O_RDONLY | O_CLOEXEC);
+	if (fd < 0) {
+		pr_warn("upatch: cannot label %s for policy %s: %s",
+			entry->path, entry->policy, strerror(errno));
+		return;
+	}
+	label_fd(fd, entry->path, entry);
+	close(fd);
+}
+
+/*
+ * Root owns the directory and can put a symbolic link under a name the
+ * pattern matches, to a file the signed pattern does not name: a match
+ * is labeled only where it is a regular file itself.
+ */
+static bool label_match(int dir_fd, const char *name,
+			const struct upatch_policy_label_entry *entry)
+{
+	struct stat st;
+	bool regular;
+	int fd;
+
+	fd = openat(dir_fd, name,
+		    O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC);
+	if (fd < 0)
+		return false;
+	regular = !fstat(fd, &st) && S_ISREG(st.st_mode);
+	if (regular)
+		label_fd(fd, name, entry);
+	close(fd);
+	return regular;
+}
+
+/*
+ * Returns how many of the entries of dir, which reads dir_fd, the
+ * pattern labeled, or a negative errno.
+ */
+static int label_matches(DIR *dir, int dir_fd, const char *pattern,
+			 const struct upatch_policy_label_entry *entry)
+{
+	struct dirent *de;
+	int nr_labeled = 0;
+
+	for (;;) {
+		errno = 0;
+		de = readdir(dir);
+		if (!de)
+			return errno ? -errno : nr_labeled;
+		if (name_glob_match(pattern, de->d_name, strlen(de->d_name)) &&
+		    label_match(dir_fd, de->d_name, entry))
+			nr_labeled++;
+	}
+}
+
+static void label_pattern(const struct upatch_policy_label_entry *entry,
+			  const char *pattern)
+{
+	char dir_path[UPATCH_POLICY_PATH_MAX];
+	int dir_fd, nr_labeled;
+	DIR *dir;
+
+	/* The directory with its '/', which a pattern in the root keeps. */
+	memcpy(dir_path, entry->path, pattern - entry->path);
+	dir_path[pattern - entry->path] = '\0';
+	dir_fd = open(dir_path, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	dir = dir_fd < 0 ? NULL : fdopendir(dir_fd);
+	if (!dir) {
+		pr_warn("upatch: cannot label %s for policy %s: %s",
+			entry->path, entry->policy, strerror(errno));
+		if (dir_fd >= 0)
+			close(dir_fd);
+		return;
+	}
+	nr_labeled = label_matches(dir, dir_fd, pattern, entry);
+	closedir(dir);
+	if (nr_labeled < 0)
+		pr_warn("upatch: cannot label %s for policy %s: %s",
+			entry->path, entry->policy, strerror(-nr_labeled));
+	else if (!nr_labeled)
+		pr_warn("upatch: cannot label %s for policy %s: no regular file matches",
+			entry->path, entry->policy);
+}
+
 /*
  * From the copy the kernel's signature check covered, not from the file
  * again, which may hold other labels by now.
@@ -2084,6 +2192,7 @@ static void apply_policy_labels(const struct upatch *u)
 {
 	struct upatch_policy_label_header header;
 	struct upatch_policy_label_entry entry;
+	const char *pattern;
 	const __u8 *labels;
 	__u32 len, count;
 
@@ -2093,33 +2202,13 @@ static void apply_policy_labels(const struct upatch *u)
 	memcpy(&header, labels, sizeof(header));
 	count = le32_to_cpu(header.count);
 	for (__u32 i = 0; i < count; i++) {
-		__u64 current = 0;
-		ssize_t n;
-		int fd;
-
 		memcpy(&entry, labels + sizeof(header) + i * sizeof(entry),
 		       sizeof(entry));
-		fd = open(entry.path, O_RDONLY | O_CLOEXEC);
-		if (fd < 0) {
-			pr_warn("upatch: cannot label %s for policy %s: %s",
-				entry.path, entry.policy, strerror(errno));
-			continue;
-		}
-		n = fgetxattr(fd, XATTR_POLICY, &current, sizeof(current));
-		if (n < 0 && (errno == ENODATA || errno == EOPNOTSUPP)) {
-			current = 0;
-		} else if (n != (ssize_t)sizeof(current)) {
-			pr_warn("upatch: cannot read policy label on %s: %s",
-				entry.path,
-				n < 0 ? strerror(errno) : "invalid length");
-			close(fd);
-			continue;
-		}
-		current |= le64_to_cpu(entry.bit);
-		if (fsetxattr(fd, XATTR_POLICY, &current, sizeof(current), 0))
-			pr_warn("upatch: cannot set policy label on %s: %s",
-				entry.path, strerror(errno));
-		close(fd);
+		pattern = policy_path_pattern(entry.path);
+		if (pattern)
+			label_pattern(&entry, pattern);
+		else
+			label_path(&entry);
 	}
 }
 

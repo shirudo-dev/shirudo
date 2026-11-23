@@ -641,8 +641,9 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
      - Sections of 0, 1 and 2 labels and the lengths around them
      - An accepted section fills its length exactly, with its magic and
        version, two distinct map indexes below the map count, one bit
-       per label and a terminated name and absolute path; a refusal
-       writes nothing
+       per label, a terminated name and an absolute path of at most 255
+       bytes that does not end in ``/`` and has no wildcard before its
+       last component; a refusal writes nothing
    * - ``upatch-name``
      - ``upatch_name_valid()``, ``upatch_select()``,
        ``upatch_prog_name()``

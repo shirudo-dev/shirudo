@@ -1182,7 +1182,8 @@ static int __build_validate(struct bpm_build_spec *spec,
 			    (p->bit & (p->bit - 1)))
 				return -EINVAL;
 			for (int path = 0; path < p->n_paths; path++)
-				if (p->paths[path][0] != '/')
+				if (!policy_path_valid(p->paths[path],
+						       sizeof(p->paths[path])))
 					return -EINVAL;
 			for (size_t x = 0; x <= i; x++) {
 				struct bpm_build_upatch *other = &spec->upatches[x];

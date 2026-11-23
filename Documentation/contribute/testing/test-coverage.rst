@@ -264,7 +264,10 @@ signed config image.
      - A loaded upatch labels executable and ordinary files, ORing
        multiple policy bits with a preexisting xattr; its signed policy
        section binds verdict programs to shared task and socket policy
-       maps
+       maps; a path with a pattern labels the regular files of its
+       directory that match, also over a preexisting xattr, and neither
+       a directory nor the target of a symbolic link that matches, nor
+       a file that does not match
    * - ``t3110-double-load``
      - A second load of a loaded upatch is refused as ``already_loaded``
    * - ``t3111-xdp``
@@ -667,7 +670,9 @@ signed config image.
        refused when the tag serves another manifest
    * - ``t7006-policy-labels``
      - Beefile policy declarations are serialized into the signed
-       upatch section
+       upatch section, a path with a pattern as it is written;
+       ``bpm build`` refuses a wildcard in a directory component, a path
+       that ends in ``/`` and a relative one
    * - ``t7007-bpm-tree-fixes``
      - ``bpm tree append`` writes ``fixes`` on an ``add`` in byte order,
        after ``artifact`` and outside ``operation_digest``, none on a

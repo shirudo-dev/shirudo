@@ -785,7 +785,11 @@ A signed upatch with an ``SHPL`` path-to-policy section opts into the
 shared task and socket policy maps. The builder requires compatible map
 declarations, and the target supplies both pinned map FDs to the
 generated loader. After the load, shirudo ORs each entry's bit into the
-policy xattr of its path. It reads the artifact once and takes the
+policy xattr of its path. A path whose last component is a pattern
+labels the regular files of its directory that match, and no symbolic
+link among them: root, who owns the directory, could otherwise point a
+matching name at a file the signed pattern does not name. It reads the
+artifact once and takes the
 entries from the copy it handed to the kernel, not from the file again,
 so a task that writes the artifact during the load cannot have shirudo
 set a label the signature does not cover. The upatch's signed BPF
@@ -1959,8 +1963,11 @@ R23 Policy labels follow the inode
    every load and boot restore of the upatch that declares it. A copy
    of the executable, or the new inode a package upgrade or an editor
    leaves in its place, carries no policy until the upatch is loaded
-   again, and a hard link or a rename that root makes of an inode
-   without the seal label moves the policy to another path. A file
+   again, and neither does a file that comes to match a pattern after
+   the load. A hard link or a rename that root makes of an inode
+   without the seal label moves the policy to another path, and a
+   regular file root gives a name a pattern matches is labeled at the
+   next load. A file
    system that root makes and mounts, a loop image say, carries the
    xattr on its own executables, written where no seal ran, and an
    execution from it takes whatever bits root put there. A task

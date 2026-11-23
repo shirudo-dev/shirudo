@@ -97,6 +97,8 @@ enum upatch_section_tag {
 #define UPATCH_MAPS_MAX			64u
 #define UPATCH_POLICY_NAME_MAX		64u
 #define UPATCH_POLICY_PATH_MAX		4096u
+/* The longest path a label names, less than the field holds. */
+#define UPATCH_POLICY_PATH_LEN_MAX	255u
 
 struct upatch_policy_label_header {
 	__le32	magic;

@@ -142,6 +142,30 @@ static bool has_nul(const char *s, size_t n)
 	return memchr(s, '\0', n);
 }
 
+bool policy_path_valid(const char *path, size_t size)
+{
+	size_t end = min(size, (size_t)UPATCH_POLICY_PATH_LEN_MAX + 1);
+	bool wildcard = false;
+	size_t i;
+
+	if (!size || path[0] != '/')
+		return false;
+	for (i = 1; i < end && path[i]; i++) {
+		if (path[i] == '*' || path[i] == '?')
+			wildcard = true;
+		else if (path[i] == '/' && wildcard)
+			return false;
+	}
+	return i < end && path[i - 1] != '/';
+}
+
+const char *policy_path_pattern(const char *path)
+{
+	const char *name = strrchr(path, '/') + 1;
+
+	return strchr(name, '*') || strchr(name, '?') ? name : NULL;
+}
+
 static bool parse_policy_labels(const __u8 *p, __u32 len, __u32 nr_maps,
 				__u32 *map_idx, __u32 *socket_map_idx)
 {
@@ -169,7 +193,7 @@ static bool parse_policy_labels(const __u8 *p, __u32 len, __u32 nr_maps,
 		bit = le64_to_cpu(e.bit);
 		if (!bit || (bit & (bit - 1)) ||
 		    !has_nul(e.policy, sizeof(e.policy)) || !e.policy[0] ||
-		    !has_nul(e.path, sizeof(e.path)) || e.path[0] != '/')
+		    !policy_path_valid(e.path, sizeof(e.path)))
 			return false;
 	}
 	*map_idx = idx;

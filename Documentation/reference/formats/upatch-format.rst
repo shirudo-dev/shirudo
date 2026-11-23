@@ -322,7 +322,7 @@ Section tags
      - ``0x4c504853``
      - variable
      - Signed policy labels, each naming a policy ID, one-hot bit and
-       absolute file path. Its presence opts into the shared task
+       absolute file path or pattern. Its presence opts into the shared task
        ``shirudo_task_policy`` and socket ``shirudo_sock_policy``
        bindings.
    * - ``PTYP``
@@ -716,11 +716,16 @@ upatches without ``SHPL`` use their normal maps.
      - Distinct map descriptor index, less than ``nr_maps`` and 64.
 
 Each entry is 4168 bytes: a little-endian one-hot ``u64`` policy bit,
-64 bytes of NUL-terminated policy ID, then 4096 bytes of NUL-terminated
-absolute path. After a successful load, shirudo applies each entry by
-ORing the policy bit into the inode's existing policy xattr. It takes the
-entries from the copy of the artifact the kernel verified, not from the
-file again.
+64 bytes of NUL-terminated policy ID, then 4096 bytes that hold a
+NUL-terminated absolute path of at most 255 bytes. The path does not end
+in ``/``, and ``*`` and ``?`` appear in its last component alone, where
+they make it a pattern (:doc:`beefile`); the target refuses a section
+with any other path. After a successful load, shirudo applies each entry
+by ORing the policy bit into the existing policy xattr of the inode the
+path names, or of every regular file in the path's directory whose name
+the pattern matches, without following a symbolic link there. It takes
+the entries from the copy of the artifact the kernel verified, not from
+the file again.
 
 Header fields outside the signature
 -----------------------------------

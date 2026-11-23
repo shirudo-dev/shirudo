@@ -135,7 +135,8 @@ The sections hold:
 ``SHPL``
     The policy labels of a load whose programs share the
     ``shirudo_task_policy`` and ``shirudo_sock_policy`` maps: for each
-    label, a policy ID, a bit and an absolute file path.
+    label, a policy ID, a bit and an absolute file path, whose last
+    component may be a pattern.
 
 The header's ``payload_sha256`` is the SHA-256 of the signed bytes. The
 target recomputes it and refuses a mismatch, because the pin, the

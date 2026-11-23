@@ -3,7 +3,8 @@
 # Copyright (c) 2026 Authors of shirudo
 #
 # t7006 -- bpm build turns Beefile policy declarations into the signed
-# policy-label section consumed by upatch load.
+# policy-label section consumed by upatch load, a pattern as it is
+# written, and refuses a path that is none.
 
 cd "$(dirname "$0")/../.."
 . ./test-lib.sh
@@ -53,6 +54,28 @@ test_expect_success 'Beefile policy entries are carried in the signed upatch' '
 		policy-labels-1.0.0/upatches/policy-labels.upatch \
 		>"$WORK/policy-labels.upatch" &&
 	"$CHECK" "$WORK/policy-labels.upatch" policy-labels
+'
+
+# Build the fixture with $1 in place of the path of its pattern.
+build_with_path() {
+	rm -rf "$WORK/bad" &&
+	mkdir "$WORK/bad" &&
+	cp -P "$WORK/pkg/"* "$WORK/bad/" &&
+	sed "s|/tmp/shirudo-policy-label-test/match-\*|$1|" \
+		fixtures/policy-labels/Beefile >"$WORK/bad/Beefile" &&
+	grep -qF "\"$1\"" "$WORK/bad/Beefile" &&
+	( cd "$WORK" && "$S" bpm build bad --version 1.0.0 \
+		--keys-dir "$WORK/keys" \
+		--vmlinux "$REPO/vendor/linux/vmlinux.h" ) 2>"$WORK/bad.err"
+}
+
+test_expect_success 'bpm build takes a wildcard in the last component of a path alone' '
+	build_with_path "/tmp/shirudo-policy-label-test/m?tch*" >&2 &&
+	for path in "/tmp/*/match" "/tmp/shirudo-policy-label-?est/match-*" \
+		"/tmp/shirudo-policy-label-test/" "tmp/match"; do
+		! build_with_path "$path" &&
+		grep -q "is not a valid Beefile" "$WORK/bad.err" || return 1
+	done
 '
 
 test_done

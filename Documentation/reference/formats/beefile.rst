@@ -344,7 +344,9 @@ embeds the entries in the signed ``SHPL`` section.
    * - ``paths``
      - array of strings
      - yes
-     - 1 to 16 absolute paths. A path may name a non-executable file.
+     - 1 to 16 absolute paths of at most 255 bytes each, none ending in
+       ``/``. A path may name a non-executable file. The last component
+       may be a pattern, see below.
 
 .. code-block:: toml
 
@@ -352,6 +354,42 @@ embeds the entries in the signed ``SHPL`` section.
    id = "apache"
    bit = 0x1
    paths = ["/usr/local/apache", "/usr/bin/apache"]
+
+   [[upatches.policy]]
+   id = "php-fpm"
+   bit = 0x2
+   paths = ["/usr/sbin/php-fpm*"]
+
+In the last component of a path, ``*`` stands for any run of bytes and
+``?`` for any one byte, and each may appear more than once. There are no
+brackets and no escape, so a path cannot name a file with ``*`` or ``?``
+in its name. A wildcard in a directory component, as in
+``/opt/*/bin/app``, fails the build. The pattern is signed as written,
+and each target matches it against its own directory at every load:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 35 35
+
+   * - On the target
+     - A path without a wildcard
+     - A pattern
+   * - Which files are labeled
+     - the file the path names, through any symbolic link
+     - every regular file of the directory whose name matches
+   * - A symbolic link
+     - followed
+     - not followed and not labeled; its target is labeled when its own
+       name matches
+   * - A directory, device, socket or FIFO
+     - labeled
+     - not labeled
+   * - Nothing to label
+     - a warning in the journal; the load goes on
+     - a warning in the journal; the load goes on
+
+A file that appears in the directory after the load carries no label
+until the upatch is loaded again.
 
 A policy table opts the upatch into shirudo's shared task
 ``shirudo_task_policy`` and socket ``shirudo_sock_policy`` maps. The
