@@ -156,6 +156,7 @@ jobs:
           ssh-port: 2222
           cmd: |
             set -eu
+            systemctl start host.mount
             cd /host
             apt-get update
             if ! DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Use-Pty=0 \

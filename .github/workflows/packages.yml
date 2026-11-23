@@ -65,6 +65,7 @@ jobs:
           images-folder-parent: ${{ github.workspace }}/../lvh
           install-dependencies: true
           cmd: |
+            systemctl start host.mount
             cd /host
             sh .github/scripts/lvh-prepare.sh
 
@@ -275,6 +276,7 @@ jobs:
           install-dependencies: true
           cmd: |
             set -eu
+            systemctl start host.mount
             cd /host
             sh .github/scripts/lvh-prepare.sh
 

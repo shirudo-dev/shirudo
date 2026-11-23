@@ -40,6 +40,7 @@ jobs:
               echo 'kernel BTF lacks bpf_attr.signature_size; needs a signed-BPF capable bpf-next kernel' >&2
               exit 1
             }
+            systemctl start host.mount
             mkdir -p /host/build
             cp /sys/kernel/btf/vmlinux /host/build/vmlinux.btf
 

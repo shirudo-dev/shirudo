@@ -43,6 +43,7 @@ jobs:
           images-folder-parent: ${{ github.workspace }}/../lvh
           install-dependencies: true
           cmd: |
+            systemctl start host.mount
             cd /host
             .github/scripts/vm-toolchain.sh
             . build/vm-toolchain.env
