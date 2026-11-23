@@ -149,6 +149,12 @@ CFLAGS_BASE := -O2 $(DEBUG_CFLAGS) -std=gnu11 $(WARNINGS) $(CC_WARNINGS) \
                -DVMLINUX_PATH='"$(SHIRUDO_VMLINUX_PATH)"' \
                -DCLANG_PATH='"$(SHIRUDO_CLANG_PATH)"'
 
+# GCC coverage is collected from the host build on a clean checkout.
+COVERAGE ?= 0
+ifeq ($(PROFILE):$(COVERAGE),operator:1)
+CFLAGS_BASE += --coverage -fprofile-abs-path -fprofile-update=atomic
+endif
+
 # make SANITIZE=address,undefined instruments the host-side binaries and
 # the test helpers; BPF objects come from clang -target bpf and are never
 # affected. Recovery is off so that every report fails the run. The
