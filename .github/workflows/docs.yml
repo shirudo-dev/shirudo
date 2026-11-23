@@ -15,10 +15,11 @@ permissions:
 jobs:
   docs:
     runs-on: ubuntu-latest
-    # A newer run for the same branch or pull request supersedes this one.
+    # A newer run for the same pull request supersedes this one. On main a
+    # render in flight finishes, so a busy main still deploys.
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-      cancel-in-progress: true
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
     steps:
       - name: Check out repository
