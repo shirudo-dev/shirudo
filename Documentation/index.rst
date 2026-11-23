@@ -58,8 +58,6 @@ developers write on top of shirudo.
 Properties
 ----------
 
-shirudo is built on a set of properties for a BPF security platform:
-
 - Always on: the platform is part of the trusted computing base and starts
   from initrd in early boot
 - Signed and sealed: BPF is admitted only through loaders signed against
