@@ -56,8 +56,14 @@ them. On x86-64 a third fresh edge node then boots alone, as
 `<name>-3-end2end-edge`, the registry restarts empty again, and `host.sh`
 runs t9113 against it: the java-base64 shield published, appended to a
 new tree, pulled and blocking `upatches/test/badDecoder.jar` in a JVM,
-then deleted and gone. Their output is `build/test-vm/end2end/t9109.log`
-to `t9113.log`.
+then deleted and gone. Last, on every architecture, a fourth fresh edge
+node boots alone, as `<name>-4-end2end-edge`, the registry restarts
+empty once more, and `host.sh` runs t9114 against it: the app-sandbox
+upatch built with the sandbox of `testing/fixtures/app-sandbox`,
+published, appended to a new tree, pulled and restricting what
+`testing/end2end/app_sandbox_probe.py` executes, connects to and
+writes, then deleted and gone. Their output is
+`build/test-vm/end2end/t9109.log` to `t9114.log`.
 A test reaches the nodes with `node_sh b` or `node_sh edge` of
 `testing/end2end/node-lib.sh`, and does to them, the registry and the
 backend what `testing/end2end/pipeline-lib.sh` offers. Their boot logs

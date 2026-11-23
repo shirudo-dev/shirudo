@@ -209,10 +209,11 @@ a Python companion with the same stem, such as
 before ``init``. They skip on the build host and run in a separate VM
 that the ``tpm`` family boots without the production initrd.
 
-``t9109`` to ``t9113`` carry target numbers but run on the host:
+``t9109`` to ``t9114`` carry target numbers but run on the host:
 :src:`testing/end2end/host.sh` runs them after node A's suite, ``t9109``,
-``t9110``, ``t9112``, ``t9111`` and then ``t9113``, against other nodes (see
-:ref:`testing-two-nodes`), and node A's runner leaves them out.
+``t9110``, ``t9112``, ``t9111``, ``t9113`` and then ``t9114``, against
+other nodes (see :ref:`testing-two-nodes`), and node A's runner leaves
+them out.
 
 Run the tests
 -------------
@@ -908,15 +909,17 @@ shows the run in order.
 .. figure:: /images/contribute-end2end-run.svg
    :alt: Ten phases in order, one lane each for the host, the
          containers, the operator VM, node A, node B, the fresh edge node,
-         the second pair and the third node. 1: t9001 on the host, then the containers
+         the second pair and the lone nodes. 1: t9001 on the host, then the containers
          start. 2: the operator VM publishes, the host loads the example
          tree. 3: node A runs its tests while node B boots. 4: the
          operator verifies node A and stops. 5: the edge node boots while
          the host runs check-otlp and checks node B. 6: t9109, t9110 and
          t9112 on the host. 7: the registry starts again empty and the
          second pair boots. 8: t9111 on the host. 9, on x86-64 only: the
-         registry starts again empty and a third fresh edge node boots.
-         10: t9113 on the host, then teardown.
+         registry starts again empty, a third fresh edge node boots and
+         t9113 runs on the host. 10: the registry starts again empty, a
+         fourth fresh edge node boots and t9114 runs on the host, then
+         teardown.
 
    Figure 1. The end-to-end run in order, not to scale. Tinted bars run
    tests.
@@ -956,7 +959,10 @@ shows the run in order.
    stops.
 #. On x86-64, the registry starts again without a volume and a third
    fresh edge node boots alone; ``t9113`` runs on the host against it
-   (:ref:`testing-shield`). Then the nodes and the containers stop.
+   (:ref:`testing-shield`).
+#. The registry starts again without a volume and a fourth fresh edge
+   node boots alone; ``t9114`` runs on the host against it
+   (:ref:`testing-sandbox`). Then the nodes and the containers stop.
 
 The operator VM boots from the runtime image with clang 23 and the build
 dependencies of the operator package added, which the runner prepares
@@ -971,7 +977,7 @@ from the files git sees in the checkout and installs it. The operator VM
 and node A name the registry ``registry.test``, at QEMU's address for
 the host, so the tree names it as node A reaches it. The host's own
 build and the operator key it keeps still play the operator for the
-keepalive backend's example tree and for ``t9109`` to ``t9113``, which
+keepalive backend's example tree and for ``t9109`` to ``t9114``, which
 run on the host.
 
 To check the collector, :src:`testing/end2end/check-otlp.py` relies on
@@ -1016,10 +1022,10 @@ operator key and loads it with the backend's tree ingest job, which runs
 ``bpm tree show``. In the guest, ``t9107`` sends the example keepalives
 with their recorded quotes through that collector and queries
 ClickHouse, both through QEMU's address for the host. After node A,
-``host.sh`` runs ``t9109`` to ``t9113`` against the same backend, see
+``host.sh`` runs ``t9109`` to ``t9114`` against the same backend, see
 :ref:`testing-pipeline`, :ref:`testing-history`,
-:ref:`testing-activation`, :ref:`testing-walk` and
-:ref:`testing-shield`. ``host.sh`` writes
+:ref:`testing-activation`, :ref:`testing-walk`, :ref:`testing-shield`
+and :ref:`testing-sandbox`. ``host.sh`` writes
 the example tree's digest to ``build/test-vm/end2end/backend-tree.digest``
 when it publishes the tree, and removes it when the backend's tree
 ingest job does not load the tree and when ``host.sh`` stops. Without
@@ -1326,7 +1332,7 @@ holds the three segments, ``tree_ops`` the five operations and
 ``node_ops`` each node from seq 1, with no contradiction marked, and
 both nodes are ``healthy`` with ``4 chain: pass``, ``5 head: pass, seq 5
 of 5`` and ``6 set: pass``. :src:`testing/end2end/pipeline-lib.sh` holds
-what ``t9109`` to ``t9113`` do to the nodes, the registry and
+what ``t9109`` to ``t9114`` do to the nodes, the registry and
 ClickHouse.
 
 .. _testing-shield:
@@ -1338,7 +1344,7 @@ A shield rolled out and taken back
 an operator rolls a fix out for an advisory against a platform and takes
 it back once the platform is fixed. The shield is ``java-base64`` of
 :src:`upatches/java-base64/`, a Java agent, whose selector names
-``x86_64``, so ``host.sh`` runs the test on x86-64 alone: last, against
+``x86_64``, so ``host.sh`` runs the test on x86-64 alone: against
 a third fresh edge node, which has followed no tree, a registry that
 holds none, and the same backend. Its output is
 ``build/test-vm/end2end/t9113.log``. The host has no JDK to rely on, so
@@ -1379,6 +1385,60 @@ the operator VM builds the agent's jar and ``badDecoder.jar`` of
 It does not check that the node is ``healthy``: a user manager tries
 ``bpf()`` as it starts, which shirudo refuses and counts, and check 3
 fails a node whose tamper counters rose since its first record.
+
+.. _testing-sandbox:
+
+An application sandboxed and released
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``t9114`` takes the ``app-sandbox`` upatch of :src:`upatches/app-sandbox/`
+through the whole pipeline, from its sources to a node that enforces it
+and back. ``host.sh`` runs it last, on every architecture, against a
+fourth fresh edge node, a registry that holds no tree, and the same
+backend. Its output is ``build/test-vm/end2end/t9114.log``. The package
+it publishes is the shipped one with ``probe.Beefile`` as its Beefile
+and the rules of :src:`testing/fixtures/app-sandbox/`, whose one
+sandbox, ``probe``,
+labels a file of the test: a copy of the node's ``python3`` at
+``/tmp/shirudo-app-sandbox/app``. It may execute the file labeled
+``probe-helpers`` beside it, reach the loopback networks, and not
+create, rename or write ``*.php``. That copy runs
+:src:`testing/end2end/app_sandbox_probe.py`, which tries 26 operations
+and prints which of them the kernel denied. The test:
+
+#. checks that the node has no tree state and that the registry holds
+   neither the tree nor an index, and empties the keepalive backend;
+#. copies the application, a program it may execute and one it may not
+   to the node, and runs the probe: nothing is denied;
+#. builds the package as it ships and reads the rules of its two
+   sandboxes back with ``bpm info data``, and checks that ``bpm build``
+   fails for rules that name a sandbox the Beefile has no policy for;
+#. publishes the package with :src:`tools/put-shields`, which builds it
+   and pushes it to the ``sandboxes`` namespace, and loads the catalog
+   with :doc:`/operate/backend/shields-put`;
+#. creates ``shirudo/pipeline-tree`` with ``bpm tree append`` of the
+   package by the reference and manifest digest ``put-shields`` printed,
+   reads it back with ``bpm tree show`` and loads it with the ingest
+   job;
+#. syncs the node, which reaches seq 1, pins the upatch and labels the
+   application with policy bit ``0x1`` and the program it may execute
+   with ``0x2``;
+#. runs the probe in the application: 16 operations are denied, the
+   other program, the connections and datagrams to addresses outside
+   the loopback networks, a raw socket and each way to create, rename,
+   write or truncate a ``.php`` file, and 10 are allowed, among them the
+   helper, the loopback and reading a ``.php`` file;
+#. runs the probe with the node's own ``python3``, which no policy
+   labels: nothing is denied;
+#. sends a keepalive and checks ``5 head: pass, seq 1 of 1`` and ``6
+   set: pass, 1 loaded`` in the node's status;
+#. appends the package again with ``--op delete``, loads the tree and
+   syncs the node, which reaches seq 2 and removes the pins while the
+   label stays, and runs the probe in the application a third time:
+   nothing is denied;
+#. sends a keepalive and checks ``seq 2 of 2`` and ``0 loaded``.
+
+Like ``t9113``, it does not check that the node is ``healthy``.
 
 Select test scripts
 ~~~~~~~~~~~~~~~~~~~

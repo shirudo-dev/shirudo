@@ -1,0 +1,27 @@
+[package]
+name = "app-sandbox"
+description = "The app-sandbox upatch with the sandbox of the end-to-end test"
+license = "GPL-2.0 OR BSD-2-Clause"
+authors = ["Authors of shirudo"]
+
+[[upatches]]
+source = "app-sandbox.bpf.c"
+
+[[upatches.rodata]]
+symbol = "sandbox_policy"
+input = "sandbox.toml"
+generator = ["python3", "gen_policy.py"]
+update = ["python3", "gen_policy.py"]
+
+[[upatches.policy]]
+id = "probe"
+bit = 0x1
+paths = ["/tmp/shirudo-app-sandbox/app"]
+
+[[upatches.policy]]
+id = "probe-helpers"
+bit = 0x2
+paths = ["/tmp/shirudo-app-sandbox/helper"]
+
+[upatches.tree]
+id = "app-sandbox"

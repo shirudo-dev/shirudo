@@ -27,6 +27,7 @@
   \draw[bar] (479,37) rectangle (569,73);
   \draw[run] (575,37) rectangle (663,73);
   \draw[run] (757,37) rectangle (839,73);
+  \draw[run] (845,37) rectangle (927,73);
   \draw[run] (933,37) rectangle (1011,73);
   % containers
   \draw[bar] (172,79) rectangle (663,115);
@@ -44,8 +45,9 @@
   \draw[bar] (479,247) rectangle (663,283);
   % second pair
   \draw[bar] (669,289) rectangle (839,325);
-  % third edge node
-  \draw[bar] (845,331) rectangle (1011,367);
+  % third and fourth edge nodes
+  \draw[bar] (845,331) rectangle (927,367);
+  \draw[bar] (933,331) rectangle (1011,367);
 
   \begin{scope}[every node/.append style={anchor=base}]
     \foreach \x/\n in {168/1, 266/2, 356/3, 437/4, 524/5, 619/6,
@@ -54,7 +56,7 @@
 
     \foreach \y/\t in {61/host, 103/containers, 145/operator VM,
         187/node A, 229/node B, 271/edge node, 313/second pair,
-        355/third node}
+        355/lone nodes}
       \node[anchor=base west] at (0,\y) {\t};
 
     \begin{scope}[small]
@@ -66,7 +68,8 @@
       \node at (619,52) {t9109, t9110,};
       \node at (619,66.5) {t9112};
       \node at (798,59.5) {t9111};
-      \node at (972,52) {t9113,};
+      \node at (886,59.5) {t9113};
+      \node at (972,52) {t9114,};
       \node at (972,66.5) {teardown};
 
       \node at (417.5,101.5) {registry, two collectors, two ClickHouse
@@ -75,8 +78,8 @@
       \node at (710,108.5) {empty again};
       \node at (886,94) {registry};
       \node at (886,108.5) {empty again};
-      \node at (972,94) {stop at};
-      \node at (972,108.5) {the end};
+      \node at (972,94) {registry};
+      \node at (972,108.5) {empty again};
 
       \node at (266,136) {operator.sh};
       \node at (266,150.5) {publishes};
@@ -96,8 +99,9 @@
       \node at (752,304) {fresh edge node and};
       \node at (752,318.5) {node B boot};
 
-      \node at (928,346) {fresh edge node boots,};
-      \node at (928,360.5) {on x86-64 only};
+      \node at (886,346) {third,};
+      \node at (886,360.5) {on x86-64};
+      \node at (972,353.5) {fourth};
     \end{scope}
   \end{scope}
 \end{tikzpicture}

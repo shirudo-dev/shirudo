@@ -180,8 +180,9 @@ bit and the rules of ``sandbox_policy``, and refuse with ``EACCES``:
 reads the bit from the Beefile and the rules from ``sandbox.toml``, and
 fails the build for rules without a policy table. The package's
 ``README.md`` describes the rule keys and what the sandboxes do not
-cover. :src:`tools/put-shields` publishes it with the shields of
-``kernel-cve``.
+cover. ``t9114-app-sandbox`` takes the package from its sources to a
+node and back (:ref:`testing-sandbox`), and :src:`tools/put-shields`
+publishes it with the shields of ``kernel-cve``.
 
 Related
 -------

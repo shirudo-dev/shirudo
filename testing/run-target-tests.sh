@@ -72,12 +72,12 @@ for t in "$dir"/t[0-9]1[0-9][0-9]-*.sh; do
 	[ -e "$t" ] || continue
 	found=1
 	test_matches "$t" || continue
-	# end2end/host.sh runs t9109 to t9113 itself, on the host after node
+	# end2end/host.sh runs t9109 to t9114 itself, on the host after node
 	# A's suite, against fresh edge nodes and nodes B.
 	case "$t" in
 	end2end/t9109-pipeline.sh | end2end/t9110-keepalive-history.sh) continue ;;
 	end2end/t9111-pipeline-segments.sh | end2end/t9112-activation.sh) continue ;;
-	end2end/t9113-shield-rollout.sh) continue ;;
+	end2end/t9113-shield-rollout.sh | end2end/t9114-app-sandbox.sh) continue ;;
 	end2end/t9107-keepalive-backend.sh)
 		# host.sh records the example tree when it publishes it to
 		# its backend and removes the record when it stops, so a run

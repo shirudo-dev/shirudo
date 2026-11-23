@@ -922,7 +922,7 @@ signed config image.
        ``--expect-credential``, and the key moving from ``untrusted`` to
        ``enrolled`` in the backend
    * - ``t9113-shield-rollout``
-     - A shield rolled out and taken back, run by ``host.sh`` last, on
+     - A shield rolled out and taken back, run by ``host.sh`` on
        x86-64, on a third fresh edge node and an empty registry:
        ``put-shields`` and ``shields-put`` listing ``java-base64`` in
        ``shield_catalog``, ``bpm tree append`` by reference and
@@ -932,6 +932,20 @@ signed config image.
        agent retired at seq 2 and a JVM started after it without the
        guard, with ``5 head`` and ``6 set`` of the node's status at each
        step
+   * - ``t9114-app-sandbox``
+     - The ``app-sandbox`` upatch from its sources to a node and back,
+       run by ``host.sh`` last, on a fourth fresh edge node and an empty
+       registry: ``bpm build`` generating its rules with the Beefile's
+       ``[[upatches.rodata]]`` generator and refusing rules for a
+       sandbox without a ``[[upatches.policy]]`` table, ``put-shields``
+       and ``shields-put``, ``bpm tree append`` by reference and
+       ``--package-digest``, the node loading it at seq 1 and labeling
+       the sandbox's files, a labeled program denied the executions,
+       connections, datagrams, raw socket and ``.php`` creations,
+       renames and writes its sandbox rules out and allowed the rest, an
+       unlabeled program denied nothing, then ``--op delete`` and the
+       program unrestricted at seq 2, with ``5 head`` and ``6 set`` of
+       the node's status at each step
 
 Unit suites and fuzz targets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

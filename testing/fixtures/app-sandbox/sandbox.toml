@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+#
+# The sandbox t9114 puts end2end/app_sandbox_probe.py in.
+
+[networks]
+loopback = ["127.0.0.0/8", "::1/128"]
+
+[sandbox.probe]
+exec = ["probe-helpers"]
+network = ["@loopback"]
+
+[sandbox.probe.deny]
+create = ["*.php", "core"]
+rename = ["*.php"]
+write = ["*.php"]
