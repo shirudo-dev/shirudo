@@ -99,7 +99,8 @@ Challenge the attestation key
         OK    attestation key: the pinned key
         OK    endorsement key: name matches its public area
         OK    endorsement key: TCG default template under the endorsement policy
-        NOTE  no endorsement certificate: the endorsement key is trusted as presented
+        OK    endorsement certificate: describes the endorsement key
+        NOTE  endorsement certificate: not checked against an issuer bundle (--ek-ca)
       challenge: .../vms/quickstart/result/challenge.json
       credential: b17d3f29447eaf539bcffa2556b010082a7a10e2b7ab60746c485d176b7a40cc
 
@@ -117,9 +118,10 @@ Challenge the attestation key
 
    ``<credential>`` is the value the command printed.
 
-The software TPM of the test VM carries no endorsement certificate, so
-nothing vouches for its endorsement key, and ``--trust-presented-ek``
-accepts it as presented. Never use that option for a production target:
+The test VM builder signs the software TPM's endorsement certificate
+with a temporary test CA. With ``--trust-presented-ek``, the command
+checks that the certificate describes the presented endorsement key and
+skips issuer validation. Never use that option for a production target:
 whoever controls the target could present the keys of a software TPM,
 answer the challenge there and sign any evidence. Use one of these
 instead:
