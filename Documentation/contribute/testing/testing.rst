@@ -58,6 +58,11 @@ The functional shards run upatch, tamperproof, the BPM families, and
 the remaining families. The arm64 host job runs unit, script, and host
 functional tests together.
 
+On pull requests and pushes to ``main``, Lint runs the full-tree Coccinelle
+and unused-function checks. The CI suite, coverage, and sanitizer jobs still
+run the self-tests for both scripts. Local, manually dispatched, and sanitizer
+tag runs also scan the full tree as part of ``ci-checks``.
+
 The ``CI suite`` workflow uses the x86-64 CI kernel package.
 :src:`testing/vm/kernel-artifact.sh` pins its build run ID and checksums.
 When a change touches the kernel build inputs, CI builds packages for

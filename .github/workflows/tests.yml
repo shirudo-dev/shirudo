@@ -150,6 +150,10 @@ jobs:
 
       - name: Run unit tests
         if: matrix.suite == 'unit' || matrix.suite == 'host'
+        env:
+          SHIRUDO_SKIP_TREE_CHECKS: >-
+            ${{ (github.event_name == 'pull_request' ||
+                  (github.event_name == 'push' && github.ref == 'refs/heads/main')) && '1' || '0' }}
         run: .github/scripts/tests.sh run unit
 
       - name: Run host functional tests

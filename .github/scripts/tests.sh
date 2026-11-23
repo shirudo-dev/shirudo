@@ -159,4 +159,5 @@ sudo prlimit --pid "$$" --memlock=unlimited:unlimited
 # config probes run and for every shirudo binary the tests run here.
 # shellcheck disable=SC2086
 sudo -E env PATH="$PATH" LD_LIBRARY_PATH="$LD_LIBRARY_PATH" \
-	COVERAGE="${COVERAGE:-0}" make VM="${VM:-1}" $goals
+	COVERAGE="${COVERAGE:-0}" SHIRUDO_SKIP_TREE_CHECKS="${SHIRUDO_SKIP_TREE_CHECKS:-0}" \
+	make VM="${VM:-1}" $goals

@@ -37,6 +37,10 @@ jobs:
           - name: TSan
             sanitize: thread
             compiler: clang
+    env:
+      SHIRUDO_SKIP_TREE_CHECKS: >-
+        ${{ (github.event_name == 'pull_request' ||
+              (github.event_name == 'push' && github.ref == 'refs/heads/main')) && '1' || '0' }}
 
     steps:
       - name: Check out repository
@@ -89,7 +93,8 @@ jobs:
             make -j4 SANITIZE=${{ matrix.sanitize }}
             make SANITIZE=${{ matrix.sanitize }} shirudo-build
             make -C testing SANITIZE=${{ matrix.sanitize }} test-helpers
-            make tests VM=0 BACKEND=0 SANITIZE=${{ matrix.sanitize }}
+            SHIRUDO_SKIP_TREE_CHECKS=${{ env.SHIRUDO_SKIP_TREE_CHECKS }} \
+              make tests VM=0 BACKEND=0 SANITIZE=${{ matrix.sanitize }}
 
       - name: Save the sanitizer OpenSSL build
         if: always() && steps.sanitizer-openssl.outputs.cache-hit != 'true' && hashFiles('build/sanitizer-openssl/lib/libcrypto.so') != ''

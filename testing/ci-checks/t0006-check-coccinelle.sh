@@ -1714,9 +1714,11 @@ test_expect_success 'every rule declares SEC an attribute' '
 	done
 '
 
-test_expect_success 'the tree passes' '
-	(cd "$ROOT" && sh "$S") >"$W/out" 2>"$W/err" &&
-	grep -q "rules, no match" "$W/out"
-'
+if [ "${SHIRUDO_SKIP_TREE_CHECKS:-0}" != 1 ]; then
+	test_expect_success 'the tree passes' '
+		(cd "$ROOT" && sh "$S") >"$W/out" 2>"$W/err" &&
+		grep -q "rules, no match" "$W/out"
+	'
+fi
 
 test_done

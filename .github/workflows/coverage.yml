@@ -82,6 +82,8 @@ jobs:
       # reports the failure: every tier runs and the report is sent.
       - name: Run unit tests
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        env:
+          SHIRUDO_SKIP_TREE_CHECKS: ${{ github.event_name == 'push' && '1' || '0' }}
         run: .github/scripts/tests.sh run unit
 
       - name: Run functional tests

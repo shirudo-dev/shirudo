@@ -84,8 +84,10 @@ test_expect_success 'a prototype in a C file is no definition' '
 	check
 '
 
-test_expect_success 'the tree itself passes' '
-	sh "$S"
-'
+if [ "${SHIRUDO_SKIP_TREE_CHECKS:-0}" != 1 ]; then
+	test_expect_success 'the tree itself passes' '
+		sh "$S"
+	'
+fi
 
 test_done
