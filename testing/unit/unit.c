@@ -15,6 +15,10 @@
 #include <sys/mman.h>
 #include <sys/wait.h>
 
+#ifdef UNIT_GCOV
+#include <gcov.h>
+#endif
+
 #include <shirudo/string.h>
 
 #include "unit.h"
@@ -50,11 +54,19 @@ void unit_fail_mem(const char *file, int line, const char *what,
 		  what, i, len, x[i], y[i]);
 }
 
-void unit_abort(void)
+static __noreturn void unit_exit(int status)
 {
 	fflush(stdout);
 	fflush(stderr);
-	_exit(1);
+#ifdef UNIT_GCOV
+	__gcov_dump();
+#endif
+	_exit(status);
+}
+
+void unit_abort(void)
+{
+	unit_exit(1);
 }
 
 void unit_skip(const char *reason)
@@ -65,9 +77,7 @@ void unit_skip(const char *reason)
 		n = UNIT_REASON_MAX - 1;
 	memcpy(unit_reason, reason, n);
 	unit_reason[n] = '\0';
-	fflush(stdout);
-	fflush(stderr);
-	_exit(UNIT_SKIPPED);
+	unit_exit(UNIT_SKIPPED);
 }
 
 /* A failing case's stderr comes back as TAP diagnostics. */
@@ -116,9 +126,7 @@ static int run_case(const struct unit_case *c, size_t nr)
 		dup2(fd, STDERR_FILENO);
 		alarm(UNIT_TIMEOUT);
 		c->run();
-		fflush(stdout);
-		fflush(stderr);
-		_exit(unit_failed ? 1 : 0);
+		unit_exit(unit_failed ? 1 : 0);
 	}
 	while (waitpid(pid, &status, 0) < 0) {
 		if (errno != EINTR) {

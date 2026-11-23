@@ -1123,10 +1123,13 @@ build/unit/quote_check: tools/quote-check/row.o
 build/unit/jar: UNIT_OBJS := tools/shirudo-build/jar.o
 build/unit/jar: tools/shirudo-build/jar.o
 
+UNIT_COVERAGE_CFLAGS = $(if $(filter --coverage,$(CFLAGS)),-DUNIT_GCOV)
+
 build/unit/%: testing/unit/%.c testing/unit/unit.c testing/unit/unit.h \
 		$(UNIT_LIB) $(LIBBPF_A)
 	@printf '  CC      $@\n'
-	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) -Itesting/unit -o $@ $< testing/unit/unit.c \
+	$(Q)$(CC) $(CFLAGS) $(UNIT_COVERAGE_CFLAGS) $(LDFLAGS) -Itesting/unit \
+		-o $@ $< testing/unit/unit.c \
 		$(UNIT_OBJS) $(UNIT_LIB) $(LIBBPF_A) $(DYNAMIC_LIBS)
 
 build/unit/curl: LDFLAGS += -Wl,--wrap=curl_slist_free_all

@@ -275,6 +275,9 @@ Leave out every test that boots a VM, for a host without KVM:
    $ make tests VM=0
    $ make -C testing functional/<family> VM=0
 
+In GCC coverage builds, each unit test child writes its coverage
+counters before it exits.
+
 Run the cases of a unit suite whose names contain ``<substring>``:
 
 .. code-block:: console
