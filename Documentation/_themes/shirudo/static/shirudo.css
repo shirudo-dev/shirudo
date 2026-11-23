@@ -242,6 +242,12 @@ dl.field-list.facts p { margin: 0; }
 .grid > div > p:first-child { margin: 0 0 6px; font-size: 1.05rem; font-weight: 600; color: var(--fg); }
 .grid > div p { font-size: 14.5px; margin: 0 0 8px; color: var(--muted); }
 .grid > div p:last-child { margin: 0; }
+/* a box whose title links to a page is that link over its whole area */
+.grid > div { position: relative; }
+.grid > div > p:first-child a.reference, .grid > div > p:first-child a.reference:visited { color: inherit; text-decoration: none; }
+.grid > div > p:first-child a.reference::after { content: ""; position: absolute; inset: 0; border-radius: 10px; }
+.grid > div > p:first-child a.reference:focus-visible { outline: none; }
+.grid > div:has(> p:first-child a.reference):hover, .grid > div:focus-within { border-color: var(--accent); background: var(--accent-soft); }
 
 /* figures and footnotes */
 figure { margin: 20px 0; }

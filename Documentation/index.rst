@@ -26,7 +26,7 @@ developers write on top of shirudo.
 
    .. container::
 
-      Live patching for kernel and userspace
+      :doc:`Live patching for kernel and userspace <start/guides/live-patching>`
 
       Security mitigations that block vulnerable code paths. They
       complement traditional kernel live patching with a faster rollout
@@ -34,14 +34,14 @@ developers write on top of shirudo.
 
    .. container::
 
-      System hardening
+      :doc:`System hardening <start/guides/system-hardening>`
 
       Sandboxes for containers, Kubernetes Pods and LLM agents, and
       kernel hardening implemented as upatches.
 
    .. container::
 
-      Runtime security and observability
+      :doc:`Runtime security and observability <start/guides/runtime-observability>`
 
       For kernel and userspace applications, LLM agents included.
       Data is collected and aggregated in BPF maps and pushed over
