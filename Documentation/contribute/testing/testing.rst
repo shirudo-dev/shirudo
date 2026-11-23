@@ -77,6 +77,15 @@ Land kernel input changes first. After publishing their bundles, update
 the pin in the same change as any shirudo code that requires the new
 kernel.
 
+Host userspace coverage
+-----------------------
+
+On every run of the ``CI suite``, the x86-64 job builds its host userspace C
+binaries with coverage instrumentation. It sends an LCOV report to Coveralls
+after the existing test steps pass. The ``main`` reports provide a baseline for
+pull request coverage comparisons. Reports exclude test code, vendored code,
+QEMU guests and BPF programs.
+
 Check the quickstart and quick guides
 -------------------------------------
 
