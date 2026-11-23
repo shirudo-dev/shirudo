@@ -1,6 +1,6 @@
 [package]
 name = "app-sandbox"
-description = "Sandboxes for applications: what they execute, where they connect, which files they write"
+description = "Sandbox php2shell vulnerable applications: Block lateral movement into other binaries and unexpected sockets."
 license = "GPL-2.0 OR BSD-2-Clause"
 authors = ["Authors of shirudo"]
 
@@ -33,3 +33,4 @@ paths = ["/usr/sbin/php-fpm*", "/usr/local/sbin/php-fpm"]
 
 [upatches.tree]
 id = "app-sandbox"
+fixes = ["CVE-2026-109618", "CVE-2026-109619"]

@@ -15,6 +15,14 @@ programs and from reaching beyond private networks: what an attacker
 who found a hole in the application does first. Replace them with
 sandboxes for your own applications.
 
+Its tree entry names the PHP2Shell advisories, CVE-2026-109618 and
+CVE-2026-109619, as `fixes`, so that a backend that reads the tree
+counts a node that loaded the upatch as shielded against them. The
+sandboxes do not close the hole in PHP: a request can still run the
+attacker's code in the application. They keep that code from leaving a
+PHP file behind, from running another program and from connecting out.
+Upgrade PHP as well.
+
 A sandbox restricts and never grants: a task in it keeps every limit it
 had. It is not a boundary against root outside the sandbox, and a file
 replaced after the load is a new file without the label, see "Limits".
@@ -93,10 +101,10 @@ shirudo bpm push app-sandbox-1.0.0.bee oci://<registry>/<namespace>/app-sandbox 
 shirudo bpm tree append app-sandbox-1.0.0.bee oci://<registry>/<tree> --keys-dir <keys>
 ```
 
-The Beefile has a tree entry without a selector, so every node that
-syncs the tree loads the upatch; on a node without the applications it
-labels nothing and restricts nothing. Add a selector to load it only
-where they run:
+The Beefile has a tree entry without a selector, with the advisories
+above as its `fixes`, so every node that syncs the tree loads the
+upatch; on a node without the applications it labels nothing and
+restricts nothing. Add a selector to load it only where they run:
 
 ```toml
 [upatches.tree.selector.labels]

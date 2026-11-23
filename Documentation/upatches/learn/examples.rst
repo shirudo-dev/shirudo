@@ -149,7 +149,9 @@ app-sandbox
      - ``sandbox_policy``, which ``gen_policy.py`` writes from
        ``sandbox.toml`` and the policy bits of the Beefile
    * - Tree entry
-     - ``app-sandbox``, without a selector
+     - ``app-sandbox``, without a selector, with ``fixes`` naming the
+       PHP2Shell advisories, CVE-2026-109618 and CVE-2026-109619, which
+       its two sandboxes contain rather than close
 
 A task that executed a file of a sandbox carries its policy bit in
 ``shirudo_task_policy``, and so do its children. The programs read that
