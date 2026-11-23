@@ -88,6 +88,13 @@ int vstrsprintf(char *buf, size_t size, const char *fmt, va_list ap)
 bool name_has_suffix(const char *name, size_t len, const char *suffix);
 
 /*
+ * Whether the len bytes at name are a file name that pattern matches: '*'
+ * in pattern stands for any run of bytes and '?' for any one, every other
+ * byte for itself. "." and ".." match no pattern.
+ */
+bool name_glob_match(const char *pattern, const char *name, size_t len);
+
+/*
  * The length of prefix where s starts with it, else 0. prefix is a string
  * literal, whose length the compiler takes from its size: anything else
  * fails the build, so that the size of a pointer never stands in for it.

@@ -510,6 +510,60 @@ static void name_has_suffix_wants_a_stem(void)
 	EXPECT_TRUE(name_has_suffix("a", 1, ""));
 }
 
+static bool glob(const char *pattern, const char *name)
+{
+	return name_glob_match(pattern, name, strlen(name));
+}
+
+static void name_glob_match_takes_stars_and_question_marks(void)
+{
+	EXPECT_TRUE(glob("php-fpm", "php-fpm"));
+	EXPECT_FALSE(glob("php-fpm", "php-fpm8"));
+	EXPECT_FALSE(glob("php-fpm8", "php-fpm"));
+	EXPECT_TRUE(glob("php-fpm*", "php-fpm"));
+	EXPECT_TRUE(glob("php-fpm*", "php-fpm8.3"));
+	EXPECT_FALSE(glob("php-fpm*", "php-cgi8.3"));
+	EXPECT_TRUE(glob("*.php", "index.php"));
+	EXPECT_TRUE(glob("*.php", ".php"));
+	EXPECT_FALSE(glob("*.php", "index.php.bak"));
+	EXPECT_TRUE(glob("a*c", "ac"));
+	EXPECT_TRUE(glob("a*c", "abcbc"));
+	EXPECT_FALSE(glob("a*c", "abcb"));
+	EXPECT_TRUE(glob("*a*b*", "xaybz"));
+	EXPECT_TRUE(glob("a**b", "ab"));
+	EXPECT_FALSE(glob("*a*b*", "xbya"));
+	EXPECT_TRUE(glob("php?.?", "php8.3"));
+	EXPECT_FALSE(glob("php?.?", "php8.31"));
+	EXPECT_FALSE(glob("php?", "php"));
+	EXPECT_TRUE(glob("*", "a"));
+	EXPECT_TRUE(glob("*", ""));
+	EXPECT_FALSE(glob("?", ""));
+	EXPECT_FALSE(glob("", "a"));
+	EXPECT_TRUE(glob("", ""));
+}
+
+/* A pattern is for the entries of a directory, which these two are not. */
+static void name_glob_match_leaves_out_dot_and_dotdot(void)
+{
+	EXPECT_FALSE(glob("*", "."));
+	EXPECT_FALSE(glob("*", ".."));
+	EXPECT_FALSE(glob(".", "."));
+	EXPECT_FALSE(glob("?", "."));
+	EXPECT_FALSE(glob("??", ".."));
+	EXPECT_TRUE(glob("*", "..."));
+	EXPECT_TRUE(glob(".*", ".profile"));
+	EXPECT_TRUE(glob("??", "a."));
+}
+
+/* The name comes with a length and need not end where its buffer does. */
+static void name_glob_match_reads_len_bytes(void)
+{
+	EXPECT_TRUE(name_glob_match("php*", "php-fpm/junk", 7));
+	EXPECT_FALSE(name_glob_match("*junk", "php-fpm/junk", 7));
+	EXPECT_FALSE(name_glob_match("a", "a\0b", 3));
+	EXPECT_TRUE(name_glob_match("a?b", "a\0b", 3));
+}
+
 #define TEST_DIR "/run"
 
 static void str_has_prefix_gives_its_length(void)
@@ -880,6 +934,9 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(memzero_explicit_clears_its_span_only),
 	UNIT_CASE(memneq_explicit_tells_every_bit_apart),
 	UNIT_CASE(name_has_suffix_wants_a_stem),
+	UNIT_CASE(name_glob_match_takes_stars_and_question_marks),
+	UNIT_CASE(name_glob_match_leaves_out_dot_and_dotdot),
+	UNIT_CASE(name_glob_match_reads_len_bytes),
 	UNIT_CASE(str_has_prefix_gives_its_length),
 	UNIT_CASE(str_skip_prefix_moves_only_on_a_match),
 	UNIT_CASE(span_equals_wants_the_whole_literal),

@@ -175,6 +175,38 @@ bool name_has_suffix(const char *name, size_t len, const char *suffix)
 	return len > n && !memcmp(name + len - n, suffix, n);
 }
 
+static bool name_is_dot_or_dotdot(const char *name, size_t len)
+{
+	return (len == 1 || len == 2) && name[0] == '.' && name[len - 1] == '.';
+}
+
+bool name_glob_match(const char *pattern, const char *name, size_t len)
+{
+	const char *after_star = NULL;
+	size_t i = 0, retry_at = 0;
+
+	if (name_is_dot_or_dotdot(name, len))
+		return false;
+	while (i < len) {
+		if (*pattern == '*') {
+			after_star = ++pattern;
+			retry_at = i;
+		} else if (*pattern == '?' ||
+			   (*pattern && *pattern == name[i])) {
+			pattern++;
+			i++;
+		} else if (after_star) {
+			pattern = after_star;
+			i = ++retry_at;
+		} else {
+			return false;
+		}
+	}
+	while (*pattern == '*')
+		pattern++;
+	return !*pattern;
+}
+
 bool dns_name_valid(const char *name)
 {
 	size_t len = strlen(name), label_len = 0, label_start = 0;
