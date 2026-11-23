@@ -1,0 +1,62 @@
+name: Scorecard
+
+# On main only: the OpenSSF Scorecard rates the default branch, and each
+# run publishes its result as the project's score.
+on:
+  # The Branch-Protection check follows the rules of the branch.
+  branch_protection_rule:
+  push:
+    branches:
+      - main
+
+# Only the newest push is worth a run, as each replaces the last.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+# The Scorecard API takes results only from a workflow without a write
+# permission, an env or defaults at this level, and from a job that runs
+# on a hosted Ubuntu runner with the four actions below and nothing else.
+permissions: {}
+
+# No cache is read or written.
+cache-mode: none
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    if: github.repository == 'shirudo-dev/shirudo'
+    permissions:
+      # The upload to code scanning.
+      security-events: write
+      # The token that signs the results published to api.scorecard.dev.
+      id-token: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run the Scorecard analysis
+        uses: ossf/scorecard-action@23f22cd43608bae7a1f1fa2603d7314dee9538a5 # v2.6.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+          fail_on_publish_error: true
+
+      - name: Upload the results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scorecard-results
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload the results to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: results.sarif
