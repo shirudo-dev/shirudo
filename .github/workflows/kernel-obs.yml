@@ -37,18 +37,13 @@ jobs:
         env:
           SOURCE_EVENT: ${{ github.event.workflow_run.event }}
           SOURCE_SHA: ${{ github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.pull_requests[0].head.sha || github.event.workflow_run.head_sha }}
-          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
           RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
         run: |
           set -eu
 
           case "$SOURCE_EVENT" in
-          push)
+          push|pull_request)
             version="0.1.$RUN_NUMBER"
-            eligible=true
-            ;;
-          pull_request)
-            version="0.1.$RUN_NUMBER-pr.$PR_NUMBER"
             eligible=true
             ;;
           *)
