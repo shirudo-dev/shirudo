@@ -67,6 +67,9 @@ setup() {
 	# spatch opens libpython3.X.so by that name for the Python of its
 	# rules, and only the -dev package installs it.
 	set -- rpm coccinelle libpython3-dev
+	if [ "${COVERAGE:-0}" = 1 ]; then
+		set -- "$@" lcov
+	fi
 	if [ "${VM:-1}" != 0 ]; then
 		set -- "$@" autoconf autoconf-archive automake cloud-image-utils \
 			dracut-core file isc-dhcp-client libguestfs-tools libltdl-dev \
@@ -153,4 +156,5 @@ sudo prlimit --pid "$$" --memlock=unlimited:unlimited
 # secure_path, and the OpenSSL 3.5 build needs both: for the openssl the
 # config probes run and for every shirudo binary the tests run here.
 # shellcheck disable=SC2086
-sudo -E env PATH="$PATH" LD_LIBRARY_PATH="$LD_LIBRARY_PATH" make VM="${VM:-1}" $goals
+sudo -E env PATH="$PATH" LD_LIBRARY_PATH="$LD_LIBRARY_PATH" \
+	COVERAGE="${COVERAGE:-0}" make VM="${VM:-1}" $goals
