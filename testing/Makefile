@@ -27,7 +27,7 @@ test-vm-arch = $(shell TEST_VM_ARCH='$(TEST_VM_ARCH)'; \
 	. $(ROOT)/testing/vm/arch.sh && printf '%s' "$$$(1)")
 
 .DEFAULT_GOAL := all
-.PHONY: all help clean unit ci-checks functional end2end backend build-operator build-unit kernel-btf \
+.PHONY: all help clean unit ci-checks functional end2end backend build-host build-operator build-unit kernel-btf \
 	test-helpers \
 	fuzz afl bundle test-vm-bundle require-vm-kernel vm vm-console vm-ssh vm-enroll vm-sbom vm-stop vm-clean \
 	vm-operator-end2end
@@ -367,7 +367,7 @@ vm-clean:
 # a time.
 BUILD_LOCK := $(ROOT)/build/.testing-build.lock
 
-build-operator: build-unit
+build-operator: build-host
 	+$(Q)flock $(BUILD_LOCK) $(MAKE) -C $(ROOT) shirudo-build
 	+$(Q)flock $(BUILD_LOCK) $(MAKE) -C $(ROOT) quote-check
 	+$(Q)flock $(BUILD_LOCK) $(MAKE) -C $(ROOT) -f Makefile.shirudo test-helpers
@@ -383,9 +383,11 @@ kernel-btf:
 		VM="$(VM)" $(ROOT)/testing/vm/kernel-artifact.sh fetch || \
 		echo "no kernel artifact: building against the BTF of the running kernel" >&2
 
-build-unit: | kernel-btf
+build-host: | kernel-btf
 	$(Q)mkdir -p $(dir $(BUILD_LOCK))
 	+$(Q)flock $(BUILD_LOCK) $(MAKE) -C $(ROOT) all
+
+build-unit: build-host
 	+$(Q)flock $(BUILD_LOCK) $(MAKE) -C $(ROOT) -f Makefile.shirudo unit-tests
 
 test-helpers: | kernel-btf
