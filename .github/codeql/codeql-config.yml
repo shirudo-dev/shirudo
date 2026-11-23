@@ -1,7 +1,10 @@
 name: shirudo CodeQL configuration
 
+# The application of java-sql-inj builds its query from its argument on
+# purpose: it is what the package's upatch is shown to stop.
 paths-ignore:
   - vendor
+  - upatches/java-sql-inj/app
 
 # Rules the tree's style contradicts: option parsers advance their index
 # inside the loop, and the coding style keeps comments to what the code
