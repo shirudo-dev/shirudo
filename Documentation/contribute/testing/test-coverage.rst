@@ -94,6 +94,10 @@ signed config image.
        type on its line or the one above, a header's declaration that is
        no call, the calls that count and the definitions it leaves
        alone, and the tree itself
+   * - ``t0010-publish-test-kernel``
+     - The prerelease tag, assets, and repository token,
+       and rejection of missing source, mismatched source and a bundle
+       with the wrong checksum
 
 ``build`` (1)
 ~~~~~~~~~~~~~

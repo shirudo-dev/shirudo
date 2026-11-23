@@ -4,4 +4,4 @@
 # Shared version-discovery command used by the top-level packaging flow and
 # the generated runtime version string in Makefile.shirudo.
 
-SHIRUDO_GIT_DESCRIBE ?= git describe --tags --always --dirty
+SHIRUDO_GIT_DESCRIBE ?= git describe --tags --always --dirty --exclude 'test-kernel-*'

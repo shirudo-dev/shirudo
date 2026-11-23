@@ -15,8 +15,8 @@ mixes of builds work together.
 Releases
 --------
 
-There is no shirudo release. ``main`` is the development branch, and no
-stable branches are maintained. Every push to ``main`` builds the
+There is no shirudo software release. ``main`` is the development branch,
+and no stable branches are maintained. Every push to ``main`` builds the
 packages in the ``Build packages`` workflow, where they are available as
 run artifacts. Until a release, no format below carries a compatibility
 promise.
@@ -40,7 +40,8 @@ Version string
      - ``git describe --tags --always --dirty`` of the build tree, or
        the content of the :src:`VERSION` file, ``0.0.0-dev``, outside a git
        checkout. Without tags, describe prints the abbreviated commit,
-       with ``-dirty`` for uncommitted changes.
+       with ``-dirty`` for uncommitted changes. The command excludes
+       ``test-kernel-*`` tags.
    * - ``<extraversion>``
      - ``EXTRAVERSION`` in the top-level ``Makefile``, ``-rc0``.
    * - ``<release-name>``

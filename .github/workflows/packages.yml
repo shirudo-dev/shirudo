@@ -6,6 +6,7 @@ on:
       - main
     tags:
       - '*'
+      - '!test-kernel-*'
   pull_request:
   workflow_dispatch:
     inputs:
@@ -41,7 +42,7 @@ jobs:
           if [ "$REF_TYPE" = tag ]; then
             version=$REF_NAME
           else
-            version=$(git describe --tags --always --dirty)
+            version=$(git describe --tags --always --dirty --exclude 'test-kernel-*')
           fi
           mkdir -p build
           printf '%s\n' "$version" > build/ci-version
@@ -249,7 +250,7 @@ jobs:
           if [ "$REF_TYPE" = tag ]; then
             version=$REF_NAME
           else
-            version=$(git describe --tags --always --dirty)
+            version=$(git describe --tags --always --dirty --exclude 'test-kernel-*')
           fi
           mkdir -p build
           printf '%s\n' "$version" > build/ci-version

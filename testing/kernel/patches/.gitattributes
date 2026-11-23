@@ -1,0 +1,2 @@
+# Retain format-patch context and signatures verbatim.
+*.patch -whitespace

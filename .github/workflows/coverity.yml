@@ -110,7 +110,7 @@ jobs:
               --form token="\$token" \
               --form email="${{ github.actor }}@users.noreply.github.com" \
               --form file=@build/cov-int.tgz \
-              --form version="\$(git describe --tags --always)" \
+              --form version="\$(git describe --tags --always --exclude 'test-kernel-*')" \
               --form description="GitHub Actions ${{ github.sha }}" \
               https://scan.coverity.com/builds?project=shirudo-dev%2Fshirudo
             rm -f build/coverity-token

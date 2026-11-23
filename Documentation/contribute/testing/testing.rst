@@ -66,6 +66,17 @@ The kernel project owns the kernel source, configuration and patch
 application. Changes to those inputs need a successful kernel project
 run and an updated pin before CI can boot the series.
 
+Publish a CI kernel prerelease
+------------------------------
+
+Dispatch ``Build kernel packages`` on shirudo's ``main``. It builds
+x86-64 and arm64 from the bpf-next commit in
+:src:`testing/kernel/bpf-next.commit` and the patches and configuration
+in :src:`testing/kernel/`. Dispatch ``Publish test kernel`` with the
+successful run ID. The prerelease ``test-kernel-<run-id>`` includes both
+bundle ZIPs, their matching ``kernel-ci-source.tar.zst`` and
+``SHA256SUMS``. Verify the public downloads against ``SHA256SUMS``.
+
 Test tiers
 ----------
 

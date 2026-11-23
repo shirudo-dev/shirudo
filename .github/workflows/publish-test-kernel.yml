@@ -1,0 +1,35 @@
+name: Publish test kernel
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful kernel package build run on main with CI source export
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: publish-test-kernel-${{ inputs.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'shirudo-dev/shirudo' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Check out the publishing script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Publish the selected CI bundles and source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: bash .github/scripts/publish-test-kernel.sh
