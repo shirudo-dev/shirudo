@@ -625,6 +625,10 @@ Next steps
 - :doc:`guides/publish-package` ships a upatch through an OCI registry.
 - :doc:`guides/attest-target` enrolls the target's TPM and verifies its
   evidence.
+- :doc:`guides/backend` starts a registry, a collector and the example
+  backend for the use-case guides: :doc:`guides/live-patching`,
+  :doc:`guides/system-hardening` and
+  :doc:`guides/runtime-observability`.
 - :doc:`how-it-works` explains each step of this page.
 - :doc:`install` installs shirudo on real hosts, and
   :doc:`/operate/deploy/boot-integration` brings a target up.
