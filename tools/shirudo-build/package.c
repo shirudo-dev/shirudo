@@ -1284,6 +1284,7 @@ static int decoder_set_add(struct decoder_set *set,
 	if (err) {
 		pr_err("read decoder source %s: %s", path, strerror(-err));
 		xstrfree(path);
+		xfree(source, source_len + 1);
 		return err;
 	}
 
