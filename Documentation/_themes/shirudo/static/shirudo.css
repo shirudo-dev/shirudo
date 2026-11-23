@@ -196,6 +196,9 @@ h4:hover > a.headerlink, a.headerlink:focus-visible { visibility: visible; }
 .body dl dt { font-weight: 600; }
 .body dl dd { margin: 0 0 .8em 1.4em; }
 .body blockquote { margin: 0 0 1em; padding-left: 1em; border-left: 2px solid var(--line); color: var(--muted); }
+.body details { margin: 0 0 1em; }
+.body details > summary { padding: .25em 0; cursor: pointer; }
+.body details[open] > summary { margin-bottom: .5em; }
 
 /* code */
 div.highlight { position: relative; margin: 10px 0 18px; background: var(--code-bg); border-radius: 8px; }

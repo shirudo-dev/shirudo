@@ -52,15 +52,23 @@ Create the VM
 
       $ limactl start --name=shirudo-dev --param checkout="$PWD" infra/lima/shirudo.yaml
 
-   A git worktree keeps its repository outside the checkout, and the
-   build asks git which files to copy into its container. Share the
-   repository too:
+   .. raw:: html
+
+      <details>
+      <summary>Using a Git worktree</summary>
+
+   If you're using a Git worktree, run the command below to share the
+   repository too.
 
    .. code-block:: console
 
       $ limactl start --name=shirudo-dev --param checkout="$PWD" \
           --mount="$(git rev-parse --path-format=absolute --git-common-dir)" \
           infra/lima/shirudo.yaml
+
+   .. raw:: html
+
+      </details>
 
    The VM takes 8 GiB of memory and Lima's default of at most 4 CPUs.
    Add ``--cpus=<count>`` to give the VM more CPUs.
@@ -82,9 +90,9 @@ Create the VM
 
    .. code-block:: console
 
-      operator$ test -r /dev/kvm && test -w /dev/kvm && echo kvm ok
+      $ test -r /dev/kvm && test -w /dev/kvm && echo kvm ok
       kvm ok
-      operator$ ulimit -l
+      $ ulimit -l
       unlimited
 
 Continue with the quickstart
