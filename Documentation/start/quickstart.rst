@@ -203,6 +203,7 @@ Check enforcement
         UpatchesMeasured   OK      every pinned or archived upatch is in this boot's records
         TpmMeasured        OK      NV index 0x01818E00 readable
         ConfigActive       OK      config bb3a83a57bbd.. is active
+        XdpCovered         OK      every device an XDP upatch selects runs it
 
       Tamper attempts (this boot):
         LoadNotLoader            15  program load that is not a signed loader
@@ -522,7 +523,7 @@ nothing but the evidence, your certificates and your artifacts.
         OK    quote and certification are of one TPM boot
         OK    config: config root history matches the quoted PCR
         NOTE  config root has no operator approval; use --expect-config-root with --expect-config-pcr
-        NOTE  config records a selection; direct TPM writer protection is deferred
+        NOTE  config records a selection; operation completion depends on trusted runtime guards
         OK    eventlog: this boot has an init record
         OK    register: the document names index 0x01818E00 and PCRs 9 and 11
         OK    register: public area is bound to PCRs 9 and 11 as recorded
