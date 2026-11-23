@@ -121,3 +121,19 @@ Troubleshooting
 ``limactl start`` fails on nested virtualization or on the probe for nested KVM
    The Mac does not offer nested virtualization: it is older than an M3
    or runs a macOS before 15.
+
+The test VM state path probe fails, or ``make vm`` cannot create the vTPM keys
+   If ``build/test-vm`` is a directory in the shared checkout, Lima leaves
+   it in place. Ubuntu's AppArmor profile denies ``swtpm`` writes there.
+   After stopping any test VMs that use that directory, move it aside and
+   link the path to the Lima VM's disk. Run these commands in the checkout
+   from the Lima shell.
+
+   .. code-block:: console
+
+      operator$ mkdir -p "$HOME/test-vm" && \
+          mv -T build/test-vm "build/test-vm.saved-$(date +%Y%m%d-%H%M%S)" && \
+          ln -sT "$HOME/test-vm" build/test-vm
+
+   Retry the step that boots the test target. The saved directory holds
+   the logs and state from the earlier run.

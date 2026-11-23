@@ -105,6 +105,21 @@ probes:
       exit 1
     fi
   hint: See /var/log/cloud-init-output.log in the guest.
+- description: test VM state path
+  script: |
+    #!/bin/bash
+    set -eu
+    state="{{.Param.checkout}}/build/test-vm"
+    if [[ -L "$state" ]]; then
+      [[ "$state" -ef "$HOME/test-vm" ]]
+      exit
+    fi
+    # User provisioning may still be about to create the link.
+    [[ ! -e "$state" ]]
+  hint: |
+    The checkout already has a build/test-vm path. See Troubleshooting in
+    Documentation/start/quickstart-macos.rst to preserve it and link the
+    path to the Lima VM's own disk.
 
 message: |
   From your checkout, open a shell in the Lima VM:
