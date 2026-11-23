@@ -1,0 +1,35 @@
+[package]
+name = "app-sandbox"
+description = "Sandboxes for applications: what they execute, where they connect, which files they write"
+license = "GPL-2.0 OR BSD-2-Clause"
+authors = ["Authors of shirudo"]
+
+[[files]]
+source = "sandbox.toml"
+
+[[files]]
+source = "gen_policy.py"
+
+[[upatches]]
+source = "app-sandbox.bpf.c"
+
+[[upatches.rodata]]
+symbol = "sandbox_policy"
+input = "sandbox.toml"
+generator = ["python3", "gen_policy.py"]
+update = ["python3", "gen_policy.py"]
+
+# One table per sandbox: sandbox.toml gives the rules of the tasks that
+# execute one of its paths.
+[[upatches.policy]]
+id = "apache"
+bit = 0x1
+paths = ["/usr/sbin/apache2", "/usr/sbin/httpd", "/usr/local/apache2/bin/httpd"]
+
+[[upatches.policy]]
+id = "php-fpm"
+bit = 0x2
+paths = ["/usr/sbin/php-fpm8.2", "/usr/sbin/php-fpm8.3", "/usr/sbin/php-fpm8.4", "/usr/local/sbin/php-fpm"]
+
+[upatches.tree]
+id = "app-sandbox"

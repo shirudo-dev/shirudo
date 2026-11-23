@@ -15,7 +15,8 @@
 # Beefiles are the ones given and, for each directory given, every
 # Beefile and *.bee under it that has one; without either, those under
 # upatches/. Each is built with `shirudo bpm build` at
-# <version> and pushed with `shirudo bpm push` to
+# <version>, with the BPF headers of this checkout and, for a package
+# without a vmlinux.h of its own, its vendor/linux/vmlinux.h, and pushed with `shirudo bpm push` to
 # oci://<registry>/<namespace>/<package>, which adds it to
 # <namespace>/bpm-index:stable, signed with the same keys. --new-index
 # starts that index with the first package, for a namespace that never
@@ -164,6 +165,8 @@ case "${SHIRUDO_BUILD:-}" in
 esac
 
 mkdir "$work/out"
+# bpm build looks for shirudo's BPF headers in the directory it runs in.
+[ ! -d "$repo/bpf/lib" ] || ln -s "$repo/bpf" "$work/out/bpf"
 while read -r beefile; do
 	# A Java shield's source is a prebuilt .jar; its build.sh --jar-only
 	# makes it, where a BPF shield's source compiles in bpm build.
@@ -172,8 +175,13 @@ while read -r beefile; do
 		( cd "$dir" && ./build.sh --jar-only ) </dev/null ||
 			fail "cannot build the jar of $beefile"
 	fi
+	# A package that brings no vmlinux.h builds against the checkout's.
+	vmlinux=
+	[ -e "$dir/vmlinux.h" ] || [ ! -e "$repo/vendor/linux/vmlinux.h" ] ||
+		vmlinux=$repo/vendor/linux/vmlinux.h
 	built=$(cd "$work/out" && "$shirudo" bpm build "$dir" \
-		--file "$beefile" --version "$version" --keys-dir "$keys" </dev/null) ||
+		--file "$beefile" --version "$version" --keys-dir "$keys" \
+		${vmlinux:+--vmlinux "$vmlinux"} </dev/null) ||
 		fail "cannot build $beefile"
 	bee=$(basename "$(printf '%s\n' "$built" | tail -n 1)")
 	name=$(basename "$bee" "-$version.bee")

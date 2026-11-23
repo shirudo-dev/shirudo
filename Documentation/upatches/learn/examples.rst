@@ -10,9 +10,10 @@ Example packages
 
 The tree ships packages under :src:`upatches/`: ``kernel-obs``, a
 complete observability package with arena tables, serializers, decoders
-and generated ``.rodata``, and in ``kernel-cve`` three small CVE
+and generated ``.rodata``, in ``kernel-cve`` three small CVE
 detectors exported from a mitigation campaign and one CVE mitigation,
-each a package of its own.
+each a package of its own, and ``app-sandbox``, which enforces with
+policy labels and generated ``.rodata``.
 
 kernel-obs
 ----------
@@ -124,6 +125,63 @@ publishes it with the detectors. Beside the source a reproducer,
 through a pipe into an ``AF_ALG`` aead socket and reports whether the
 bug corrupted it; ``t3115-af-alg-block`` drives it to check the
 mitigation refuses the socket.
+
+app-sandbox
+-----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 72
+
+   * - Item
+     - Content
+   * - Package
+     - ``app-sandbox``, from :src:`upatches/app-sandbox/Beefile`
+   * - upatch
+     - ``app-sandbox``, built from ``app-sandbox.bpf.c``: twelve ``lsm``
+       programs and no state of its own
+   * - Policy labels
+     - one ``[[upatches.policy]]`` table per sandbox, ``apache`` and
+       ``php-fpm``, each a bit and the executables that put a task in
+       the sandbox
+   * - Generated data
+     - ``sandbox_policy``, which ``gen_policy.py`` writes from
+       ``sandbox.toml`` and the policy bits of the Beefile
+   * - Tree entry
+     - ``app-sandbox``, without a selector
+
+A task that executed a file of a sandbox carries its policy bit in
+``shirudo_task_policy``, and so do its children. The programs read that
+bit and the rules of ``sandbox_policy``, and refuse with ``EACCES``:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 66
+
+   * - Hook
+     - Refuses, for a task in a sandbox
+   * - ``lsm.s/bprm_check_security``
+     - executing a file that carries neither the sandbox's bit nor one
+       its ``exec`` rule names
+   * - ``lsm/socket_connect``, ``lsm/socket_sendmsg``
+     - an IPv4 or IPv6 peer outside the networks of its ``network`` rule
+   * - ``lsm/socket_create``
+     - a raw or packet socket, when it has a ``network`` rule
+   * - ``lsm/inode_create``, ``lsm/inode_mkdir``, ``lsm/inode_mknod``,
+       ``lsm/inode_symlink``, ``lsm/inode_link``
+     - a new name that matches a ``deny.create`` pattern
+   * - ``lsm/inode_rename``
+     - a rename from or to a name that matches a ``deny.rename`` pattern
+   * - ``lsm/file_open``, ``lsm/inode_setattr``
+     - opening for writing, or truncating, a name that matches a
+       ``deny.write`` pattern
+
+``gen_policy.py`` joins the two halves of a sandbox by its name: it
+reads the bit from the Beefile and the rules from ``sandbox.toml``, and
+fails the build for rules without a policy table. The package's
+``README.md`` describes the rule keys and what the sandboxes do not
+cover. :src:`tools/put-shields` publishes it with the shields of
+``kernel-cve``.
 
 Related
 -------

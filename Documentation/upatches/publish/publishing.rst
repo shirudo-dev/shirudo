@@ -178,7 +178,9 @@ It builds every ``Beefile`` and ``*.bee`` under :src:`upatches/` that has
 an ``[upatches.tree]`` entry, or, when you name Beefiles and directories
 after the namespace, those Beefiles and the ones under those
 directories, each once, and pushes each package to
-``oci://<registry>/<namespace>/<package>``. Each entry of
+``oci://<registry>/<namespace>/<package>``. A build finds the checkout's
+BPF headers, and a package that brings no ``vmlinux.h`` builds against
+``vendor/linux/vmlinux.h`` of the checkout. Each entry of
 ``<namespace>/bpm-index:stable`` then names a shield's repository,
 version and digests. Give ``--new-index`` for a namespace that has no
 index, and a new ``--version`` for every run after the first: ``bpm
