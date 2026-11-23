@@ -11,7 +11,7 @@
 [![CodeQL](https://github.com/shirudo-dev/shirudo/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/shirudo-dev/shirudo/actions/workflows/codeql.yml)
 [![Documentation](https://github.com/shirudo-dev/shirudo/actions/workflows/docs.yml/badge.svg?branch=main)](https://github.com/shirudo-dev/shirudo/actions/workflows/docs.yml)<br/>
 [![Coverage Status](https://coveralls.io/repos/github/shirudo-dev/shirudo/badge.svg?branch=main)](https://coveralls.io/github/shirudo-dev/shirudo?branch=main)
-[![Coverity Scan Status](https://scan.coverity.com/projects/999999/badge.svg)](https://scan.coverity.com/projects/999999)
+[![Coverity Scan Build Status](https://scan.coverity.com/projects/33401/badge.svg)](https://scan.coverity.com/projects/shirudo-dev-shirudo)
 [![License](https://img.shields.io/badge/license-BSD--2--Clause-blue.svg)](LICENSE)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/999999/badge)](https://www.bestpractices.dev/projects/999999)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/shirudo-dev/shirudo/badge)](https://scorecard.dev/viewer/?uri=github.com/shirudo-dev/shirudo)
