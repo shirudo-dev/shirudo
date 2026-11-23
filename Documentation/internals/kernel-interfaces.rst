@@ -54,7 +54,7 @@ Kernel baseline
      - 7.4 cycle
 
 bpf-next contains the signed-loader ABI at merge ``0867b7bfa9de``.
-The test suite uses the pinned artifact built by ``shirudo-dev/kernel``.
+The test suite uses the pinned artifact built from :src:`testing/kernel/`.
 shirudo defines ``KEY_SPEC_DM_VERITY_KEYRING`` (-10) itself when
 the UAPI headers lack it. The ``tpm_command`` LSM hook, the label reads
 without the calling task's permission, the sleepable form of six inode
@@ -386,7 +386,7 @@ Kfuncs and helpers
      - Read ``security.bpf.shirudo``, ``security.bpf.shirudo.policy``
        and ``security.bpf.shirudo.ancestor``.
        Sleepable; upstream they check ``MAY_READ`` for the calling task
-       first, which kernel project patch 0002 skips for ``security.bpf.``
+       first, which carried patch 0021 skips for ``security.bpf.``
        names.
    * - ``bpf_inode_init_xattr()``
      - Add the label in ``inode_init_security``.
@@ -581,7 +581,7 @@ function only the option builds, ``__module_address`` for
 Without ``CONFIG_MODULE_SIG``, ``module_sig_check()`` is a stub that
 asks no LSM about an unsigned module.
 
-The kernel project configures the test kernel with these options and the
+The test kernel configuration sets these options and the
 additional options the test fixtures and VM need.
 
 Kernel command line

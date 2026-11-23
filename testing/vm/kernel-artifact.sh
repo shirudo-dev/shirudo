@@ -2,11 +2,12 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 #
-# testing/vm/kernel-artifact.sh -- the test VM's kernel, which
-# github.com/shirudo-dev/kernel builds and this checkout does not.
+# testing/vm/kernel-artifact.sh -- download and stage the test VM kernel.
 #
 #   kernel-artifact.sh fetch         download and stage the CI artifact for
 #                                    the test VM architecture
+#   kernel-artifact.sh download      download and extract it into build/
+#                                    kernel-ci-artifact without staging
 #   kernel-artifact.sh stage <dir>   stage an artifact already downloaded
 #   kernel-artifact.sh run-id        print the pinned run
 #
@@ -18,17 +19,19 @@
 # With VM=0 it stages the BTF alone and invalidates the staged VM kernel
 # if the BTF changes.
 #
-#   KERNEL_RUN_ID   another run of the kernel project's package workflow
-#                   than the pinned one.
+#   KERNEL_RUN_ID   another run of shirudo's Build kernel packages workflow.
 #
-# fetch needs gh, logged in with read access to the kernel repository.
+# Fetch the pinned prerelease with curl and python3, or an explicit
+# run override with gh and Actions read access to shirudo.
 
 set -eu
 
 # The run every trigger of the CI suite tests on, so that a new build of
 # the kernel does not change what a series is tested on.
-PINNED_RUN_ID=45062075601
-REPOSITORY=shirudo-dev/kernel
+PINNED_RUN_ID=45212180772
+PINNED_ARM64_SHA256=13967ee9310eca1d175e9d17ee2f06254de4a9e4ab90e8b9a2f992fcba4b599b
+PINNED_AMD64_SHA256=f3e660ce7b1e0cea8d3d1c19d8f3a75097c8aa9cf1dbc10b7ad81abfa2134a9b
+KERNEL_REPOSITORY=shirudo-dev/shirudo
 
 # A directory named from where the caller stands.
 [ "${1:-}" != stage ] || [ $# -ne 2 ] || staged_from=$(realpath -- "$2")
@@ -48,7 +51,7 @@ require_lsm_hooks() {
 		done)
 	rm -f "$names"
 	[ -z "$missing" ] && return 0
-	printf 'kernel BTF lacks the LSM hooks%s: use a shirudo-dev/kernel build\n' \
+	printf 'kernel BTF lacks the LSM hooks%s: use a build from testing/kernel\n' \
 		"$missing" >&2
 	return 1
 }
@@ -195,7 +198,7 @@ run_id() {
 	printf '%s\n' "$id"
 }
 
-fetch() {
+download_ci_artifact() {
 	id=$(run_id) || return 1
 	# shellcheck source=testing/vm/arch.sh
 	. testing/vm/arch.sh
@@ -203,20 +206,39 @@ fetch() {
 		echo "no CI kernel artifact for $TEST_VM_ARCH" >&2
 		return 1
 	}
-	artifact="$TEST_VM_ARCH_CI_ARTIFACT"
-	command -v gh >/dev/null 2>&1 || {
-		echo "gh is needed to download $artifact of $REPOSITORY run $id" >&2
-		return 1
-	}
+	artifact=$TEST_VM_ARCH_CI_ARTIFACT
 	download=build/kernel-ci-artifact
-	rm -rf "$download"
+	rm -rf "$download" || return 1
 	mkdir -p "$download" || return 1
-	echo "downloading $artifact of $REPOSITORY run $id" >&2
-	gh run download "$id" --repo "$REPOSITORY" --name "$artifact" \
-		--dir "$download" || {
-		echo "cannot download $artifact of $REPOSITORY run $id" >&2
+	echo "downloading $artifact from kernel build run $id" >&2
+
+	if [ "$id" != "$PINNED_RUN_ID" ]; then
+		command -v gh >/dev/null 2>&1 || {
+			echo "gh is needed to download $artifact of $KERNEL_REPOSITORY run $id" >&2
+			return 1
+		}
+		gh run download "$id" --repo "$KERNEL_REPOSITORY" --name "$artifact" --dir "$download"
+		return
+	fi
+
+	asset=$artifact.zip
+	archive=$download/$asset
+	url=https://github.com/$KERNEL_REPOSITORY/releases/download/test-kernel-$id/$asset
+	curl --fail --silent --show-error --location --output "$archive" "$url" || return 1
+	case "$TEST_VM_ARCH_DEB" in
+	arm64) checksum=$PINNED_ARM64_SHA256 ;;
+	amd64) checksum=$PINNED_AMD64_SHA256 ;;
+	esac
+	printf '%s  %s\n' "$checksum" "$archive" | sha256sum --check --status || {
+		echo "SHA-256 mismatch for $asset from run $id" >&2
 		return 1
 	}
+	python3 -m zipfile -e "$archive" "$download" || return 1
+	rm -f "$archive"
+}
+
+fetch() {
+	download_ci_artifact || return 1
 	stage_kernel_ci_artifact "$download" "$TEST_VM_ARCH_DEB" || return 1
 	if [ "${VM:-1}" = 0 ] && [ -s "$kernel/$kernel_image_name.sha256sum" ]; then
 		return 0
@@ -224,20 +246,28 @@ fetch() {
 	printf '%s\n' "$id" >"$kernel/kernel-run-id"
 }
 
+usage() {
+	echo "usage: kernel-artifact.sh fetch|download|stage <dir>|run-id" >&2
+	exit 2
+}
+
 case "${1:-}" in
 fetch)
-	[ $# -eq 1 ] || { echo "usage: kernel-artifact.sh fetch" >&2; exit 2; }
+	[ $# -eq 1 ] || usage
 	fetch
 	;;
+download)
+	[ $# -eq 1 ] || usage
+	download_ci_artifact
+	;;
 stage)
-	[ $# -eq 2 ] || { echo "usage: kernel-artifact.sh stage <dir>" >&2; exit 2; }
+	[ $# -eq 2 ] || usage
 	stage_kernel_ci_artifact "$staged_from"
 	;;
 run-id)
 	run_id
 	;;
 *)
-	echo "usage: kernel-artifact.sh fetch|stage <dir>|run-id" >&2
-	exit 2
+	usage
 	;;
 esac

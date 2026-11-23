@@ -134,7 +134,7 @@ The build takes the first of these sources:
      - Generates the header from a BTF file or an ELF file with a
        ``.BTF`` section.
    * - ``artifacts/bpf-next-kernel-debs/vmlinux.btf``
-     - The BTF staged from the pinned kernel project artifact.
+     - The BTF staged from the pinned CI kernel artifact.
    * - ``/sys/kernel/btf/vmlinux``
      - The running kernel.
 
@@ -419,9 +419,9 @@ Project layout
      - Vendored libbpf and BPF UAPI headers.
    * - ``vendor/linux/``
      - The generated ``vmlinux.h``. Not tracked.
-   * - ``shirudo-dev/kernel``
-     - Kernel source, configuration, patches and built artifacts used
-       by CI. See :doc:`/internals/kernel-patches`.
+   * - :src:`testing/kernel/`
+     - The upstream kernel pin, configuration, patches and build script
+       used by CI. See :doc:`/internals/kernel-patches`.
    * - :src:`upatches/`
      - The shipped packages: ``kernel-obs`` with its Beefile, and the
        three ``kernel-cve`` detectors and the ``kernel-cve``

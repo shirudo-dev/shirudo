@@ -11,7 +11,7 @@
 # ci-checks tests, functional and end2end the tier of that name.
 # With VM=0, setup installs only host test dependencies using the kernel
 # CI artifact's BTF, and run leaves out target VMs. CI supplies this artifact
-# from github.com/shirudo-dev/kernel.
+# built from testing/kernel.
 #
 #   .github/scripts/tests.sh setup|run [unit|functional|end2end]
 #
@@ -59,7 +59,7 @@ setup() {
 	fi
 
 	if [ -z "${KERNEL_CI_ARTIFACT_DIR:-}" ]; then
-		echo 'KERNEL_CI_ARTIFACT_DIR must name the downloaded artifact from github.com/shirudo-dev/kernel' >&2
+		echo 'KERNEL_CI_ARTIFACT_DIR must name the downloaded CI kernel artifact' >&2
 		exit 1
 	fi
 	testing/vm/kernel-artifact.sh stage "$KERNEL_CI_ARTIFACT_DIR" || exit 1

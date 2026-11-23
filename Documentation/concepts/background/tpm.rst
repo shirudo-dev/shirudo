@@ -369,7 +369,7 @@ The signature alone does not keep other processes out. The bytes the
 writer key derives from are not a secret, so any process that recreates
 the key could ask the TPM to sign. An LSM hook in the kernel keeps
 them out. The companion kernel change in the
-`shirudo-dev/kernel project <https://github.com/shirudo-dev/kernel>`_
+:src:`testing/kernel/`
 adds an LSM hook, ``tpm_command``, that sees every command written to
 ``/dev/tpm0`` or ``/dev/tpmrm0`` before the driver sends or queues it.
 shirudo's ``lsm/tpm_command``

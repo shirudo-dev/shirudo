@@ -74,7 +74,7 @@ kfuncs:
     Read an xattr whose name starts with ``user.`` or ``security.bpf.``.
     They first check that the current task may read the inode
     (``inode_permission()`` with ``MAY_READ``) and return its error if
-    not; kernel project patch 0002 skips that check for
+    not; carried patch 0021 skips that check for
     ``security.bpf.`` names (:doc:`/internals/kernel-patches`). Both
     may sleep, so only sleepable programs call them.
 
@@ -298,7 +298,7 @@ Limits
 ------
 
 Upstream, the read kfuncs check the calling task's read permission even
-for ``security.bpf.`` names; kernel project patch 0002 drops that check
+for ``security.bpf.`` names; carried patch 0021 drops that check
 for them. On a kernel without the patch, when another LSM, an ACL
 or an idmapped mount denies that task read access, the seal decides by
 the record of the inode, or of the directory the operation changes, and

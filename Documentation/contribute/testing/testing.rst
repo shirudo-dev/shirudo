@@ -52,30 +52,30 @@ Before you begin
   operator's build dependencies, a JDK among them, to the image of the
   operator VM.
 
-The ``CI suite`` workflow uses the x86-64 CI kernel package from
-``shirudo-dev/kernel`` for every trigger: the
-``kernel-packages-x86-64-ci`` artifact of the run that
-:src:`testing/vm/kernel-artifact.sh` pins, so that a new build of the
-kernel does not change what a series is tested on. For a manual run,
-set ``kernel_run_id`` to select another run. The run must contain that
-artifact. The ``KERNEL_REPO_READ_TOKEN`` secret needs Actions read
-access to the kernel repository. Setup extracts the packages,
-checks BTF for the signed-loader ABI and every LSM hook a
-program of ``bpf/`` attaches to, and stages the result for the test VM.
-The kernel project owns the kernel source, configuration and patch
-application. Changes to those inputs need a successful kernel project
-run and an updated pin before CI can boot the series.
+The ``CI suite`` workflow uses the x86-64 CI kernel package.
+:src:`testing/vm/kernel-artifact.sh` pins its build run ID and checksums.
+When a change touches the kernel build inputs, CI builds packages for
+x86-64 and arm64 using the bpf-next commit recorded in
+:src:`testing/kernel/bpf-next.commit` and the patches and configuration in
+:src:`testing/kernel/`. Both builds must pass and the test VM uses the
+x86-64 package from that run. For a manual CI run, set ``kernel_run_id``
+to use a ``kernel-packages-x86-64-ci`` artifact from a shirudo Actions run.
+Setup extracts the packages, checks BTF for the signed-loader ABI and
+every LSM hook a program of ``bpf/`` attaches to, and stages the result
+for the test VM.
 
-Publish a CI kernel prerelease
-------------------------------
-
-Dispatch ``Build kernel packages`` on shirudo's ``main``. It builds
-x86-64 and arm64 from the bpf-next commit in
-:src:`testing/kernel/bpf-next.commit` and the patches and configuration
-in :src:`testing/kernel/`. Dispatch ``Publish test kernel`` with the
-successful run ID. The prerelease ``test-kernel-<run-id>`` includes both
-bundle ZIPs, their matching ``kernel-ci-source.tar.zst`` and
-``SHA256SUMS``. Verify the public downloads against ``SHA256SUMS``.
+To update the published pin, dispatch ``Build kernel packages`` on
+shirudo's ``main``, then dispatch ``Publish test kernel`` with the
+successful build run ID. The workflow publishes ``test-kernel-<run-id>``
+with the original x86-64 and arm64 bundle ZIPs and
+``kernel-ci-source.tar.zst``. The source archive contains the patched
+kernel, the patch series, the CI configuration fragments and the build
+script. The bundles contain the generated configurations and build
+metadata. Use the release's ``SHA256SUMS`` to update both architecture
+checksums and the run ID in :src:`testing/vm/kernel-artifact.sh` together.
+Land kernel input changes first. After publishing their bundles, update
+the pin in the same change as any shirudo code that requires the new
+kernel.
 
 Test tiers
 ----------
@@ -458,8 +458,8 @@ end-to-end test has no TPM and no shirudo kernel arguments; it builds
 and installs the operator package and serves the end-to-end run. The
 interactive VM stays up until you stop it.
 
-Use a kernel project artifact
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Use a CI kernel artifact
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 The kernel CI artifacts contain the kernel image, BTF, configuration and
 modules. :src:`testing/vm/kernel-artifact.sh` pins the run the tests use.
@@ -467,15 +467,17 @@ A goal of ``make -C testing`` that finds no kernel under
 ``artifacts/bpf-next-kernel-debs/`` downloads and stages the CI artifact
 for the VM architecture. A target VM goal uses its kernel image, and a
 build uses its BTF unless ``BPF_VMLINUX_BTF`` or ``BPF_VMLINUX_H`` names
-another source. Fetching needs ``gh`` logged in with read access to the
-kernel repository:
+another source. ``fetch`` downloads the architecture's ZIP from the
+pinned run's ``test-kernel-<run-id>`` prerelease in
+``shirudo-dev/shirudo`` with ``curl``. It checks the pinned SHA-256 before
+extracting the ZIP with Python 3.
 
 .. code-block:: console
 
    $ testing/vm/kernel-artifact.sh fetch
 
-``KERNEL_RUN_ID=<run>`` takes another run that publishes the CI artifact
-for the architecture. A kernel that is staged is
+``KERNEL_RUN_ID=<run>`` selects a shirudo Actions run that has the CI
+artifact for the architecture and fetches it using authenticated ``gh``. A kernel that is staged is
 left as it is, whatever run it came from, and
 ``artifacts/bpf-next-kernel-debs/kernel-run-id`` names the run of one
 that was fetched: remove the directory to get the pinned kernel after

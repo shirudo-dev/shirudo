@@ -159,8 +159,7 @@ without the protection.
        ``inode_remove_acl``, ``inode_file_setattr`` and
        ``inode_copy_up``, a ``dentry->d_parent`` the verifier trusts,
        and the ``mm_read_access`` LSM hook. Upstream has none of these,
-       and the `shirudo-dev/kernel project
-       <https://github.com/shirudo-dev/kernel>`_ carries them in the
+       and :src:`testing/kernel/` carries them in the
        target kernel build.
      - T1 needs the ABI, T5 the hook, T3 the label read, the sleepable
        hooks, the trusted parent and the read-only mm access hook.
@@ -797,7 +796,7 @@ receive no binding to these maps.
 A labeled directory takes new entries, by create, mkdir, symlink,
 mknod, hard link or rename, only from authorized tasks (``SealEntry``):
 each entry hook reads the directory's label from the new entry's parent
-dentry, which the kernel project patches 0003 and 0004 (A3) make possible by
+dentry, which the carried patches 0022 and 0023 (A3) make possible by
 letting a sleepable program attach to ``inode_mkdir`` and ``inode_link``
 and by trusting ``dentry->d_parent``, and refreshes the directory's
 mark on the way, from which ``lsm/inode_init_security`` gives the new
@@ -876,7 +875,7 @@ An authorized process is protected against being taken over:
   ``/proc/<pid>/exe``, ``environ``, ``maps`` and the ``fd`` links,
   without a counter. ``lsm/mm_read_access`` refuses the read-only
   access ``mm_access()`` would otherwise grant ``CAP_PERFMON`` past that
-  refusal (kernel project patch 0005, A3).
+  refusal (carried patch 0024, A3).
 - ``lsm/perf_event_alloc`` refuses a perf event bound to a marked task
   (``SealPerf``). Events on all tasks of a CPU, and events opened on a
   task before the exec that marks it, are not checked (D9).

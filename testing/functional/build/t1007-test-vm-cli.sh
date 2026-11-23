@@ -628,8 +628,8 @@ test_expect_success 'an operator VM serves without a TPM and alone gets the key'
 	grep -q "the operator VM has a TPM" vm/guest.sh &&
 	grep -q "bindeb-pkg PKG_ROLES=operator" vm/guest.sh
 '
-test_expect_success 'test VMs require a kernel project artifact' '
-	grep -q "github.com/shirudo-dev/kernel" ../testing/Makefile &&
+test_expect_success 'test VMs require a CI kernel artifact' '
+	grep -q "testing/kernel" ../testing/Makefile &&
 	grep -q "^require-vm-kernel:" ../testing/Makefile &&
 	! grep -q "build-kernel.sh\|KERNEL_CONFIG\|KERNEL_PATCHES" ../testing/Makefile &&
 	grep -q "KERNEL_CI_ARTIFACT_DIR" ../.github/scripts/tests.sh &&
@@ -638,7 +638,7 @@ test_expect_success 'test VMs require a kernel project artifact' '
 	test "$(KERNEL_RUN_ID=12 vm/kernel-artifact.sh run-id)" = 12 &&
 	test "$id" -gt 0 &&
 	! KERNEL_RUN_ID=1x vm/kernel-artifact.sh run-id 2>/dev/null &&
-	grep -q "kernel-artifact.sh run-id" ../.github/workflows/tests.yml
+	grep -q "select-test-kernel.sh" ../.github/workflows/tests.yml
 '
 test_expect_success 'prepared VM runtime includes ripgrep' '
 	grep -qx "ripgrep" vm/runtime-packages &&

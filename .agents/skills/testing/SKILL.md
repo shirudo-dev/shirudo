@@ -102,14 +102,19 @@ parser of input from outside the host gets a target in `testing/fuzz/`.
 
 ## Before a VM goal
 
-- `vm`, `test-vm-bundle` and every family with target tests require the
-  kernel artifact from `shirudo-dev/kernel` under
-  `artifacts/bpf-next-kernel-debs/`. `testing/vm/kernel-artifact.sh`
-  pins a kernel run; the CI setup script stages its artifact, and a
-  local VM goal that finds no kernel there downloads and stages it with
-  `gh` (`testing/vm/kernel-artifact.sh fetch`). A kernel already staged
-  is left alone: remove the directory to get the pinned one. No goal
-  builds a kernel from this checkout.
+- `vm`, `test-vm-bundle` and every family with target tests require a CI
+  kernel artifact under `artifacts/bpf-next-kernel-debs/`.
+  `testing/vm/kernel-artifact.sh` pins a build run and a SHA-256 for each
+  architecture. Dispatch Build kernel packages and Publish test kernel
+  on shirudo's main branch for a new pin. Update the run ID and both
+  checksums together. CI builds x86-64 and arm64 from `testing/kernel/`
+  for a run that changes the kernel inputs. Otherwise it downloads the pinned
+  prerelease. Local VM goals use `testing/vm/kernel-artifact.sh fetch`
+  when the kernel is missing. It downloads the prerelease ZIP with
+  `curl` and verifies its checksum before extraction. Use authenticated
+  `gh` with `KERNEL_RUN_ID` for a specific shirudo Actions run. A kernel
+  already staged is left alone: remove the directory to get the pinned
+  one.
 - The bundle builds in the build container (`testing/container/`) from
   a copy of the files git sees in the checkout, tracked and untracked but
   not ignored, so uncommitted changes are tested; edit nothing until the

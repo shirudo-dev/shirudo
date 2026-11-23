@@ -8,10 +8,9 @@
 Carried kernel patches
 ======================
 
-The kernel changes shirudo needs and the external project that builds
-them. The ``shirudo-dev/kernel`` repository carries these changes and
-publishes the kernel artifacts used by the test suite. A production
-kernel needs the same changes.
+The kernel changes shirudo needs. :src:`testing/kernel/patches/` carries
+these changes for the test suite. A production kernel needs the same
+changes.
 
 Summary
 -------
@@ -24,23 +23,23 @@ Summary
      - Author
      - In bpf-next
      - Architectures
-   * - ``0001-tpm-Let-LSMs-inspect-userspace-commands.patch``
+   * - ``0020-tpm-Let-LSMs-inspect-userspace-commands.patch``
      - KP Singh
      - No
      - All
-   * - ``0002-bpf-Read-security.bpf-xattrs-for-LSM-programs-without-the-caller-s-permission.patch``
+   * - ``0021-bpf-Read-security.bpf-xattrs-for-LSM-programs-without-the-callers-permission.patch``
      - Daniel Borkmann
      - No
      - All
-   * - ``0003-bpf-Let-sleepable-LSM-programs-attach-to-the-remaining-inode-hooks.patch``
+   * - ``0022-bpf-Let-sleepable-LSM-programs-attach-to-the-remaining-inode-hooks.patch``
      - Daniel Borkmann
      - No
      - All
-   * - ``0004-bpf-Treat-dentry-d_parent-as-a-trusted-pointer.patch``
+   * - ``0023-bpf-Treat-dentry-d_parent-as-a-trusted-pointer.patch``
      - Daniel Borkmann
      - No
      - All
-   * - ``0005-mm-Let-LSMs-check-read-only-remote-mm-access-under-CAP_PERFMON.patch``
+   * - ``0024-mm-Let-LSMs-check-read-only-remote-mm-access-under-CAP_PERFMON.patch``
      - Daniel Borkmann
      - No
      - All
@@ -64,10 +63,10 @@ why.
 How the test kernel includes them
 ---------------------------------
 
-The kernel project maintains and builds the patches. CI downloads its
-kernel package artifact and checks the BTF ABI and LSM hooks before it
-stages the image for the test VM. The kernel configuration and patch
-application are owned by that project.
+:src:`testing/kernel/build-kernel.sh` applies the patches to the pinned
+bpf-next commit and builds the kernel package with the configuration in
+:src:`testing/kernel/`. CI checks the BTF ABI and LSM hooks before it
+stages the image for the test VM.
 
 TPM command LSM hook
 --------------------

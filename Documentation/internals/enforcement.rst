@@ -532,7 +532,7 @@ Hooks in seal
        ``mm_access()`` would grant ``CAP_PERFMON`` after the ptrace check
        refused it: ``environ``, ``maps``, ``smaps``, ``pagemap``.
      - ``EACCES``, uncounted
-     - Closed, with kernel project patch 0005.
+     - Closed, with carried patch 0024.
    * - ``lsm/perf_event_alloc``
      - A perf event bound to a marked task. CPU-wide events have no task
        and are not checked.

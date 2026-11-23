@@ -63,7 +63,7 @@ TEST_VM_MEMORY ?= 4G
 TEST_VM_DISK_SIZE ?= 30G
 TEST_VM_UBUNTU_CODENAME ?= resolute
 TEST_VM_VERBOSE ?= 0
-# Test VMs use kernel artifacts built by github.com/shirudo-dev/kernel.
+# Test VMs use kernel artifacts built from testing/kernel.
 VM_KERNEL ?= $(if $(strip $(KERNEL)),$(KERNEL),bpf-next)
 VM_KERNEL_VERSION := $(patsubst v%,%,$(VM_KERNEL))
 VM_KERNEL_MIN := 7.4
@@ -181,7 +181,7 @@ require-vm-kernel:
 		[ "$(VM_KERNEL)" = bpf-next ] && \
 			$(ROOT)/testing/vm/kernel-artifact.sh fetch; \
 	} || { \
-		echo "kernel artifact is missing; use github.com/shirudo-dev/kernel packages in $(VM_KERNEL_ARTIFACT_DIR)" >&2; \
+		echo "kernel artifact is missing; use CI kernel packages in $(VM_KERNEL_ARTIFACT_DIR)" >&2; \
 		exit 1; \
 	}
 
@@ -438,8 +438,8 @@ help:
 	  '  make -C testing fuzz [FUZZ_SECONDS=60] [FUZZ_CORPUS=<dir>] [FUZZERS=<target>...]' \
 	  '  make -C testing afl [AFL_SECONDS=600] [FUZZ_CORPUS=<dir>] [FUZZERS=<target>...]' \
 	  '  make -C testing vm, vm-console, vm-ssh, vm-enroll, vm-sbom, vm-stop, or vm-clean' \
-	  '  VM_KERNEL=bpf-next (default) selects the shirudo-dev/kernel artifact,' \
-	  '  downloaded with gh when artifacts/bpf-next-kernel-debs has none' \
+	  '  VM_KERNEL=bpf-next (default) selects the pinned CI kernel artifact,' \
+	  '  fetched when artifacts/bpf-next-kernel-debs has none' \
 	  '  make -C testing bundle or test-helpers' \
 	  '  make -C testing stack-up, oci, telemetry, xtop or stack-down' \
 	  '  make -C testing clean'

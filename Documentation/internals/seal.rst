@@ -174,7 +174,7 @@ task. It counts one whose mode includes ``PTRACE_MODE_ATTACH``
 ``pidfd_getfd()`` and ``process_vm_readv()``, and refuses a read-mode
 one uncounted, because journald reads ``/proc/<pid>/exe`` of every
 process it logs for and a counted read would rise on an honest node.
-``lsm/mm_read_access``, a hook of kernel project patch 0005, refuses the
+``lsm/mm_read_access``, a hook of carried patch 0024, refuses the
 read-only access ``mm_access()`` grants ``CAP_PERFMON`` after that
 refusal, to ``environ``, ``maps`` and the other memory files. ``lsm/perf_event_alloc``
 refuses a perf event bound to a marked task (``SealPerf``).
@@ -397,11 +397,11 @@ Marks are a cache
     entry's parent dentry and refresh its mark on the way, which
     ``inode_init_security``, the one hook without a dentry, labels the
     new inode from in the same operation. On a kernel without the
-    kernel project patches 0003 and 0004, the seal's entry hooks do not load
+    carried patches 0022 and 0023, the seal's entry hooks do not load
     and ``init`` fails.
 
 Label reads on an upstream kernel
-    Without kernel project patch 0002, the kfuncs check that the calling
+    Without carried patch 0021, the kfuncs check that the calling
     task may read the inode, and every LSM's ``inode_permission`` hook
     takes part. A read that fails for the caller, through an idmapped
     mount, an ACL or another LSM's policy, makes a labeled inode

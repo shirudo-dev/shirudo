@@ -103,9 +103,10 @@ Kernel source
        there, and ``init`` fails without the hook.
 
 :doc:`/internals/kernel-patches` describes the required changes and
-their status. The `shirudo-dev/kernel repository
-<https://github.com/shirudo-dev/kernel>`_ maintains the patches and
-builds the test and production kernel artifacts.
+their status. :src:`testing/kernel/` carries the patches and builds the
+test kernel artifacts. The `shirudo-dev/kernel repository
+<https://github.com/shirudo-dev/kernel>`_ builds the production kernel
+artifacts.
 
 Identify the kernel
 ~~~~~~~~~~~~~~~~~~~
@@ -118,14 +119,13 @@ Identify the kernel
   the kernel has every LSM hook the embedded programs attach to
   (``kernel_lsm_hooks``), and names the hooks a kernel built without
   the kernel project patch set lacks.
-- The test harness uses the pinned kernel build artifact from
-  `shirudo-dev/kernel <https://github.com/shirudo-dev/kernel>`_. The
-  kernel project owns its source, configuration and patch application.
+- The test harness uses the pinned artifact built from
+  :src:`testing/kernel/`.
 
 Kernel configuration
 ~~~~~~~~~~~~~~~~~~~~
 
-shirudo needs every option below. The kernel project's CI profile sets
+shirudo needs every option below. The CI kernel configuration sets
 these options and additional ones that the tests use.
 
 .. list-table::

@@ -40,8 +40,8 @@ Before you begin
   and ``tss2-tctildr``) and LuaJIT.
 - OpenSSL 3.5 or newer (``openssl version``). If it reports an older
   version, follow :ref:`the developer guide's steps <dev-openssl>` first.
-- ``dpkg-deb`` to extract the test kernel, and Docker or Podman to build
-  the test VM bundle.
+- ``curl``, Python 3 and ``dpkg-deb`` to fetch and extract the test
+  kernel, and Docker or Podman to build the test VM bundle.
 - For the test VM, with their Debian and Ubuntu names: QEMU
   (``qemu-system-x86`` or ``qemu-system-arm``), ``qemu-utils``, ``swtpm``,
   ``swtpm-tools``, ``tpm2-tools``, ``libtss2-tcti-swtpm0t64``,
@@ -66,12 +66,12 @@ From the checkout root, download and stage the CI kernel for your host:
 
    operator$ testing/vm/kernel-artifact.sh fetch
 
-``fetch`` needs ``gh`` logged in with read access to the kernel
-repository. It selects ``kernel-packages-x86-64-ci`` or
-``kernel-packages-arm64-ci`` from the run pinned in
-:src:`testing/vm/kernel-artifact.sh`. Use ``KERNEL_RUN_ID=<run>`` to
-select another run that publishes the CI artifact for your architecture.
-If you downloaded the artifact separately, run
+``fetch`` selects the kernel bundle for your architecture from the run
+pinned in :src:`testing/vm/kernel-artifact.sh` and checks its SHA-256
+before extracting it. It downloads the prerelease ZIP from
+``shirudo-dev/shirudo`` with ``curl``. Set ``KERNEL_RUN_ID=<run>`` to
+fetch a CI artifact from a shirudo Actions run using authenticated ``gh``.
+If you downloaded the bundle separately, extract it and run
 ``testing/vm/kernel-artifact.sh stage <artifact-dir>``.
 
 The artifact includes the kernel, its BTF, configuration and modules.

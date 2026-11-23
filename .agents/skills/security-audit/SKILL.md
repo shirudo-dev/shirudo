@@ -103,8 +103,8 @@ of `bpf/` the list of who writes and reads it, set against its flags.
 
 Hunt each class in both halves, the BPF programs and the userspace C,
 and with the kernel source open: a checkout of the kernel the test VM
-boots, which the `shirudo-dev/kernel` project builds with its patch
-set. Neither half can be judged without it. For a hook,
+boots, which `testing/kernel/build-kernel.sh` builds with the carried
+patch set. Neither half can be judged without it. For a hook,
 read the callers of `security_<hook>()`, what each does with the return
 value and what it holds while it calls; for a helper or kfunc, what it
 returns, when it fails and whether it sleeps; for a system call, a
