@@ -6,24 +6,102 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shirudo main CI history · Pivot</title>
+<script>
+(() => {
+  const key = "shirudo-theme";
+  const root = document.documentElement;
+  const preference = window.matchMedia("(prefers-color-scheme: dark)");
+  let button;
+
+  function nextTheme() {
+    const current = root.dataset.theme || (preference.matches ? "dark" : "light");
+    return current === "dark" ? "light" : "dark";
+  }
+
+  function label() {
+    const next = nextTheme();
+    button.textContent = next === "dark" ? "Dark" : "Light";
+    button.setAttribute("aria-label", "Switch to the " + next + " theme");
+  }
+
+  function applyTheme(theme) {
+    if (theme === "light" || theme === "dark") root.dataset.theme = theme;
+    else delete root.dataset.theme;
+    if (button) label();
+  }
+
+  try {
+    applyTheme(localStorage.getItem(key));
+    window.addEventListener("storage", event => {
+      if (event.storageArea === localStorage && (event.key === key || event.key === null)) {
+        applyTheme(event.newValue);
+      }
+    });
+  } catch {
+    // Follow the system preference when storage is unavailable.
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    button = document.querySelector(".theme-toggle");
+    button.addEventListener("click", () => {
+      const next = nextTheme();
+      applyTheme(next);
+      try {
+        localStorage.setItem(key, next);
+      } catch {
+        // Keep the choice for the current page.
+      }
+    });
+    preference.addEventListener("change", label);
+    label();
+    button.hidden = false;
+  });
+})();
+</script>
 <style>
+  :root {
+    color-scheme: light dark;
+    --background:light-dark(#fff,#0e1116);
+    --foreground:light-dark(#202531,#e4e8ee);
+    --panel:light-dark(#fff,#161b22);
+    --cell:light-dark(#f2f4f7,#242c38);
+    --rule:light-dark(#e3e7ed,#262d37);
+    --input:light-dark(#cbd3de,#465365);
+    --subtle:light-dark(#606b7b,#9ba5b3);
+    --ring:light-dark(#4a62de,#87b7f8);
+    --passed:light-dark(#248776,#71d5bc);
+    --failed:light-dark(#c23a46,#f18a96);
+    --cancelled:light-dark(#7656a3,#c5a9ef);
+    --skipped:light-dark(#6b7280,#a5afbd);
+    --active:light-dark(#3d69be,#90baff);
+    --other:light-dark(#76685b,#cbb8a8);
+  }
+  :root[data-theme="light"] { color-scheme:light; }
+  :root[data-theme="dark"] { color-scheme:dark; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--background,#fff); color: var(--foreground,#202531); font: 14px/1.4 var(--font-sans,system-ui,sans-serif); }
-  main { --passed:var(--chart-2,#248776); --failed:var(--destructive,#c23a46); --cancelled:var(--chart-4,#7656a3); --skipped:var(--muted-foreground,#6b7280); --active:var(--chart-1,#3d69be); --rule:var(--border,#e3e7ed); --subtle:var(--muted-foreground,#606b7b); --page-padding:clamp(14px,3vw,25px); padding:var(--header-height,0px) var(--page-padding) var(--page-padding); }
+  body { margin: 0; background: var(--background); color: var(--foreground); font: 14px/1.4 var(--font-sans,system-ui,sans-serif); }
+  main { --page-padding:clamp(14px,3vw,25px); padding:var(--header-height,0px) var(--page-padding) var(--page-padding); }
   h2, p { margin:0; }
   h2 { font-size:15px; font-weight:640; }
-  .head, .legend { display:flex; flex-wrap:wrap; align-items:center; gap:8px 15px; }
-  .head { justify-content:space-between; align-items:baseline; }
+  .head, .head-actions, .legend { display:flex; flex-wrap:wrap; align-items:center; gap:8px 15px; }
+  .head { justify-content:space-between; }
+  .head-context { display:grid; grid-template-columns:28px minmax(0,1fr); align-items:center; column-gap:10px; min-width:0; }
+  .head-logo { grid-row:span 2; width:28px; height:30px; background:currentColor; mask:url("../../_static/shirudo-symbol-mono-for-light-back.png") center / contain no-repeat; }
+  .crumbs { display:flex; flex-wrap:wrap; row-gap:4px; margin:0; padding:0; list-style:none; }
+  .crumbs li { white-space:nowrap; }
+  .crumbs span { margin:0 6px; color:var(--subtle); }
   .empty-state { padding:12px 0; text-align:left; }
-  .other { --series:var(--chart-3,#76685b); }
+  .other { --series:var(--other); }
   .head a, .detail a { color:inherit; text-underline-offset:3px; }
-  .warning { margin-top:6px; padding:6px 10px; border:1px solid var(--failed); border-radius:4px; background:color-mix(in srgb,var(--failed) 12%,var(--background,#fff)); font-weight:650; }
+  .warning { margin-top:6px; padding:6px 10px; border:1px solid var(--failed); border-radius:4px; background:color-mix(in srgb,var(--failed) 12%,var(--background)); font-weight:650; }
   .muted { color:var(--subtle); font-size:12px; }
   #loading { white-space:nowrap; }
   #loading::before { content:""; display:inline-block; width:.8em; height:.8em; margin:0 .35em 0 .6em; border:1px solid var(--rule); border-top-color:currentColor; border-radius:50%; animation:spin .8s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
   @media (prefers-reduced-motion:reduce) { #loading::before { animation:none; } }
   button { color:inherit; font:inherit; }
+  .theme-toggle { padding:2px 8px; background:var(--panel); border:1px solid var(--input); border-radius:4px; cursor:pointer; }
+  .theme-toggle:hover { border-color:var(--subtle); }
   .legend { margin:12px 0 9px; }
   .legend span { white-space:nowrap; }
   .mark { display:inline-flex; align-items:center; justify-content:center; width:1.15em; font-weight:750; font-size:1.12em; }
@@ -33,46 +111,60 @@
   .skipped { --series:var(--skipped); }
   .active { --series:var(--active); }
   .mark { color:var(--series,currentColor); }
-  #page-header { position:fixed; inset:0 0 auto; z-index:4; background:var(--background,#fff); padding:var(--page-padding) var(--page-padding) 0; display:flow-root; }
+  #page-header { position:fixed; inset:0 0 auto; z-index:4; background:var(--background); padding:var(--page-padding) var(--page-padding) 0; display:flow-root; }
   table { width:100%; border-collapse:separate; border-spacing:2px; table-layout:fixed; font-variant-numeric:tabular-nums; }
   .commit-col { width:150px; }
   .commit-sha { display:block; color:inherit; font:11px var(--font-mono,monospace); text-underline-offset:2px; }
   .commit-time { display:block; padding-top:2px; color:var(--subtle); font-size:11px; font-weight:400; }
   th { font-weight:600; }
-  thead { position:sticky; top:var(--header-height,0px); z-index:2; background:var(--background,#fff); }
+  thead { position:sticky; top:var(--header-height,0px); z-index:2; background:var(--background); }
   thead th { font-size:11px; vertical-align:bottom; overflow-wrap:anywhere; }
   thead .date { padding:3px 0; border-bottom:1px solid var(--rule); }
-  thead th:first-child, tbody th { text-align:left; position:sticky; left:0; z-index:1; background:var(--background,#fff); }
+  thead th:first-child, tbody th { text-align:left; position:sticky; left:0; z-index:1; background:var(--background); }
   thead th:first-child { z-index:3; }
   thead th:nth-child(n+2) > span { display:inline-block; writing-mode:vertical-rl; transform-origin:top center; transform:translateY(100%) rotate(210deg); white-space:nowrap; }
   tbody th { font-size:12px; font-weight:520; }
   td { padding:0; }
   td > button { position:relative; width:100%; cursor:pointer; border:1px solid transparent; background:transparent; border-radius:4px; }
-  td > button { min-height:27px; padding:2px 3px; background:color-mix(in srgb,var(--muted,#f2f4f7) 72%,transparent); }
+  td > button { min-height:27px; padding:2px 3px; background:color-mix(in srgb,var(--cell) 72%,transparent); }
   td > button:hover { border-color:var(--subtle); }
-  td > button[aria-expanded="true"] { outline:1px solid var(--ring,#4a62de); outline-offset:0; }
-  :focus-visible { outline:2px solid var(--ring,#4a62de); outline-offset:1px; }
+  td > button[aria-expanded="true"] { outline:1px solid var(--ring); outline-offset:0; }
+  :focus-visible { outline:2px solid var(--ring); outline-offset:1px; }
   .empty { display:block; text-align:center; color:var(--subtle); }
   .counts { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:1px 3px; font-size:11px; line-height:1.2; min-height:14px; }
   .counts > span { white-space:nowrap; }
   .strip { position:absolute; inset:-1px auto -1px -1px; display:flex; flex-direction:column; width:3px; border-radius:4px 0 0 4px; overflow:hidden; pointer-events:none; }
   .segment { display:block; background:var(--series); }
   .segment.cancelled { background:repeating-linear-gradient(120deg,var(--series) 0 3px,transparent 3px 5px); }
-  .detail { position:fixed; inset:auto; margin:0; width:min(430px,calc(100vw - 16px)); max-height:min(420px,calc(100dvh - 16px)); overflow:auto; padding:12px; border:1px solid var(--rule); border-radius:8px; background:var(--card,#fff); color:inherit; box-shadow:0 6px 20px #0003; overflow-wrap:anywhere; }
+  .detail { position:fixed; inset:auto; margin:0; width:min(430px,calc(100vw - 16px)); max-height:min(420px,calc(100dvh - 16px)); overflow:auto; padding:12px; border:1px solid var(--rule); border-radius:8px; background:var(--panel); color:inherit; box-shadow:0 6px 20px #0003; overflow-wrap:anywhere; }
   .detail-list { list-style:none; margin:6px 0 0; padding:0; }
   .detail-list li { display:grid; grid-template-columns:86px 1fr 52px; gap:10px; align-items:baseline; padding:4px 0; border-bottom:1px solid var(--rule); font-size:12px; }
   .detail-list time { color:var(--subtle); font-variant-numeric:tabular-nums; }
-  .detail button { margin-top:8px; padding:4px 7px; background:var(--card,#fff); border:1px solid var(--input,#cbd3de); border-radius:4px; cursor:pointer; }
+  .detail button { margin-top:8px; padding:4px 7px; background:var(--panel); border:1px solid var(--input); border-radius:4px; cursor:pointer; }
 </style>
 </head>
 <body>
 <main id="timeline">
   <div id="page-header">
     <header class="head">
-      <a href="testing.html">Run and write tests</a>
-      <a href="https://github.com/shirudo-dev/shirudo/actions?query=branch%3Amain" target="_blank" rel="noopener">Live GitHub Actions ↗</a>
+      <div class="head-context">
+        <span class="head-logo" aria-hidden="true"></span>
+        <nav aria-label="Breadcrumb">
+          <ol class="crumbs" role="list">
+            <li><a href="../../index.html">Docs</a></li>
+            <li><span aria-hidden="true">/</span><a href="../index.html">Contribute</a></li>
+            <li><span aria-hidden="true">/</span><a href="index.html">Testing</a></li>
+            <li><span aria-hidden="true">/</span><a href="testing.html">Run and write tests</a></li>
+            <li aria-current="page"><span aria-hidden="true">/</span>CI Status</li>
+          </ol>
+        </nav>
+        <p class="muted"><span id="as-of"></span><span id="loading" role="status" hidden>Fetching…</span></p>
+      </div>
+      <div class="head-actions">
+        <button class="theme-toggle" type="button" hidden></button>
+        <a href="https://github.com/shirudo-dev/shirudo/actions?query=branch%3Amain" target="_blank" rel="noopener">Github Actions</a>
+      </div>
     </header>
-    <p class="muted"><span id="as-of"></span><span id="loading" role="status" hidden>Fetching…</span></p>
     <p class="warning" id="fetch-warning" role="alert" hidden></p>
     <div class="legend muted" aria-label="CI outcomes" id="legend"></div>
   </div>
