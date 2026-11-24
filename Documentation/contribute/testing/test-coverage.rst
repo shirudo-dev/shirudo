@@ -327,6 +327,34 @@ signed config image.
        every op as ``activity`` and, for a marked socket whose op failed, a
        ``hit``. A spliced failing decrypt moves both counters; an ordinary
        copying failing decrypt moves only ``activity``; the unload removes it
+   * - ``t3118-fentry-fexit``
+     - Live ``fentry`` and ``fexit`` links attach to ``vfs_fallocate()``
+       from one upatch and report their kinds. The ``fentry`` program
+       sees a call with its arguments and follows a pointer among them
+       to the file's inode number. The ``fexit`` program sees a call
+       that succeeds and a call the kernel refuses, each with the
+       arguments as passed and the value returned. The unload detaches
+       both
+   * - ``t3119-fmod-ret``
+     - Live ``fmod_ret`` links. On ``security_task_setnice()``, a target
+       on every kernel, the program fails the one call it is written
+       for, the caller gets its error, another call runs, and the unload
+       lets the refused call through again. On ``vfs_fallocate()``, on a
+       kernel whose BTF carries the tags of
+       ``CONFIG_BPF_FMODRET_SCAN``, the same holds for a listed error,
+       an ``fentry`` program runs before the skip, an ``fexit`` program
+       sees that error with the arguments of the skipped call, and a
+       program that returns an error outside the list is refused as
+       ``verifier_rejected``. On a kernel without tags, the load for
+       ``vfs_fallocate()`` is refused the same way
+   * - ``t3120-sleepable``
+     - Live ``fentry.s``, ``fmod_ret.s`` and ``fexit.s`` links attach to
+       the entry point of ``chdir(2)`` from one upatch and report their
+       kinds. Each program reads the path from user memory with
+       ``bpf_copy_from_user()``, which only a sleepable program may
+       call. The ``fmod_ret.s`` program fails the one call it is written
+       for, the caller gets its error, the other two programs see that
+       call, another call runs, and the unload detaches all three
 
 ``tpm`` (4)
 ~~~~~~~~~~~
@@ -1429,10 +1457,13 @@ several of them are tested, the counter is not.
 Attach kinds
 ~~~~~~~~~~~~
 
-- ``fexit``, ``tp_btf`` and ``kretprobe`` have no test, offline or on a
-  target.
-- ``fmod_ret`` and kprobe override are checked offline only
-  (``t3008``).
+- ``tp_btf`` and ``kretprobe`` have no test, offline or on a target.
+- kprobe override is checked offline only (``t3008``).
+- ``t3119`` runs its cases for a tagged function only on a kernel whose
+  BTF carries the tags. On another kernel it checks the refusal instead.
+- ``t3120`` covers the sleepable forms on a system call entry point
+  only. The test kernel has no ``CONFIG_FUNCTION_ERROR_INJECTION``, so
+  no other function takes them there.
 - kprobe loads run only on a kernel with a kprobe PMU. The test kernel
   has none, so ``t6116`` leaves out its kprobe case.
 

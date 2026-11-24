@@ -172,6 +172,7 @@ build_fixture()
 	local source="$1"
 	local name="$2"
 	local keys_dir="$3"
+	local cflags="${4:-}"
 
 	(
 		cd "$REPO_ROOT"
@@ -179,7 +180,7 @@ build_fixture()
 			"$REPO_ROOT/testing/fixtures/$source" \
 			-o "$TMP_DIR/fixtures/$name.upatch" \
 			--name "$name" --vmlinux "$REPO_ROOT/vendor/linux/vmlinux.h" \
-			--extra-cflags "-I$REPO_ROOT/vendor/libbpf" \
+			--extra-cflags "-I$REPO_ROOT/vendor/libbpf${cflags:+ $cflags}" \
 			--key "$keys_dir/signing_key.pem" \
 			--cert "$keys_dir/cert.der"
 	)
@@ -871,6 +872,17 @@ queue_fixture build_fixture uprobe.bpf.c shirudo-test-uprobe "$FIXTURE_WORK/trus
 queue_fixture build_fixture uretprobe.bpf.c shirudo-test-uretprobe "$FIXTURE_WORK/trusted"
 queue_fixture build_fixture kprobe-multi.bpf.c shirudo-test-kprobe-multi "$FIXTURE_WORK/trusted"
 queue_fixture build_fixture kprobe-multi-missing.bpf.c shirudo-test-kprobe-multi-missing "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture fentry-fexit.bpf.c shirudo-test-fentry-fexit "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture fmod-ret.bpf.c shirudo-test-fmod-ret "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture fmod-ret-tagged.bpf.c shirudo-test-fmod-ret-tagged "$FIXTURE_WORK/trusted"
+queue_fixture build_fixture fmod-ret-unlisted.bpf.c shirudo-test-fmod-ret-unlisted "$FIXTURE_WORK/trusted"
+# The entry point of a system call carries the architecture in its name.
+case "$TEST_VM_ARCH" in
+aarch64) fixture_arch=arm64 ;;
+*) fixture_arch=x86 ;;
+esac
+queue_fixture build_fixture sleepable.bpf.c shirudo-test-sleepable "$FIXTURE_WORK/trusted" \
+	"-D__TARGET_ARCH_$fixture_arch"
 queue_fixture build_fixture scope-netfilter.bpf.c shirudo-test-scope-netfilter "$FIXTURE_WORK/trusted"
 queue_fixture build_fixture scope-cgroup.bpf.c shirudo-test-scope-cgroup "$FIXTURE_WORK/trusted"
 queue_fixture build_fixture scope-kprobe.bpf.c shirudo-test-scope-kprobe "$FIXTURE_WORK/trusted"
@@ -923,6 +935,18 @@ uretprobe_single_payload="$($REPO_ROOT/shirudo upatch info \
 	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
 kprobe_multi_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/shirudo-test-kprobe-multi.upatch" --json |
+	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+fentry_fexit_payload="$($REPO_ROOT/shirudo upatch info \
+	"$TMP_DIR/fixtures/shirudo-test-fentry-fexit.upatch" --json |
+	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+sleepable_payload="$($REPO_ROOT/shirudo upatch info \
+	"$TMP_DIR/fixtures/shirudo-test-sleepable.upatch" --json |
+	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+fmod_ret_payload="$($REPO_ROOT/shirudo upatch info \
+	"$TMP_DIR/fixtures/shirudo-test-fmod-ret.upatch" --json |
+	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+fmod_ret_tagged_payload="$($REPO_ROOT/shirudo upatch info \
+	"$TMP_DIR/fixtures/shirudo-test-fmod-ret-tagged.upatch" --json |
 	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
 otel_backend_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/shirudo-test-otel-backend.upatch" --json |
@@ -1007,6 +1031,10 @@ shirudo-test-uprobe-multi-sleepable $uprobe_sleepable_payload shirudo-test-uprob
 shirudo-test-uprobe $uprobe_single_payload shirudo-test-uprobe.unload.upatch
 shirudo-test-uretprobe $uretprobe_single_payload shirudo-test-uretprobe.unload.upatch
 shirudo-test-kprobe-multi $kprobe_multi_payload shirudo-test-kprobe-multi.unload.upatch
+shirudo-test-fentry-fexit $fentry_fexit_payload shirudo-test-fentry-fexit.unload.upatch
+shirudo-test-sleepable $sleepable_payload shirudo-test-sleepable.unload.upatch
+shirudo-test-fmod-ret $fmod_ret_payload shirudo-test-fmod-ret.unload.upatch
+shirudo-test-fmod-ret-tagged $fmod_ret_tagged_payload shirudo-test-fmod-ret-tagged.unload.upatch
 EOF
 wait_fixture_jobs
 
