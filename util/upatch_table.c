@@ -12,6 +12,7 @@
 #include <shirudo/misc.h>
 #include <shirudo/string.h>
 
+#include "format.h"
 #include "json.h"
 #include "timefmt.h"
 #include "upatch_table.h"
@@ -41,6 +42,7 @@ static const char *missed_text(const struct upatch_table_row *r, char *buf,
 void upatch_table_print(const struct upatch_table_row *rows,
 			size_t n)
 {
+	size_t width = NAME_COLUMN_MIN;
 	size_t i;
 
 	printf("\nLoaded upatches (%zu):\n", n);
@@ -48,7 +50,9 @@ void upatch_table_print(const struct upatch_table_row *rows,
 		printf("  none\n");
 		return;
 	}
-	printf("  %-24s  %-28s  %5s  %6s  %-28s  %s\n",
+	for (i = 0; i < n; i++)
+		width = max(width, strlen(rows[i].name));
+	printf("  %-*s  %-28s  %5s  %6s  %-28s  %s\n", (int)width,
 	       "NAME", "LOCATION", "MAPS", "MISSED", "STATUS", "AGE");
 	for (i = 0; i < n; i++) {
 		const struct upatch_table_row *r = &rows[i];
@@ -57,7 +61,7 @@ void upatch_table_print(const struct upatch_table_row *rows,
 		if (r->age_sec >= 0 &&
 		    format_duration((long)r->age_sec, age, sizeof(age)))
 			strscpy_literal(age, "?");
-		printf("  %-24s  %-28s  %5u  %6s  %-28s  %s\n", r->name,
+		printf("  %-*s  %-28s  %5u  %6s  %-28s  %s\n", (int)width, r->name,
 		       r->location, r->n_maps,
 		       missed_text(r, missed, sizeof(missed)),
 		       r->status[0] ? r->status : "success", age);

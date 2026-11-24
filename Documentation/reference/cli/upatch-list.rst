@@ -38,6 +38,8 @@ Description
   ``not archived, gone at reboot``
 
 An archived artifact that cannot be read is listed as ``unreadable``.
+The ``NAME`` column is as wide as the longest name it holds, and 24
+characters at least.
 
 Options
 -------

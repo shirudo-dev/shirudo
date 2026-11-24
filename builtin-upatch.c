@@ -43,6 +43,7 @@
 #include "util/crypto.h"
 #include "util/eventlog.h"
 #include "util/elf_target.h"
+#include "util/format.h"
 #include "util/help.h"
 #include "util/io.h"
 #include "util/java_agent.h"
@@ -662,6 +663,39 @@ static bool upatch_is_loaded(const char *name)
 	return stat(pin, &st) == 0;
 }
 
+struct list_row {
+	char		name[NAME_MAX + 1];
+	const char	*loaded;
+	const char	*type;
+	const char	*kind;
+	char		payload[32];
+};
+
+static struct list_row *list_row_new(struct list_row *rows, size_t *n_rows,
+				     const char *name)
+{
+	struct list_row *row = &rows[(*n_rows)++];
+
+	if (strscpy(row->name, name, sizeof(row->name)) < 0)
+		strscpy_literal(row->name, "?");
+	return row;
+}
+
+static void list_rows_print(const struct list_row *rows, size_t n_rows)
+{
+	size_t width = NAME_COLUMN_MIN;
+	size_t i;
+
+	for (i = 0; i < n_rows; i++)
+		width = max(width, strlen(rows[i].name));
+	printf("  %-*s  %-6s  %-6s  %-4s  %s\n", (int)width, "NAME", "LOADED",
+	       "TYPE", "KIND", "PAYLOAD");
+	for (i = 0; i < n_rows; i++)
+		printf("  %-*s  %-6s  %-6s  %-4s  %s\n", (int)width, rows[i].name,
+		       rows[i].loaded, rows[i].type, rows[i].kind,
+		       rows[i].payload);
+}
+
 /*
  * Drift in either direction is the point: a persisted upatch that is
  * not loaded, or a loaded one with no persisted copy to survive a
@@ -672,6 +706,8 @@ static int cmd_upatch_list(int argc, const char **argv)
 	struct dirent **persisted = NULL, **active = NULL;
 	struct json_emit e = { .buf = NULL };
 	int np, na, i, j, ret = 0, opt;
+	struct list_row *rows = NULL;
+	size_t n_rows = 0;
 	struct opt_parser p;
 	bool json = false;
 	char *jbuf = NULL;
@@ -714,18 +750,19 @@ static int cmd_upatch_list(int argc, const char **argv)
 		json_arr_open(&e, "upatches");
 	} else {
 		printf("Archived upatches (%s):\n", UPATCHES_DIR);
-		if (np == 0 && na == 0)
-			printf("  none\n");
-		else
-			printf("  %-24s  %-6s  %-6s  %-4s  %s\n",
-			       "NAME", "LOADED", "TYPE", "KIND", "PAYLOAD");
+		rows = xcalloc((size_t)np + (size_t)na, sizeof(*rows));
+		if (!rows) {
+			ret = 1;
+			goto out;
+		}
 	}
 
 	for (i = 0; i < np; i++) {
 		char path[1024], name[UPATCH_NAME_MAX + 1];
 		char payload_hex[2 * 32 + 1];
-		struct upatch u;
 		const char *type, *payload_type;
+		struct list_row *row;
+		struct upatch u;
 		bool loaded;
 
 		if (strsprintf(path, sizeof(path), "%s/%s",
@@ -733,10 +770,14 @@ static int cmd_upatch_list(int argc, const char **argv)
 			       persisted[i]->d_name) < 0)
 			continue;
 		if (upatch_open(path, &u) != 0) {
-			if (!json)
-				printf("  %-24s  %-6s  %-6s  %-4s  %s\n",
-				       persisted[i]->d_name, "?", "?", "?",
-				       "unreadable");
+			if (!json) {
+				row = list_row_new(rows, &n_rows,
+						   persisted[i]->d_name);
+				row->loaded = "?";
+				row->type = "?";
+				row->kind = "?";
+				strscpy_literal(row->payload, "unreadable");
+			}
 			continue;
 		}
 		upatch_header_name(&u, name);
@@ -757,12 +798,12 @@ static int cmd_upatch_list(int argc, const char **argv)
 			json_kv_string(&e, "payload_sha256", payload_hex);
 			json_obj_close(&e);
 		} else {
-			char shown[19];
-
-			memcpy(shown, payload_hex, 16);
-			memcpy(shown + 16, "..", 3);
-			printf("  %-24s  %-6s  %-6s  %-4s  %s\n", name,
-			       loaded ? "yes" : "no", type, payload_type, shown);
+			row = list_row_new(rows, &n_rows, name);
+			row->loaded = loaded ? "yes" : "no";
+			row->type = type;
+			row->kind = payload_type;
+			memcpy(row->payload, payload_hex, 16);
+			memcpy(row->payload + 16, "..", 3);
 		}
 	}
 
@@ -789,10 +830,21 @@ static int cmd_upatch_list(int argc, const char **argv)
 			json_kv_null(&e, "payload_sha256");
 			json_obj_close(&e);
 		} else {
-			printf("  %-24s  %-6s  %-6s  %-4s  %s\n", raw_name,
-			       "yes", "-", "-", "not archived, gone at reboot");
+			struct list_row *row;
+
+			row = list_row_new(rows, &n_rows, raw_name);
+			row->loaded = "yes";
+			row->type = "-";
+			row->kind = "-";
+			strscpy_literal(row->payload,
+					"not archived, gone at reboot");
 		}
 	}
+
+	if (!json && np == 0 && na == 0)
+		printf("  none\n");
+	else if (!json && n_rows)
+		list_rows_print(rows, n_rows);
 
 	if (json) {
 		json_arr_close(&e);
@@ -814,6 +866,7 @@ out:
 		libc_free(active[j]);
 	libc_free(active);
 	xfree(jbuf, 65536);
+	xfree(rows, size_mul((size_t)np + (size_t)na, sizeof(*rows)));
 	return ret;
 }
 

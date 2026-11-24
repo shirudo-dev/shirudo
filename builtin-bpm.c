@@ -42,6 +42,7 @@
 #include "util/chain.h"
 #include "util/crypto.h"
 #include "util/eventlog.h"
+#include "util/format.h"
 #include "util/help.h"
 #include "util/hex.h"
 #include "util/io.h"
@@ -3496,14 +3497,18 @@ static int bpm_list_cmd(int argc, const char **argv)
 			xfree(buf, cap);
 		}
 	} else if (!ret) {
+		size_t width = NAME_COLUMN_MIN;
+
 		printf("Installed packages:\n");
+		for (int i = 0; i < n_state; i++)
+			width = max(width, strlen(state[i].name));
 		if (!n_state)
 			printf("  none\n");
 		else
-			printf("  %-24s  %-12s  %s\n", "NAME",
+			printf("  %-*s  %-12s  %s\n", (int)width, "NAME",
 			       "VERSION", "SOURCE");
 		for (int i = 0; i < n_state; i++)
-			printf("  %-24s  %-12s  %s\n", state[i].name,
+			printf("  %-*s  %-12s  %s\n", (int)width, state[i].name,
 			       state[i].version, state[i].source);
 	}
 	xfree(state, BPM_MAX_STATE * sizeof(*state));

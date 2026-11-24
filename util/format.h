@@ -14,6 +14,12 @@
 #include <shirudo/misc.h>
 
 /*
+ * The NAME column of a table is as wide as its longest name, and at
+ * least this wide, so that a table of short names keeps its shape.
+ */
+#define NAME_COLUMN_MIN	24
+
+/*
  * Format a byte count in IEC-binary human units: B/K/M/G. Precision is
  * picked so the rendered value stays within four significant digits
  * regardless of magnitude (16K / 1.8M / 5.57G / 1.23G / 124G).
