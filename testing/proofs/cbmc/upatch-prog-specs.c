@@ -59,8 +59,9 @@ static void uprobe_valid(const struct prog_spec *s)
 	__u32 j;
 
 	__CPROVER_assert(s->uprobe_path && s->uprobe_path[0] == '/' &&
-			 strnlen(s->uprobe_path, s->uprobe_path_len + 1) ==
-			 s->uprobe_path_len, "an absolute path of its length");
+			 strnlen(s->uprobe_path, UPATCH_UPROBE_PATH_MAX) <
+			 UPATCH_UPROBE_PATH_MAX,
+			 "an absolute, terminated path");
 	if (kind_is_uprobe_multi(s->kind))
 		__CPROVER_assert(!strchr(s->target, ',') && !strchr(s->target, '|'),
 				 "a glob without separators");

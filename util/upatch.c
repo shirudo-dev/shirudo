@@ -752,7 +752,6 @@ static int parse_uprobe_targets(const __u8 **pos, const __u8 *end, struct prog_s
 		spec->uprobe_path = xstrndup((const char *)cursor, path_len);
 		if (!spec->uprobe_path)
 			return -ENOMEM;
-		spec->uprobe_path_len = path_len;
 		cursor += path_len;
 		memcpy(spec->build_id, cursor, build_id_len);
 		spec->build_id_len = build_id_len;

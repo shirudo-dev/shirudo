@@ -29,8 +29,9 @@ static void uprobe_valid(const struct prog_spec *s)
 	__u32 j;
 
 	__CPROVER_assert(s->uprobe_path && s->uprobe_path[0] == '/' &&
-			 strnlen(s->uprobe_path, s->uprobe_path_len + 1) ==
-			 s->uprobe_path_len, "an absolute path of its length");
+			 strnlen(s->uprobe_path, UPATCH_UPROBE_PATH_MAX) <
+			 UPATCH_UPROBE_PATH_MAX,
+			 "an absolute, terminated path");
 	if (!kind_is_uprobe_multi(s->kind))
 		__CPROVER_assert(s->nr_uprobe_offsets == 1, "one offset for a uprobe");
 	__CPROVER_assert(s->build_id_len && s->build_id_len <=
@@ -55,7 +56,6 @@ void harness(void)
 	 */
 	__CPROVER_assume(kind_has_uprobe_target(entry.kind));
 	entry.uprobe_path = NULL;
-	entry.uprobe_path_len = 0;
 	entry.build_id_len = 0;
 	entry.uprobe_offsets = NULL;
 	entry.nr_uprobe_offsets = 0;

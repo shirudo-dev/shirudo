@@ -163,7 +163,6 @@ struct prog_spec {
 	char target[UPATCH_ATTACH_TARGET_MAX];
 	char map[UPATCH_PROG_MAP_MAX];
 	char *uprobe_path;
-	__u32 uprobe_path_len;
 	__u8 build_id[UPATCH_BUILD_ID_MAX];
 	__u32 build_id_len;
 	__u64 *uprobe_offsets;

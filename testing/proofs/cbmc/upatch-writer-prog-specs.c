@@ -571,8 +571,7 @@ static void uprobe_target(const struct prog_spec *s,
 {
 	__u32 i;
 
-	__CPROVER_assert(s->uprobe_path_len == strlen(UPROBE_PATH) &&
-			 !strcmp(s->uprobe_path, UPROBE_PATH),
+	__CPROVER_assert(!strcmp(s->uprobe_path, UPROBE_PATH),
 			 "the path the section names");
 	__CPROVER_assert(s->build_id_len == shape->build_id_len &&
 			 !memcmp(s->build_id, resolved[nth].build_id,

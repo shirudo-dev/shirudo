@@ -92,6 +92,10 @@ CI runs them only once the change is on main. A proof that no longer
 matches the code, or no longer holds, is a security bug: a threat's
 fact box or a coverage row then claims an assurance the tree does not
 have.
+Proofs must not add runtime state used only to carry proof bookkeeping.
+Derive the value from observable state in the harness, or state the
+invariant directly, so production code retains only state needed at
+runtime.
 
 New documentation extends an existing page or adds one to its section's
 toctree, and follows `Documentation/contribute/documentation/writing-docs.rst`. Only
