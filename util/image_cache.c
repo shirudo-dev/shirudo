@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,6 +33,48 @@ struct image_download {
 	__u64 limit;
 	__u64 written;
 };
+
+static volatile sig_atomic_t image_download_interrupted;
+
+static void image_download_sigint_handler(int sig)
+{
+	image_download_interrupted = 1;
+}
+
+/*
+ * Install a SIGINT handler so that Ctrl+C can interrupt hung DNS lookups.
+ * Without this, the process is uninterruptible when getaddrinfo() blocks.
+ */
+static void image_download_setup_signal_handler(void)
+{
+	struct sigaction sa = {};
+
+	sa.sa_handler = image_download_sigint_handler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	sigaction(SIGINT, &sa, NULL);
+}
+
+static void image_download_restore_signal_handler(void)
+{
+	struct sigaction sa = {};
+
+	sa.sa_handler = SIG_DFL;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	sigaction(SIGINT, &sa, NULL);
+}
+
+/*
+ * Progress callback that checks for interruption. Called periodically by
+ * libcurl, even during DNS lookup and connection, so we can abort early.
+ */
+static int image_download_progress_callback(void *clientp, curl_off_t dltotal,
+					    curl_off_t dlnow, curl_off_t ultotal,
+					    curl_off_t ulnow)
+{
+	return image_download_interrupted ? 1 : 0;
+}
 
 static size_t download_write(char *data, size_t size, size_t count, void *ctx)
 {
@@ -65,6 +108,8 @@ static int download_https(const char *source, struct image_download *download)
 	curl = curl_easy_init();
 	if (!curl)
 		return -ENOMEM;
+	image_download_interrupted = 0;
+	image_download_setup_signal_handler();
 	ret = tls_curl_policy(curl, NULL);
 	if (ret)
 		goto out;
@@ -75,6 +120,10 @@ static int download_https(const char *source, struct image_download *download)
 	    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L) != CURLE_OK ||
 	    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L) != CURLE_OK ||
 	    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L) != CURLE_OK ||
+	    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L) != CURLE_OK ||
+	    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION,
+			     image_download_progress_callback) != CURLE_OK ||
+	    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L) != CURLE_OK ||
 	    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L) != CURLE_OK ||
 	    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L) != CURLE_OK ||
 	    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L) != CURLE_OK ||
@@ -85,10 +134,13 @@ static int download_https(const char *source, struct image_download *download)
 		goto out;
 	}
 	result = curl_easy_perform(curl);
-	if (result != CURLE_OK)
+	if (result == CURLE_ABORTED_BY_CALLBACK && image_download_interrupted)
+		ret = -EINTR;
+	else if (result != CURLE_OK)
 		ret = download->err ? download->err : -EIO;
 out:
 	curl_easy_cleanup(curl);
+	image_download_restore_signal_handler();
 	return ret;
 }
 
