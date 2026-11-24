@@ -238,7 +238,8 @@ make -C testing vm-clean VM_NAME=<name>
 
 Adding `VM_SSH_COMMAND='<command>'` to `vm-ssh` runs one command in the
 guest and returns. In the guest, `shirudo-runtime` is the runtime the
-initrd verified; `shirudo-runtime status` shows an initialized target,
+initrd verified, and `shirudo` an alias of it only in the shell `vm-ssh`
+opens from a terminal; `shirudo-runtime status` shows an initialized target,
 and `. /etc/shirudo-test-vm.env` sets the environment a family run
 gives the target tests.
 The checkout is mounted read-only at `/workspace/shirudo`. Without

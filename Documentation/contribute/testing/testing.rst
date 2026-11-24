@@ -595,7 +595,10 @@ Boot an interactive VM
       # make -C testing vm-ssh VM_NAME=<name>
 
    Without ``VM_NAME``, ``vm-ssh`` connects to the most recently created
-   VM.
+   VM. From a terminal, the shell it opens has ``shirudo`` as an alias
+   of ``shirudo-runtime``; with ``VM_SSH_COMMAND`` or a script on its
+   standard input it sets none, and the command names
+   ``shirudo-runtime`` itself.
 
 3. Verify that the guest is an initialized target:
 

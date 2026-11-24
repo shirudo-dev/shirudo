@@ -148,15 +148,9 @@ Boot the target
 
       operator$ make -C testing vm-ssh VM_NAME=dev
 
-4. Make ``shirudo`` name the trusted binary in this shell:
-
-   .. code-block:: console
-
-      target# alias shirudo=shirudo-runtime
-
-   ``shirudo-runtime`` runs the binary on the runtime image, the only
-   one the target lets read and change shirudo's state, see
-   :ref:`runtime-invocation`.
+   In this shell ``shirudo`` is an alias of ``shirudo-runtime``, which
+   runs the binary on the runtime image, the only one the target lets
+   read and change shirudo's state, see :ref:`runtime-invocation`.
 
 Connect the target to the registry and the collector
 ----------------------------------------------------

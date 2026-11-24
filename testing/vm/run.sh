@@ -969,6 +969,13 @@ run_ssh()
 	if [[ -n "$VM_SSH_COMMAND" ]]; then
 		exec ssh "${SSH_ARGS[@]}" root@127.0.0.1 "$VM_SSH_COMMAND"
 	fi
+	# Only the runtime image's binary holds authority in the guest, so
+	# the shell a person types in names that one shirudo. A script on
+	# stdin gets the plain shell, where an alias would not expand.
+	if [[ -t 0 ]]; then
+		exec ssh -t "${SSH_ARGS[@]}" root@127.0.0.1 \
+			'exec bash --rcfile <(cat ~/.bashrc 2>/dev/null; echo "alias shirudo=shirudo-runtime")'
+	fi
 	exec ssh "${SSH_ARGS[@]}" root@127.0.0.1
 }
 

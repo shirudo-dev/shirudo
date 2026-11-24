@@ -153,18 +153,7 @@ Boot a test target
 
    Commands with the ``target#`` prompt run in this shell.
 
-3. Make ``shirudo`` name the trusted binary in this shell:
-
-   .. code-block:: console
-
-      target# alias shirudo=shirudo-runtime
-
-   On a target, the trusted ``shirudo`` is the binary on the runtime image,
-   ``/run/shirudo/runtime/usr/bin/shirudo``, and the test VM wraps it as
-   ``shirudo-runtime``. The LSM gives access to shirudo's state only to
-   tasks that executed that binary from the runtime image. The test VM
-   keeps an identical copy under ``/usr/local/bin``. That copy prints its
-   version, but every command that reads shirudo's state stops:
+3. See that only the trusted binary reads shirudo's state:
 
    .. guide-check: fail Permission denied
 
@@ -172,6 +161,16 @@ Boot a test target
 
       target# /usr/local/bin/shirudo status
       shirudo: image state: Permission denied
+
+   On a target, the trusted ``shirudo`` is the binary on the runtime image,
+   ``/run/shirudo/runtime/usr/bin/shirudo``, and the test VM wraps it as
+   ``shirudo-runtime``. The LSM gives access to shirudo's state only to
+   tasks that executed that binary from the runtime image. The test VM
+   keeps an identical copy under ``/usr/local/bin``, which prints its
+   version and stops at every command that reads shirudo's state. In the
+   shell ``make vm-ssh`` opens, ``shirudo`` is an alias of
+   ``shirudo-runtime``; a shell you reach another way, such as the
+   console, needs ``alias shirudo=shirudo-runtime`` first.
 
 4. Change to your checkout inside the guest:
 

@@ -31,12 +31,14 @@ Before you begin
   directory and ``PAYLOAD`` holding the payload digest of
   ``basic.upatch``.
 - ``jq`` and the ``openssl`` command on the operator host.
-- A root shell on the target (``make -C testing vm-ssh
-  VM_NAME=quickstart``) in which ``shirudo`` runs the runtime binary:
+- A root shell on the target, in which ``shirudo`` runs the runtime
+  binary:
+
+  .. guide-check: skip
 
   .. code-block:: console
 
-     target# alias shirudo=shirudo-runtime
+     operator$ make vm-ssh VM_NAME=quickstart
 
 Take the first evidence
 -----------------------

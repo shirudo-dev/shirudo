@@ -160,6 +160,9 @@ def run(steps):
                 shell_command.append("VM_SSH_COMMAND=" + shlex.join(bash))
                 shell_command.insert(1, "-s")
                 guest = Shell(shell_command)
+                # make vm-ssh sets this alias in a terminal's shell only.
+                if guest.run("alias shirudo=shirudo-runtime")[0]:
+                    raise RuntimeError("could not name the runtime binary")
                 continue
             if mode == "guides":
                 if guest.close(command):
