@@ -115,7 +115,10 @@ runs:
         images-folder-parent: ${{ github.workspace }}/../lvh
         install-dependencies: false
         ssh-port: 2222
-        cmd: /bin/sh /host/.github/scripts/kernel-obs-in-lvh.sh
+        cmd: |
+          set -eu
+          systemctl start host.mount
+          /bin/sh /host/.github/scripts/kernel-obs-in-lvh.sh
 
     - name: Upload preview package and public certificate
       if: inputs.mode == 'preview'
