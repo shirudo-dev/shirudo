@@ -34,6 +34,17 @@ struct image_download {
 	__u64 written;
 };
 
+/* The files of an image, each fetched into staging as image<suffix>. */
+static const struct {
+	const char *suffix;
+	__u64 max_bytes;
+} files[] = {
+	{ ".roothash", 65 },
+	{ ".p7s", CONFIG_IMAGE_SIG_MAX },
+	{ ".img", CONFIG_IMAGE_MAX_BYTES },
+	{ ".verity", CONFIG_IMAGE_MAX_BYTES },
+};
+
 /* A resolver thread can receive a process-directed SIGINT. */
 static _Atomic bool download_interrupted;
 
@@ -257,6 +268,29 @@ static int fetch_file(const char *source, const char *destination, __u64 max)
 	return ret;
 }
 
+static int remove_staging(const char *staging)
+{
+	char path[PATH_MAX];
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(files); i++) {
+		if (strsprintf(path, sizeof(path), "%s/image%s", staging,
+			       files[i].suffix) >= 0)
+			unlink(path);
+	}
+	return rmdir(staging) ? -errno : 0;
+}
+
+/* The mapping verify_incoming() reads the image in staging through. */
+static int incoming_mapping_name(const char *staging, char *name,
+				 size_t size)
+{
+	if (strsprintf(name, size, "shirudo-verify-%s",
+		       strrchr(staging, '/') + 1) < 0)
+		return -ENAMETOOLONG;
+	return 0;
+}
+
 /* Verify downloads before publishing their root-hash-named cache files. */
 static int verify_incoming(const struct config_image_open *opened,
 			   const char *staging)
@@ -268,8 +302,9 @@ static int verify_incoming(const struct config_image_open *opened,
 	int ret, cleanup;
 	char name[128];
 
-	if (strsprintf(name, sizeof(name), "shirudo-verify-%s", strrchr(staging, '/') + 1) < 0)
-		return -ENAMETOOLONG;
+	ret = incoming_mapping_name(staging, name, sizeof(name));
+	if (ret)
+		return ret;
 	ret = dm_verity_create(opened, name, &device);
 	if (ret)
 		return ret;
@@ -286,15 +321,6 @@ int image_cache_fetch(const char *source,
 		      struct config_update_target *target,
 		      image_cache_verify_fn verify, void *ctx)
 {
-	static const struct {
-		const char *suffix;
-		__u64 max_bytes;
-	} files[] = {
-		{ ".roothash", 65 },
-		{ ".p7s", CONFIG_IMAGE_SIG_MAX },
-		{ ".img", CONFIG_IMAGE_MAX_BYTES },
-		{ ".verity", CONFIG_IMAGE_MAX_BYTES },
-	};
 	struct config_image_open opened;
 	char staging[] = IMAGE_CACHE_DIR "/incoming-XXXXXX";
 	char incoming[PATH_MAX], from[PATH_MAX], to[PATH_MAX];
@@ -365,10 +391,6 @@ int image_cache_fetch(const char *source,
 out:
 	if (dir >= 0)
 		close(dir);
-	for (i = 0; i < ARRAY_SIZE(files); i++) {
-		if (strsprintf(to, sizeof(to), "%s/image%s", staging, files[i].suffix) >= 0)
-			unlink(to);
-	}
-	rmdir(staging);
+	remove_staging(staging);
 	return ret;
 }
