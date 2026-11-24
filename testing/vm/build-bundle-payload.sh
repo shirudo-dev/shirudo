@@ -15,6 +15,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=testing/vm/arch.sh
 . "${REPO_ROOT}/testing/vm/arch.sh"
 PACKAGE_CERT="${TEST_VM_PACKAGE_CERT:-}"
+# The container is given TEST_VM_COVERAGE alone, so that only the target
+# is instrumented there; a build in the checkout follows the host's.
+COVERAGE="${TEST_VM_COVERAGE:-${COVERAGE:-0}}"
 
 log()
 {
@@ -74,11 +77,24 @@ make -C "$REPO_ROOT/testing" -j"$jobs" test-helpers
 # t7108 reaches the tree walk limits: the guest runs a target that walks
 # 4 operations back from a cursor past 0 and 6 from 0. t7110 reaches past
 # the keepalive window, which the target lowers to the last 7 operations.
-make -C "$REPO_ROOT" -j"$jobs" \
-	TREE_LIMIT_CFLAGS="-DTREE_MAX_WALK_OPS=4 -DTREE_MAX_JOIN_OPS=6 -DKEEPALIVE_WINDOW_OPS=7" \
-	DESTDIR="$TMP_DIR/root" install-target
+tree_limits="-DTREE_MAX_WALK_OPS=4 -DTREE_MAX_JOIN_OPS=6 -DKEEPALIVE_WINDOW_OPS=7"
+make -C "$REPO_ROOT" -j"$jobs" TREE_LIMIT_CFLAGS="$tree_limits" \
+	COVERAGE="$COVERAGE" DESTDIR="$TMP_DIR/root" install-target
+# shirudo-image-fault links the objects of the target as they are: other
+# options would compile some again, and under gcov a guest would then have
+# two builds of one object write over each other's counters.
 make -C "$REPO_ROOT" -j"$jobs" -f Makefile.shirudo \
+	TREE_LIMIT_CFLAGS="$tree_limits" COVERAGE="$COVERAGE" \
 	PROFILE=target CONFIG_MK=config-target.mk verity-test-helpers
+if [[ "$COVERAGE" == 1 ]]; then
+	# A guest's counters name the objects by the path they were built
+	# at, and gcov reads them beside the notes of that build.
+	install -d "$TMP_DIR/coverage"
+	(cd "$REPO_ROOT" && find build/target build/verity-tests \
+		-name '*.gcno' -print0 |
+		tar --null --files-from=- -cf "$TMP_DIR/coverage/gcno.tar")
+	printf '%s\n' "$REPO_ROOT" >"$TMP_DIR/coverage/srcdir"
+fi
 
 install -d "$TMP_DIR/test-helpers/testing/helper" \
 	"$TMP_DIR/test-helpers/testing/fixtures" \

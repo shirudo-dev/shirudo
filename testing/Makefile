@@ -147,6 +147,14 @@ TEST_VM_BUNDLE_INPUTS := $(sort \
 	$(TEST_VM_BUNDLE_SOURCES) $(TEST_VM_BUNDLE_ARTIFACTS) \
 	$(if $(strip $(TEST_VM_PACKAGE_CERT)),$(TEST_VM_PACKAGE_CERT)))
 
+# A bundle carries coverage/ when its target was built with COVERAGE=1,
+# and one built the other way is built again.
+COVERAGE ?= 0
+TEST_VM_BUNDLE_COVERAGE := $(if $(wildcard $(TEST_VM_BUNDLE_DIR)/coverage),1,0)
+TEST_VM_BUNDLE_REBUILD := $(if $(filter $(COVERAGE),$(TEST_VM_BUNDLE_COVERAGE)),,test-vm-bundle-rebuild)
+.PHONY: test-vm-bundle-rebuild
+test-vm-bundle-rebuild:
+
 $(ROOT)/config.mk: $(ROOT)/Makefile.config
 	+$(Q)$(MAKE) -C $(ROOT) config
 
@@ -154,10 +162,10 @@ $(ROOT)/config.mk: $(ROOT)/Makefile.config
 test-vm-bundle: require-vm-kernel
 	+$(Q)$(MAKE) -f "$(ROOT)/testing/Makefile" "$(TEST_VM_BUNDLE_STAMP)"
 
-$(TEST_VM_BUNDLE_STAMP): $(TEST_VM_BUNDLE_INPUTS)
+$(TEST_VM_BUNDLE_STAMP): $(TEST_VM_BUNDLE_INPUTS) $(TEST_VM_BUNDLE_REBUILD)
 	$(Q)mkdir -p $(dir $(BUILD_LOCK))
 	$(Q)TEST_VM_MODE="$(TEST_VM_MODE)" TEST_VM_INITRD="$(TEST_VM_INITRD)" \
-		BUILD_CONTAINER="$(BUILD_CONTAINER)" \
+		BUILD_CONTAINER="$(BUILD_CONTAINER)" COVERAGE="$(COVERAGE)" \
 		TEST_VM_HOST_BUNDLE="$(abspath $(TEST_VM_BUNDLE_DIR))" \
 		TEST_VM_WORK_DIR="$(abspath $(TEST_VM_WORK_DIR))" \
 		TEST_VM_HOST_PRIVATE_DIR="$(abspath $(TEST_VM_HOST_PRIVATE_DIR))" \

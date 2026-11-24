@@ -149,9 +149,10 @@ CFLAGS_BASE := -O2 $(DEBUG_CFLAGS) -std=gnu11 $(WARNINGS) $(CC_WARNINGS) \
                -DVMLINUX_PATH='"$(SHIRUDO_VMLINUX_PATH)"' \
                -DCLANG_PATH='"$(SHIRUDO_CLANG_PATH)"'
 
-# GCC coverage is collected from the host build on a clean checkout.
+# GCC coverage is collected from a build on a clean checkout: the host's
+# counters from the checkout, the target's from the test VMs.
 COVERAGE ?= 0
-ifeq ($(PROFILE):$(COVERAGE),operator:1)
+ifeq ($(COVERAGE),1)
 CFLAGS_BASE += --coverage -fprofile-abs-path -fprofile-update=atomic
 endif
 

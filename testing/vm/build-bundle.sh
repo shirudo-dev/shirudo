@@ -338,7 +338,7 @@ prepare_runtime_image()
 
 bundle_is_current()
 {
-	local input
+	local input built=0
 
 	[[ -s "$BUNDLE_DIR/test-mode" &&
 	   "$(cat "$BUNDLE_DIR/test-mode")" == "$TEST_VM_MODE" ]] || return 1
@@ -351,6 +351,8 @@ bundle_is_current()
 		"$BUNDLE_DIR/fixtures/cert.der" || return 1
 	[[ "$(<"$BUNDLE_DIR/runtime-image-key")" == "$RUNTIME_KEY" ]] || return 1
 	[[ -s "$RUNTIME_IMAGE" ]] || return 1
+	[[ -d "$BUNDLE_DIR/coverage" ]] && built=1
+	[[ "$built" == "${COVERAGE:-0}" ]] || return 1
 	for input in $STAMP_INPUTS; do
 		[[ -e "$input" ]] || return 1
 		[[ "$input" -nt "$STAMP_FILE" ]] && return 1
@@ -365,7 +367,7 @@ bundle_is_current()
 build_payload_in_container()
 {
 	local container="$REPO_ROOT/testing/container/run.sh" deps name
-	local -a pass=(-e TARGET_DEPS_DIR -e TEST_VM_ARCH)
+	local -a pass=(-e TARGET_DEPS_DIR -e TEST_VM_ARCH -e TEST_VM_COVERAGE)
 
 	deps="$WORK_DIR/cache/target-deps/$({
 		"$container" --image
@@ -382,7 +384,7 @@ build_payload_in_container()
 		pass+=(-e "$name")
 	done
 	log "building the payload in $("$container" --image)"
-	TARGET_DEPS_DIR="$deps" "$container" -v "$TMP_DIR" -v "$FIXTURE_WORK" \
+	TARGET_DEPS_DIR="$deps" TEST_VM_COVERAGE="${COVERAGE:-0}" "$container" -v "$TMP_DIR" -v "$FIXTURE_WORK" \
 		-v "$deps" "${pass[@]}" -- \
 		"$REPO_ROOT/testing/vm/build-bundle-payload.sh" --from-copy \
 		"$FIXTURE_WORK/inputs/source-files" "$TMP_DIR" "$FIXTURE_WORK"
