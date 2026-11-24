@@ -261,9 +261,9 @@ point is missing fails to load.
        that are marked for error injection.
    * - ``CONFIG_BPF_FMODRET_SCAN``
      - ``fmod_ret`` on the kernel functions that return errors, which the
-       build finds and tags, on x86-64 and arm64. The build host needs
-       the headers and libraries of LLVM 17 or later. See
-       :doc:`/concepts/background/fmod-ret`.
+       build finds and tags, on x86-64 and arm64. The build host needs a
+       C++17 compiler and the headers and libraries of LLVM 17 or later.
+       See :doc:`/concepts/background/fmod-ret`.
    * - ``CONFIG_BPF_KPROBE_OVERRIDE``
      - ``bpf_override_return()`` from a ``kprobe`` upatch.
    * - ``CONFIG_UPROBE_EVENTS``

@@ -230,6 +230,10 @@ Read the verifier log
           or one of the listed errors, each as a constant, and declare
           the program ``long BPF_PROG(...)`` when the function returns
           ``long``.
+      * - ``tail calls are not allowed in fmod_ret programs with
+          restricted return values``
+        - A tail call in an ``fmod_ret`` program on a function the kernel
+          build tagged. Call the code directly.
       * - ``<function> is not sleepable``
         - A ``.s`` section on a function or hook that cannot sleep. Use
           the section without ``.s``.
