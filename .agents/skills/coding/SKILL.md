@@ -448,11 +448,22 @@ without a body.
   `rindex()`, `rawmemchr()`, `gets()`, `strdupa()` and their kin: the
   `#pragma GCC poison` lines of `<shirudo/string.h>` are the list, and
   one comes off it with the first caller that needs it.
+- Functions the tree does not use: `rand()`, `srand()`, `random()` and
+  their kin (use `getrandom()` for secrets), `gets()`, `tmpnam()`,
+  `tempnam()` and `mktemp()` (unsafe by design), `vfork()`, `alloca()`,
+  `setjmp()`, `longjmp()`, `sigsetjmp()` and `siglongjmp()` (defeat
+  compiler checks), `usleep()` and `signal()` (obsolete; use
+  `nanosleep()` and `sigaction()`), `asctime()`, `ctime()`, `gmtime()`,
+  `localtime()`, `getpwnam()`, `getpwuid()`, `getgrnam()`, `getgrgid()`,
+  `getlogin()` and `ttyname()` (hidden state; use `_r` forms), `index()`
+  and `getwd()` (obsolete), and `abort()` and `assert()` (only in tests).
+  `testing/coccinelle/banned.cocci` refuses them.
 - A `strsprintf()` that does not fit leaves the buffer empty and a
   `strscpy()` leaves a cut copy: either way a path or value is refused,
   a helper formatting display text returns the error, and status shows
   `"?"`. Constant text is copied, not formatted, and a literal copied
-  into an array takes `strscpy_literal()`, which cannot fail.
+  into an array takes `strscpy_literal()`, which fails at build time when
+  the literal is too large, not at run time on a path nobody tests.
 - `xstrdup()` copies a string and `xstrndup(s, n)` at most its first
   `n` bytes: a prefix, or a bounded copy of what already is a string.
   Both end the copy at a NUL and say nothing, which is wrong for bytes
@@ -464,7 +475,10 @@ without a body.
   unsigned value takes a `U` suffix.
 - `ret` holds a return code, `err` an errno kept beside the value a
   function returns. No `(void)` casts: a result that must be checked
-  comes from a `__must_check` function, and every call checks it.
+  comes from a `__must_check` function, and every call checks it; a
+  result callers may ignore needs none; every build takes
+  `-Wno-unused-parameter`, so unused parameters need no cast; an unused
+  variable goes. The type check of `min()` and `max()` is the exception.
 - Internal names carry no `shirudo_` prefix; it stays only where a name
   leaves the code: include guards, BPF object and pin names, environment
   variables, a clash with libc.
@@ -483,8 +497,13 @@ without a body.
 - All JSON goes through `util/json.c`; text from outside is written
   with its lossy writers. All logging goes through `pr_*()` to syslog;
   shirudo writes no log file of its own.
-- Fields of a little- or big-endian format are read and written with
-  `le32_to_cpu()`, `get_le32()` and their kin; sparse refuses the rest.
+- Multi-byte integers in formats and network protocols use the
+  little-endian and big-endian types `__le16`, `__le32`, `__le64`,
+  `__be16`, `__be32`, `__be64` from `<shirudo/types.h>`, converted to
+  and from host order with `cpu_to_le32()`, `le32_to_cpu()`, `get_le32()`,
+  `put_be32()` and their kin from `<shirudo/byteorder.h>`. Sparse checks
+  that a value is converted before it crosses between host order and these
+  types.
 - Userspace is BSD-2-Clause. Every file a BPF object compiles, and each
   Lua decoder, is `GPL-2.0 OR BSD-2-Clause`, with
   `char _license[] SEC("license") = "Dual BSD/GPL";`. No emojis.
