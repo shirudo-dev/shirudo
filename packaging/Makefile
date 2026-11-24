@@ -60,7 +60,7 @@ PKG_MAINTAINER  ?= $(shell git config user.name 2>/dev/null || echo shirudo) <$(
 
 DEB_STAGE      ?= build/deb
 DEB_RAW_VERSION ?= $(PKG_RAW_VERSION)
-DEB_VERSION    ?= $(shell printf '%s' "$(DEB_RAW_VERSION)" | sed 's/^v//; s/[^A-Za-z0-9.+:~-]/./g; /^[0-9]/!s/^/0~/')
+DEB_VERSION    ?= $(shell printf '%s' "$(DEB_RAW_VERSION)" | sed 's/^v//; s/[^A-Za-z0-9.+:~-]/./g; /^[0-9][0-9]*\./!s/^/0~/')
 DEB_ARCH       ?= $(shell dpkg --print-architecture 2>/dev/null || echo amd64)
 DEB_TARGET_PKG   ?= shirudo-target_$(DEB_VERSION)_$(DEB_ARCH).deb
 DEB_OPERATOR_PKG ?= shirudo-operator_$(DEB_VERSION)_$(DEB_ARCH).deb
@@ -73,7 +73,7 @@ DEB_OPERATOR_PKG ?= shirudo-operator_$(DEB_VERSION)_$(DEB_ARCH).deb
 # 0.<hash>.
 RPM_STAGE       ?= build/rpm
 RPM_RAW_VERSION ?= $(PKG_RAW_VERSION)
-RPM_VERSION     ?= $(shell printf '%s\n' "$(RPM_RAW_VERSION)" | sed 's/^v//; s/-.*//; s/[^A-Za-z0-9.+~^]/./g; /^[0-9]/!s/^/0./')
+RPM_VERSION     ?= $(shell printf '%s\n' "$(RPM_RAW_VERSION)" | sed 's/^v//; s/-.*//; s/[^A-Za-z0-9.+~^]/./g; /^[0-9][0-9]*\./!s/^/0./')
 RPM_RELEASE     ?= $(shell printf '%s\n' "$(RPM_RAW_VERSION)" | sed 's/^v//; s/^[^-]*//; s/^-//; s/[^A-Za-z0-9.+~^]/./g' | sed -e 's/^$$/1/;t' -e 's/^[0-9]/1.&/;t' -e 's/^dirty/1.&/;t' -e 's/^/0./')
 RPM_ARCH        ?= $(shell rpm --eval '%{_arch}' 2>/dev/null || uname -m)
 RPM_TARGET_PKG   ?= shirudo-target-$(RPM_VERSION)-$(RPM_RELEASE).$(RPM_ARCH).rpm
