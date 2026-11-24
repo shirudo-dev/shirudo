@@ -15,11 +15,14 @@ permissions:
 jobs:
   docs:
     runs-on: ubuntu-latest
-    # A newer run for the same pull request supersedes this one. On main a
-    # render in flight finishes, so a busy main still deploys.
+    # A newer push to a pull request supersedes its run. Any other run is
+    # keyed on its ref and commit, so a merge never cancels another's run.
     concurrency:
-      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+      group: |
+        ${{ github.workflow }}
+        ${{ github.event_name }}
+        ${{ github.event.pull_request.number || format('{0}@{1}', github.ref, github.sha) }}
+      cancel-in-progress: true
 
     steps:
       - name: Check out repository
@@ -66,6 +69,21 @@ jobs:
       cancel-in-progress: false
 
     steps:
+      - name: Check out the CI scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      # Renders on main can finish out of order: only main's head deploys.
+      - name: Check that main has not moved on
+        id: head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: .github/scripts/is-main-head.sh
+
       - name: Deploy to GitHub Pages
+        if: steps.head.outputs.current == 'true'
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

@@ -12,9 +12,13 @@ on:
 permissions:
   contents: read
 
-# A newer run for the same branch or pull request supersedes this one.
+# A newer push to a pull request supersedes its run. Any other run is
+# keyed on its ref and commit, so a merge never cancels another's run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: |
+    ${{ github.workflow }}
+    ${{ github.event_name }}
+    ${{ github.event.pull_request.number || format('{0}@{1}', github.ref, github.sha) }}
   cancel-in-progress: true
 
 jobs:

@@ -18,9 +18,13 @@ on:
 permissions:
   contents: read
 
-# A newer run for the same branch or pull request supersedes this one.
+# A newer push to a pull request supersedes its run. Any other run is
+# keyed on its ref and commit, so a merge never cancels another's run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: |
+    ${{ github.workflow }}
+    ${{ github.event_name }}
+    ${{ github.event.pull_request.number || format('{0}@{1}', github.ref, github.sha) }}
   cancel-in-progress: true
 
 jobs:
@@ -343,6 +347,11 @@ jobs:
     needs: [deb, rpm-target]
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # bpm push rewrites the signed index, so publishes run one at a time.
+    # GitHub drops all but the newest waiting one, the greatest version.
+    concurrency:
+      group: ${{ github.workflow }}-kernel-obs-publish
+      cancel-in-progress: false
     environment:
       name: kernel-obs
     permissions:
