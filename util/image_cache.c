@@ -5,6 +5,7 @@
 #include <shirudo/overflow.h>
 #include <shirudo/string.h>
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -317,6 +318,51 @@ static int verify_incoming(const struct config_image_open *opened,
 	return ret ? ret : cleanup;
 }
 
+static void remove_stale_mapping(const char *staging)
+{
+	struct dm_verity device = {
+		.data_loop_fd = -1,
+		.hash_loop_fd = -1,
+	};
+	int ret;
+
+	ret = incoming_mapping_name(staging, device.name, sizeof(device.name));
+	if (!ret)
+		ret = dm_verity_remove(&device, true);
+	if (ret && ret != -ENXIO && ret != -ENODEV)
+		pr_warn("image: cannot remove stale mapping %s: %s",
+			device.name, strerror(-ret));
+}
+
+/*
+ * A fetch that was killed leaves its staging directory behind, and its
+ * mapping when it died in verify_incoming(). The update lock the caller
+ * holds keeps any other fetch from using them.
+ */
+static void remove_stale_staging(void)
+{
+	char staging[PATH_MAX];
+	struct dirent *entry;
+	DIR *cache;
+	int ret;
+
+	cache = opendir(IMAGE_CACHE_DIR);
+	if (!cache)
+		return;
+	while ((entry = readdir(cache))) {
+		if (!str_has_prefix(entry->d_name, "incoming-") ||
+		    strsprintf(staging, sizeof(staging), "%s/%s",
+			       IMAGE_CACHE_DIR, entry->d_name) < 0)
+			continue;
+		remove_stale_mapping(staging);
+		ret = remove_staging(staging);
+		if (ret)
+			pr_warn("image: cannot remove stale staging %s: %s",
+				staging, strerror(-ret));
+	}
+	closedir(cache);
+}
+
 int image_cache_fetch(const char *source,
 		      struct config_update_target *target,
 		      image_cache_verify_fn verify, void *ctx)
@@ -330,6 +376,7 @@ int image_cache_fetch(const char *source,
 
 	if (!verify)
 		return -EINVAL;
+	remove_stale_staging();
 	if (!mkdtemp(staging))
 		return -errno;
 	ret = seal_label(staging);

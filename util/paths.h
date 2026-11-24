@@ -128,7 +128,9 @@
 #define CONFIG_IMAGE_DIR		RUN_DIR "/config"
 #define CONFIG_CANDIDATE_DIR	RUN_DIR "/config-candidate"
 #define CONFIG_UPDATE_DIR	VAR_LIB "/config-update"
+#ifndef IMAGE_CACHE_DIR
 #define IMAGE_CACHE_DIR		VAR_LIB "/images"
+#endif
 #define RUNTIME_CONF_PATH \
 	RUNTIME_DIR "/etc/shirudo/shirudo.conf"
 #define RUNTIME_CERT_PATH	RUNTIME_DIR "/keys/cert.der"

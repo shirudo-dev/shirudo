@@ -1083,7 +1083,8 @@ the functional tests run.
 The ``image_cache`` suite interrupts an HTTPS fetch during a stalled DNS
 lookup and checks that the command removes the staging directory and
 restores the SIGINT disposition. It checks cleanup after a failed lookup
-as well.
+as well. It also checks that a fetch first removes the staging directory
+a killed fetch left behind and asks for the removal of its mapping.
 
 .. list-table::
    :header-rows: 1

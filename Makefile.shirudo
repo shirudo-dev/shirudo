@@ -1134,6 +1134,17 @@ build/unit/quote_check: tools/quote-check/row.o
 build/unit/jar: UNIT_OBJS := tools/shirudo-build/jar.o
 build/unit/jar: tools/shirudo-build/jar.o
 
+build/unit/image_cache: UNIT_OBJS := build/unit/image_cache.o
+build/unit/image_cache: CFLAGS += -pthread
+build/unit/image_cache: build/unit/image_cache.o
+build/unit/image_cache.o: util/image_cache.c Makefile.shirudo $(CONFIG_MK_DEP)
+	@printf '  CC      $@\n'
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CC) $(CFLAGS) $(UNIT_COVERAGE_CFLAGS) \
+		-DIMAGE_CACHE_DIR='"/tmp/shirudo-unit-image-cache"' \
+		-MMD -MP -c $< -o $@
+-include build/unit/image_cache.d
+
 UNIT_COVERAGE_CFLAGS = $(if $(filter --coverage,$(CFLAGS)),-DUNIT_GCOV)
 
 build/unit/%: testing/unit/%.c testing/unit/unit.c testing/unit/unit.h \
@@ -1147,7 +1158,8 @@ build/unit/curl: LDFLAGS += -Wl,--wrap=curl_slist_free_all
 build/unit/upatch_pins: LDFLAGS += -Wl,--wrap=opendir,--wrap=readdir64
 build/unit/image_cache: testing/unit/image_cache_test.h
 build/unit/image_cache: LDFLAGS += -Wl,--wrap=fsetxattr -Wl,--wrap=seal_label \
-				  -Wl,--export-dynamic-symbol,getaddrinfo
+				  -Wl,--wrap=dm_verity_remove \
+				  -Wl,--export-dynamic-symbol,getaddrinfo -pthread
 
 unit-tests: $(UNIT_TESTS)
 

@@ -104,6 +104,10 @@ is a local path prefix or an ``https://`` URL prefix.
 When libcurl supports asynchronous DNS and quick cleanup, Ctrl-C during
 an HTTPS transfer removes the staged downloads and then ends the command
 by SIGINT, so that a script running it stops as well.
+A fetch that a signal or a crash ends at any other point leaves its
+staging directory behind, and the ``shirudo-verify-incoming-XXXXXX``
+mapping of its check when it ended there. The next ``update`` or
+``stage`` removes both before it fetches.
 
 When ``update`` stops between steps 5 and 7, the activation stays pending.
 Every command except ``status`` and ``image status`` is then refused
