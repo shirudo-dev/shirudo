@@ -92,7 +92,7 @@ jobs:
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: .github/scripts/tests.sh run end2end
 
-      - name: Collect host userspace coverage
+      - name: Merge the counters of the host and the guests
         id: collect
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: .github/scripts/coverage.sh
@@ -101,5 +101,5 @@ jobs:
         if: ${{ !cancelled() && steps.collect.outcome == 'success' }}
         uses: coverallsapp/github-action@cfd0633edbd2411b532b808ba7a8b5e04f76d2c8 # v2.3.4
         with:
-          file: coverage/host.lcov
+          file: coverage/shirudo.lcov
           format: lcov

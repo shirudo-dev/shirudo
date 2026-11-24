@@ -10,6 +10,7 @@ e2fsprogs
 file
 git
 gpg
+lcov
 libcurl4-openssl-dev
 libelf-dev
 libltdl-dev

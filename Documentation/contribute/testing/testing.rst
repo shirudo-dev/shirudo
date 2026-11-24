@@ -77,18 +77,37 @@ Land kernel input changes first. After publishing their bundles, update
 the pin in the same change as any shirudo code that requires the new
 kernel.
 
-Host userspace coverage
------------------------
+Coverage
+--------
 
 The ``Coverage`` workflow, :src:`.github/workflows/coverage.yml`, runs after
 a push to main, never on a pull request: the ``CI suite`` tests the binaries
 as they ship, and no pull request waits on a coverage figure. It builds the
-host userspace C binaries with coverage instrumentation, runs every tier and
-sends an LCOV report to Coveralls, also when a tier fails. Reports exclude
-test code, vendored code, QEMU guests and BPF programs.
+userspace C code with coverage instrumentation, the host's binaries and the
+target the test VMs boot, runs every tier and sends one LCOV report to
+Coveralls, also when a tier fails.
 
 Start the workflow by hand on a branch for the figure of a change before it
-lands.
+lands, or make the report on a host with ``lcov``, from a clean checkout:
+
+.. code-block:: console
+
+   $ make tests COVERAGE=1
+   $ .github/scripts/coverage.sh
+
+``coverage/shirudo.lcov`` is the report. With ``COVERAGE=1`` the bundle
+carries a target built with gcov and the notes of that build, and every
+shirudo process in a guest, from ``init`` in the initrd on, writes its
+counters under ``/run/shirudo-gcov`` when it exits. A guest packs them
+into its result directory before it powers off, a node of the end-to-end
+test when ``run.sh --stop`` asks it to, and :src:`testing/vm/run.sh` keeps
+them in ``build/test-vm/coverage/``. :src:`.github/scripts/coverage.sh`
+reads them in the build container, whose gcov matches the compiler of the
+target, and merges them with the host's.
+
+The report leaves out test code, vendored code and BPF programs, and counts
+nothing for a process that is killed, as the loads that ``t6143`` and
+``t6144`` interrupt are, since gcov writes its counters at exit.
 
 Check the quickstart and quick guides
 -------------------------------------
