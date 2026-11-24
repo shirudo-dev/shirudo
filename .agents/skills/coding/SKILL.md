@@ -8,10 +8,10 @@ description: Write or change shirudo's C code, userspace or BPF, in the tree's s
 `Documentation/contribute/code/coding-style.rst` is the kernel's coding
 style, and the tree follows it in userspace as well as in BPF: tabs
 eight wide, 80 columns where it reads well and never past 100, K&R
-braces, short functions that do one thing. AGENTS.md lists the
-project's conventions in short; this skill gives them with their
-reasons. Read the code around a change first and write like it, and
-write what more than one place needs once, in `util/`.
+braces, short functions that do one thing. AGENTS.md points readers to
+this skill as the reference for coding conventions; this skill gives them
+with their reasons. Read the code around a change first and write like
+it, and write what more than one place needs once, in `util/`.
 
 ## Write code that explains itself
 

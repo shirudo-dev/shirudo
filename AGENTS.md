@@ -110,65 +110,24 @@ package for `bpm info`.
 
 C follows the kernel coding style,
 `Documentation/contribute/code/coding-style.rst`, in userspace and BPF
-alike; the `coding` skill, which the section above has you load first,
-gives these conventions with their reasons, the helpers to use and the
-commit message that carries a change.
+alike. The `coding` skill gives these conventions with their reasons,
+the helpers to use and the commit message that carries a change:
+`.agents/skills/coding/SKILL.md` is the reference, and the "Before you
+write code" section above has you load and follow it.
 
-- Plain C, no C++. Zero-initialise with `= {}`. Integers are `__u8` to
-  `__u64` and `__s8` to `__s64`; a system header that uses `uint8_t` and
-  its kin goes above the first shirudo header, which poisons them.
-- Use the helpers of `util/` and `include/shirudo/` over libc and open
-  code: `parse_u64()` and its kin for numbers, `<shirudo/overflow.h>`
-  for sizes, `strscpy()` and `strsprintf()` with their `-E2BIG`
-  checked and `strscpy_literal()` for a literal into an array,
-  `str_has_prefix()`, `str_after_prefix()` and `span_equals()` for a
-  prefix or a span, `span_until()`, `span_find()` and `str_contains()`
-  for a search, `for_each_token()` for the tokens of a buffer, the
-  `xmalloc()` family, `min()` and `max()`,
-  `memzero_explicit()` and `memneq_explicit()` for secrets,
-  `util/json.c` for all JSON and `pr_*()` for all logging. The libc names
-  they replace are poisoned, and so are the string functions of libc
-  that nothing calls; `<shirudo/string.h>` has the list. Code that a
-  second place needs moves into `util/` with unit cases rather than
-  being copied.
-- Bytes from outside come with a length and become a string in one
-  step that refuses a NUL among them and terminates them:
-  `span_to_str()` for a file read whole, a reply, a counted field or a
-  line cut from a text, `read_text_line()` for the lines of a settings
-  file, `json_parse()` for a document. A fixed-size field of a format
-  is a string once its parser found a NUL inside it. `strcmp()`,
-  `strlen()`, `strchr()` and their kin, which no poison can refuse, are
-  for what passed that step, for literals, `argv` and paths; never for
-  a buffer a `read()` filled, a field nobody checked or a pointer that
-  came with a length. A digest over several strings delimits or counts
-  each.
-- `ret` names a return code and `err` an errno kept beside the value a
-  function returns. No `(void)` casts: a result that must be checked
-  comes from a `__must_check` function, and every call checks it.
-  Internal names carry no `shirudo_` prefix. Locals go in
-  reverse-Christmas-tree order.
-- Write self-documenting code: names that say what a function does and
-  what a value holds, and small functions, so that comments stay rare. A
-  file starts with its SPDX line, the copyright and at most five lines of
-  purpose; in code a comment says only the why the code cannot, never
-  what it does or how it came to be. Block comments follow section 8 of
-  the style, and `//` is for SPDX alone.
-- Userspace is BSD-2-Clause. Every file compiled into a BPF object, and
-  every Lua decoder, is `GPL-2.0 OR BSD-2-Clause`, and a BPF program
-  declares `char _license[] SEC("license") = "Dual BSD/GPL";`. No emojis.
+Coding conventions, helpers, patterns, and commit message format belong
+in the `coding` skill, not here. This file documents architecture,
+invariants, and project policies; the skill documents how to write C.
 
 ## Commits
 
-`Documentation/contribute/code/contributing.rst` is the kernel's process
-applied here and is the reference for every commit an agent prepares: a
-subject of the form `area: imperative summary`, a body that explains why
-before what, and the `Co-developed-by`, `Fixes`, `Reported-by`,
-`Suggested-by`, `Tested-by`, `Reviewed-by`, `Acked-by` and `Cc` tags
-used as the kernel uses them. Every commit needs a `Signed-off-by:` from
-a real identity, and only a person can give one: an agent never adds a
-sign-off, on its own or anyone else's behalf, and leaves that line to
-the human who reviews and submits the work. One logical change per
+Every commit follows `Documentation/contribute/code/contributing.rst` and
+the commit message format in the `coding` skill. One logical change per
 commit, each one building and passing on its own.
+
+An agent never adds a `Signed-off-by:`, on its own or anyone else's
+behalf: only a person can give one, and that line is left to the human
+who reviews and submits the work.
 
 ## Invariants that are easy to break
 
