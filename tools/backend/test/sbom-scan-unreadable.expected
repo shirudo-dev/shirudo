@@ -1,0 +1,7 @@
+sbom-scan: loaded images: 0, findings: 0
+readable-empty: status 0
+sbom-scan: cannot read the store <store>
+unreadable: status 1
+sbom-scan: no store directory <store>
+missing: status 1
+sbom_images	0

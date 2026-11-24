@@ -199,11 +199,17 @@ def image(store, work, n, directory):
     return row, copy, "", len(components)
 
 
+def walk_error(error):
+    # os.walk swallows a listing error by default, so an unreadable store
+    # would look empty and the scan would report success over nothing.
+    raise error
+
+
 def image_directories(store):
     """The image directories under the store; other image.json are named."""
     found = []
     left_out = False
-    for top, dirs, files in os.walk(store):
+    for top, dirs, files in os.walk(store, onerror=walk_error):
         dirs.sort()
         if "image.json" not in files:
             continue
@@ -226,7 +232,12 @@ def images_main(store, work):
         print("%s: no store directory %s" % (PROG, printable(store)),
               file=sys.stderr)
         return 1
-    directories, left_out = image_directories(store)
+    try:
+        directories, left_out = image_directories(store)
+    except OSError as error:
+        print("%s: cannot read the store %s" % (
+            PROG, printable(error.filename or store)), file=sys.stderr)
+        return 1
     images = []
     with open(os.path.join(work, "images.tsv"), "w", encoding="utf-8") as tsv:
         for n, directory in enumerate(directories, 1):
