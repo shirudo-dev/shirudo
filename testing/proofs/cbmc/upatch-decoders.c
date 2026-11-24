@@ -63,7 +63,6 @@ void harness(void)
 		return;
 	}
 	__CPROVER_assert((const __u8 *)u.decoder_blob == bp &&
-			 u.decoder_blob_len == len &&
 			 u.nr_decoders == get_le32(bp + 8) && u.nr_decoders,
 			 "the whole section and its count");
 	for (i = 0; i < NR_MAX; i++)

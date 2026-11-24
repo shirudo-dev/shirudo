@@ -251,7 +251,6 @@ static bool parse_decoders(struct upatch *u, const __u8 *bp,
 	}
 
 	u->decoder_blob = (const void *)bp;
-	u->decoder_blob_len = decoder_len;
 	u->nr_decoders = nr_decoders;
 	return true;
 }
@@ -259,7 +258,6 @@ static bool parse_decoders(struct upatch *u, const __u8 *bp,
 static void forget_signed_sections(struct upatch *u)
 {
 	u->decoder_blob = NULL;
-	u->decoder_blob_len = 0;
 	u->nr_decoders = 0;
 	u->signed_name = NULL;
 	u->signed_attach = NULL;

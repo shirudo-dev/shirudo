@@ -73,7 +73,6 @@ void harness(void)
 			 "the name and the attach metadata");
 	__CPROVER_assert(written(&u, u.decoder_blob, DECODERS_OFF, decoders,
 				 DECODERS_LEN) &&
-			 u.decoder_blob_len == DECODERS_LEN &&
 			 u.nr_decoders == alone.nr_decoders,
 			 "the decoders behind the padding");
 	__CPROVER_assert(written(&u, u.signed_policy_labels, LABELS_OFF,

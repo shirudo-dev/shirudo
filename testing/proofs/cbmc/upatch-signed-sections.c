@@ -79,7 +79,7 @@ static void forgotten(const struct upatch *u)
 {
 	__CPROVER_assert(!u->signed_attach_len &&
 			 !u->signed_policy_labels_len &&
-			 !u->decoder_blob_len && !u->nr_decoders &&
+			 !u->nr_decoders &&
 			 !u->signed_policy_map_idx &&
 			 !u->signed_socket_policy_map_idx &&
 			 !u->signed_jar_len,
@@ -146,7 +146,10 @@ void harness(void)
 	__CPROVER_assert(!u.signed_policy_labels, "no policy labels");
 	__CPROVER_assert(!u.decoder_blob ||
 			 (u.nr_decoders &&
-			  below(&u, u.decoder_blob, u.decoder_blob_len,
+			  below(&u, u.decoder_blob,
+				sizeof(struct upatch_decoder_blob) +
+				(size_t)u.nr_decoders *
+				sizeof(struct upatch_decoder_entry),
 				dir_off)),
 			 "decoders below the directory");
 }
