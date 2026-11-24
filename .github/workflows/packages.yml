@@ -8,6 +8,8 @@ on:
       - '*'
       - '!test-kernel-*'
   pull_request:
+  merge_group:
+    types: [checks_requested]
   workflow_dispatch:
     inputs:
       additional_config_cert:
@@ -325,7 +327,7 @@ jobs:
           if-no-files-found: error
 
   kernel-obs-preview:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     needs: [deb, rpm-target]
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -339,8 +341,8 @@ jobs:
         uses: ./.github/actions/kernel-obs
         with:
           mode: preview
-          version: 0.1.${{ github.run_number }}-pr.${{ github.event.pull_request.number }}
-          artifact-name: kernel-obs-preview-pr-${{ github.event.pull_request.number }}
+          version: 0.1.${{ github.run_number }}-${{ github.event_name == 'pull_request' && format('pr.{0}', github.event.pull_request.number) || 'merge-group' }}
+          artifact-name: ${{ github.event_name == 'pull_request' && format('kernel-obs-preview-pr-{0}', github.event.pull_request.number) || format('kernel-obs-preview-merge-group-{0}', github.event.merge_group.head_sha) }}
 
   kernel-obs-publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
