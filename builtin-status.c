@@ -1487,7 +1487,6 @@ static void status_cond_input(struct status_view *v)
 					  v->keyring_pinned >= 1 &&
 					  v->keyring_serial == v->keyring_pinned,
 		.tpm_reachable		= t->cst.tpm,
-		.ks_seen		= v->keyring_present,
 		.ksp_seen		= v->keyring_pinned >= 1,
 		.ksm_seen		= v->keyring_present &&
 					  v->keyring_pinned >= 1,

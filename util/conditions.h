@@ -29,7 +29,7 @@ struct conditions_input {
 	__s64		keyring_serial;
 	__s64		keyring_serial_pinned;
 	int		keyring_serial_matches;	/* 0/1 if ksm_seen */
-	int		ks_seen, ksp_seen, ksm_seen;
+	int		ksp_seen, ksm_seen;
 	int		bpf_unfrozen;	/* links init did not freeze */
 	int		dmv_present;	/* the .dm-verity keyring exists */
 	__s64		dmv_serial;

@@ -66,7 +66,6 @@ int main(int argc, char **argv)
 	in.keyring_mode = mode;
 	in.keyring_serial = serial;
 	in.keyring_serial_pinned = pinned;
-	in.ks_seen = in.keyring_present;
 	in.ksp_seen = pinned >= 1;
 	in.ksm_seen = in.keyring_present && pinned >= 1;
 	in.keyring_serial_matches = in.ksm_seen && serial == pinned;
