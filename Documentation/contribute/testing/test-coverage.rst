@@ -239,6 +239,13 @@ signed config image.
        that is no jar, a jar without a ``Premain-Class``, ``--java``
        alone, rodata on a Java upatch and a header relabelled BPF are
        refused
+   * - ``t3015-app-sandbox-policy``
+     - ``upatches/app-sandbox/gen_policy.py``: packing the shipped rules,
+       ``deny.network`` (including IPv4-mapped IPv6 and shadowed
+       allowlist refusal), ``deny.families``, ``deny.ops``, ``deny.read``
+       and ``deny.unix`` with ``parent/name`` patterns, refusal of
+       unknown keys and malformed paths, and monotonic multi-sandbox
+       composition
    * - ``t3101-target-fixtures``
      - Prebuilt fixtures load and unload, foreign and own-keyring
        fixtures are refused, a map fixture exports
@@ -974,12 +981,15 @@ signed config image.
        and ``shields-put``, ``bpm tree append`` by reference and
        ``--package-digest``, the node loading it at seq 1 and labeling
        the sandbox's files, those a pattern of the Beefile matches and
-       not the target of a symbolic link it matches, a labeled program denied the executions,
-       connections, datagrams, raw socket and ``.php`` creations,
-       renames and writes its sandbox rules out and allowed the rest, an
-       unlabeled program denied nothing, then ``--op delete`` and the
-       program unrestricted at seq 2, with ``5 head`` and ``6 set`` of
-       the node's status at each step
+       not the target of a symbolic link it matches, a labeled program
+       denied the executions (including ``memfd_create``), disallowed and
+       IMDS ``deny.network`` connections and datagrams, raw, ``AF_VSOCK``
+       and ``AF_ALG`` sockets, ``docker.sock`` directly and via symlink,
+       ``.env`` and ``.ssh/*`` reads and alias links or renames, ``.php``
+       creations, renames and writes, ``userns`` and cross-process
+       ``ptrace``, and allowed the rest, an unlabeled program denied
+       nothing, then ``--op delete`` and the program unrestricted at seq
+       2, with ``5 head`` and ``6 set`` of the node's status at each step
 
 Quickstart and quick guides
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~

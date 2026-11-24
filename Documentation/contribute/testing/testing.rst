@@ -1484,10 +1484,12 @@ sandbox, ``probe``,
 labels a file of the test: a copy of the node's ``python3`` at
 ``/tmp/shirudo-app-sandbox/app``. It may execute the files labeled
 ``probe-helpers`` beside it, which the Beefile names by the pattern
-``helper*``, reach the loopback networks, and not create, rename or
-write ``*.php``. That copy runs
-:src:`testing/end2end/app_sandbox_probe.py`, which tries 28 operations
-and prints which of them the kernel denied. The test:
+``helper*``, reach loopback and the non-IMDS parts of the link-local
+prefixes while denying cloud metadata addresses, exotic socket families,
+``docker.sock``, ``userns``, cross-process ``ptrace``, reads of ``.env``
+and ``.ssh/*``, and creating, renaming or writing ``*.php``. That copy
+runs :src:`testing/end2end/app_sandbox_probe.py`, which tries 46
+operations and prints which of them the kernel denied. The test:
 
 #. checks that the node has no tree state and that the registry holds
    neither the tree nor an index, and empties the keepalive backend;
@@ -1509,12 +1511,16 @@ and prints which of them the kernel denied. The test:
    application with policy bit ``0x1`` and both programs the pattern
    matches with ``0x2``, and not ``other``, though the link to it
    matches too;
-#. runs the probe in the application: 17 operations are denied, the
-   other program by its name and by the link, the connections and
-   datagrams to addresses outside the loopback networks, a raw socket
-   and each way to create, rename, write or truncate a ``.php`` file,
-   and 11 are allowed, among them both helpers, the loopback and reading
-   a ``.php`` file;
+#. runs the probe in the application: 32 operations are denied, the
+   other program by its name, by the link and via ``memfd_create``, the
+   connections and datagrams outside the allowed networks or matching
+   the IMDS ``deny.network`` rules, raw, ``AF_VSOCK`` and ``AF_ALG``
+   sockets, ``docker.sock`` directly and through a symlink, reading,
+   linking or renaming ``.env`` and ``.ssh/id_rsa``, each way to create,
+   rename, write or truncate a ``.php`` file, creating a user namespace
+   and opening another process's ``/proc/<pid>/mem``, and 14 are
+   allowed, among them both helpers, loopback, non-IMDS link-local,
+   ``ok.sock``, ``/proc/self/stat`` and reading a ``.php`` file;
 #. runs the probe with the node's own ``python3``, which no policy
    labels: nothing is denied;
 #. sends a keepalive and checks ``5 head: pass, seq 1 of 1`` and ``6

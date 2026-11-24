@@ -65,11 +65,11 @@ stage() {
 
 # Run the probe in the node with the interpreter $1 and write the checks
 # the kernel denied it to $W/denied, one name per line. The probe makes
-# 28 checks.
+# 46 checks.
 probe() {
 	on edge "python3 $PROBE setup $APP_DIR && $1 $PROBE run $APP_DIR" \
 		>"$W/probe" &&
-	test "$(wc -l <"$W/probe")" = 28 &&
+	test "$(wc -l <"$W/probe")" = 46 &&
 	sed -n "s/ denied\$//p" "$W/probe" >"$W/denied"
 }
 
@@ -187,12 +187,21 @@ test_expect_success 'the application executes, connects and writes only what its
 	cat >"$W/expected" <<-\EOT &&
 	exec-helper-link
 	exec-other
+	exec-memfd
 	connect-remote
 	connect-remote-v6
 	connect-remote-mapped
+	connect-imds
+	connect-imds-mapped
+	connect-imds-v6
 	send-remote
 	send-remote-v6
+	send-imds
 	raw-socket
+	vsock-socket
+	alg-socket
+	unix-docker
+	unix-docker-symlink
 	create-php
 	create-exact
 	mkdir-php
@@ -200,8 +209,14 @@ test_expect_success 'the application executes, connects and writes only what its
 	link-php
 	rename-to-php
 	rename-from-php
+	read-env
+	read-ssh-key
+	link-env
+	rename-ssh-key
 	write-php
 	truncate-php
+	userns-create
+	ptrace-other
 	EOT
 	diff -u "$W/expected" "$W/denied" >&2
 '

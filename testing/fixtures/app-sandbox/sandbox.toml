@@ -5,12 +5,18 @@
 
 [networks]
 loopback = ["127.0.0.0/8", "::1/128"]
+imds = ["169.254.169.254/32", "fd00:ec2::254/128"]
 
 [sandbox.probe]
 exec = ["probe-helpers"]
-network = ["@loopback"]
+network = ["@loopback", "169.254.0.0/16", "fd00:ec2::/64"]
 
 [sandbox.probe.deny]
+network = ["@imds"]
+families = ["vsock", "alg"]
+ops = ["userns", "ptrace"]
 create = ["*.php", "core"]
 rename = ["*.php"]
 write = ["*.php"]
+read = [".env", ".ssh/*"]
+unix = ["docker.sock"]
