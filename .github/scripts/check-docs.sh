@@ -34,9 +34,11 @@ report() {
 find Documentation -name '*.rst' -not -path 'Documentation/output*' \
 	-not -path 'Documentation/contribute/code/coding-style.rst' | sort >"$work/pages"
 
-# The options of the command lines in console blocks, by page.
+# The options of the command lines in console blocks, by page. A line
+# ending in a backslash is joined to the next, as the shell does.
 while IFS= read -r page; do
-	grep -E '^[[:space:]]+(operator\$|target#|\$|#) shirudo( |$)' "$page" |
+	awk '/\\$/ { sub(/\\$/, ""); printf "%s", $0; next } { print }' "$page" |
+		grep -E '^[[:space:]]+(operator\$|target#|\$|#) shirudo( |$)' |
 		grep -oE -- '--[a-z0-9][a-z0-9-]*' | sort -u |
 		sed "s|^|$page |"
 done <"$work/pages" >"$work/options"
