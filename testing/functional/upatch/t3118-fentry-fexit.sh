@@ -3,9 +3,9 @@
 # Copyright (c) 2026 Authors of shirudo
 #
 # t3118 -- live fentry and fexit programs on one function: both links
-# attach and get names them, the fentry program sees a call with its
-# arguments and follows a pointer among them, the fexit program sees a
-# call that succeeded and a call the kernel refused, each with the
+# attach, the load and get name each kind, the fentry program sees a call
+# with its arguments and follows a pointer among them, the fexit program
+# sees a call that succeeded and a call the kernel refused, each with the
 # arguments as passed and the value returned, and an unload detaches
 # both.
 
@@ -26,9 +26,11 @@ for fixture in "$LOAD" "$UNLOAD"; do
 	[ -s "$fixture" ] || test_skip_all "missing fentry and fexit fixture: $fixture"
 done
 
-test_expect_success 'both links are pinned' '
-	"$SHIRUDO_BIN" upatch load "$LOAD" --no-precheck >/dev/null 2>&1 &&
-	[ -e "$DIR/link_0" ] && [ -e "$DIR/link_1" ]
+test_expect_success 'both links are pinned, and the load names each kind' '
+	"$SHIRUDO_BIN" upatch load "$LOAD" --no-precheck >"$WORK/load.log" 2>&1 &&
+	[ -e "$DIR/link_0" ] && [ -e "$DIR/link_1" ] &&
+	grep -q "program 0 (fentry) pinned at $DIR/link_0" "$WORK/load.log" &&
+	grep -q "program 1 (fexit) pinned at $DIR/link_1" "$WORK/load.log"
 '
 
 test_expect_success 'get reports both kinds and the function' '

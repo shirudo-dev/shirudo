@@ -398,7 +398,7 @@ Load it
       target# shirudo upatch load basic.upatch
       upatch load: signed loader accepted, keyring 1025034781, 124 instructions
       upatch load: loader ran, 0 maps and 1 programs
-      upatch load: program 0 (raw_tracepoint) pinned at /run/shirudo/bpffs/upatches/basic/link
+      upatch load: program 0 (fentry) pinned at /run/shirudo/bpffs/upatches/basic/link
       upatch load: basic loaded, 1 programs, keyring 1025034781
       upatch load: basic measured, register 2705e01ee2dbc5b81b7ba45749aa06251a32b535142788ef24a40be985b78bf7
 

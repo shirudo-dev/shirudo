@@ -85,6 +85,16 @@ static const char *loc_prefix(__u32 prog_type, __u32 attach_type)
 	return NULL;
 }
 
+const char *upatch_tracing_link_kind(const struct bpf_link_info *info)
+{
+	__u32 attach_type = info->tracing.attach_type;
+
+	if (info->type != BPF_LINK_TYPE_TRACING)
+		return NULL;
+	return loc_prefix(attach_type == BPF_LSM_MAC ? BPF_PROG_TYPE_LSM :
+			  BPF_PROG_TYPE_TRACING, attach_type);
+}
+
 int upatch_first_prog_id(const char *name, __u32 *out)
 {
 	struct bpf_link_info linfo = {};

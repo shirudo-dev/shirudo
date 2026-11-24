@@ -136,7 +136,7 @@ Load it and read the map
       target# shirudo upatch load /workspace/shirudo/build/tutorial/sleep-count.upatch
       upatch load: signed loader accepted, keyring 272801410, 148 instructions
       upatch load: loader ran, 1 maps and 1 programs
-      upatch load: program 0 (raw_tracepoint) pinned at /run/shirudo/bpffs/upatches/sleep-count/link
+      upatch load: program 0 (fentry) pinned at /run/shirudo/bpffs/upatches/sleep-count/link
       upatch load: map 0 (calls) pinned at /run/shirudo/bpffs/upatches/sleep-count/maps/calls
       upatch load: sleep-count loaded, 1 programs, keyring 272801410
       upatch load: sleep-count measured, register 88e45b0c80b0ffe83d471b6372402082a5dcf82173adc5c4bdd631039fe4609c

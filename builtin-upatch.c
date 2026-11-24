@@ -1283,6 +1283,22 @@ static const char *attach_kind_name(__u32 kind)
 	}
 }
 
+/*
+ * UPATCH_ATTACH_RAW_TRACEPOINT is the kind of every program the builder
+ * gave none of its own: fentry, fexit, lsm and tp_btf. The link says which.
+ */
+static const char *link_kind_name(const struct prog_spec *spec, int link_fd)
+{
+	struct bpf_link_info info = {};
+	__u32 len = sizeof(info);
+	const char *kind = NULL;
+
+	if (spec->kind == UPATCH_ATTACH_RAW_TRACEPOINT &&
+	    !bpf_link_get_info_by_fd(link_fd, &info, &len))
+		kind = upatch_tracing_link_kind(&info);
+	return kind ? kind : attach_kind_name(spec->kind);
+}
+
 static int prepare_uprobe_targets(struct prog_spec *specs,
 				  __u32 nr_progs)
 {
@@ -1785,6 +1801,7 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 				       (size_t)i * sizeof(*pd));
 		int inner_fd = pd->prog_fd;
 		const struct prog_spec *spec = &specs[i];
+		const char *kind;
 		int link_fd;
 
 		if (inner_fd <= 0) {
@@ -1888,6 +1905,7 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 			close(link_fd);
 			goto out;
 		}
+		kind = link_kind_name(spec, link_fd);
 		ret = obj_pin(link_fd, pin);
 		close(link_fd);
 		if (ret) {
@@ -1898,7 +1916,7 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 		if (has_xdp)
 			pinned_links++;
 		pr_info("upatch load: program %u (%s) pinned at %s",
-			i, attach_kind_name(spec->kind), pin);
+			i, kind, pin);
 	}
 	if (test_fd >= 0) {
 		__u64 init_ctx[2] = {};

@@ -329,12 +329,12 @@ signed config image.
        copying failing decrypt moves only ``activity``; the unload removes it
    * - ``t3118-fentry-fexit``
      - Live ``fentry`` and ``fexit`` links attach to ``vfs_fallocate()``
-       from one upatch and report their kinds. The ``fentry`` program
-       sees a call with its arguments and follows a pointer among them
-       to the file's inode number. The ``fexit`` program sees a call
-       that succeeds and a call the kernel refuses, each with the
-       arguments as passed and the value returned. The unload detaches
-       both
+       from one upatch, and the load and ``get`` name each kind. The
+       ``fentry`` program sees a call with its arguments and follows a
+       pointer among them to the file's inode number. The ``fexit``
+       program sees a call that succeeds and a call the kernel refuses,
+       each with the arguments as passed and the value returned. The
+       unload detaches both
    * - ``t3119-fmod-ret``
      - Live ``fmod_ret`` links. On ``security_task_setnice()``, a target
        on every kernel, the program fails the one call it is written

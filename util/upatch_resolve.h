@@ -54,6 +54,12 @@ struct upatch_link_misses {
 };
 
 /*
+ * The kind of the program behind a tracing link as a location names it:
+ * "fentry", "fexit", "fmod_ret" or "lsm". NULL for a link of another type.
+ */
+const char *upatch_tracing_link_kind(const struct bpf_link_info *info);
+
+/*
  * Whether the runs the kernel skips of the program behind this link are
  * reported: kprobe, kretprobe, their multi forms, fentry, fexit, fmod_ret
  * and tp_btf. The kernel skips no lsm, xdp, cgroup_skb or netfilter run,

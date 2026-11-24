@@ -238,7 +238,7 @@ Load an artifact and print the report:
    target# shirudo upatch load --report=- shirudo-test-basic.upatch
    upatch load: signed loader accepted, keyring 272801410, 124 instructions
    upatch load: loader ran, 0 maps and 1 programs
-   upatch load: program 0 (raw_tracepoint) pinned at /run/shirudo/bpffs/upatches/shirudo-test-basic/link
+   upatch load: program 0 (fentry) pinned at /run/shirudo/bpffs/upatches/shirudo-test-basic/link
    upatch load: shirudo-test-basic loaded, 1 programs, keyring 272801410
    upatch load: shirudo-test-basic measured, register 7f63313a31ac8ddd3a6a16fce2038322c9c782d5787155d2dc18dfa582dff548
 

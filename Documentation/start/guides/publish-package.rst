@@ -151,7 +151,7 @@ none, so here the target installs by direct reference.
       upatch load: --no-precheck, pre-flight state check skipped
       upatch load: signed loader accepted, keyring 272801410, 124 instructions
       upatch load: loader ran, 0 maps and 1 programs
-      upatch load: program 0 (raw_tracepoint) pinned at /run/shirudo/bpffs/upatches/hello/link
+      upatch load: program 0 (fentry) pinned at /run/shirudo/bpffs/upatches/hello/link
       upatch load: hello loaded, 1 programs, keyring 272801410
       upatch load: hello measured, register 55a8c670eb10d9bc6a9dc7475e3fc94407066016798dddbc59870138525f61b6
 

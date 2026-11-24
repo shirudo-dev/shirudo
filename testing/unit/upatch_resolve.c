@@ -103,11 +103,30 @@ static void a_kprobe_link_adds_what_it_counts_itself(void)
 	EXPECT_UEQ(upatch_link_missed(&info), 0);
 }
 
+static void a_tracing_link_names_the_kind_of_its_program(void)
+{
+	struct bpf_link_info info = tracing_link(BPF_TRACE_FENTRY);
+
+	EXPECT_STREQ(upatch_tracing_link_kind(&info), "fentry");
+	info = tracing_link(BPF_TRACE_FEXIT);
+	EXPECT_STREQ(upatch_tracing_link_kind(&info), "fexit");
+	info = tracing_link(BPF_MODIFY_RETURN);
+	EXPECT_STREQ(upatch_tracing_link_kind(&info), "fmod_ret");
+	info = tracing_link(BPF_LSM_MAC);
+	EXPECT_STREQ(upatch_tracing_link_kind(&info), "lsm");
+
+	info = perf_link(BPF_PERF_EVENT_KPROBE);
+	EXPECT_TRUE(!upatch_tracing_link_kind(&info));
+	info = (struct bpf_link_info){ .type = BPF_LINK_TYPE_RAW_TRACEPOINT };
+	EXPECT_TRUE(!upatch_tracing_link_kind(&info));
+}
+
 static const struct unit_case cases[] = {
 	UNIT_CASE(links_of_an_absent_upatch_are_not_read),
 	UNIT_CASE(the_kinds_the_kernel_counts_skipped_runs_of_count),
 	UNIT_CASE(the_kinds_it_never_skips_or_never_counts_do_not),
 	UNIT_CASE(a_kprobe_link_adds_what_it_counts_itself),
+	UNIT_CASE(a_tracing_link_names_the_kind_of_its_program),
 	{}
 };
 

@@ -259,7 +259,7 @@ runtime image. Load the upatch and print the report:
        /mnt/shirudo-src/build/rpl-shield/cve-2026-63984-rpl.upatch
    upatch load: signed loader accepted, keyring 531121468, 172 instructions
    upatch load: loader ran, 2 maps and 1 programs
-   upatch load: program 0 (raw_tracepoint) pinned at /run/shirudo/bpffs/upatches/cve-2026-63984-rpl/link
+   upatch load: program 0 (fentry) pinned at /run/shirudo/bpffs/upatches/cve-2026-63984-rpl/link
    upatch load: map 0 (hits) pinned at /run/shirudo/bpffs/upatches/cve-2026-63984-rpl/maps/hits
    upatch load: map 1 (activity) pinned at /run/shirudo/bpffs/upatches/cve-2026-63984-rpl/maps/activity
    upatch load: cve-2026-63984-rpl loaded, 1 programs, keyring 531121468
@@ -269,9 +269,9 @@ runtime image. Load the upatch and print the report:
 The log lines go to standard error and the JSON report to standard
 output. The report has ``"result":"ok"``, phase ``done`` and category
 ``ok``, and its ``tpm.chain_after`` is the measurement register after the
-load. ``program 0 (raw_tracepoint) pinned at ...`` means that shirudo
-attached the fentry program through ``BPF_RAW_TRACEPOINT_OPEN`` at the
-function the verifier bound, and pinned the link.
+load. ``program 0 (fentry) pinned at ...`` means that shirudo attached
+the fentry program at the function the verifier bound, and pinned the
+link.
 :doc:`/upatches/test/debugging` explains the report when a load fails.
 
 Check where the kernel attached it and read the counters:
