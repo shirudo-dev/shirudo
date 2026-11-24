@@ -735,8 +735,8 @@ static int cmd_upatch_list(int argc, const char **argv)
 		if (upatch_open(path, &u) != 0) {
 			if (!json)
 				printf("  %-24s  %-6s  %-6s  %-4s  %s\n",
-				       persisted[i]->d_name, "?", "?", "?",
-				       "unreadable");
+				       printable(persisted[i]->d_name),
+				       "?", "?", "?", "unreadable");
 			continue;
 		}
 		upatch_header_name(&u, name);
@@ -749,7 +749,7 @@ static int cmd_upatch_list(int argc, const char **argv)
 
 		if (json) {
 			json_obj_open(&e);
-			json_kv_string(&e, "name", name);
+			json_kv_string_lossy(&e, "name", name);
 			json_kv_string(&e, "type", type);
 			json_kv_string(&e, "payload_type", payload_type);
 			json_kv_bool(&e, "loaded", loaded);
@@ -761,8 +761,9 @@ static int cmd_upatch_list(int argc, const char **argv)
 
 			memcpy(shown, payload_hex, 16);
 			memcpy(shown + 16, "..", 3);
-			printf("  %-24s  %-6s  %-6s  %-4s  %s\n", name,
-			       loaded ? "yes" : "no", type, payload_type, shown);
+			printf("  %-24s  %-6s  %-6s  %-4s  %s\n",
+			       printable(name), loaded ? "yes" : "no",
+			       type, payload_type, shown);
 		}
 	}
 
@@ -782,15 +783,16 @@ static int cmd_upatch_list(int argc, const char **argv)
 
 		if (json) {
 			json_obj_open(&e);
-			json_kv_string(&e, "name", raw_name);
+			json_kv_string_lossy(&e, "name", raw_name);
 			json_kv_null(&e, "type");
 			json_kv_bool(&e, "loaded", 1);
 			json_kv_bool(&e, "archived", 0);
 			json_kv_null(&e, "payload_sha256");
 			json_obj_close(&e);
 		} else {
-			printf("  %-24s  %-6s  %-6s  %-4s  %s\n", raw_name,
-			       "yes", "-", "-", "not archived, gone at reboot");
+			printf("  %-24s  %-6s  %-6s  %-4s  %s\n",
+			       printable(raw_name), "yes", "-", "-",
+			       "not archived, gone at reboot");
 		}
 	}
 
