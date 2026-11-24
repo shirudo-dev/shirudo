@@ -13,6 +13,14 @@ full run CI makes, how to use the test VM that plays the target, and
 where a test you add goes. :doc:`/contribute/testing/test-coverage` lists what
 the tests cover.
 
+Open the `CI dashboard <ci-status.html>`__ to see the last 24 hours of
+workflow and check results for ``main``. Select a cell to see its results
+and follow the links to GitHub. The dashboard caches results in the browser.
+On reload, it fetches recent runs and revisits runs still in progress.
+It checks the full window on the first load and on the next load after
+an hour. If GitHub rate-limits requests, the dashboard shows cached results
+and waits until the displayed retry time before sending more requests.
+
 Before you begin
 ----------------
 

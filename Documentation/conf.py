@@ -24,6 +24,7 @@ html_theme = "shirudo"
 html_theme_path = ["_themes"]
 html_title = "shirudo documentation"
 html_static_path = ["logos"]
+html_extra_path = ["_extra"]
 html_favicon = "_themes/shirudo/favicon.svg"
 html_sidebars = {"**": []}
 html_copy_source = False

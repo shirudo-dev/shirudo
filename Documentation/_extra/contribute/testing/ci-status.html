@@ -1,0 +1,612 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: BSD-2-Clause
+     Copyright (c) 2026 Authors of shirudo -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shirudo main CI history · Pivot</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--background,#fff); color: var(--foreground,#202531); font: 14px/1.4 var(--font-sans,system-ui,sans-serif); }
+  main { --passed:var(--chart-2,#248776); --failed:var(--destructive,#c23a46); --cancelled:var(--chart-4,#7656a3); --skipped:var(--muted-foreground,#6b7280); --active:var(--chart-1,#3d69be); --rule:var(--border,#e3e7ed); --subtle:var(--muted-foreground,#606b7b); --page-padding:clamp(14px,3vw,25px); padding:var(--header-height,0px) var(--page-padding) var(--page-padding); }
+  h2, p { margin:0; }
+  h2 { font-size:15px; font-weight:640; }
+  .head, .legend { display:flex; flex-wrap:wrap; align-items:center; gap:8px 15px; }
+  .head { justify-content:space-between; align-items:baseline; }
+  .empty-state { padding:12px 0; text-align:left; }
+  .other { --series:var(--chart-3,#76685b); }
+  .head a, .detail a { color:inherit; text-underline-offset:3px; }
+  .warning { margin-top:6px; padding:6px 10px; border:1px solid var(--failed); border-radius:4px; background:color-mix(in srgb,var(--failed) 12%,var(--background,#fff)); font-weight:650; }
+  .muted { color:var(--subtle); font-size:12px; }
+  #loading { white-space:nowrap; }
+  #loading::before { content:""; display:inline-block; width:.8em; height:.8em; margin:0 .35em 0 .6em; border:1px solid var(--rule); border-top-color:currentColor; border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion:reduce) { #loading::before { animation:none; } }
+  button { color:inherit; font:inherit; }
+  .legend { margin:12px 0 9px; }
+  .legend span { white-space:nowrap; }
+  .mark { display:inline-flex; align-items:center; justify-content:center; width:1.15em; font-weight:750; font-size:1.12em; }
+  .success { --series:var(--passed); }
+  .failure { --series:var(--failed); }
+  .cancelled { --series:var(--cancelled); }
+  .skipped { --series:var(--skipped); }
+  .active { --series:var(--active); }
+  .mark { color:var(--series,currentColor); }
+  #page-header { position:fixed; inset:0 0 auto; z-index:4; background:var(--background,#fff); padding:var(--page-padding) var(--page-padding) 0; display:flow-root; }
+  table { width:100%; border-collapse:separate; border-spacing:2px; table-layout:fixed; font-variant-numeric:tabular-nums; }
+  .commit-col { width:150px; }
+  .commit-sha { display:block; color:inherit; font:11px var(--font-mono,monospace); text-underline-offset:2px; }
+  .commit-time { display:block; padding-top:2px; color:var(--subtle); font-size:11px; font-weight:400; }
+  th { font-weight:600; }
+  thead { position:sticky; top:var(--header-height,0px); z-index:2; background:var(--background,#fff); }
+  thead th { font-size:11px; vertical-align:bottom; overflow-wrap:anywhere; }
+  thead .date { padding:3px 0; border-bottom:1px solid var(--rule); }
+  thead th:first-child, tbody th { text-align:left; position:sticky; left:0; z-index:1; background:var(--background,#fff); }
+  thead th:first-child { z-index:3; }
+  thead th:nth-child(n+2) > span { display:inline-block; writing-mode:vertical-rl; transform-origin:top center; transform:translateY(100%) rotate(210deg); white-space:nowrap; }
+  tbody th { font-size:12px; font-weight:520; }
+  td { padding:0; }
+  td > button { position:relative; width:100%; cursor:pointer; border:1px solid transparent; background:transparent; border-radius:4px; }
+  td > button { min-height:27px; padding:2px 3px; background:color-mix(in srgb,var(--muted,#f2f4f7) 72%,transparent); }
+  td > button:hover { border-color:var(--subtle); }
+  td > button[aria-expanded="true"] { outline:1px solid var(--ring,#4a62de); outline-offset:0; }
+  :focus-visible { outline:2px solid var(--ring,#4a62de); outline-offset:1px; }
+  .empty { display:block; text-align:center; color:var(--subtle); }
+  .counts { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:1px 3px; font-size:11px; line-height:1.2; min-height:14px; }
+  .counts > span { white-space:nowrap; }
+  .strip { position:absolute; inset:-1px auto -1px -1px; display:flex; flex-direction:column; width:3px; border-radius:4px 0 0 4px; overflow:hidden; pointer-events:none; }
+  .segment { display:block; background:var(--series); }
+  .segment.cancelled { background:repeating-linear-gradient(120deg,var(--series) 0 3px,transparent 3px 5px); }
+  .detail { position:fixed; inset:auto; margin:0; width:min(430px,calc(100vw - 16px)); max-height:min(420px,calc(100dvh - 16px)); overflow:auto; padding:12px; border:1px solid var(--rule); border-radius:8px; background:var(--card,#fff); color:inherit; box-shadow:0 6px 20px #0003; overflow-wrap:anywhere; }
+  .detail-list { list-style:none; margin:6px 0 0; padding:0; }
+  .detail-list li { display:grid; grid-template-columns:86px 1fr 52px; gap:10px; align-items:baseline; padding:4px 0; border-bottom:1px solid var(--rule); font-size:12px; }
+  .detail-list time { color:var(--subtle); font-variant-numeric:tabular-nums; }
+  .detail button { margin-top:8px; padding:4px 7px; background:var(--card,#fff); border:1px solid var(--input,#cbd3de); border-radius:4px; cursor:pointer; }
+</style>
+</head>
+<body>
+<main id="timeline">
+  <div id="page-header">
+    <header class="head">
+      <a href="testing.html">Run and write tests</a>
+      <a href="https://github.com/shirudo-dev/shirudo/actions?query=branch%3Amain" target="_blank" rel="noopener">Live GitHub Actions ↗</a>
+    </header>
+    <p class="muted"><span id="as-of"></span><span id="loading" role="status" hidden>Fetching…</span></p>
+    <p class="warning" id="fetch-warning" role="alert" hidden></p>
+    <div class="legend muted" aria-label="CI outcomes" id="legend"></div>
+  </div>
+  <table id="matrix" aria-label="Main CI outcomes by commit, oldest to newest">
+    <colgroup id="columns"></colgroup>
+    <thead id="day-head"></thead>
+    <tbody id="workflow-rows"></tbody>
+  </table>
+  <section id="detail" class="detail" popover="auto" aria-labelledby="detail-title">
+    <h2 id="detail-title"></h2>
+    <p id="detail-commit" class="muted"></p>
+    <p id="detail-summary" class="muted"></p>
+    <ul id="detail-list" class="detail-list"></ul>
+    <button id="show-more" type="button" hidden>Show all results</button>
+  </section>
+</main>
+<script>
+(() => {
+  const root = document.getElementById("timeline");
+  const el = id => root.querySelector("#" + id);
+  const windowSeconds = 24 * 3600;
+  const fullRefreshSeconds = 3600;
+  const overlapSeconds = 300;
+  const activeStates = new Set(["queued","pending","in_progress","waiting","requested","expected"]);
+  const now = () => Math.floor(Date.now() / 1000);
+  const statuses = ["success","failure","cancelled","skipped","active","other"];
+  const cacheKey = "shirudo-main-ci-pivot-24h-v1";
+  let actions = [];
+  let external = {};
+  let workflowsFetchedAt = null;
+  let workflowsThrough = 0;
+  let fullRefreshAt = 0;
+  let data;
+  try {
+    const cached = JSON.parse(localStorage.getItem(cacheKey));
+    if (Array.isArray(cached?.actions) && cached.external) {
+      actions = cached.actions;
+      external = cached.external;
+      if (Number.isFinite(cached.workflowsFetchedAt)) workflowsFetchedAt = cached.workflowsFetchedAt;
+      if (Number.isFinite(cached.workflowsThrough)) workflowsThrough = cached.workflowsThrough;
+      if (Number.isFinite(cached.fullRefreshAt)) fullRefreshAt = cached.fullRefreshAt;
+    }
+  } catch {
+    // The pane can still refresh when storage is unavailable.
+  }
+  const labels = ["Passed", "Failed", "Cancelled", "Skipped", "Active", "Other"];
+  const symbols = ["✓", "×", "∕", "–", "●", "◇"];
+  const order = [1, 2, 4, 5, 0, 3];
+  const timeZone = "Europe/Zurich";
+  const dateTime = new Intl.DateTimeFormat("en-GB", {timeZone, day:"numeric", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit", timeZoneName:"short"});
+  const clock = new Intl.DateTimeFormat("en-GB", {timeZone, hour:"2-digit", minute:"2-digit", hourCycle:"h23"});
+  const date = unix => new Date(unix * 1000);
+  const relativeTime = new Intl.RelativeTimeFormat("en", {numeric:"always"});
+
+  function commitAge(timestamp) {
+    const elapsed = Math.max(0, now() - timestamp);
+    const [unit, seconds] = elapsed >= 86400 ? ["day",86400] :
+      elapsed >= 3600 ? ["hour",3600] : ["minute",60];
+    return " (" + relativeTime.format(-Math.floor(elapsed / seconds), unit) + ")";
+  }
+  const make = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+  const mark = i => {
+    const icon = make("span", "mark " + data.status[i], symbols[i]);
+    icon.setAttribute("aria-hidden", "true");
+    return icon;
+  };
+  const count = list => {
+    const counts = Array(labels.length).fill(0);
+    for (const run of list) counts[run[3]]++;
+    return counts;
+  };
+  const describe = counts => order.filter(i => counts[i]).map(i => counts[i] + " " + labels[i].toLowerCase()).join(", ") || "No results";
+  function addCount(node, index, total) {
+    const item = make("span");
+    item.append(mark(index), document.createTextNode(total.toString()));
+    node.append(item);
+  }
+
+  function bar(counts) {
+    const shape = make("div", "strip");
+    shape.setAttribute("aria-hidden", "true");
+    for (const i of data.status.keys()) {
+      if (!counts[i]) continue;
+      const segment = make("span", "segment " + data.status[i]);
+      segment.style.flexGrow = counts[i];
+      shape.append(segment);
+    }
+    return shape;
+  }
+
+  let selectedButton = null;
+  let selectedView = null;
+  const choices = new Map();
+  const details = el("detail");
+
+  function placeDetails() {
+    if (!selectedButton || !details.matches(":popover-open")) return;
+    const anchor = selectedButton.getBoundingClientRect();
+    const width = document.documentElement.clientWidth;
+    const height = document.documentElement.clientHeight;
+    const gap = 8;
+    const left = Math.max(gap, Math.min(anchor.left, width - details.offsetWidth - gap));
+    const below = anchor.bottom + gap;
+    const above = anchor.top - details.offsetHeight - gap;
+    const top = below + details.offsetHeight <= height - gap ? below : above;
+    details.style.left = left + "px";
+    details.style.top = Math.max(gap, Math.min(top, height - details.offsetHeight - gap)) + "px";
+  }
+
+  details.addEventListener("toggle", () => {
+    if (details.matches(":popover-open")) return;
+    if (selectedButton) selectedButton.setAttribute("aria-expanded","false");
+    selectedButton = null;
+    selectedView = null;
+  });
+  window.addEventListener("resize", placeDetails);
+  window.addEventListener("scroll", placeDetails, {passive:true});
+
+  function select(button, title, list, limit = 8) {
+    if (selectedButton) selectedButton.setAttribute("aria-expanded","false");
+    selectedButton = button;
+    selectedView = {key:button.dataset.key, limit};
+    button.setAttribute("aria-expanded","true");
+    el("detail-title").textContent = title;
+    el("detail-commit").textContent = data.commits[list[0][5]][2];
+    el("detail-summary").textContent = describe(count(list));
+    const sorted = list.slice().sort((a,b) => order.indexOf(a[3]) - order.indexOf(b[3]) || b[1] - a[1]);
+    const show = limit => {
+      const links = el("detail-list");
+      links.replaceChildren();
+      for (const [id, t, workflow, status, attempt, , activeState, url] of sorted.slice(0,limit)) {
+        const row = make("li");
+        const outcome = make("span");
+        const activeLabel = {queued:"Queued",pending:"Pending",in_progress:"Running",waiting:"Waiting",requested:"Requested"};
+        const exact = activeState && activeState.replaceAll("_"," ");
+        const outcomeLabel = activeLabel[activeState] ?? (exact ? exact[0].toUpperCase() + exact.slice(1) : labels[status]);
+        outcome.append(mark(status), document.createTextNode(outcomeLabel));
+        const link = make("a", "", data.workflows[workflow] + (url ? "" : " #" + id));
+        link.href = url ?? ("https://github.com/shirudo-dev/shirudo/actions/runs/" + id +
+          (attempt > 1 ? "/attempts/" + attempt : ""));
+        link.target = "_blank";
+        link.rel = "noopener";
+        const when = make("time", "", clock.format(date(t)));
+        when.dateTime = date(t).toISOString();
+        row.append(outcome,link,when);
+        links.append(row);
+      }
+      el("show-more").hidden = sorted.length <= limit;
+    };
+    el("show-more").onclick = () => {
+      selectedView.limit = Infinity;
+      show(Infinity);
+      placeDetails();
+    };
+    show(limit);
+    if (!details.matches(":popover-open")) details.showPopover({source:button});
+    placeDetails();
+  }
+
+  function makeButton(title,list) {
+    const counts = count(list);
+    const button = make("button");
+    button.type = "button";
+    button.setAttribute("aria-label", title + ". " + describe(counts));
+    button.setAttribute("aria-expanded","false");
+    button.setAttribute("aria-controls","detail");
+    button.title = describe(counts);
+    const [first] = list;
+    button.dataset.key = data.commits[first[5]][0] + ":" + data.groups[first[2]];
+    choices.set(button.dataset.key, {button,title,list});
+    button.addEventListener("click",() => select(button,title,list));
+    const visible = make("span","counts");
+    visible.setAttribute("aria-hidden","true");
+    const signals = order.slice(0,4).filter(i => counts[i]);
+    const indexes = signals.length ? signals : [0,3].filter(i => counts[i]);
+    for (const i of indexes) addCount(visible,i,counts[i]);
+    button.append(visible,bar(counts));
+    return button;
+  }
+
+  const scroller = document.scrollingElement;
+  const pageHeader = el("page-header");
+  const atBottom = () => scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <= 8;
+  function sizeHeader() {
+    root.style.setProperty("--header-height", pageHeader.offsetHeight + "px");
+  }
+
+  new ResizeObserver(() => {
+    const keepNewest = atBottom();
+    sizeHeader();
+    if (keepNewest) scroller.scrollTop = scroller.scrollHeight;
+  }).observe(pageHeader);
+
+  function render() {
+    const scrollTop = scroller.scrollTop;
+    const keepNewest = atBottom();
+    const prior = details.matches(":popover-open") ? selectedView : null;
+    selectedButton = null;
+    selectedView = null;
+    choices.clear();
+    const sortedRuns = data.runs.slice().sort((a,b) => a[1] - b[1]);
+    const buckets = data.commits.map(([sha, t, subject], index) => ({
+      sha, t, subject, label:sha.slice(0,7), runs:sortedRuns.filter(run => run[5] === index)
+    }));
+    el("matrix").style.width = 150 + data.workflows.length * 44 + 2 * (data.workflows.length + 2) + "px";
+    el("columns").replaceChildren(make("col","commit-col"),
+      ...data.workflows.map(() => make("col")));
+    const header = make("tr");
+    for (const name of ["Commit",...data.workflows]) {
+      const label = make("th","date");
+      label.append(make("span","",name));
+      label.scope = "col";
+      header.append(label);
+    }
+    el("day-head").replaceChildren(header);
+    const rows = el("workflow-rows");
+    rows.replaceChildren();
+    if (!buckets.length) {
+      const line = make("tr");
+      const message = make("td","empty-state","No CI results in this window.");
+      message.colSpan = header.children.length;
+      line.append(message);
+      rows.append(line);
+    }
+    for (const bucket of buckets) {
+      const line = make("tr");
+      const commit = make("th");
+      commit.scope = "row";
+      const link = make("a","commit-sha",bucket.label);
+      link.href = "https://github.com/shirudo-dev/shirudo/commit/" + bucket.sha;
+      link.title = bucket.subject;
+      link.setAttribute("aria-label", bucket.label + " · " + bucket.subject);
+      link.target = "_blank";
+      link.rel = "noopener";
+      const time = make("time","commit-time",clock.format(date(bucket.t)));
+      time.dateTime = date(bucket.t).toISOString();
+      time.append(make("span","commit-age",commitAge(bucket.t)));
+      commit.append(link,time);
+      line.append(commit);
+      data.workflows.forEach((name,index) => {
+        const list = bucket.runs.filter(run => run[2] === index);
+        const cell = make("td");
+        if (list.length) cell.append(makeButton(name + " · " + bucket.label,list));
+        else {
+          const empty = make("span","empty","·");
+          empty.setAttribute("aria-label","No results");
+          cell.append(empty);
+        }
+        line.append(cell);
+      });
+      rows.append(line);
+    }
+    const fetched = workflowsFetchedAt === null ?
+      (actions.length ? " · Cached workflows, fetch time unavailable" : "") :
+      " · Workflows fetched " + dateTime.format(date(workflowsFetchedAt));
+    el("as-of").textContent = "main · Last 24 hours · " + data.commits.length + " commits · " +
+      data.runs.length + " results" + fetched;
+    el("legend").replaceChildren();
+    for (const i of data.status.keys()) {
+      if (i === 5 && !data.runs.some(run => run[3] === i)) continue;
+      const entry = make("span");
+      entry.append(mark(i),document.createTextNode(labels[i]));
+      el("legend").append(entry);
+    }
+    sizeHeader();
+    scroller.scrollTop = keepNewest ? scroller.scrollHeight : scrollTop;
+    const selected = prior && choices.get(prior.key);
+    if (selected) select(selected.button, selected.title, selected.list, prior.limit);
+    else if (details.matches(":popover-open")) details.hidePopover();
+  }
+
+  const api = "https://api.github.com/repos/shirudo-dev/shirudo";
+  const repository = "https://github.com/shirudo-dev/shirudo";
+  const cooldownKey = cacheKey + ":cooldown";
+  const rateLimitMessage = "GitHub API rate limit reached.";
+  let retryAt = 0;
+
+  function readCooldown() {
+    try {
+      const saved = Number(localStorage.getItem(cooldownKey));
+      if (Number.isFinite(saved)) retryAt = Math.max(retryAt, saved);
+    } catch {
+      // The cooldown still applies to this page if storage is unavailable.
+    }
+  }
+
+  function saveCooldown(time) {
+    readCooldown();
+    retryAt = Math.max(retryAt, time);
+    try {
+      localStorage.setItem(cooldownKey, String(retryAt));
+    } catch {
+      // Keep the in-memory cooldown.
+    }
+  }
+
+  async function getGitHub(path, budget) {
+    readCooldown();
+    if (retryAt > Date.now()) throw new Error(rateLimitMessage);
+    budget.requests++;
+    let response;
+    try {
+      response = await fetch(api + path, {
+        credentials:"omit", cache:"no-store", headers:{Accept:"application/vnd.github+json"},
+        signal:AbortSignal.timeout(20_000)
+      });
+    } catch {
+      throw new Error("Couldn’t reach GitHub.");
+    }
+    const remaining = response.headers.get("x-ratelimit-remaining");
+    const reset = Number(response.headers.get("x-ratelimit-reset")) * 1000;
+    if (remaining !== null) budget.remaining = Number(remaining);
+    budget.reset = reset;
+    if (response.ok) {
+      if (remaining === "0") saveCooldown(reset > Date.now() ? reset : Date.now() + 60_000);
+      return response.json();
+    }
+
+    const retryAfter = Number(response.headers.get("retry-after"));
+    const error = response.status === 403 ? await response.json().catch(() => null) : null;
+    if (response.status === 429 || (response.status === 403 &&
+        (remaining === "0" || retryAfter > 0 || /rate limit/i.test(error?.message ?? "")))) {
+      const time = Date.now();
+      const retry = Math.max(remaining === "0" && reset > time ? reset : 0,
+        retryAfter > 0 ? time + retryAfter * 1000 : 0);
+      saveCooldown(retry || time + 60_000);
+      throw new Error(rateLimitMessage);
+    }
+    throw new Error("GitHub returned HTTP " + response.status + ".");
+  }
+
+  async function getPage(start, end, page, budget) {
+    const query = new URLSearchParams({
+      branch:"main",
+      created:[start,end].map(t => date(t).toISOString().replace(".000Z","Z")).join(".."),
+      per_page:"100", page:String(page)
+    });
+    const body = await getGitHub("/actions/runs?" + query, budget);
+    if (!Array.isArray(body.workflow_runs) || !Number.isInteger(body.total_count)) {
+      throw new Error("GitHub returned an incomplete workflow response.");
+    }
+    return body;
+  }
+
+  async function getRuns(start, end, budget, canSplit = true) {
+    const first = await getPage(start, end, 1, budget);
+    const runs = first.workflow_runs;
+    if (first.total_count < 1000) {
+      for (let page = 2; page <= Math.ceil(first.total_count / 100); page++) {
+        runs.push(...(await getPage(start, end, page, budget)).workflow_runs);
+      }
+      if (runs.length === first.total_count && new Set(runs.map(run => run.id)).size === runs.length) return runs;
+    }
+    if (!canSplit || start === end) throw new Error("GitHub results changed during refresh.");
+    const middle = Math.floor((start + end) / 2);
+    const earlier = await getRuns(start, middle, budget, false);
+    const later = await getRuns(middle + 1, end, budget, false);
+    return earlier.concat(later);
+  }
+
+  function actionResult(run) {
+    return {
+      id: run.id, time: Math.floor(Date.parse(run.created_at) / 1000),
+      group: "action:" + run.workflow_id, name: run.name, sha: run.head_sha,
+      subject: run.head_commit?.message?.split("\n")[0] ?? "",
+      pushed: run.event === "push", attempt: run.run_attempt,
+      state: run.conclusion ?? run.status
+    };
+  }
+
+  function resultUrl(url, sha) {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol === "https:") return parsed.href;
+    } catch {
+      // Some checks have no details URL.
+    }
+    return repository + "/commit/" + sha + "/checks";
+  }
+
+  async function getExternal(sha, kind, budget) {
+    const path = "/commits/" + sha + "/" + kind;
+    const results = [];
+    const contexts = new Set();
+    let total = 0;
+    for (let page = 1; page === 1 || (page - 1) * 100 < total; page++) {
+      if (budget.remaining <= budget.reserve || budget.requests >= budget.limit) return null;
+      const body = await getGitHub(path + "?per_page=100&page=" + page, budget);
+      const checks = kind === "status" ? body.statuses : body.check_runs;
+      if (!Array.isArray(checks) || !Number.isInteger(body.total_count)) {
+        throw new Error("GitHub returned an incomplete check response.");
+      }
+      total = body.total_count;
+      for (const check of checks) {
+        if (check.app?.slug === "github-actions") continue;
+        const name = check.context ?? check.name;
+        const group = kind + ":" + (check.app?.slug ?? "") + ":" + name;
+        if (kind === "status" && contexts.has(group)) continue;
+        contexts.add(group);
+        results.push({
+          id: check.id, group, name, sha,
+          time: Math.floor(Date.parse(check.created_at ?? check.started_at ?? check.completed_at) / 1000),
+          state: check.state ?? check.conclusion ?? check.status,
+          url: resultUrl(check.target_url ?? check.details_url ?? check.html_url, sha)
+        });
+      }
+    }
+    return {checkedAt: now(), results};
+  }
+
+  async function refreshExternal(budget, full) {
+    const emptyCheckCutoff = now() - 900;
+    const tasks = [];
+    for (const [sha] of data.commits.slice().reverse()) {
+      for (const kind of ["status", "check-runs"]) {
+        const entry = external[sha]?.[kind];
+        const due = !entry || (entry.results.length ?
+          entry.results.some(run => activeStates.has(run.state)) : entry.checkedAt <= emptyCheckCutoff);
+        if (full || due) tasks.push({sha, kind, checkedAt: entry?.checkedAt ?? 0});
+      }
+    }
+    tasks.sort((a,b) => a.checkedAt - b.checkedAt);
+    for (const {sha, kind} of tasks) {
+      const entry = await getExternal(sha, kind, budget);
+      if (!entry) {
+        if (budget.remaining <= budget.reserve) {
+          if (budget.reset > Date.now()) saveCooldown(budget.reset);
+          throw new Error("GitHub’s remaining API quota is too low to refresh more checks.");
+        }
+        break;
+      }
+      (external[sha] ??= {})[kind] = entry;
+    }
+  }
+
+  function updateTimeline() {
+    const end = now(), start = end - windowSeconds;
+    actions = actions.filter(run => run.time >= start && run.time <= end);
+    const first = new Map();
+    for (const run of actions) {
+      const previous = first.get(run.sha);
+      if (!previous || (run.pushed === previous.pushed ? run.time < previous.time : run.pushed)) {
+        first.set(run.sha, run);
+      }
+    }
+    const commits = [...first.values()].map(run => [run.sha,run.time,run.subject])
+      .sort((a,b) => a[1]-b[1] || a[0].localeCompare(b[0]));
+    for (const sha of Object.keys(external)) {
+      if (!first.has(sha)) delete external[sha];
+    }
+    const extra = Object.values(external).flatMap(entries => Object.values(entries).flatMap(entry => entry.results));
+    const runs = actions.concat(extra.filter(run => run.time >= start && run.time <= end));
+    const workflows = [...new Map(runs.map(run => [run.group, run.name]))]
+      .sort((a,b) => a[1].localeCompare(b[1]));
+    const indexes = new Map(workflows.map(([group], index) => [group,index]));
+    const commitIndexes = new Map(commits.map(([sha], index) => [sha,index]));
+    const rows = runs.map(run => {
+      let result = run.state;
+      if (["error","timed_out","startup_failure","action_required"].includes(result)) result = "failure";
+      if (activeStates.has(result)) result = "active";
+      if (result === "neutral") result = "skipped";
+      if (!statuses.includes(result)) result = "other";
+      return [run.id,run.time,indexes.get(run.group),statuses.indexOf(result),run.attempt,
+        commitIndexes.get(run.sha),run.state === result ? null : run.state,run.url];
+    });
+    data = {start,end,workflows:workflows.map(w => w[1]),groups:workflows.map(w => w[0]),status:statuses,commits,runs:rows};
+    render();
+  }
+
+  async function refresh() {
+    const loading = el("loading");
+    loading.hidden = false;
+    const budget = {requests:0, remaining:60};
+    let workflowsUpdated = false;
+    try {
+      const end = now(), cutoff = end - windowSeconds;
+      const full = !workflowsThrough || workflowsThrough > end || !fullRefreshAt ||
+        fullRefreshAt > end || end - fullRefreshAt >= fullRefreshSeconds;
+      let start = full ? cutoff : Math.max(cutoff, workflowsThrough - overlapSeconds);
+      if (!full) {
+        for (const run of actions) {
+          if (activeStates.has(run.state)) start = Math.min(start, run.time);
+        }
+      }
+      const runs = await getRuns(start,end,budget);
+      const updated = runs.filter(run => run.path?.startsWith(".github/workflows/") &&
+        /^[a-f0-9]{40}$/.test(run.head_sha)).map(actionResult);
+      actions = actions.filter(run => run.time < start).concat(updated);
+      workflowsThrough = end;
+      if (full) fullRefreshAt = end;
+      workflowsFetchedAt = now();
+      workflowsUpdated = true;
+      updateTimeline();
+      budget.reserve = budget.requests + 1;
+      budget.limit = budget.requests + 4;
+      await refreshExternal(budget, full);
+    } catch (error) {
+      const warning = el("fetch-warning");
+      const context = workflowsUpdated ? " External checks may be incomplete." :
+        actions.length ? " Showing cached results." : " No cached results available.";
+      const retry = retryAt > Date.now() ?
+        " Reload after " + dateTime.format(Math.ceil(retryAt / 60_000) * 60_000) + " to retry." : "";
+      warning.textContent = error.message + context + retry;
+      warning.hidden = false;
+    } finally {
+      loading.hidden = true;
+      updateTimeline();
+      if (workflowsUpdated) {
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({
+            actions, external, workflowsFetchedAt, workflowsThrough, fullRefreshAt
+          }));
+        } catch (error) {
+          console.warn("Local cache unavailable.", error);
+        }
+      }
+    }
+  }
+
+  history.scrollRestoration = "manual";
+  updateTimeline();
+  scroller.scrollTop = scroller.scrollHeight;
+  refresh();
+  setInterval(() => {
+    for (const age of root.querySelectorAll(".commit-age")) {
+      age.textContent = commitAge(Date.parse(age.parentElement.dateTime) / 1000);
+    }
+  }, 60_000);
+})();
+</script>
+</body>
+</html>
