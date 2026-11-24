@@ -98,6 +98,9 @@ signed config image.
      - The prerelease tag, assets, and repository token,
        and rejection of missing source, mismatched source and a bundle
        with the wrong checksum
+   * - ``t0011-build-commits``
+     - ``build-commits.sh``: isolation from earlier builds and the caller's
+       existing outputs, staged kernel BTF, and temporary worktree cleanup
 
 ``build`` (1)
 ~~~~~~~~~~~~~
