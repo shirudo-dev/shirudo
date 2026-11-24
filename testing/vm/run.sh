@@ -76,6 +76,12 @@ else
 	RUNTIME_CACHE_DIR="$REPO_ROOT/$RUNTIME_CACHE_INPUT"
 fi
 VMS_DIR="${VM_ROOT}/vms"
+# Where the shirudo of a coverage build writes its counters in a guest:
+# under /run, which the initrd hands to the root, and outside what
+# shirudo seals. COVERAGE_DIR keeps what each guest wrote for coverage.sh.
+GCOV_PREFIX_DIR=/run/shirudo-gcov
+GCOV_COLLECT="[ ! -d $GCOV_PREFIX_DIR ] || tar -C $GCOV_PREFIX_DIR -cf /mnt/shirudo-out/gcov.tar ."
+COVERAGE_DIR="${VM_ROOT}/coverage"
 LOGS_DIR="${VM_ROOT}/logs"
 DEFAULT_KERNEL="${REPO_ROOT}/artifacts/bpf-next-kernel-debs/${TEST_VM_ARCH_KIMAGE}"
 CPUS="${TEST_VM_CPUS:-4}"
@@ -506,6 +512,34 @@ validate_host_bundle()
 	runtime_image="$RUNTIME_CACHE_DIR/$runtime_key.qcow2"
 	[[ -s "$runtime_image" ]] ||
 		die "prepared runtime image is missing: $runtime_image; run 'make -C testing bundle'"
+}
+
+# A node is stopped from outside, so its counters are asked for first. A
+# VM that does not answer at once has none worth the wait.
+collect_coverage()
+{
+	local dir="$1" key="$1/ssh/id_ed25519"
+
+	[[ -d "$TEST_VM_HOST_BUNDLE/coverage" && -s "$dir/ssh.port" ]] || return 0
+	[[ ! -s "$dir/ssh.key" ]] || key="$(<"$dir/ssh.key")"
+	[[ -r "$key" ]] || return 0
+	SSH_DIR="$dir/ssh"
+	SSH_KEY="$key"
+	SSH_PORT="$(<"$dir/ssh.port")"
+	ssh_options
+	timeout 30 ssh "${SSH_ARGS[@]}" -o BatchMode=yes root@127.0.0.1 \
+		"$GCOV_COLLECT" </dev/null >/dev/null 2>&1 || true
+}
+
+# The result directory goes with the next VM of the name.
+keep_coverage()
+{
+	local dir="$1"
+
+	[[ -s "$dir/result/gcov.tar" ]] || return 0
+	mkdir -p "$COVERAGE_DIR"
+	mv -- "$dir/result/gcov.tar" \
+		"$(mktemp --suffix=.tar "$COVERAGE_DIR/$(basename "$dir").XXXXXX")"
 }
 
 vm_has_builder()
@@ -991,12 +1025,14 @@ stop_named_state()
 	vm_dir="${VMS_DIR}/${VM_NAME_REQUEST}"
 	[[ -d "$vm_dir" ]] ||
 		die "VM_NAME '$VM_NAME_REQUEST' has no state directory under $VMS_DIR"
+	collect_coverage "$vm_dir"
 	while IFS= read -r -d '' unit_file; do
 		stop_user_unit_file "$unit_file"
 	done < <(find "$vm_dir" -type f \( -name qemu.unit -o -name swtpm.unit \) -print0)
 	while IFS= read -r -d '' pidfile; do
 		stop_pid_file "$pidfile"
 	done < <(find "$vm_dir" -type f \( -name qemu.pid -o -name swtpm.pid \) -print0)
+	keep_coverage "$vm_dir"
 }
 
 stop_all_state()
@@ -1270,6 +1306,9 @@ cleanup()
 	fi
 	if [[ "$FINAL_STATUS" -ne 0 ]]; then
 		save_failure_logs
+	fi
+	if [[ "$LEAVE_RUNNING" -eq 0 && -n "$RUN_DIR" ]]; then
+		keep_coverage "$RUN_DIR"
 	fi
 	if [[ ( "$VM_MODE" == test || "$VM_MODE" == serve ) &&
 	      -n "$RUN_DIR" && -d "$RUN_DIR" ]]; then
@@ -1886,6 +1925,9 @@ cat >>"$USER_DATA" <<'EOF'
       if [ "${VM_MODE:-test}" = serve ] && [ "$rc" -eq 0 ]; then
         while [ ! -e /mnt/shirudo-out/host-done ]; do sleep 1; done
       fi
+EOF
+printf '      %s || :\n      sync\n' "$GCOV_COLLECT" >>"$USER_DATA"
+cat >>"$USER_DATA" <<'EOF'
       poweroff
       sleep 10
       poweroff -f
@@ -1901,6 +1943,10 @@ cd "$RUN_DIR" || die "cannot enter $RUN_DIR"
 log "booting $(basename "$KERNEL") with ${CPUS} CPUs and ${MEMORY} memory"
 
 KERNEL_LSM_ARGS=""
+# systemd gives the variable to every unit, in the initrd and in the root.
+KERNEL_COVERAGE_ARGS=""
+[[ ! -d "$TEST_VM_HOST_BUNDLE/coverage" ]] ||
+	KERNEL_COVERAGE_ARGS="systemd.setenv=GCOV_PREFIX=$GCOV_PREFIX_DIR"
 if [[ "$VM_ROLE" == target ]]; then
 	# The bpf keyring is left open for init to enrol the certificate and
 	# seal it, as a production initrd does.
@@ -1939,7 +1985,7 @@ QEMU_ARGS=(
 	-m "$MEMORY" \
 	"${DISK_ARGS[@]}" \
 	-kernel "$KERNEL" \
-	-append "root=/dev/vda1 rootwait rw console=${TEST_VM_ARCH_CONSOLE},115200n8 loglevel=7 net.ifnames=0 ${KERNEL_LSM_ARGS}" \
+	-append "root=/dev/vda1 rootwait rw console=${TEST_VM_ARCH_CONSOLE},115200n8 loglevel=7 net.ifnames=0 ${KERNEL_LSM_ARGS} ${KERNEL_COVERAGE_ARGS}" \
 	-netdev "user,id=net0,hostfwd=tcp:127.0.0.1:${SSH_PORT}-:22" \
 	-device "$KERNEL_NET_DEVICE" \
 	-virtfs "local,id=shirudo-src,path=${REPO_ROOT},mount_tag=shirudo-src,security_model=none,readonly=on" \

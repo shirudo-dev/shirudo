@@ -446,6 +446,9 @@ chmod 0600 "$OPERATOR_KEYS_DIR/keys/signing_key.pem"
 
 rm -rf -- "$BUNDLE_DIR"
 mv -- "$TMP_DIR" "$BUNDLE_DIR"
+# Counters are read beside the notes of the build that wrote them, and
+# those of the bundle before went with it.
+rm -rf -- "$WORK_DIR/coverage"
 touch -d "@$STAMP_TIME" "$STAMP_FILE"
 trap - EXIT
 log "ready: $BUNDLE_DIR"

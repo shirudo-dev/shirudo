@@ -328,6 +328,10 @@ write_target_test_env()
 			/mnt/shirudo-out/failed-suites
 		printf 'export TEST_FILTER=%q\n' "${TEST_FILTER:-}"
 	} >/etc/shirudo-test-vm.env
+	# The units have the variable from the kernel command line; a
+	# session over SSH takes it from here.
+	[[ ! -d "$BUNDLE/coverage" ]] ||
+		printf 'GCOV_PREFIX=/run/shirudo-gcov\n' >>/etc/environment
 }
 
 # The operator holds the signing key and is no target: it has no TPM, and its
