@@ -1060,7 +1060,7 @@ The unit suites in :src:`testing/unit/` cover 45 of the modules in
 ``bpm_package``, ``bpm_state``,
 ``bpm_tree``, ``bpm_tree_overlap``, ``bpm_tree_state``, ``chain``,
 ``chain_history``, ``conditions``, ``config_update``, ``crypto_openssl``,
-``curl``, ``eventlog``, ``format``, ``hex``, ``identity``, ``io``,
+``curl``, ``eventlog``, ``format``, ``hex``, ``identity``, ``image_cache``, ``io``,
 ``java_agent``, ``json``, ``kconfig``, ``kernel_abi``,
 ``keepalive``, ``keepalive_quote``, ``kernel_build_id``,
 ``kernel_prereq``, ``kernel_release``, ``keys``, ``log``, ``measured``,
@@ -1079,6 +1079,11 @@ software P-256 key signs: every reject reason, the signer's qualified
 name, the empty PCR selection and the base64 of each field. The other
 modules are reached through the test helpers, the fuzz targets and the binaries
 the functional tests run.
+
+The ``image_cache`` suite interrupts an HTTPS fetch during a stalled DNS
+lookup and checks that the command removes the staging directory and
+restores the SIGINT disposition. It checks cleanup after a failed lookup
+as well.
 
 .. list-table::
    :header-rows: 1

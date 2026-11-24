@@ -1145,6 +1145,9 @@ build/unit/%: testing/unit/%.c testing/unit/unit.c testing/unit/unit.h \
 
 build/unit/curl: LDFLAGS += -Wl,--wrap=curl_slist_free_all
 build/unit/upatch_pins: LDFLAGS += -Wl,--wrap=opendir,--wrap=readdir64
+build/unit/image_cache: testing/unit/image_cache_test.h
+build/unit/image_cache: LDFLAGS += -Wl,--wrap=fsetxattr -Wl,--wrap=seal_label \
+				  -Wl,--export-dynamic-symbol,getaddrinfo
 
 unit-tests: $(UNIT_TESTS)
 

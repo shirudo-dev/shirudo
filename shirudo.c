@@ -5,6 +5,7 @@
  * main() and the subcommand dispatch table.
  */
 
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -158,5 +159,9 @@ int main(int argc, const char **argv)
 	}
 	ret = c->fn(argc - 1, argv + 1);
 	image_leave();
+	if (ret == EXIT_INTERRUPTED) {
+		fflush(NULL);
+		raise(SIGINT);
+	}
 	return ret;
 }

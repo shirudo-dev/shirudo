@@ -101,6 +101,10 @@ is a local path prefix or an ``https://`` URL prefix.
    Updating to the already active root is a no-op and preserves that
    selection.
 
+When libcurl supports asynchronous DNS and quick cleanup, Ctrl-C during
+an HTTPS transfer removes the staged downloads and then ends the command
+by SIGINT, so that a script running it stops as well.
+
 When ``update`` stops between steps 5 and 7, the activation stays pending.
 Every command except ``status`` and ``image status`` is then refused
 until the next reboot.
