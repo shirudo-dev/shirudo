@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,6 +33,49 @@
 #include "json.h"
 #include "log.h"
 #include "malloc.h"
+
+static volatile sig_atomic_t bpm_oci_interrupted;
+
+static void bpm_oci_sigint_handler(int sig)
+{
+	bpm_oci_interrupted = 1;
+}
+
+/*
+ * Install a SIGINT handler so that Ctrl+C can interrupt hung DNS lookups.
+ * Without this, CURLOPT_NOSIGNAL (which we need for thread safety) leaves
+ * the process uninterruptible when getaddrinfo() blocks.
+ */
+static void bpm_oci_setup_signal_handler(void)
+{
+	struct sigaction sa = {};
+
+	sa.sa_handler = bpm_oci_sigint_handler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	sigaction(SIGINT, &sa, NULL);
+}
+
+static void bpm_oci_restore_signal_handler(void)
+{
+	struct sigaction sa = {};
+
+	sa.sa_handler = SIG_DFL;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	sigaction(SIGINT, &sa, NULL);
+}
+
+/*
+ * Progress callback that checks for interruption. Called periodically by
+ * libcurl, even during DNS lookup and connection, so we can abort early.
+ */
+static int bpm_oci_progress_callback(void *clientp, curl_off_t dltotal,
+				     curl_off_t dlnow, curl_off_t ultotal,
+				     curl_off_t ulnow)
+{
+	return bpm_oci_interrupted ? 1 : 0;
+}
 
 void bpm_copy_string(char *dst, size_t dst_sz, const char *src)
 {
@@ -409,12 +453,20 @@ int bpm_oci_parse_endpoint(const char *endpoint, struct bpm_oci_client *c)
  * every other command waits for, longer than the most a transfer may
  * carry takes at a floor rate: room bytes, in a minute and at 128 KiB a
  * second.
+ *
+ * DNS resolution comes before connection and must time out as well, so
+ * that a hung DNS query does not block indefinitely. Without a DNS
+ * timeout or with SIGINT masked, as CURLOPT_NOSIGNAL does, an
+ * unresponsive name server leaves the process stuck in an uninterruptible
+ * state: glibc's getaddrinfo() blocks in the kernel, and no connection
+ * timeout fires until after DNS completes.
  */
 static int bpm_curl_deadlines(CURL *curl, __u64 room)
 {
 	__u64 seconds = BPM_TRANSFER_BASE_S + room / BPM_TRANSFER_RATE_MIN;
 
-	if (curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L) != CURLE_OK ||
+	if (curl_easy_setopt(curl, CURLOPT_DNS_CACHE_TIMEOUT, 30L) != CURLE_OK ||
+	    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 30000L) != CURLE_OK ||
 	    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L) != CURLE_OK ||
 	    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L) != CURLE_OK ||
 	    curl_easy_setopt(curl, CURLOPT_TIMEOUT, (long)seconds) != CURLE_OK)
@@ -473,6 +525,8 @@ static int curl_once_ex(struct bpm_oci_client *c, const char *method,
 		curl_slist_free_sensitive(headers);
 		return -ENOMEM;
 	}
+	bpm_oci_interrupted = 0;
+	bpm_oci_setup_signal_handler();
 	if (curl_easy_setopt(curl, CURLOPT_URL, url) != CURLE_OK ||
 	    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method) != CURLE_OK ||
 	    (str_equals_nocase(method, "HEAD") &&
@@ -480,6 +534,9 @@ static int curl_once_ex(struct bpm_oci_client *c, const char *method,
 	    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers) != CURLE_OK ||
 	    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf) != CURLE_OK ||
 	    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L) != CURLE_OK ||
+	    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION,
+			     bpm_oci_progress_callback) != CURLE_OK ||
+	    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L) != CURLE_OK ||
 	    bpm_curl_deadlines(curl, (file ? file->room : BPM_MAX_HTTP_BODY) +
 				     body_len))
 		goto setup_failed;
@@ -518,6 +575,7 @@ static int curl_once_ex(struct bpm_oci_client *c, const char *method,
 		pr_err("bpm OCI request %s: cannot apply TLS policy", url);
 		curl_easy_cleanup(curl);
 		curl_slist_free_sensitive(headers);
+		bpm_oci_restore_signal_handler();
 		return -EHOSTUNREACH;
 	}
 	if (body &&
@@ -545,6 +603,13 @@ static int curl_once_ex(struct bpm_oci_client *c, const char *method,
 	cc = curl_easy_perform(curl);
 	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
 	r->status = status;
+	if (cc == CURLE_ABORTED_BY_CALLBACK && bpm_oci_interrupted) {
+		curl_easy_cleanup(curl);
+		curl_slist_free_sensitive(headers);
+		tls_ca_cleanup(&c->tls_ca);
+		bpm_oci_restore_signal_handler();
+		return -EINTR;
+	}
 	if (cc != CURLE_OK) {
 		pr_err("bpm OCI request %s: %s", url, errbuf[0] ? errbuf : curl_easy_strerror(cc));
 		status = -1;
@@ -554,6 +619,7 @@ static int curl_once_ex(struct bpm_oci_client *c, const char *method,
 	curl_easy_cleanup(curl);
 	curl_slist_free_sensitive(headers);
 	tls_ca_cleanup(&c->tls_ca);
+	bpm_oci_restore_signal_handler();
 	return status < 0 ? -EHOSTUNREACH : 0;
 
 setup_failed:
@@ -561,12 +627,15 @@ setup_failed:
 	curl_easy_cleanup(curl);
 	curl_slist_free_sensitive(headers);
 	tls_ca_cleanup(&c->tls_ca);
+	bpm_oci_restore_signal_handler();
 	return -EINVAL;
 too_long:
 	curl_slist_free_sensitive(headers);
+	bpm_oci_restore_signal_handler();
 	return -E2BIG;
 no_memory:
 	curl_slist_free_sensitive(headers);
+	bpm_oci_restore_signal_handler();
 	return -ENOMEM;
 }
 
@@ -728,6 +797,8 @@ static int get_bearer_token(struct bpm_oci_client *c, const char *challenge)
 	curl = curl_easy_init();
 	if (!curl)
 		return -ENOMEM;
+	bpm_oci_interrupted = 0;
+	bpm_oci_setup_signal_handler();
 	esc_service = curl_easy_escape(curl, service, 0);
 	esc_scope = curl_easy_escape(curl, scope, 0);
 	if (!esc_service || !esc_scope)
@@ -764,6 +835,9 @@ static int get_bearer_token(struct bpm_oci_client *c, const char *challenge)
 	    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L) != CURLE_OK ||
 	    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers) != CURLE_OK ||
 	    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L) != CURLE_OK ||
+	    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION,
+			     bpm_oci_progress_callback) != CURLE_OK ||
+	    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L) != CURLE_OK ||
 	    bpm_curl_deadlines(curl, BPM_MAX_HTTP_BODY) ||
 	    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
 			     bpm_write_memory) != CURLE_OK ||
@@ -776,6 +850,10 @@ static int get_bearer_token(struct bpm_oci_client *c, const char *challenge)
 	}
 	cc = curl_easy_perform(curl);
 	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &r.status);
+	if (cc == CURLE_ABORTED_BY_CALLBACK && bpm_oci_interrupted) {
+		ret = -EINTR;
+		goto out;
+	}
 	if (cc != CURLE_OK) {
 		ret = -EHOSTUNREACH;
 		goto out;
@@ -794,6 +872,7 @@ out:
 	curl_slist_free_sensitive(headers);
 	tls_ca_cleanup(&c->tls_ca);
 	bpm_buffer_free(&r.body);
+	bpm_oci_restore_signal_handler();
 	return ret;
 }
 
