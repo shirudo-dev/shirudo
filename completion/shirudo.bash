@@ -24,6 +24,16 @@ _shirudo_listed()
 	return 1
 }
 
+_shirudo_paths()
+{
+	local start=${#COMPREPLY[@]}
+
+	mapfile -t -O "$start" COMPREPLY < <(compgen "$@")
+	if (( ${#COMPREPLY[@]} > start )); then
+		compopt -o filenames 2>/dev/null || :
+	fi
+}
+
 # What to offer for the value of an option whose placeholder is $1.
 _shirudo_value()
 {
@@ -37,42 +47,50 @@ _shirudo_value()
 	esac
 	case $1 in
 	*dir*)
-		COMPREPLY=( $(compgen -d -- "$cur") ) ;;
+		_shirudo_paths -d -- "$cur" ;;
 	'<hex>'|'<64-hex>'|'<n>'|'<0-10>'|'<id>'|'<url>'|'<uri>'|'<version>'|\
 	'<ref>'|'<list>'|'<upatch-name>'|*'=<hex>'|*':'*|sha256:*|"'<flags>'")
 		;;
 	*)
-		COMPREPLY=( $(compgen -f -- "$cur") ) ;;
+		_shirudo_paths -f -- "$cur" ;;
 	esac
 }
 
 # Files of the type the arguments of the command $1 are.
 _shirudo_args()
 {
-	local cur=$2 first=$3
+	local cur=$2 first=$3 mode=
 
 	case $1 in
 	'upatch load'|'upatch unload'|'upatch info')
-		COMPREPLY=( $(compgen -f -X '!*.upatch' -- "$cur")
-			    $(compgen -d -- "$cur") ) ;;
+		_shirudo_paths -f -X '!*.upatch' -- "$cur"
+		_shirudo_paths -d -- "$cur" ;;
 	build)
-		COMPREPLY=( $(compgen -f -X '!*.bpf.[co]' -- "$cur")
-			    $(compgen -d -- "$cur") ) ;;
+		_shirudo_paths -f -X '!*.bpf.[co]' -- "$cur"
+		_shirudo_paths -d -- "$cur" ;;
 	'bpm info')
-		[[ -n $first ]] || COMPREPLY=( $(compgen -W "upatches data" -- "$cur") )
-		COMPREPLY+=( $(compgen -f -X '!*.bee' -- "$cur")
-			     $(compgen -f -X '!*.upatch' -- "$cur")
-			     $(compgen -d -- "$cur") ) ;;
+		if [[ -z $first ]]; then
+			COMPREPLY=( $(compgen -W "upatches data" -- "$cur") )
+			mode=${COMPREPLY[0]-}
+		fi
+		_shirudo_paths -f -X '!*.bee' -- "$cur"
+		_shirudo_paths -f -X '!*.upatch' -- "$cur"
+		_shirudo_paths -d -- "$cur"
+		if (( ${#COMPREPLY[@]} == 2 )) &&
+		   [[ -n $mode && ${COMPREPLY[1]} == "$mode" ]]; then
+			COMPREPLY=( "$mode" )
+			compopt +o filenames 2>/dev/null || :
+		fi ;;
 	'bpm install'|'bpm push'|'bpm tree append'|'bpm config update')
-		COMPREPLY=( $(compgen -f -X '!*.bee' -- "$cur")
-			    $(compgen -d -- "$cur") ) ;;
+		_shirudo_paths -f -X '!*.bee' -- "$cur"
+		_shirudo_paths -d -- "$cur" ;;
 	'bpm build')
-		COMPREPLY=( $(compgen -d -- "$cur") ) ;;
+		_shirudo_paths -d -- "$cur" ;;
 	'upatch get'|'upatch map'|'bpm uninstall'|'bpm pull'|'bpm repo update'|\
 	'bpm config register'*|'bpm tree show')
 		;;
 	*)
-		COMPREPLY=( $(compgen -f -- "$cur") ) ;;
+		_shirudo_paths -f -- "$cur" ;;
 	esac
 }
 

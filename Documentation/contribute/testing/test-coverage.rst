@@ -145,8 +145,9 @@ signed config image.
      - VM-first service configuration and stable public trust across starts
    * - ``t1011-completion``
      - The bash completion: commands and subcommands from ``--list-cmds``,
-       options from ``--list-opts``, a value by its placeholder, and a
-       command without subcommands that answers ``--list-cmds`` with
+       options from ``--list-opts``, a value by its placeholder, paths
+       with spaces, a ``bpm info`` mode that also names a directory, and
+       a command without subcommands that answers ``--list-cmds`` with
        nothing and logs nothing
    * - ``t1012-messages-once``
      - A message goes to standard error and to syslog, and to syslog
