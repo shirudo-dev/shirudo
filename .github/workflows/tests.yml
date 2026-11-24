@@ -59,14 +59,11 @@ jobs:
           - name: CI tests
             runner: ubuntu-latest
             vm: '1'
-            coverage: '1'
           - name: CI host tests (arm64)
             runner: ubuntu-24.04-arm
             vm: '0'
-            coverage: '0'
     env:
       VM: ${{ matrix.vm }}
-      COVERAGE: ${{ matrix.coverage }}
 
     steps:
       - name: Require successful kernel preparation
@@ -162,17 +159,6 @@ jobs:
         id: end2end
         if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.vm == '1' }}
         run: .github/scripts/tests.sh run end2end
-
-      - name: Collect host userspace coverage
-        if: env.COVERAGE == '1'
-        run: .github/scripts/coverage.sh
-
-      - name: Upload coverage to Coveralls
-        if: env.COVERAGE == '1'
-        uses: coverallsapp/github-action@cfd0633edbd2411b532b808ba7a8b5e04f76d2c8 # v2.3.4
-        with:
-          file: coverage/host.lcov
-          format: lcov
 
       - name: Upload end-to-end guest logs
         if: always() && steps.end2end.outcome == 'failure'

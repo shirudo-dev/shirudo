@@ -1,0 +1,105 @@
+name: Coverage
+
+# An instrumented build is not the one that ships, and a coverage figure
+# that moves with the runner is no gate for a pull request: the report
+# is made from what lands on main, as
+# Documentation/contribute/testing/testing.rst says.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      kernel_run_id:
+        description: Optional override; defaults to the run testing/vm/kernel-artifact.sh pins
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+# A push while a report is made queues its run behind it rather than
+# cancelling it: pushes closer together than a run takes would leave
+# main without a finished one. GitHub keeps only the newest run waiting.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      VM: '1'
+      COVERAGE: '1'
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download the pinned or selected kernel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KERNEL_RUN_ID: ${{ inputs.kernel_run_id }}
+          TEST_VM_ARCH: x86_64
+        run: testing/vm/kernel-artifact.sh download
+
+      # The caches are those of the CI suite, which saves them: this
+      # workflow only reads them.
+      - name: Restore the static target dependencies
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/target-deps
+          key: target-deps-${{ hashFiles('Makefile.target-deps') }}
+
+      - name: Restore the host OpenSSL toolchain
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/host-openssl
+          key: host-openssl-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/vm-toolchain.sh') }}
+
+      - name: Restore the host libtpms toolchain
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/host-libtpms
+          key: host-libtpms-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/vm-toolchain.sh', '.github/scripts/install-libtpms.sh') }}
+
+      - name: Restore the VM images
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/test-vm/cache
+          key: test-vm-images-${{ hashFiles('testing/vm/runtime-packages', 'testing/vm/operator-packages', 'testing/vm/prepare-runtime.sh', 'testing/vm/build-bundle.sh', 'testing/vm/arch.sh', '.github/scripts/install-clang.sh', '.github/scripts/install-static-libcrypto-deps.sh', 'testing/container/Containerfile', 'testing/container/packages', 'Makefile.target-deps') }}
+
+      - name: Prepare the test environment
+        id: setup
+        env:
+          KERNEL_CI_ARTIFACT_DIR: ${{ format('{0}/build/kernel-ci-artifact', github.workspace) }}
+        run: .github/scripts/tests.sh setup
+
+      # A tier that fails still counted what it ran, and the CI suite
+      # reports the failure: every tier runs and the report is sent.
+      - name: Run unit tests
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: .github/scripts/tests.sh run unit
+
+      - name: Run functional tests
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: .github/scripts/tests.sh run functional
+
+      - name: Run end-to-end tests
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: .github/scripts/tests.sh run end2end
+
+      - name: Collect host userspace coverage
+        id: collect
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: .github/scripts/coverage.sh
+
+      - name: Upload coverage to Coveralls
+        if: ${{ !cancelled() && steps.collect.outcome == 'success' }}
+        uses: coverallsapp/github-action@cfd0633edbd2411b532b808ba7a8b5e04f76d2c8 # v2.3.4
+        with:
+          file: coverage/host.lcov
+          format: lcov

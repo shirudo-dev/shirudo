@@ -80,11 +80,15 @@ kernel.
 Host userspace coverage
 -----------------------
 
-On every run of the ``CI suite``, the x86-64 job builds its host userspace C
-binaries with coverage instrumentation. It sends an LCOV report to Coveralls
-after the existing test steps pass. The ``main`` reports provide a baseline for
-pull request coverage comparisons. Reports exclude test code, vendored code,
-QEMU guests and BPF programs.
+The ``Coverage`` workflow, :src:`.github/workflows/coverage.yml`, runs after
+a push to main, never on a pull request: the ``CI suite`` tests the binaries
+as they ship, and no pull request waits on a coverage figure. It builds the
+host userspace C binaries with coverage instrumentation, runs every tier and
+sends an LCOV report to Coveralls, also when a tier fails. Reports exclude
+test code, vendored code, QEMU guests and BPF programs.
+
+Start the workflow by hand on a branch for the figure of a change before it
+lands.
 
 Check the quickstart and quick guides
 -------------------------------------
