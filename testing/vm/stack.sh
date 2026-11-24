@@ -22,7 +22,7 @@ fi
 exec 9>"$W/.lock"
 flock 9
 case "$TLS_DIR/" in "$REPO/"*) echo 'stack private keys must be outside the checkout' >&2; exit 1 ;; esac
-command=${1:?usage: stack.sh prepare|oci|telemetry|down|enroll|sbom|shields|xtop|vm}
+command=${1:?usage: stack.sh prepare|oci|telemetry|env|down|enroll|sbom|shields|xtop|vm}
 shift
 prepare()
 {
@@ -33,11 +33,33 @@ prepare()
 	fi
 }
 
+quoted()
+{
+	printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+# What a shell needs to run the guides' commands against the stack, in a
+# file it sources: make cannot set a variable in the shell that ran it.
+write_env()
+{
+	cat >"$W/env.tmp" <<-EOF
+	export PATH=$(quoted "$REPO:$REPO/tools/shirudo-build"):"\$PATH"
+	KEYS=$(quoted "${TEST_VM_HOST_PRIVATE_DIR:?}/operator-keys/keys")
+	export BPM_OCI_CA_FILE=$(quoted "$W/ca.pem")
+	TREE=oci://$REGISTRY/shirudo/local-tree
+	export CLICKHOUSE_CLIENT='docker exec -i $STACK_NAME-clickhouse clickhouse-client'
+	EOF
+	[ "$(id -u)" != 0 ] || chown "$owner" "$W/env.tmp"
+	mv -- "$W/env.tmp" "$W/env"
+}
+
 case "$command" in
 prepare) prepare ;;
-oci) prepare; stack_oci; printf 'OCI: oci://%s (CA: %s/ca.pem)\n' "$REGISTRY" "$W" ;;
+env) prepare; write_env; printf 'Shell: . %s/env\n' "$W" ;;
+oci) prepare; write_env; stack_oci; printf 'OCI: oci://%s (CA: %s/ca.pem)\n' "$REGISTRY" "$W" ;;
 telemetry)
 	prepare
+	write_env
 	checker=$REPO/tools/quote-check/shirudo-quote-check
 	if [ -x "$checker" ]; then
 		stack_telemetry "$REPO/testing/vm/otelcol-stack.yaml" \

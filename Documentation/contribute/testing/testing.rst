@@ -750,6 +750,15 @@ storage.
 ``make stack-up`` is shorthand for ``make oci telemetry``. Start the VM
 with ``make vm``.
 
+Each of the three writes ``build/test-vm/stack/env``, and ``make
+stack-up`` ends with a ``Shell:`` line that names it. A shell that reads
+the file, ``. build/test-vm/stack/env``, has the checkout's ``shirudo``
+and ``shirudo-build`` on ``PATH``, the bundle's operator key directory
+in ``KEYS``, the stack's CA in ``BPM_OCI_CA_FILE``, the tree the VM
+follows in ``TREE`` and the stack's ClickHouse client in
+``CLICKHOUSE_CLIENT``, as the commands of :doc:`/start/guides/index`
+use them.
+
 ``make telemetry`` and ``make stack-up`` first build
 ``tools/quote-check/shirudo-quote-check``, as ``make quote-check`` does,
 and turn that ClickHouse into a keepalive backend with it: they install

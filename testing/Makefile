@@ -456,6 +456,7 @@ clean:
 
 .PHONY: oci telemetry stack-up stack-down xtop shields
 stack-up: oci telemetry
+	$(Q)TEST_VM_HOST_PRIVATE_DIR="$(TEST_VM_HOST_PRIVATE_DIR)" $(ROOT)/testing/vm/stack.sh env
 
 oci telemetry:
 	$(Q)TEST_VM_HOST_PRIVATE_DIR="$(TEST_VM_HOST_PRIVATE_DIR)" $(ROOT)/testing/vm/stack.sh $@
