@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -63,6 +64,49 @@
 #define S3_JSON_BUFFER_SIZE	(64U * 1024U)
 #define S3_GZIP_BUFFER_SIZE	(64U * 1024U)
 #define S3_REFERENCE_MAX	(64U * 1024U)
+
+static volatile sig_atomic_t otel_interrupted;
+
+static void otel_sigint_handler(int sig)
+{
+	otel_interrupted = 1;
+}
+
+/*
+ * Install a SIGINT handler so that Ctrl+C can interrupt hung DNS lookups.
+ * Without this, CURLOPT_NOSIGNAL leaves the process uninterruptible when
+ * getaddrinfo() blocks.
+ */
+static void otel_setup_signal_handler(void)
+{
+	struct sigaction sa = {};
+
+	sa.sa_handler = otel_sigint_handler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	sigaction(SIGINT, &sa, NULL);
+}
+
+static void otel_restore_signal_handler(void)
+{
+	struct sigaction sa = {};
+
+	sa.sa_handler = SIG_DFL;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	sigaction(SIGINT, &sa, NULL);
+}
+
+/*
+ * Progress callback that checks for interruption. Called periodically by
+ * libcurl, even during DNS lookup and connection, so we can abort early.
+ */
+static int otel_progress_callback(void *clientp, curl_off_t dltotal,
+				  curl_off_t dlnow, curl_off_t ultotal,
+				  curl_off_t ulnow)
+{
+	return otel_interrupted ? 1 : 0;
+}
 
 struct otel_response {
 	char		buf[OTEL_RESPONSE_MAX];
@@ -1238,6 +1282,8 @@ static noinline_for_stack int otel_post(struct otel_state *st,
 		body = compressed;
 		compressed_cap = compressBound(json_len) + 32;
 	}
+	otel_interrupted = 0;
+	otel_setup_signal_handler();
 	for (attempt = 0; attempt < max_attempts; attempt++) {
 		struct otel_response response = {};
 		CURL *curl = curl_easy_init();
@@ -1267,6 +1313,9 @@ static noinline_for_stack int otel_post(struct otel_state *st,
 		    curl_easy_setopt(curl, CURLOPT_HEADERDATA,
 				     &response) != CURLE_OK ||
 		    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L) != CURLE_OK ||
+		    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION,
+				     otel_progress_callback) != CURLE_OK ||
+		    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L) != CURLE_OK ||
 		    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS,
 				     st->timeout_ms) != CURLE_OK ||
 		    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER,
@@ -1296,6 +1345,11 @@ static noinline_for_stack int otel_post(struct otel_state *st,
 			curl_easy_cleanup(curl);
 			break;
 		}
+		if (cc == CURLE_ABORTED_BY_CALLBACK && otel_interrupted) {
+			ret = -EINTR;
+			curl_easy_cleanup(curl);
+			break;
+		}
 		retry = cc != CURLE_OK ? retryable_curl(cc) :
 			retryable_http(status);
 		if (cc != CURLE_OK)
@@ -1312,6 +1366,7 @@ static noinline_for_stack int otel_post(struct otel_state *st,
 		retry_wait(attempt, response.retry_after,
 			   response.retry_after_valid);
 	}
+	otel_restore_signal_handler();
 	xfree(compressed, compressed_cap);
 	return ret;
 }
@@ -1997,6 +2052,8 @@ static noinline_for_stack int s3_put(struct otel_s3_state *st,
 		ret = -ENAMETOOLONG;
 		goto out;
 	}
+	otel_interrupted = 0;
+	otel_setup_signal_handler();
 	for (__u32 attempt = 0; attempt < max_attempts; attempt++) {
 		struct otel_response response = {};
 		CURL *curl = curl_easy_init();
@@ -2029,6 +2086,8 @@ static noinline_for_stack int s3_put(struct otel_s3_state *st,
 		curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, response_header);
 		curl_easy_setopt(curl, CURLOPT_HEADERDATA, &response);
 		curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+		curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, otel_progress_callback);
+		curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
 		curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS,
 				 OTEL_DEFAULT_TIMEOUT_MS);
 		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER,
@@ -2053,6 +2112,11 @@ static noinline_for_stack int s3_put(struct otel_s3_state *st,
 			curl_easy_cleanup(curl);
 			break;
 		}
+		if (cc == CURLE_ABORTED_BY_CALLBACK && otel_interrupted) {
+			ret = -EINTR;
+			curl_easy_cleanup(curl);
+			break;
+		}
 		retry = cc != CURLE_OK ? retryable_curl(cc) :
 			retryable_s3_http(status);
 		if (cc != CURLE_OK)
@@ -2069,6 +2133,7 @@ static noinline_for_stack int s3_put(struct otel_s3_state *st,
 		retry_wait(attempt, response.retry_after,
 			   response.retry_after_valid);
 	}
+	otel_restore_signal_handler();
 out:
 	curl_slist_free_sensitive(headers);
 	return ret;
