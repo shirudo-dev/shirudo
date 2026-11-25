@@ -3,12 +3,11 @@
 # Copyright (c) 2026 Authors of shirudo
 #
 # t0008 -- .github/scripts/check-docs.sh: the options of a console
-# example on every line of its command, the whole of each field of a
-# threat's fact box, a hook by its section, the programs and counters no
-# threat names, the source files a proof reads or the coverage page
-# lists as read by none, and a figure against its TikZ source, on a
-# throwaway repository, and the tree itself.
-
+# example on every line of its command and none of another program's,
+# the whole of each field of a threat's fact box, a hook by its section,
+# the programs and counters no threat names, the source files a proof
+# reads or the coverage page lists as read by none, and a figure against
+# its TikZ source, on a throwaway repository, and the tree itself.
 cd "$(dirname "$0")/.."
 . ./test-lib.sh
 command -v git >/dev/null 2>&1 || test_skip_all "git not installed"
@@ -109,6 +108,81 @@ test_expect_success 'only the lines of a shirudo command are checked' '
 	good && console "   \$ shirudo status \\" "   \$ make --bogus" &&
 	check &&
 	good && console "   \$ shirudo status \\" "" "   --bogus" &&
+	check
+'
+
+q="'"
+
+test_expect_success 'what a command hands to another program is not checked' '
+	good && console "   \$ shirudo status --json \\" "       | jq --arg k v" &&
+	check &&
+	good && console "   \$ shirudo status && ls --color; ls --all" &&
+	check &&
+	good && console "   \$ shirudo status & ls --color" &&
+	check &&
+	good && console "   \$ shirudo status --json # --bogus" &&
+	check &&
+	good && console "   \$ shirudo status > \"\$(mktemp --tmpdir)\"" &&
+	check &&
+	good && console "   \$ shirudo status | grep -c \"\$(hostname)\" --color" &&
+	check &&
+	good && console "   \$ shirudo status | jq -r $q.a | select(.b)$q --arg k v" &&
+	check
+'
+
+test_expect_success 'a quote hides a pipe, a list and a comment, and a redirect is none' '
+	good && console "   \$ shirudo status \"a|b\" --bogus" &&
+	refuses "no parser accepts --bogus" &&
+	good && console "   \$ shirudo status \"a; b\" --bogus" &&
+	refuses "no parser accepts --bogus" &&
+	good && console "   \$ shirudo status \"a #b\" --bogus" &&
+	refuses "no parser accepts --bogus" &&
+	good && console "   \$ shirudo status ${q}a | b$q --bogus" &&
+	refuses "no parser accepts --bogus" &&
+	good && console "   \$ shirudo status $q--bogus$q \"--json\"" &&
+	refuses "no parser accepts --bogus" &&
+	good && console "   \$ shirudo status | jq $q--bogus$q" &&
+	check &&
+	good && console "   \$ shirudo status \`ls | wc -l\` --bogus" &&
+	refuses "no parser accepts --bogus" &&
+	good && console "   \$ shirudo status 2>&1 --bogus" &&
+	refuses "no parser accepts --bogus" &&
+	good && console "   \$ shirudo status <&3 --bogus" &&
+	refuses "no parser accepts --bogus"
+'
+
+test_expect_success 'a placeholder hides a pipe, a list and a parenthesis' '
+	good && console "   \$ shirudo status <a|b> --bogus" &&
+	refuses "no parser accepts --bogus" &&
+	good && console "   \$ shirudo status <a;b> <c&d> <e(f)> --bogus" &&
+	refuses "no parser accepts --bogus" &&
+	good && console "   \$ shirudo status <in | jq --arg k v >out" &&
+	check
+'
+
+test_expect_success 'a shirudo command behind another is checked' '
+	good && console "   \$ shirudo status | shirudo status --bogus" &&
+	refuses "no parser accepts --bogus" &&
+	good && console "   \$ ls || shirudo status --bogus" &&
+	check &&
+	good && console "   \$ shirudo status || shirudo status --bogus" &&
+	refuses "no parser accepts --bogus" &&
+	good && console "   \$ shirudo status \"\$(shirudo status --bogus | jq -r .a)\"" &&
+	refuses "no parser accepts --bogus" &&
+	good && console "   \$ shirudo status \"\$(ls | jq --arg k v)\" --bogus" &&
+	refuses "no parser accepts --bogus"
+'
+
+test_expect_success 'a command that ends inside a substitution goes on' '
+	good && console "   \$ shirudo status \\" \
+		"       \"\$(shirudo status --json |" \
+		"          jq --arg k v)\" \\" "       --json" &&
+	check &&
+	good && console "   \$ shirudo status \\" \
+		"       \"\$(shirudo status --json |" \
+		"          jq --arg k v)\" \\" "       --bogus" &&
+	refuses "no parser accepts --bogus" &&
+	good && console "   \$ shirudo status \"\$(ls" "   \$ make --bogus" &&
 	check
 '
 

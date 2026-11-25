@@ -37,22 +37,107 @@ find Documentation -name '*.rst' -not -path 'Documentation/output*' \
 # The options of the command lines in console blocks, by page. A command
 # line ending in a backslash is joined to the next, as the shell does,
 # and so is one with blanks after the backslash, which a reader pastes
-# all the same. Only a command is joined: a backslash that ends any
+# all the same, and one that ends inside a quote or a substitution or
+# after a pipe. Only a command is joined: a backslash that ends any
 # other line of a page would take the prompt of the next one with it,
 # and a command ends at the next prompt or blank line whatever it ends
-# in, as that one starts another.
+# in, as that one starts another. What a command hands to another
+# program, after a pipe, in a list or in a substitution, is not
+# shirudo's, and neither is a comment; a quote hides all of these, and
+# so does a placeholder such as <a|b>.
 while IFS= read -r page; do
 	awk '
-	joined && /^[ \t]*$|^[ \t]+(operator\$|target#|\$|#) / {
-		print ""
+	# What of a command line shirudo runs, and in unfinished whether
+	# the line ends where the shell would read on. keep[d] says whether
+	# the command at nesting depth d is shirudo, quoted[d] whether it
+	# stands in double quotes there, and closing[d] what ends the depth.
+	function shirudo_only(line,    c, d, from, i, len, next_c, prev_c,
+			      start, text) {
+		sub(/^[ \t]+[a-z]*[$#] /, "", line)
+		len = length(line)
+		d = 0
+		quoted[0] = 0
+		closing[0] = ""
+		start = 1
+		for (i = 1; i <= len; i++) {
+			c = substr(line, i, 1)
+			next_c = substr(line, i + 1, 1)
+			prev_c = i > 1 ? substr(line, i - 1, 1) : " "
+			if (start) {
+				keep[d] = substr(line, i) ~ /^[ \t]*shirudo( |$)/
+				start = 0
+			}
+			if (c == "\\") {
+				i++
+			} else if (c == "\047" && !quoted[d]) {
+				from = ++i
+				while (i <= len && substr(line, i, 1) != "\047")
+					i++
+				if (i > len) {
+					unfinished = 1
+					return text
+				}
+				if (keep[d])
+					text = text substr(line, from, i - from)
+			} else if (c == "\"") {
+				quoted[d] = !quoted[d]
+			} else if (d && !quoted[d] && c == closing[d]) {
+				d--
+				text = text " "
+			} else if (c == "$" && next_c == "(" || c == "`" ||
+				   c == "(" && !quoted[d]) {
+				if (c == "$")
+					i++
+				d++
+				closing[d] = c == "`" ? "`" : ")"
+				quoted[d] = 0
+				start = 1
+				text = text " "
+			} else if (quoted[d]) {
+				if (keep[d])
+					text = text c
+			} else if (match(substr(line, i), /^<[^ \t\n<>]+>/)) {
+				if (keep[d])
+					text = text substr(line, i, RLENGTH)
+				i += RLENGTH - 1
+			} else if (c == "#" && prev_c ~ /[ \t\n]/) {
+				while (i < len && next_c != "\n") {
+					i++
+					next_c = substr(line, i + 1, 1)
+				}
+			} else if (c == "|" || c == ";" || c == "\n" ||
+				   c == "&" && prev_c !~ /[<>]/ && next_c != ">") {
+				if (next_c == c && c != ";")
+					i++
+				start = 1
+				text = text " "
+			} else if (keep[d]) {
+				text = text c
+			}
+		}
+		unfinished = d || quoted[0] || line ~ /(\||&&)[ \t]*$/
+		return text
+	}
+	function finish() {
+		print shirudo_only(command)
+		command = ""
 		joined = 0
 	}
+	joined && /^[ \t]*$|^[ \t]+(operator\$|target#|\$|#) / { finish() }
 	!joined && !/^[ \t]+(operator\$|target#|\$|#) shirudo( |$)/ { next }
 	{
-		joined = sub(/\\[ \t]*$/, "")
-		printf "%s%s", $0, joined ? "" : "\n"
+		continued = sub(/\\[ \t]*$/, "")
+		command = command $0
+		if (!continued) {
+			shirudo_only(command)
+			if (unfinished)
+				command = command "\n"
+		}
+		joined = continued || unfinished
+		if (!joined)
+			finish()
 	}
-	END { if (joined) print "" }' "$page" |
+	END { if (joined) finish() }' "$page" |
 		grep -oE -- '--[a-z0-9][a-z0-9-]*' | sort -u |
 		sed "s|^|$page |"
 done <"$work/pages" >"$work/options"

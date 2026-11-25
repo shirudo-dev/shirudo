@@ -87,11 +87,16 @@ signed config image.
      - ``check-docs.sh``: an option on a continuation line of a
        console example, with blanks after its backslash, a command
        after a line that is none and a prompt or blank line that ends
-       one, the whole of each field of a threat's fact box, a hook by
-       its section, each tamper and integrity counter's entry on its
-       page, the source files a proof reads or the proof coverage page
-       lists as read by none, a figure against its TikZ source and one
-       without a source, and the tree itself
+       one, the options of a program a command pipes to, runs next or
+       substitutes and of a comment, which are not shirudo's, a pipe,
+       list or comment inside a quote or a placeholder, a shirudo
+       command behind a pipe or in a substitution, one that goes on
+       after a line ending inside a substitution, the whole of each
+       field of a threat's fact box, a hook by its section, each tamper
+       and integrity counter's entry on its page, the source files a
+       proof reads or the proof coverage page lists as read by none, a
+       figure against its TikZ source and one without a source, and the
+       tree itself
    * - ``t0009-check-unused``
      - ``check-unused.sh``: an extern function nothing calls, with its
        type on its line or the one above, a header's declaration that is
