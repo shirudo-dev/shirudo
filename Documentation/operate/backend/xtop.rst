@@ -110,7 +110,9 @@ key the operator has recorded as a TPM's.
    * - ``TREE``
      - ``✓ #<head>`` at the head of its tree, ``#<last>/#<head>``
        behind it, ``#<last>`` when the head of its tree is not known,
-       ``no tree`` when it follows none.
+       as the backend has no publication of the tree or the node names
+       a generation later than those it has, ``no tree`` when it
+       follows none.
    * - ``SHIELDS``
      - From ``node_vulns``, counted by upatch: ``✓`` loaded and
        shielding (``shielded``), ``…`` coming (``shield_pending``),

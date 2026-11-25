@@ -134,8 +134,12 @@ export function healthPercent(nodes: readonly Pick<FleetNode, "status">[]): numb
  */
 const UNKNOWN_LAG = 0.5;
 
-/** head − last: how far behind its own tree a member is. */
-const lagOf = (t: ImageGroup["tree"]) => (t.headSeq === null ? UNKNOWN_LAG : t.headSeq - t.lastSeq!);
+/**
+ * head − last: how far behind its own tree a member is. One past the
+ * head is at it, as check 5 of node_status has it.
+ */
+const lagOf = (t: ImageGroup["tree"]) =>
+  t.headSeq === null ? UNKNOWN_LAG : Math.max(0, t.headSeq - t.lastSeq!);
 
 /**
  * The tree position of the member furthest behind its own tree, all-null

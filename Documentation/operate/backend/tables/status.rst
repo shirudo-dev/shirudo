@@ -217,6 +217,7 @@ shirudo.node_status
    :generation: From the newest record. NULL with no tree.
    :last_seq: From the newest record.
    :head_seq: Head of the newest loaded publication of the node's tree.
+      NULL with none, or when the node names a later generation.
    :loaded: count from the record.
    :set_sha256: From the record.
    :updated_at: When the row was computed.

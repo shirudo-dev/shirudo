@@ -90,7 +90,7 @@ A UI reads ``node_status`` as often as it likes, as :doc:`xtop` does:
    * - ``generation``, ``last_seq``
      - From the newest record; ``NULL`` for a node that follows no tree.
    * - ``head_seq``
-     - The head of the newest publication loaded for the node's tree, ``NULL`` when there is none.
+     - The head of the newest publication loaded for the node's tree, ``NULL`` when there is none or when the node names a later generation, whose head is in a publication yet to be loaded.
    * - ``loaded``, ``set_sha256``
      - ``count`` and ``set_sha256`` of the newest record.
    * - ``updated_at``

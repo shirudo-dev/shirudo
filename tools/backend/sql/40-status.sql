@@ -370,7 +370,8 @@ WHERE (ak_name, tree_id) NOT IN (SELECT ak_name, tree_id FROM shirudo.history_co
 -- fails, 2 for stale and 0 for none, and log has one line per check, 1
 -- to 7. A node's trust does not decide its status; check 7 reads it to
 -- choose the node's peers. head_seq is the head of the newest publication
--- known for the node's tree.
+-- known for the node's tree, NULL where the node names a later one, whose
+-- head is not known yet.
 CREATE TABLE IF NOT EXISTS shirudo.node_status
 (
     node_id String,
@@ -716,7 +717,7 @@ SELECT
     received AS last_seen,
     generation,
     last_seq,
-    if(newest = 0, NULL, head) AS head_seq,
+    if(newest = 0 OR ifNull(generation, 0) > newest, NULL, head) AS head_seq,
     count AS loaded,
     set_sha256,
     now() AS updated_at

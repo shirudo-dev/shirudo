@@ -274,6 +274,22 @@ describe("groupByImage", () => {
   });
 });
 
+describe("a member past its head", () => {
+  const member = (over: Partial<NodeRow>) => toFleetNode(row({ ...over }));
+
+  test("is at it: reported after a member with an unknown head", () => {
+    const g = groupByImage([
+      member({ ak_name: "000b001", last_seq: 5, head_seq: 3 }),
+      member({ ak_name: "000b002", last_seq: 7, head_seq: null }),
+    ]);
+    expect(g[0]!.tree).toEqual({ lastSeq: 7, headSeq: null });
+  });
+
+  test("sorts with the rows at their head", () => {
+    expect(treeSortKey({ lastSeq: 5, headSeq: 3 })).toBe(0);
+  });
+});
+
 describe("treeSortKey", () => {
   const sorted = (trees: { lastSeq: number | null; headSeq: number | null }[]) =>
     [...trees].sort((a, b) => treeSortKey(a) - treeSortKey(b) || 0);

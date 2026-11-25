@@ -2,7 +2,7 @@ generation 3 is the newest
 at-3	at-3	healthy	untrusted	0	3	3	3	1
 at-3	5 head: pass, seq 3 of 3, generation 3
 generation 4, an hour allowed
-ahead-of-ingest	ahead-of-ingest	healthy	untrusted	0	5	5	4	1
+ahead-of-ingest	ahead-of-ingest	healthy	untrusted	0	5	5	\N	1
 at-1-of-generation-1	at-1-of-generation-1	unhealthy	untrusted	5	1	1	4	1
 at-2-of-generation-2	at-2-of-generation-2	unhealthy	untrusted	5	2	2	4	0
 at-3	at-3	healthy	untrusted	0	3	3	4	1
@@ -23,7 +23,7 @@ generation-1-wrong-root	6 set: pass, 1 loaded
 generation-1-wrong-root	7 peers: pass, 2 in group
 other-tree	5 head: publication unknown
 generation 4, forty minutes allowed
-ahead-of-ingest	ahead-of-ingest	healthy	untrusted	0	5	5	4	1
+ahead-of-ingest	ahead-of-ingest	healthy	untrusted	0	5	5	\N	1
 at-1-of-generation-1	at-1-of-generation-1	unhealthy	untrusted	5	1	1	4	1
 at-2-of-generation-2	at-2-of-generation-2	unhealthy	untrusted	5	2	2	4	0
 at-3	at-3	unhealthy	untrusted	5	3	3	4	1
