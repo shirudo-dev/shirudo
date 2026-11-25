@@ -273,7 +273,7 @@ if [[ "${1:-}" == --check-kvm-appliance ]]; then
 	case "$status" in
 	0) log "KVM appliance ready. Check target readiness separately with 'make -C testing vm'." ;;
 	124) log "KVM appliance readiness check timed out. Inspect the console for boot progress."
-	     log "If boot appears stalled in Lima, see Troubleshooting in Documentation/start/quickstart-macos.rst." ;;
+	     log "If boot appears stalled in Lima, see https://docs.shirudo.dev/start/quickstart-macos.html#troubleshooting" ;;
 	*) log "KVM appliance check failed with status $status. See output above." ;;
 	esac
 	exit "$status"

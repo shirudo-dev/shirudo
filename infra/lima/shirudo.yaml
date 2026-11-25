@@ -106,7 +106,7 @@ provision:
       case "$rc" in
         0) echo "The nested KVM appliance is ready." ;;
         124) echo "The nested KVM appliance check timed out. Inspect $log for boot progress."
-             echo "If boot stalled, see Troubleshooting in Documentation/start/quickstart-macos.rst." ;;
+             echo "If boot stalled, see https://docs.shirudo.dev/start/quickstart-macos.html#troubleshooting" ;;
         *) echo "The nested KVM appliance check failed with status $rc. See $log." ;;
       esac
     fi
@@ -142,16 +142,17 @@ probes:
     # User provisioning may still be about to create the link.
     [[ ! -e "$state" ]]
   hint: |
-    The checkout already has a build/test-vm path. See Troubleshooting in
-    Documentation/start/quickstart-macos.rst to preserve it and link the
-    path to the Lima VM's own disk.
+    The checkout already has a build/test-vm path. Follow the troubleshooting
+    steps to preserve it and link the path to the Lima VM's own disk.
+    https://docs.shirudo.dev/start/quickstart-macos.html#troubleshooting
 
 message: |
   From your checkout, open a shell in the Lima VM:
   ------
   limactl shell {{.Name}}
   ------
-  Follow the test kernel artifact steps in Documentation/start/quickstart.rst
-  before building shirudo and booting the test target.
+  Follow the test kernel artifact steps before building shirudo and
+  booting the test target.
+  https://docs.shirudo.dev/start/quickstart.html#quickstart-kernel-artifact
   The first-start nested KVM check logs to ~/test-vm/kvm-appliance-check.log
   inside the Lima VM.
