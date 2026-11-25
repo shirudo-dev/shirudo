@@ -180,7 +180,8 @@ signed config image.
    * - ``t2003-keys-set``
      - The trusted set and its digest, revoked certificates left out,
        ``attest predict`` agreement, signatures accepted from either
-       active signer and refused after that signer is revoked
+       active signer and refused after that signer is revoked, and
+       non-ML-DSA-87 primary and vouched certificates refused
    * - ``t2004-keys-vouch``
      - ``keys vouch``, and ``keys add`` admitting only vouched
        certificates
@@ -443,7 +444,8 @@ signed config image.
    * - ``t5002-image-config``
      - Settings a config may set, symbolic links and special files
    * - ``t5003-image-keys``
-     - Signer set and revocation records in a config
+     - Signer set, ML-DSA-87 key enforcement and revocation records in a
+       config
    * - ``t5004-image-cli``
      - Local key and repository changes refused, ``config`` output,
        repository certificates inside the image, tree trust
@@ -718,7 +720,8 @@ signed config image.
    * - ``t7008-bpm-tree-show``
      - ``bpm tree show`` prints the manifest digest and the signed
        document verbatim, ``fixes`` included, refuses a signature by
-       another key, a wrong certificate, a tampered layer and a document
+       another key, a classical certificate, a wrong certificate, a
+       tampered layer and a document
        ``tree sync`` would refuse with the errno sync reports, and
        writes nothing to the registry; with ``--walk`` prints a tree
        never sealed as without it and every segment of a tree sealed
@@ -1289,7 +1292,8 @@ The threats are those of :doc:`/security/threat-model`.
        ``t7103``, ``t7104``, ``t7105``, ``t7106``, ``t7107``, ``t7108``,
        ``t8005``, ``t9105``
    * - T8 Quantum-capable adversaries
-     - ``t2001``, ``t2002``, ``t5001``, ``t8005``
+     - ``t2001``, ``t2002``, ``t2003``, ``t2004``, ``t5001``, ``t5003``,
+       ``t7008``, ``t8005``. Unit: ``crypto_openssl``
    * - T9 A target lying about its state
      - ``t4001``, ``t4003``, ``t4004``, ``t4102``, ``t9105``, ``t9112``
    * - T10 An attempt that leaves no trace
@@ -1371,8 +1375,6 @@ Most of these attacks are open threats in
   ``BPM_OCI_SCHEME``, ``BPM_OCI_CA_FILE``, proxy variables,
   ``SSLKEYLOGFILE``. ``t6136`` covers the dynamic
   loader's variables only.
-- A repository index or tree publication signed with a classical
-  algorithm.
 - Removing an empty sealed directory, ``chattr`` on sealed files, POSIX
   ACLs on them, and a hard link of a labeled inode into an unsealed
   directory. ``t6118`` covers hard links into sealed directories only.

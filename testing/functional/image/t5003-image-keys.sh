@@ -128,6 +128,28 @@ test_expect_success 'malformed additional certificates fail before mutation' '
 	invalid bad-trusted
 '
 
+test_expect_success 'non-ML-DSA-87 primary and vouched signers fail before mutation' '
+	openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+		-nodes -keyout "$W/ec.key" -outform DER -out "$W/ec.der" \
+		-days 1 -subj "/CN=t5003-ec" >/dev/null 2>&1 &&
+	! "$H" "$W/ec.der" "$W/initial" >"$W/result" &&
+	grep -q "rc=-129 mutations=0" "$W/result" &&
+	fp_ec=$(../shirudo bpm key fingerprint "$W/ec.der" 2>/dev/null) &&
+	fresh ec-trusted &&
+	python3 - "$W/ec.der" "$W/ec-vouch.in" <<"PY" &&
+from pathlib import Path
+import sys
+Path(sys.argv[2]).write_bytes(b"shirudo-key-vouch\0" + Path(sys.argv[1]).read_bytes())
+PY
+	openssl x509 -inform DER -in "$W/a/cert.der" -out "$W/a.pem" &&
+	openssl cms -sign -binary -md sha512 -in "$W/ec-vouch.in" \
+		-signer "$W/a.pem" -inkey "$W/a/signing_key.pem" \
+		-outform DER -out "$W/ec-trusted/keys/trusted/$fp_ec.vouch" \
+		-nosmimecap -nocerts -keyid &&
+	cp "$W/ec.der" "$W/ec-trusted/keys/trusted/$fp_ec.der" &&
+	invalid ec-trusted
+'
+
 test_expect_success 'a live config with a new signer fails before PCR measurement or activation' '
 	fresh new-live && vouch new-live b "$fp_b" a &&
 	mkdir -m 700 "$W/new-journal" &&

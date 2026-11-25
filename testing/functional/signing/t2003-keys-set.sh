@@ -115,5 +115,30 @@ test_expect_success 'revoking A leaves B signatures valid and refuses earlier A 
 	! ./$H verify-signature "$W/keys" "$W/payload" "$W/signed-a"
 '
 
+test_expect_success 'non-ML-DSA-87 primary and vouched certificates are refused' '
+	mkdir -p "$W/classical/trusted" "$W/classical-vouched/trusted" &&
+	openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+		-nodes -keyout "$W/ec.key" -outform DER -out "$W/ec.der" \
+		-days 1 -subj "/CN=t2003-ec" >/dev/null 2>&1 &&
+	cp "$W/ec.der" "$W/classical/cert.der" &&
+	! ./$H image "$W/classical" >"$W/classical.out" &&
+	grep -qx "rc=-129" "$W/classical.out" &&
+	fp_ec=$(../shirudo bpm key fingerprint "$W/ec.der" 2>/dev/null) &&
+	cp "$W/a/cert.der" "$W/classical-vouched/cert.der" &&
+	python3 - "$W/ec.der" "$W/ec-vouch.in" <<"PYTEST" &&
+from pathlib import Path
+import sys
+Path(sys.argv[2]).write_bytes(b"shirudo-key-vouch\0" + Path(sys.argv[1]).read_bytes())
+PYTEST
+	openssl x509 -inform DER -in "$W/a/cert.der" -out "$W/a.pem" &&
+	openssl cms -sign -binary -md sha512 -in "$W/ec-vouch.in" \
+		-signer "$W/a.pem" -inkey "$W/a/signing_key.pem" \
+		-outform DER -out "$W/classical-vouched/trusted/$fp_ec.vouch" \
+		-nosmimecap -nocerts -keyid &&
+	cp "$W/ec.der" "$W/classical-vouched/trusted/$fp_ec.der" &&
+	./$H load "$W/classical-vouched" >"$W/with-ec" &&
+	grep -qx "n=1 revoked=0 unvouched=1" "$W/with-ec" &&
+	! grep -q "$fp_ec" "$W/with-ec"
+'
 
 test_done

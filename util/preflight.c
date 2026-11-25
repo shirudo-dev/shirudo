@@ -301,26 +301,28 @@ static void check_cert_algorithm(struct preflight_result *r)
 	}
 	for (i = 0; i < set.n; i++) {
 		struct cert cert = {};
-		char name[64];
-		int ret;
 
 		if (keys_cert_read(&set.certs[i], &cert)) {
 			fail(r, c, "%s: cannot parse", set.certs[i].path);
 			return;
 		}
-		ret = cert_key_algorithm(&cert, name, sizeof(name));
+		if (!cert_is_mldsa87(&cert)) {
+			char name[64];
+			int ret;
+
+			ret = cert_key_algorithm(&cert, name, sizeof(name));
+			cert_free(&cert);
+			if (ret)
+				fail(r, c,
+				     "%s: cannot determine public-key algorithm",
+				     set.certs[i].path);
+			else
+				fail(r, c,
+				     "%s is %s; shirudo accepts only ML-DSA-87 certificates (re-key with shirudo genkey)",
+				     set.certs[i].path, name);
+			return;
+		}
 		cert_free(&cert);
-		if (ret) {
-			fail(r, c, "%s: cannot determine public-key algorithm",
-			     set.certs[i].path);
-			return;
-		}
-		if (strcmp(name, "ML-DSA-87") != 0) {
-			fail(r, c, "%s is %s; shirudo accepts only ML-DSA-87 "
-			     "certificates (re-key with shirudo genkey)",
-			     set.certs[i].path, name);
-			return;
-		}
 	}
 	pass(c);
 }

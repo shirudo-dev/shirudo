@@ -308,6 +308,28 @@ int cert_key_algorithm(const struct cert *cert,
 	return 0;
 }
 
+bool cert_is_mldsa87(const struct cert *cert)
+{
+	EVP_PKEY *pub;
+
+	if (!cert || !cert->impl)
+		return false;
+	pub = X509_get0_pubkey(cert->impl);
+	return pub && EVP_PKEY_is_a(pub, "ML-DSA-87") == 1;
+}
+
+bool cert_der_is_mldsa87(const __u8 *der, size_t len)
+{
+	struct cert cert = {};
+	bool ok;
+
+	if (cert_read_der(der, len, &cert))
+		return false;
+	ok = cert_is_mldsa87(&cert);
+	cert_free(&cert);
+	return ok;
+}
+
 int cert_subject(const struct cert *cert, char *out, size_t out_sz)
 {
 	char *text;
@@ -369,9 +391,9 @@ static CMS_ContentInfo *read_cms(const __u8 *signature, size_t len)
 }
 
 /*
- * The algorithm comes from the SignerInfo, so an ML-DSA signature,
- * with signedAttrs and SHA-512 or bare on OpenSSL 4, and an RSA one
- * verify through one call; ML-DSA needs libcrypto >= 3.5.
+ * Only an ML-DSA-87 certificate may verify a detached CMS signature:
+ * with signedAttrs and SHA-512 on OpenSSL 3.x or bare on OpenSSL 4.
+ * ML-DSA needs libcrypto >= 3.5.
  */
 int verify_detached(const __u8 *payload, size_t payload_len,
 		    const __u8 *signature, size_t signature_len,
@@ -386,6 +408,8 @@ int verify_detached(const __u8 *payload, size_t payload_len,
 	if (!payload || !signature || !cert || !cert->impl ||
 	    payload_len > INT_MAX || signature_len > INT_MAX)
 		return -EINVAL;
+	if (!cert_is_mldsa87(cert))
+		return -EKEYREJECTED;
 	data = BIO_new_mem_buf(payload, (int)payload_len);
 	out = BIO_new(BIO_s_null());
 	store = X509_STORE_new();

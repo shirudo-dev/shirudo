@@ -197,8 +197,8 @@ int keys_cert_read(const struct trusted_cert *c,
 }
 
 /* The certificate at path, its digests, and its bytes kept for the set. */
-static int keys_take_file(const char *path, __u8 sha256[32],
-			  __u8 fingerprint[32])
+static int keys_take_file(const char *path, bool require_mldsa87,
+			  __u8 sha256[32], __u8 fingerprint[32])
 {
 	size_t der_sz = 0;
 	__u8 *der = NULL;
@@ -208,6 +208,8 @@ static int keys_take_file(const char *path, __u8 sha256[32],
 	if (ret)
 		return ret;
 	ret = keys_digest_der(der, der_sz, sha256, fingerprint);
+	if (!ret && require_mldsa87 && !cert_der_is_mldsa87(der, der_sz))
+		ret = -EKEYREJECTED;
 	if (!ret)
 		ret = der_keep(sha256, der, der_sz);
 	xfree(der, der_sz);
@@ -439,6 +441,8 @@ static int admit_vouched(struct trusted_set *set,
 				c->done = true;
 				continue;
 			}
+			if (!cert_der_is_mldsa87(c->der, c->der_sz))
+				continue;
 			if (vouch_path_for(c->dirfd >= 0 ? c->name : c->path,
 					   vouch, sizeof(vouch)) ||
 			    (c->dirfd >= 0 ?
@@ -598,7 +602,7 @@ static int load_set(const char *primary, const char *keys_dir,
 			return -ENAMETOOLONG;
 		revoked_dir = revoked;
 	}
-	ret = keys_take_file(primary, sha256, fingerprint);
+	ret = keys_take_file(primary, false, sha256, fingerprint);
 	if (ret)
 		return ret;
 	if (!keys_is_revoked(revoked_dir, fingerprint)) {
@@ -641,7 +645,7 @@ static int load_set_at(const char *primary, int keys_fd, const char *display,
 	int ret;
 
 	memset(set, 0, sizeof(*set));
-	ret = keys_take_file(primary, sha256, fingerprint);
+	ret = keys_take_file(primary, true, sha256, fingerprint);
 	if (ret)
 		return ret;
 	ret = set_add(set, primary, sha256, fingerprint, NULL, NULL, 0);

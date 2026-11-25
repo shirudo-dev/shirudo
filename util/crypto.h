@@ -59,6 +59,8 @@ int cert_pubkey_digest(const struct cert *cert,
 /* The provider's name for the cert's public key, e.g. "ML-DSA-87". */
 int cert_key_algorithm(const struct cert *cert,
 		       char *out, size_t out_sz) __must_check;
+bool cert_is_mldsa87(const struct cert *cert) __must_check;
+bool cert_der_is_mldsa87(const __u8 *der, size_t len) __must_check;
 /* The subject on one line, "O=Example, CN=fleet", control bytes escaped. */
 int cert_subject(const struct cert *cert, char *out, size_t out_sz)
 	__must_check;

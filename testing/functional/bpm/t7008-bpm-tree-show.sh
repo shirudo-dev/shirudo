@@ -215,6 +215,24 @@ test_expect_success 'show refuses a signature by another key' '
 	refused "Key was rejected by service" "$TREE" --cert "$CERT"
 '
 
+test_expect_success 'show refuses a classical certificate and signature' '
+	restore &&
+	mkdir -p "$WORK/rsa" &&
+	openssl req -x509 -newkey rsa:2048 -nodes \
+		-keyout "$WORK/rsa/signing_key.pem" \
+		-out "$WORK/rsa/cert.pem" -days 1 -sha256 \
+		-subj "/CN=t7008-rsa" >/dev/null 2>&1 &&
+	openssl x509 -in "$WORK/rsa/cert.pem" -outform DER \
+		-out "$WORK/rsa/cert.der" &&
+	openssl cms -sign -binary -md sha256 -in "$WORK/doc.json" \
+		-signer "$WORK/rsa/cert.pem" \
+		-inkey "$WORK/rsa/signing_key.pem" -outform DER \
+		-out "$WORK/doc.json.sig" -nosmimecap -nocerts -keyid &&
+	replace_layer "$SIG_MEDIA" "$WORK/doc.json.sig" &&
+	refused "Key was rejected by service" "$TREE" \
+		--cert "$WORK/rsa/cert.der"
+'
+
 test_expect_success 'show refuses a document its signature does not cover' '
 	restore &&
 	sed "s/EXAMPLE-0101/EXAMPLE-0102/" "$WORK/doc.json" >"$WORK/forged.json" &&

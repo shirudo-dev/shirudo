@@ -560,13 +560,14 @@ static int check_cert_algorithm(const __u8 *der, size_t der_sz,
 		pr_err("keys add: %s is not a certificate", what);
 		return ret;
 	}
-	ret = cert_key_algorithm(&cert, name, sizeof(name));
-	cert_free(&cert);
-	if (ret || strcmp(name, "ML-DSA-87")) {
+	if (!cert_is_mldsa87(&cert)) {
+		ret = cert_key_algorithm(&cert, name, sizeof(name));
+		cert_free(&cert);
 		pr_err("keys add: %s is %s; shirudo accepts only ML-DSA-87",
 		       what, ret ? "of an unknown algorithm" : name);
 		return -EKEYREJECTED;
 	}
+	cert_free(&cert);
 	return 0;
 }
 
