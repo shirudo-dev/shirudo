@@ -96,7 +96,7 @@ help:
 	  '  Package: make -C packaging help' \
 	  '  Tests: make tests (all of them), make -C testing help' \
 	  '  Proofs: make proofs (CBMC and Lean 4), make proofs-cbmc [PROOFS=<proof>...], make proofs-lean4' \
-	  '  Documentation: make docs (render and serve), make -C Documentation help' \
+	  '  Documentation: make docs (render, serve and watch), make -C Documentation help' \
 	  '  Watch lists: make -C upatches/kernel-obs lists'
 
 shirudo-build:

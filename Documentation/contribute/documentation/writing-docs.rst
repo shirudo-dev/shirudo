@@ -253,6 +253,11 @@ Render and serve the documentation on ``http://127.0.0.1:8000``:
 
    $ make docs
 
+If ``fswatch`` or ``inotifywait`` is on your ``PATH``, the preview rebuilds
+when files under ``Documentation/`` change. Refresh the page to see the
+new build. Install ``fswatch`` or the ``inotify-tools`` package to enable
+automatic rebuilds.
+
 Render it and check it against the code, as CI does:
 
 .. code-block:: console

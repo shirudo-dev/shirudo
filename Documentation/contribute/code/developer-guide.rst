@@ -349,7 +349,8 @@ Other make targets
        :doc:`/start/install`.
    * - ``make docs``
      - Renders the documentation and serves it on
-       ``http://127.0.0.1:8000``. See
+       ``http://127.0.0.1:8000``. Rebuilds on changes with ``fswatch`` or
+       ``inotifywait``. See
        :doc:`/contribute/documentation/writing-docs`.
    * - ``make tags``, ``make cscope``
      - Index the C sources, untracked ones and the generated

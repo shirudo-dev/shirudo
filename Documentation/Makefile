@@ -48,7 +48,7 @@ RUN_SERVE = $(CONTAINER) run --rm --read-only --cap-drop=ALL \
 help:
 	@printf '%s\n' \
 	  'make -C Documentation html       render the HTML into $(DOCS_OUT)/html' \
-	  'make -C Documentation serve      render, then serve it on $(DOCS_BIND):$(DOCS_PORT)' \
+	  'make -C Documentation serve      render, serve on $(DOCS_BIND):$(DOCS_PORT), watch with fswatch or inotifywait' \
 	  'make -C Documentation check      render, then check the docs against the code' \
 	  'make -C Documentation linkcheck  check external links (needs the network)' \
 	  'make -C Documentation figures    draw the SVGs of images/ from figures/ (needs TeX)' \
@@ -107,7 +107,8 @@ html-docs: html
 serve: html
 	@printf 'shirudo: serving http://%s:%s/ (Ctrl-C stops it)\n' \
 		'$(DOCS_BIND)' '$(DOCS_PORT)'
-	$(Q)$(RUN_SERVE) python3 -m http.server --directory /srv --bind 0.0.0.0 8000
+	+$(Q)bash "$(DOCS)/serve.sh" "$(MAKE)" "$(OUT)" $(RUN_SERVE) \
+		python3 -m http.server --directory /srv --bind 0.0.0.0 8000
 
 check: html
 	$(Q)$(ROOT)/.github/scripts/check-docs.sh
