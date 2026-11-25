@@ -106,7 +106,9 @@ provision:
       case "$rc" in
         0) echo "The nested KVM appliance is ready." ;;
         124) echo "The nested KVM appliance check timed out. Inspect $log for boot progress."
-             echo "If boot stalled, see https://docs.shirudo.dev/start/quickstart-macos.html#troubleshooting" ;;
+             echo "If the appliance started booting and then stalled, try the GICv3 traps."
+             echo "Run sudo sh infra/lima/enable-gicv3-traps.sh from the checkout inside this Lima VM."
+             echo "Then restart the VM from your Mac. See https://docs.shirudo.dev/start/quickstart-macos.html#troubleshooting" ;;
         *) echo "The nested KVM appliance check failed with status $rc. See $log."
            echo "For troubleshooting, see https://docs.shirudo.dev/start/quickstart-macos.html#troubleshooting" ;;
       esac
