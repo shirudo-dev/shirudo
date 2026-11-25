@@ -2057,8 +2057,11 @@ wait_for_guest_status()
 	while [[ ! -s "$RUN_DIR/result/status" ]]; do
 		kill -0 "$QEMU_PID" 2>/dev/null ||
 			die "QEMU exited before guest preparation completed"
-		(( elapsed < VM_TIMEOUT )) ||
-			die "VM timed out after ${VM_TIMEOUT}s"
+		if (( elapsed >= VM_TIMEOUT )); then
+			log "console log: $RUN_DIR/console.log"
+			log "qemu log: $RUN_DIR/qemu.log"
+			die "target readiness timed out after ${VM_TIMEOUT}s"
+		fi
 		sleep 1
 		elapsed=$((elapsed + 1))
 	done

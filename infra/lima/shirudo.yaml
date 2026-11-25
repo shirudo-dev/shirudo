@@ -19,6 +19,7 @@ disk: 100GiB
 
 param:
   checkout: ""
+  gicv3Traps: "false"
 
 # The checkout is shared at the path it has on the Mac, so that limactl
 # shell opens in it and the build writes there.
@@ -75,6 +76,13 @@ provision:
     set -eux -o pipefail
     sh "{{.Param.checkout}}/.github/scripts/install-clang.sh"
     sh "{{.Param.checkout}}/.github/scripts/install-static-libcrypto-deps.sh"
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eu
+    {{if eq .Param.gicv3Traps "true"}}
+    sh "{{.Param.checkout}}/infra/lima/enable-gicv3-traps.sh"
+    {{end}}
 # The test VMs' TPM and console sockets cannot live on the shared checkout,
 # and Ubuntu's AppArmor profile lets swtpm write only under the home
 # directory, so build/test-vm points there.
@@ -86,6 +94,23 @@ provision:
     if [ ! -e "{{.Param.checkout}}/build/test-vm" ]; then
       ln -s ~/test-vm "{{.Param.checkout}}/build/test-vm"
     fi
+    {{if ne .Param.gicv3Traps "true"}}
+    # Keep the appliance check on the guest disk and run it once.
+    log="$HOME/test-vm/kvm-appliance-check.log"
+    if [[ "{{.Param.checkout}}/build/test-vm" -ef "$HOME/test-vm" && ! -e "$log" ]]; then
+      echo "Checking nested KVM with a libguestfs appliance."
+      rc=0
+      TEST_VM_WORK_DIR="$HOME/test-vm" \
+        "{{.Param.checkout}}/testing/vm/build-bundle.sh" --check-kvm-appliance \
+        >"$log" 2>&1 || rc=$?
+      case "$rc" in
+        0) echo "The nested KVM appliance is ready." ;;
+        124) echo "The nested KVM appliance check timed out. Inspect $log for boot progress."
+             echo "If boot stalled, see Troubleshooting in Documentation/start/quickstart-macos.rst." ;;
+        *) echo "The nested KVM appliance check failed with status $rc. See $log." ;;
+      esac
+    fi
+    {{end}}
 
 probes:
 - description: nested KVM
@@ -128,3 +153,5 @@ message: |
   ------
   Follow the test kernel artifact steps in Documentation/start/quickstart.rst
   before building shirudo and booting the test target.
+  The first-start nested KVM check logs to ~/test-vm/kvm-appliance-check.log
+  inside the Lima VM.

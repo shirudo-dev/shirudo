@@ -265,6 +265,32 @@ if [[ "$TEST_VM_ARCH" == aarch64 ]]; then
 	require_command objcopy binutils binutils
 	require_command zstd zstd zstd
 fi
+if [[ "${1:-}" == --check-kvm-appliance ]]; then
+	require_command timeout coreutils coreutils
+	log "Waiting up to 150s for the KVM appliance, including kernel selection. Console follows."
+	status=0
+	timeout --kill-after=5s 150s "$BASH" "$0" --boot-kvm-appliance || status=$?
+	case "$status" in
+	0) log "KVM appliance ready. Check target readiness separately with 'make -C testing vm'." ;;
+	124) log "KVM appliance readiness check timed out. Inspect the console for boot progress."
+	     log "If boot appears stalled in Lima, see Troubleshooting in Documentation/start/quickstart-macos.rst." ;;
+	*) log "KVM appliance check failed with status $status. See output above." ;;
+	esac
+	exit "$status"
+fi
+if [[ "${1:-}" == --boot-kvm-appliance ]]; then
+	require_command guestfish libguestfs-tools guestfs-tools
+	check_libguestfs_host
+	# shellcheck source=testing/vm/guestfs.sh
+	. "$REPO_ROOT/testing/vm/guestfs.sh"
+	export LIBGUESTFS_BACKEND=direct LIBGUESTFS_BACKEND_SETTINGS=force_kvm
+	export LIBGUESTFS_HV
+	LIBGUESTFS_HV="$(command -v "${TEST_VM_QEMU:-$TEST_VM_ARCH_QEMU}")" ||
+		die "could not find the test VM's QEMU"
+	guestfs_setup
+	guestfs_run guestfish -v -a /dev/null run
+	exit
+fi
 check_libguestfs_host
 
 resolve_rootfs()
