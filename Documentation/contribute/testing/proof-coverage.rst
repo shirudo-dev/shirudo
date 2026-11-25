@@ -54,8 +54,9 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
      - ``text_sanitize()``
      - Lengths 0 to 6, with and without line breaks
      - Leaves well-formed UTF-8 without a C0, DEL or C1 control but a
-       kept line break; changes a byte only to ``?``; keeps every
-       printable character
+       kept line break and without a bidi or zero-width format
+       character; changes a byte only to ``?``; keeps every printable
+       character
    * - ``string-copy``
      - ``strscpy()``
      - Strings and buffers up to 8 bytes

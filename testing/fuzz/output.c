@@ -66,13 +66,31 @@ const char *fuzz_output(size_t *len)
 	return printed;
 }
 
-/* Whether the width bytes at i are a control text_sanitize() takes out. */
+/* U+200B to U+200F, U+2028 to U+202E or U+2066 to U+2069 at s. */
+static bool hidden_format3(const char *s)
+{
+	__u8 b1 = s[1], b2 = s[2];
+
+	if ((__u8)s[0] != 0xe2)
+		return false;
+	return (b1 == 0x80 && ((b2 >= 0x8b && b2 <= 0x8f) ||
+			       (b2 >= 0xa8 && b2 <= 0xae))) ||
+	       (b1 == 0x81 && b2 >= 0xa6 && b2 <= 0xa9);
+}
+
+/*
+ * Whether the width bytes at i are a control or a hidden format
+ * character that text_sanitize() takes out.
+ */
 static bool stray_control(const char *s, size_t len, size_t i, size_t width)
 {
 	__u8 c = s[i];
 
 	if (width == 2)
-		return c == 0xc2 && (__u8)s[i + 1] < 0xa0;
+		return (c == 0xc2 && (__u8)s[i + 1] < 0xa0) ||
+		       (c == 0xd8 && (__u8)s[i + 1] == 0x9c);
+	if (width == 3)
+		return hidden_format3(s + i);
 	if (width != 1 || (c >= 0x20 && c != 0x7f) || c == '\t' || c == '\n')
 		return false;
 	return c != '\r' || i + 1 == len || s[i + 1] != '\n';

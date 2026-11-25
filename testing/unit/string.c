@@ -443,14 +443,38 @@ static void text_sanitize_replaces_controls_and_stray_bytes(void)
 	EXPECT_TRUE(sanitized("\xed\xa0\x80", 3, false, "???"));
 }
 
-/* Every scalar value but the controls passes; a control leaves only '?'. */
+static void text_sanitize_replaces_hidden_formats(void)
+{
+	EXPECT_TRUE(sanitized("evil\342\200\256fdp.exe", 14, false,
+			      "evil???fdp.exe"));
+	EXPECT_TRUE(sanitized("a\342\201\246b\342\201\251", 8, true,
+			      "a???b???"));
+	EXPECT_TRUE(sanitized("x\xe2\x80\x8by\xd8\x9c", 7, false,
+			      "x???y??"));
+	EXPECT_TRUE(sanitized("\xe2\x80\xa8\xe2\x80\xa9", 6, true, "??????"));
+	EXPECT_TRUE(sanitized("\xe2\x80\x8a\xe2\x80\x90\xe2\x80\xaf", 9,
+			      false, "\xe2\x80\x8a\xe2\x80\x90\xe2\x80\xaf"));
+}
+
+static bool hidden_format_cp(__u32 cp)
+{
+	return cp == 0x061c || (cp >= 0x200b && cp <= 0x200f) ||
+	       (cp >= 0x2028 && cp <= 0x202e) ||
+	       (cp >= 0x2066 && cp <= 0x2069);
+}
+
+/*
+ * Every scalar value but the controls and the hidden formats passes; one
+ * of those leaves only '?'.
+ */
 static void text_sanitize_passes_all_but_the_controls(void)
 {
 	__u32 cp, wrong = 0;
 	char buf[4];
 
 	for (cp = 0; cp <= 0x10ffff; cp++) {
-		bool control = cp < 0x20 || (cp >= 0x7f && cp <= 0x9f);
+		bool control = cp < 0x20 || (cp >= 0x7f && cp <= 0x9f) ||
+			       hidden_format_cp(cp);
 		size_t len, i, marks = 0;
 		char copy[4];
 
@@ -930,6 +954,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(utf8_width_takes_well_formed_characters_only),
 	UNIT_CASE(utf8_width_takes_the_scalar_values_alone),
 	UNIT_CASE(text_sanitize_replaces_controls_and_stray_bytes),
+	UNIT_CASE(text_sanitize_replaces_hidden_formats),
 	UNIT_CASE(text_sanitize_passes_all_but_the_controls),
 	UNIT_CASE(memzero_explicit_clears_its_span_only),
 	UNIT_CASE(memneq_explicit_tells_every_bit_apart),

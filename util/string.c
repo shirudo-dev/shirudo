@@ -277,6 +277,29 @@ size_t utf8_width(const char *s, size_t n)
 	return width;
 }
 
+/*
+ * Whether the width bytes at s, one well-formed character, are a format
+ * character a terminal does not show but that changes how it shows the
+ * text around it: the Arabic letter mark U+061C, the zero-width
+ * characters and direction marks U+200B to U+200F, the line and
+ * paragraph separators and the bidi embeddings and overrides U+2028 to
+ * U+202E, and the bidi isolates U+2066 to U+2069.
+ */
+static bool hidden_format(const char *s, size_t width)
+{
+	__u8 b0 = s[0], b1, b2;
+
+	if (width == 2)
+		return b0 == 0xd8 && (__u8)s[1] == 0x9c;
+	if (width != 3 || b0 != 0xe2)
+		return false;
+	b1 = s[1];
+	b2 = s[2];
+	if (b1 == 0x80)
+		return (b2 >= 0x8b && b2 <= 0x8f) || (b2 >= 0xa8 && b2 <= 0xae);
+	return b1 == 0x81 && b2 >= 0xa6 && b2 <= 0xa9;
+}
+
 void text_sanitize(char *s, size_t len, bool lines)
 {
 	size_t i, n;
@@ -293,9 +316,10 @@ void text_sanitize(char *s, size_t len, bool lines)
 		else if (n == 1)
 			shown = c >= 0x20 && c != 0x7f;
 		else if (n == 2)
-			shown = c != 0xc2 || (__u8)s[i + 1] >= 0xa0;
+			shown = (c != 0xc2 || (__u8)s[i + 1] >= 0xa0) &&
+				!hidden_format(s + i, n);
 		else
-			shown = n != 0;
+			shown = n != 0 && !hidden_format(s + i, n);
 		if (!n)
 			n = 1;
 		if (!shown)
