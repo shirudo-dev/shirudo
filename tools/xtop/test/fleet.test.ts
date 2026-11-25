@@ -249,6 +249,29 @@ describe("groupByImage", () => {
     ]);
     expect(mixed[0]!.tree).toEqual({ lastSeq: 5, headSeq: 5 });
   });
+
+  test("reports a member with an unknown head before the caught-up ones", () => {
+    const member = (over: Partial<NodeRow>) => toFleetNode(row({ ...over }));
+    // The caught-up member has the smaller last, which the tie-break prefers.
+    const unknown = groupByImage([
+      member({ ak_name: "000b001", last_seq: 3, head_seq: 3 }),
+      member({ ak_name: "000b002", last_seq: 7, head_seq: null }),
+    ]);
+    expect(unknown[0]!.tree).toEqual({ lastSeq: 7, headSeq: null });
+    // A member known to be behind still comes first, in either order.
+    const behind = groupByImage([
+      member({ ak_name: "000b001", last_seq: 7, head_seq: null }),
+      member({ ak_name: "000b002", last_seq: 2, head_seq: 3 }),
+      member({ ak_name: "000b003", last_seq: 5, head_seq: 5 }),
+    ]);
+    expect(behind[0]!.tree).toEqual({ lastSeq: 2, headSeq: 3 });
+    // Among unknown heads the smaller last, as among known ones.
+    const both = groupByImage([
+      member({ ak_name: "000b001", last_seq: 7, head_seq: null }),
+      member({ ak_name: "000b002", last_seq: 4, head_seq: null }),
+    ]);
+    expect(both[0]!.tree).toEqual({ lastSeq: 4, headSeq: null });
+  });
 });
 
 describe("toFleetReport", () => {

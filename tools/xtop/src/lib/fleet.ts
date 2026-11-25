@@ -128,13 +128,21 @@ export function healthPercent(nodes: readonly Pick<FleetNode, "status">[]): numb
   return Math.round((100 * nodes.filter((n) => n.status === "healthy").length) / nodes.length);
 }
 
-/** head − last, 0 for a member that reports no head: how far behind its own tree a member is. */
-const lagOf = (m: FleetNode) => (m.tree.headSeq === null ? 0 : m.tree.headSeq - m.tree.lastSeq!);
+/**
+ * Where a member with no known head ranks: after every member known to
+ * be behind, which is a whole step or more, and before one caught up.
+ */
+const UNKNOWN_LAG = 0.5;
+
+/** head − last: how far behind its own tree a member is. */
+const lagOf = (m: FleetNode) => (m.tree.headSeq === null ? UNKNOWN_LAG : m.tree.headSeq - m.tree.lastSeq!);
 
 /**
  * The tree position of the member furthest behind its own tree, all-null
  * when none follows one. Members of an image can follow independent
- * trees, so their positions never mix into one pair.
+ * trees, so their positions never mix into one pair. A member whose
+ * head is unknown counts ahead of the caught-up ones, so that the group
+ * never reports a head every member reached while one may not have.
  */
 function behindTree(members: readonly FleetNode[]): ImageGroup["tree"] {
   const worst = members

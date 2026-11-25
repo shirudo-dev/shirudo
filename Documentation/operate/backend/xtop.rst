@@ -109,7 +109,8 @@ key the operator has recorded as a TPM's.
        record. ``—`` for a node that reports no image.
    * - ``TREE``
      - ``✓ #<head>`` at the head of its tree, ``#<last>/#<head>``
-       behind it, ``no tree`` when it follows none.
+       behind it, ``#<last>`` when the head of its tree is not known,
+       ``no tree`` when it follows none.
    * - ``SHIELDS``
      - From ``node_vulns``, counted by upatch: ``✓`` loaded and
        shielding (``shielded``), ``…`` coming (``shield_pending``),
@@ -144,9 +145,9 @@ the nodes with one.
 labels of its members beside it, ``?`` for a member without one. A
 group's status is its worst member's, its health the percent of its
 members ``healthy``, its kernel ``mixed`` when its members differ, its
-tree the member furthest behind, its shields the sums over its members,
-and its exposure that of its most exposed member. Enter on an image
-shows its nodes.
+tree the member furthest behind, or one whose head is not known when
+none is behind, its shields the sums over its members, and its exposure
+that of its most exposed member. Enter on an image shows its nodes.
 
 Detector hits are not shown: the collector of
 :src:`tools/backend/otelcol.yaml` takes in no map snapshot metrics.
