@@ -518,9 +518,10 @@ the commit at ``HEAD`` alone without them.
    * - ``build-commits.sh <range>``
      - Builds every commit on its own: ``make``, ``make
        shirudo-build``, ``make quote-check`` and ``make -C testing
-       test-helpers``. It
-       refuses to start with uncommitted changes and checks out each
-       commit in the working tree.
+       test-helpers``. It refuses to start with uncommitted tracked changes
+       and builds each commit in a fresh temporary worktree. The staged
+       kernel BTF in the original checkout is available to each build by
+       default. Use absolute paths for other external build inputs.
    * - ``install-clang.sh [<package>...]``
      - Installs clang and LLVM 23, from the distribution, Debian unstable
        or apt.llvm.org, and points ``clang``, ``llvm-strip``,

@@ -12,10 +12,12 @@ over, and again on the commits a fixup or rebase rewrote. The
 
 ## Where to run
 
-- `build-commits.sh` checks out each commit in the checkout it runs in
-  and goes back to the branch afterwards. Run it, the Coccinelle loop
-  below and a build with another compiler in a `git worktree`, never in
-  the checkout being edited or one a VM bundle builds from.
+- `build-commits.sh` builds each commit in its own temporary worktree.
+  It uses the staged BTF in the caller's checkout unless
+  `BPF_VMLINUX_BTF` is set.
+- Run the Coccinelle loop below and a build with another compiler in a
+  `git worktree`, never in the checkout being edited or one a VM bundle
+  builds from.
 - A worktree has no `artifacts/`, so its build reads the host's kernel
   BTF: set `BPF_VMLINUX_BTF=<checkout>/artifacts/bpf-next-kernel-debs/vmlinux.btf`
   when the host kernel lacks the signed-loader ABI.
