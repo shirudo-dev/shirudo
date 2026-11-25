@@ -211,10 +211,10 @@ describe("groupByImage", () => {
 
   test("rolls up kernel, tree, shields and exposure", () => {
     expect(fleetOs.kernel).toBe("7.4.2");
-    expect(fleetOs.tree).toEqual({ minLastSeq: 2, headSeq: 3 });
+    expect(fleetOs.tree).toEqual({ lastSeq: 2, headSeq: 3 });
     expect(fleetOs.shields).toEqual({ applied: 2, pending: 0, idle: 2 });
     expect(fleetOs.exposed).toBe(2);
-    expect(none.tree).toEqual({ minLastSeq: null, headSeq: null });
+    expect(none.tree).toEqual({ lastSeq: null, headSeq: null });
     expect(none.unknown).toBe(1);
   });
 
@@ -226,6 +226,28 @@ describe("groupByImage", () => {
   test("reports a mixed kernel as null", () => {
     const mixed = groupByImage([toFleetNode(ROWS[0]!), toFleetNode(row({ ak_name: "x", kernel_release: "7.5.0" }))]);
     expect(mixed[0]!.kernel).toBeNull();
+  });
+
+  test("reports the tree of the member furthest behind, never a mixed pair", () => {
+    const member = (over: Partial<NodeRow>) => toFleetNode(row({ ...over }));
+    // Two members on independent trees, each at its own head: caught up.
+    const heads = groupByImage([
+      member({ ak_name: "000b001", last_seq: 3, head_seq: 3 }),
+      member({ ak_name: "000b002", last_seq: 8, head_seq: 8 }),
+    ]);
+    expect(heads[0]!.tree).toEqual({ lastSeq: 3, headSeq: 3 });
+    // A member a step behind its tree reports its real position.
+    const behind = groupByImage([
+      member({ ak_name: "000b001", last_seq: 2, head_seq: 3 }),
+      member({ ak_name: "000b002", last_seq: 8, head_seq: 8 }),
+    ]);
+    expect(behind[0]!.tree).toEqual({ lastSeq: 2, headSeq: 3 });
+    // A member without a tree does not hide the position of one that has it.
+    const mixed = groupByImage([
+      member({ ak_name: "000b001", generation: null, last_seq: null, head_seq: null }),
+      member({ ak_name: "000b002", last_seq: 5, head_seq: 5 }),
+    ]);
+    expect(mixed[0]!.tree).toEqual({ lastSeq: 5, headSeq: 5 });
   });
 });
 

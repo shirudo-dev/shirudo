@@ -72,15 +72,10 @@ function ExposedCell({ exposed, unknown }: { exposed: number; unknown: number })
   );
 }
 
-function TreeCell({ last, head, atLeast = false }: { last: number | null; head: number | null; atLeast?: boolean }) {
+function TreeCell({ last, head }: { last: number | null; head: number | null }) {
   if (last === null) return <Text dimColor>no tree</Text>;
   if (head === null) return <Text dimColor>#{last}</Text>;
-  if (last < head)
-    return (
-      <Text color="yellow">
-        {atLeast ? "≥" : ""}#{last}/#{head}
-      </Text>
-    );
+  if (last < head) return <Text color="yellow">#{last}/#{head}</Text>;
   return <Text color="green">✓ #{head}</Text>;
 }
 
@@ -220,8 +215,8 @@ const IMAGE_COLUMNS: readonly Column<ImageGroup>[] = [
     title: "TREE",
     width: 11,
     defaultDir: "asc",
-    sortKey: (g) => (g.tree.minLastSeq === null ? -1 : g.tree.minLastSeq - (g.tree.headSeq ?? g.tree.minLastSeq)),
-    render: (g) => <TreeCell last={g.tree.minLastSeq} head={g.tree.headSeq} atLeast />,
+    sortKey: (g) => (g.tree.lastSeq === null ? -1 : g.tree.lastSeq - (g.tree.headSeq ?? g.tree.lastSeq)),
+    render: (g) => <TreeCell last={g.tree.lastSeq} head={g.tree.headSeq} />,
   },
   { id: "shields", title: "SHIELDS", width: 12, defaultDir: "desc", sortKey: (g) => shieldsKey(g.shields), render: (g) => <ShieldsCell s={g.shields} /> },
   {
