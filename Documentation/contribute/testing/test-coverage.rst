@@ -84,11 +84,14 @@ signed config image.
        outside the list or named like one on it, and the operator
        binaries when built
    * - ``t0008-check-docs``
-     - ``check-docs.sh``: the whole of each field of a threat's fact
-       box, a hook by its section, each tamper and integrity counter's
-       entry on its page, the source files a proof reads or the proof
-       coverage page lists as read by none, a figure against its TikZ
-       source and one without a source, and the tree itself
+     - ``check-docs.sh``: an option on a continuation line of a
+       console example, with blanks after its backslash, a command
+       after a line that is none and a prompt or blank line that ends
+       one, the whole of each field of a threat's fact box, a hook by
+       its section, each tamper and integrity counter's entry on its
+       page, the source files a proof reads or the proof coverage page
+       lists as read by none, a figure against its TikZ source and one
+       without a source, and the tree itself
    * - ``t0009-check-unused``
      - ``check-unused.sh``: an extern function nothing calls, with its
        type on its line or the one above, a header's declaration that is

@@ -34,9 +34,25 @@ report() {
 find Documentation -name '*.rst' -not -path 'Documentation/output*' \
 	-not -path 'Documentation/contribute/code/coding-style.rst' | sort >"$work/pages"
 
-# The options of the command lines in console blocks, by page.
+# The options of the command lines in console blocks, by page. A command
+# line ending in a backslash is joined to the next, as the shell does,
+# and so is one with blanks after the backslash, which a reader pastes
+# all the same. Only a command is joined: a backslash that ends any
+# other line of a page would take the prompt of the next one with it,
+# and a command ends at the next prompt or blank line whatever it ends
+# in, as that one starts another.
 while IFS= read -r page; do
-	grep -E '^[[:space:]]+(operator\$|target#|\$|#) shirudo( |$)' "$page" |
+	awk '
+	joined && /^[ \t]*$|^[ \t]+(operator\$|target#|\$|#) / {
+		print ""
+		joined = 0
+	}
+	!joined && !/^[ \t]+(operator\$|target#|\$|#) shirudo( |$)/ { next }
+	{
+		joined = sub(/\\[ \t]*$/, "")
+		printf "%s%s", $0, joined ? "" : "\n"
+	}
+	END { if (joined) print "" }' "$page" |
 		grep -oE -- '--[a-z0-9][a-z0-9-]*' | sort -u |
 		sed "s|^|$page |"
 done <"$work/pages" >"$work/options"
