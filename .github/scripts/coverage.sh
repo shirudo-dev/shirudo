@@ -7,11 +7,35 @@
 # and, where the test VMs ran, of the target in each guest.
 #
 #   .github/scripts/coverage.sh [--sudo-container]
+#   .github/scripts/coverage.sh merge-ci
 
 set -eu
 
 cd "$(dirname "$0")/../.."
 mkdir -p coverage
+
+merge_ci() {
+	set --
+	for suite in unit functional-ci-1 functional-ci-2 functional-ci-3 functional-ci-4 end2end; do
+		trace="coverage/shards/coverage-$suite/shirudo.lcov"
+		[ -s "$trace" ] || {
+			echo "coverage.sh: missing or empty tracefile: $trace" >&2
+			exit 1
+		}
+		set -- "$@" --add-tracefile "$trace"
+	done
+
+	if ! command -v lcov >/dev/null; then
+		sudo apt-get update
+		sudo apt-get install -y --no-install-recommends lcov
+	fi
+	lcov --ignore-errors inconsistent "$@" --output-file coverage/shirudo.lcov
+}
+
+if [ "${1:-}" = merge-ci ]; then
+	merge_ci
+	exit 0
+fi
 
 capture() {
 	suffix=$1

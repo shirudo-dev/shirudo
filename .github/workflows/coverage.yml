@@ -28,11 +28,15 @@ concurrency:
 
 jobs:
   coverage:
-    name: Coverage
+    name: Coverage (${{ matrix.suite }})
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [unit, functional-ci-1, functional-ci-2, functional-ci-3, functional-ci-4, end2end]
     env:
-      VM: '1'
+      VM: ${{ matrix.suite == 'unit' && '0' || '1' }}
       COVERAGE: '1'
 
     steps:
@@ -49,6 +53,7 @@ jobs:
       # The caches are those of the CI suite, which saves them: this
       # workflow only reads them.
       - name: Restore the static target dependencies
+        if: matrix.suite != 'unit'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/target-deps
@@ -67,6 +72,7 @@ jobs:
           key: host-libtpms-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/vm-toolchain.sh', '.github/scripts/install-libtpms.sh') }}
 
       - name: Restore the VM images
+        if: matrix.suite != 'unit'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/test-vm/cache
@@ -78,29 +84,47 @@ jobs:
           KERNEL_CI_ARTIFACT_DIR: ${{ format('{0}/build/kernel-ci-artifact', github.workspace) }}
         run: .github/scripts/tests.sh setup
 
-      # A tier that fails still counted what it ran, and the CI suite
-      # reports the failure: every tier runs and the report is sent.
-      - name: Run unit tests
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+      - name: Run selected test suite
         env:
+          TEST_SUITE: ${{ matrix.suite }}
           SHIRUDO_SKIP_TREE_CHECKS: ${{ github.event_name == 'push' && '1' || '0' }}
-        run: .github/scripts/tests.sh run unit
+        run: .github/scripts/tests.sh run "$TEST_SUITE"
 
-      - name: Run functional tests
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
-        run: .github/scripts/tests.sh run functional
-
-      - name: Run end-to-end tests
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
-        run: .github/scripts/tests.sh run end2end
-
-      - name: Merge the counters of the host and the guests
+      # A failing test still leaves counters for the tests that ran.
+      - name: Collect the counters of the host and the guests
         id: collect
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: .github/scripts/coverage.sh --sudo-container
 
-      - name: Upload coverage to Coveralls
+      - name: Upload the shard tracefile
         if: ${{ !cancelled() && steps.collect.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-${{ matrix.suite }}
+          path: coverage/shirudo.lcov
+          if-no-files-found: error
+          overwrite: true
+
+  report:
+    name: Report coverage
+    needs: coverage
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download the shard tracefiles
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: coverage-*
+          path: coverage/shards
+
+      - name: Merge the shard tracefiles
+        run: .github/scripts/coverage.sh merge-ci
+
+      - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@8d6379e14d29928660c4ba802d8e85393440b329 # v2.3.8
         with:
           file: coverage/shirudo.lcov

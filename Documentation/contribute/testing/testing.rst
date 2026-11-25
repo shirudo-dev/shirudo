@@ -112,8 +112,10 @@ The ``Coverage`` workflow, :src:`.github/workflows/coverage.yml`, runs after
 a push to main, never on a pull request: the ``CI suite`` tests the binaries
 as they ship, and no pull request waits on a coverage figure. It builds the
 userspace C code with coverage instrumentation, the host's binaries and the
-target the test VMs boot, runs every tier and sends one LCOV report to
-Coveralls, also when a tier fails.
+target the test VMs boot, and runs unit tests, four functional shards and
+end-to-end tests in parallel. It merges the six tracefiles and sends one
+LCOV report to Coveralls. A test failure still allows the report to be
+sent if every job produced a tracefile.
 
 Start the workflow by hand on a branch for the figure of a change before it
 lands, or make the report on a host with ``lcov``, from a clean checkout:
