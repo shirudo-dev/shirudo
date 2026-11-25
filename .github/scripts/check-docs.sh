@@ -3,7 +3,8 @@
 # Copyright (c) 2026 Authors of shirudo
 #
 # .github/scripts/check-docs.sh -- check Documentation/ against the tree:
-# every option a console example passes to shirudo exists in a parser,
+# every option a console example passes to shirudo or to one of its
+# generators exists in a parser,
 # every failure category the code emits, every tamper and integrity
 # counter and every proof has its entry in the reference, every hook,
 # counter, test, proof and unit a page names exists, every LSM program
@@ -44,9 +45,14 @@ find Documentation -name '*.rst' -not -path 'Documentation/output*' \
 # in, as that one starts another. What a command hands to another
 # program, after a pipe, in a list or in a substitution, is not
 # shirudo's, and neither is a comment; a quote hides all of these, and
-# so does a placeholder such as <a|b>.
+# so does a placeholder such as <a|b>. shirudo is the binary under each
+# name it is installed as, with or without a path, and the image and
+# initrd generators, whose scripts are among the parsers below. A path
+# holds no =: NAME=dir/shirudo sets a variable for another command.
+shirudo='([^ \t=]*/)?shirudo(-runtime|-target|-gen-[a-z]+)?( |$)'
 while IFS= read -r page; do
-	awk '
+	awk -v prompt="^[ \t]+(operator[$]|target#|[$]|#) $shirudo" \
+	    -v first="^[ \t]*$shirudo" '
 	# What of a command line shirudo runs, and in unfinished whether
 	# the line ends where the shell would read on. keep[d] says whether
 	# the command at nesting depth d is shirudo, quoted[d] whether it
@@ -64,7 +70,7 @@ while IFS= read -r page; do
 			next_c = substr(line, i + 1, 1)
 			prev_c = i > 1 ? substr(line, i - 1, 1) : " "
 			if (start) {
-				keep[d] = substr(line, i) ~ /^[ \t]*shirudo( |$)/
+				keep[d] = substr(line, i) ~ first
 				start = 0
 			}
 			if (c == "\\") {
@@ -124,7 +130,7 @@ while IFS= read -r page; do
 		joined = 0
 	}
 	joined && /^[ \t]*$|^[ \t]+(operator\$|target#|\$|#) / { finish() }
-	!joined && !/^[ \t]+(operator\$|target#|\$|#) shirudo( |$)/ { next }
+	!joined && $0 !~ prompt { next }
 	{
 		continued = sub(/\\[ \t]*$/, "")
 		command = command $0

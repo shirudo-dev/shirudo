@@ -3,11 +3,13 @@
 # Copyright (c) 2026 Authors of shirudo
 #
 # t0008 -- .github/scripts/check-docs.sh: the options of a console
-# example on every line of its command and none of another program's,
-# the whole of each field of a threat's fact box, a hook by its section,
-# the programs and counters no threat names, the source files a proof
-# reads or the coverage page lists as read by none, and a figure against
-# its TikZ source, on a throwaway repository, and the tree itself.
+# example on every line of its command, under each name of the binary
+# and of a generator, and none of another program's, the whole of each
+# field of a threat's fact box, a hook by its section, the programs and
+# counters no threat names, the source files a proof reads or the
+# coverage page lists as read by none, and a figure against its TikZ
+# source, on a throwaway repository, and the tree itself.
+
 cd "$(dirname "$0")/.."
 . ./test-lib.sh
 command -v git >/dev/null 2>&1 || test_skip_all "git not installed"
@@ -184,6 +186,30 @@ test_expect_success 'a command that ends inside a substitution goes on' '
 	refuses "no parser accepts --bogus" &&
 	good && console "   \$ shirudo status \"\$(ls" "   \$ make --bogus" &&
 	check
+'
+
+test_expect_success 'the binary is checked under its other names and a path' '
+	good && console "   target# /usr/local/bin/shirudo status --bogus" &&
+	refuses "no parser accepts --bogus" &&
+	good && console "   target# shirudo-runtime status --bogus" &&
+	refuses "no parser accepts --bogus" &&
+	good && console "   \$ ./shirudo-target status --bogus" &&
+	refuses "no parser accepts --bogus" &&
+	good && console "   \$ shirudoctl --bogus" "   \$ myshirudo --bogus" &&
+	check &&
+	good && console "   \$ SHIRUDO=build/shirudo make --bogus" &&
+	check
+'
+
+test_expect_success 'a generator is checked against its script' '
+	good && put tools/gen-initrd/gen "case \$1 in" "--kver) ;;" "esac" &&
+	console "   target# shirudo-gen-initrd \\" "       --kver 7.4" \
+		"   operator\$ /usr/libexec/shirudo/shirudo-gen-image --kver 7.4" &&
+	check &&
+	console "   target# shirudo-gen-initrd \\" "       --kverr 7.4" &&
+	refuses "no parser accepts --kverr" &&
+	console "   operator\$ tools/gen-image/shirudo-gen-image --bogus" &&
+	refuses "no parser accepts --bogus"
 '
 
 test_expect_success 'a hook on a continuation line is checked, by its section' '
