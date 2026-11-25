@@ -8,7 +8,7 @@
 import { describe, expect, test } from "bun:test";
 import { toFleetNode, toFleetReport, type NodeRow } from "../src/lib/backend.ts";
 import { configFromEnv, queryRows } from "../src/lib/clickhouse.ts";
-import { failedCheckName, groupByImage, healthPercent, imageLabel, labelPairs } from "../src/lib/fleet.ts";
+import { failedCheckName, groupByImage, healthPercent, imageLabel, labelPairs, treeSortKey } from "../src/lib/fleet.ts";
 
 const BUILD = "d6d918ad22ff597579e6678bef75adca84d30f9661e0b7bbdbf534eebc138c1f";
 const LOG = [
@@ -271,6 +271,28 @@ describe("groupByImage", () => {
       member({ ak_name: "000b002", last_seq: 4, head_seq: null }),
     ]);
     expect(both[0]!.tree).toEqual({ lastSeq: 4, headSeq: null });
+  });
+});
+
+describe("treeSortKey", () => {
+  const sorted = (trees: { lastSeq: number | null; headSeq: number | null }[]) =>
+    [...trees].sort((a, b) => treeSortKey(a) - treeSortKey(b) || 0);
+
+  test("keeps the rows without a tree apart from those one step behind", () => {
+    const none = { lastSeq: null, headSeq: null };
+    const one = { lastSeq: 2, headSeq: 3 };
+    const far = { lastSeq: 1, headSeq: 9 };
+    const head = { lastSeq: 5, headSeq: 5 };
+    expect(treeSortKey(none)).toBeLessThan(treeSortKey(far));
+    expect(sorted([one, none, head, far, none, one])).toEqual([none, none, far, one, one, head]);
+  });
+
+  test("sorts an unknown head between the rows behind and those at their head", () => {
+    const unknown = { lastSeq: 7, headSeq: null };
+    const one = { lastSeq: 2, headSeq: 3 };
+    const head = { lastSeq: 5, headSeq: 5 };
+    expect(sorted([head, unknown, one, head])).toEqual([one, unknown, head, head]);
+    expect(treeSortKey(head)).toBe(0);
   });
 });
 
