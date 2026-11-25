@@ -42,7 +42,7 @@ case "$role" in
 target)
 	pkg=shirudo-target
 	other=shirudo-operator
-	bins="$stage/usr/bin/shirudo"
+	bins="$stage/usr/bin/shirudo $stage/usr/libexec/shirudo/shirudo-runtime"
 	short="signed-BPF lockdown LSM platform (target node)"
 	;;
 operator)

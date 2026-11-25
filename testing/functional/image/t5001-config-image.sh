@@ -214,7 +214,7 @@ test_expect_success 'installed helper finds the image scripts beside it' '
 	mkdir -p "$W/operator/gen-image" &&
 	cp "$B" "$W/operator/shirudo-build" &&
 	cp ../tools/gen-image/shirudo-gen-* ../tools/gen-image/common.sh \
-		../tools/gen-image/runtime-service*.conf.in "$W/operator/gen-image/" &&
+		../tools/gen-image/shirudo-runtime-elf ../tools/gen-image/runtime-service*.conf.in "$W/operator/gen-image/" &&
 	"$W/operator/shirudo-build" image build "$W/data" -o "$W/installed" --keys-dir "$W/keys" &&
 	verify "$W/installed" "$W/keys/cert.der"
 '
@@ -281,16 +281,22 @@ if command -v mkfs.ext4 >/dev/null 2>&1 && command -v debugfs >/dev/null 2>&1; t
 
 	test_expect_success 'runtime generator includes interpreter, public keys and trusted probe' '
 		cp fixtures/image-runtime.conf "$W/bootstrap.conf" &&
+		runtime_flags=$(../tools/gen-image/shirudo-runtime-elf link-flags --binary "$S") &&
+		${CC:-cc} fixtures/image-static-probe.c $runtime_flags -o "$W/runtime-entry" &&
+		${CC:-cc} fixtures/image-static-probe.c $runtime_flags -o "$W/dynamic-probe" &&
 		${CC:-cc} -static fixtures/image-static-probe.c -o "$W/static-probe" &&
-		../tools/gen-image/shirudo-gen-runtime --binary "$S" \
+		../tools/gen-image/shirudo-gen-runtime --binary "$W/runtime-entry" --bootstrap-binary "$S" \
 			--bootstrap-conf "$W/bootstrap.conf" --cert "$W/keys/cert.der" \
 			--config-cert "$W/other/cert.der" --keys-dir "$W/keys" --builder "$B" \
-			--extra-binary /bin/true --extra-binary "$W/static-probe" \
+			--extra-binary "$W/dynamic-probe" --extra-binary "$W/static-probe" \
 			--unit-output "$W/runtime-service.conf" \
 			--output "$W/generated-runtime" --size 128 &&
 		verify "$W/generated-runtime" "$W/keys/cert.der" &&
-		grep -q -- "--inhibit-cache --library-path /run/shirudo/runtime/" "$W/runtime-service.conf" &&
-		debugfs -R "stat /usr/bin/true" "$W/generated-runtime.img" 2>/dev/null |
+		debugfs -R "cat /usr/bin/shirudo" "$W/generated-runtime.img" \
+			>"$W/extracted-runtime" 2>/dev/null &&
+		cmp "$W/extracted-runtime" "$W/runtime-entry" &&
+		grep -qx "ExecStart=/run/shirudo/runtime/usr/bin/shirudo init" "$W/runtime-service.conf" &&
+		debugfs -R "stat /usr/bin/dynamic-probe" "$W/generated-runtime.img" 2>/dev/null |
 			grep -q "Type: regular" &&
 		debugfs -R "stat /usr/bin/static-probe" "$W/generated-runtime.img" 2>/dev/null |
 			grep -q "Type: regular" &&
@@ -299,7 +305,7 @@ if command -v mkfs.ext4 >/dev/null 2>&1 && command -v debugfs >/dev/null 2>&1; t
 		cmp "$W/extracted.der" "$W/other/cert.der"
 	'
 	test_expect_success 'runtime generator packages both config verification keys and their settings' '
-		../tools/gen-image/shirudo-gen-runtime --binary "$W/static-probe" \
+		../tools/gen-image/shirudo-gen-runtime --binary "$W/static-probe" --bootstrap-binary "$W/static-probe" \
 			--bootstrap-conf "$W/bootstrap.conf" --cert "$W/keys/cert.der" \
 			--config-cert "$W/keys/cert.der" --config-cert "$W/other/cert.der" \
 			--keys-dir "$W/keys" --builder "$B" --output "$W/runtime-overlap" --size 8 &&
@@ -321,7 +327,7 @@ if command -v mkfs.ext4 >/dev/null 2>&1 && command -v debugfs >/dev/null 2>&1; t
 	'
 
 	test_expect_success 'retired runtime keeps only its supplied config key' '
-		../tools/gen-image/shirudo-gen-runtime --binary "$W/static-probe" \
+		../tools/gen-image/shirudo-gen-runtime --binary "$W/static-probe" --bootstrap-binary "$W/static-probe" \
 			--bootstrap-conf "$W/overlap.conf" --cert "$W/keys/cert.der" \
 			--config-cert "$W/other/cert.der" \
 			--keys-dir "$W/keys" --builder "$B" --output "$W/runtime-retired" --size 8 &&
@@ -339,7 +345,7 @@ if command -v mkfs.ext4 >/dev/null 2>&1 && command -v debugfs >/dev/null 2>&1; t
 	'
 
 	test_expect_success 'runtime generator refuses the same config certificate twice' '
-		! ../tools/gen-image/shirudo-gen-runtime --binary "$W/static-probe" \
+		! ../tools/gen-image/shirudo-gen-runtime --binary "$W/static-probe" --bootstrap-binary "$W/static-probe" \
 			--bootstrap-conf "$W/bootstrap.conf" --cert "$W/keys/cert.der" \
 			--config-cert "$W/keys/cert.der" --config-cert "$W/keys/cert.der" \
 			--keys-dir "$W/keys" --builder "$B" --output "$W/runtime-duplicate" --size 8 &&
@@ -347,7 +353,7 @@ if command -v mkfs.ext4 >/dev/null 2>&1 && command -v debugfs >/dev/null 2>&1; t
 	'
 
 	test_expect_success 'static runtime images run directly without a packaged loader' '
-		../tools/gen-image/shirudo-gen-runtime --binary "$W/static-probe" \
+		../tools/gen-image/shirudo-gen-runtime --binary "$W/static-probe" --bootstrap-binary "$W/static-probe" \
 			--bootstrap-conf "$W/bootstrap.conf" --cert "$W/keys/cert.der" \
 			--config-cert "$W/other/cert.der" --keys-dir "$W/keys" --builder "$B" \
 			--unit-output "$W/static-runtime.service" \
@@ -378,18 +384,18 @@ if command -v mkfs.ext4 >/dev/null 2>&1 && command -v debugfs >/dev/null 2>&1; t
 	'
 	test_expect_success 'check-runtime-image.sh reports the space left in the default image' '
 		SHIRUDO="$S" SHIRUDO_BUILD="$B" sh ../.github/scripts/check-runtime-image.sh \
-			"$W/static-probe" >"$W/check.out" &&
+			"$W/static-probe" "$W/static-probe" >"$W/check.out" &&
 		grep -Eq "^shirudo: the default runtime image of [0-9]+ MiB holds .* with [0-9]+ KiB free$" \
 			"$W/check.out"
 	'
 	test_expect_success 'check-runtime-image.sh fails once a binary outgrows the default' '
-		head -c 16777216 /dev/urandom >"$W/blob" &&
+		head -c 142606336 /dev/urandom >"$W/blob" &&
 		printf ".section .rodata\n.incbin \"%s\"\n.section .note.GNU-stack,\"\",%%progbits\n" \
 			"$W/blob" >"$W/blob.s" &&
 		printf "int main(void) { return 0; }\n" >"$W/big-probe.c" &&
 		${CC:-cc} -static -o "$W/big-probe" "$W/big-probe.c" "$W/blob.s" &&
 		! SHIRUDO="$S" SHIRUDO_BUILD="$B" sh ../.github/scripts/check-runtime-image.sh \
-			"$W/big-probe" 2>"$W/check.err" &&
+			"$W/big-probe" "$W/big-probe" 2>"$W/check.err" &&
 		grep -q "raise size= in tools/gen-image/shirudo-gen-runtime" "$W/check.err"
 	'
 

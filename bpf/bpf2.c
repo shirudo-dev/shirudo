@@ -140,8 +140,14 @@ SEC("lsm/bpf_map")
 int BPF_PROG(shirudo_lsm_bpf_map, struct bpf_map *map, fmode_t fmode,
 	     int ret)
 {
+	char name[16] = {};
+
 	if (ret)
 		return ret;
+	bpf_probe_read_kernel_str(name, sizeof(name), map->name);
+	if (!__builtin_memcmp(name, "shirudo_rt_ent", sizeof("shirudo_rt_ent")) &&
+	    (fmode & FMODE_WRITE) && !shirudo_bootstrap_task())
+		return -EACCES;
 	if (fmode & FMODE_WRITE)
 		return shirudo_self_or_deny(TAMPER_MAP_FD);
 	return shirudo_self_or_deny(TAMPER_OBJ_GET);

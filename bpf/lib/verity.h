@@ -5,6 +5,7 @@
 #define SHIRUDO_BPF_VERITY_H
 
 #include "lsm.h"
+#include "../include/shirudo/runtime_entry.h"
 
 #define DEVICE_RUNTIME		1
 #define DEVICE_CONFIG		2
@@ -135,14 +136,47 @@ shirudo_inode_device(struct inode *inode)
 	return shirudo_bdev_device(bdev);
 }
 
+struct {
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(map_flags, BPF_F_RDONLY_PROG);
+	__uint(max_entries, 1);
+	__type(key, __u32);
+	__type(value, struct shirudo_runtime_entry);
+} shirudo_rt_ent SEC(".maps");
+
+/* A file of the runtime image the bootstrap bound. */
 static __always_inline bool shirudo_file_runtime(struct file *file)
 {
 	struct verity_device *device;
+	__u32 zero = 0;
 
 	if (!file)
 		return false;
 	device = shirudo_inode_device(BPF_CORE_READ(file, f_inode));
-	return device && device->kind == DEVICE_RUNTIME;
+	return device && device->kind == DEVICE_RUNTIME &&
+	       shirudo_runtime_entry_matches(bpf_map_lookup_elem(&shirudo_rt_ent, &zero),
+					     device->dev, device->diskseq);
+}
+
+/*
+ * Fresh full authority: exec of the bound entry inode. A task that already
+ * holds the role keeps it across exec of another file of the same runtime.
+ */
+static __always_inline bool shirudo_file_runtime_entry(struct file *file,
+						       bool trusted)
+{
+	struct verity_device *device;
+	__u32 zero = 0;
+
+	if (!file)
+		return false;
+	device = shirudo_inode_device(BPF_CORE_READ(file, f_inode));
+	if (!device || device->kind != DEVICE_RUNTIME)
+		return false;
+	return shirudo_runtime_may_exec(bpf_map_lookup_elem(&shirudo_rt_ent, &zero),
+					BPF_CORE_READ(file, f_inode, i_ino),
+					device->dev, device->diskseq, trusted,
+					device->dev);
 }
 
 #endif /* SHIRUDO_BPF_VERITY_H */

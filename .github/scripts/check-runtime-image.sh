@@ -15,8 +15,8 @@
 
 set -eu
 
-if [ "$#" -ne 1 ]; then
-	printf 'usage: %s <target-binary>\n' "$0" >&2
+if [ "$#" -ne 2 ]; then
+	printf 'usage: %s <runtime-binary> <bootstrap-binary>\n' "$0" >&2
 	exit 2
 fi
 
@@ -37,7 +37,8 @@ printf '%s\n' \
 	'config.pcr = 14' \
 	'config.image = /var/lib/shirudo/images/config' >"$work/runtime.conf"
 
-if ! "$generator" --binary "$1" --bootstrap-conf "$work/runtime.conf" \
+if ! "$generator" --binary "$1" --bootstrap-binary "$2" \
+	--bootstrap-conf "$work/runtime.conf" \
 	--cert "$work/keys/cert.der" --config-cert "$work/keys/cert.der" \
 	--output "$work/runtime" --keys-dir "$work/keys" \
 	--builder "$builder" >/dev/null 2>"$work/err"; then

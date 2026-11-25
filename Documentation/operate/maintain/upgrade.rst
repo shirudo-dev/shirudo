@@ -109,7 +109,8 @@ Build on the operator host
 
    .. code-block:: console
 
-      operator$ shirudo-gen-runtime --binary ./shirudo-target \
+      operator$ shirudo-gen-runtime --binary ./shirudo-runtime \
+          --bootstrap-binary ./shirudo-target \
           --bootstrap-conf runtime.conf --cert <bpf-cert> \
           --config-cert <config-keys-dir>/cert.der --output runtime-2 \
           --keys-dir <config-keys-dir> --unit-output runtime-service-2.conf

@@ -3,4 +3,4 @@
 [Service]
 EnvironmentFile=
 ExecStart=
-ExecStart=/run/shirudo/runtime@interpreter@ --inhibit-cache --library-path @library_path@ /run/shirudo/runtime/usr/bin/shirudo init
+ExecStart=/run/shirudo/runtime/usr/bin/shirudo init

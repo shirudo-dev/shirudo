@@ -197,3 +197,31 @@ Where to read more
 - :doc:`design-decisions` gives the reasons behind the design.
 - :doc:`/security/threat-model` states what the design defends against
   and where it stops.
+
+Authenticated runtime entry
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Runtime services start ``/run/shirudo/runtime/usr/bin/shirudo`` directly.
+``make runtime`` links it as a separate static-PIE ELF, and
+``shirudo-gen-runtime`` stages those exact bytes, validated by
+``shirudo-runtime-elf``. A static target needs no interpreter or host
+library lookup. A dynamic extra binary needs the fixed runtime interpreter
+and its complete library closure from the same image.
+
+Starting the runtime through its dynamic loader made the loader the
+executable. The guard could not tell that from a direct loader invocation
+on any other binary of the image, which then got the full Shirudo role.
+Fresh full authority is now granted only on exec of an executable the
+bootstrap bound from the image's ``usr/bin``; the loader started directly
+from the image gets none.
+
+The bootstrap binds the entry after it creates the final runtime mapping:
+the mapping's device number, its disk sequence and the inodes of the
+regular executables of its ``usr/bin``, ``usr/bin/shirudo`` first, go into
+``shirudo_rt_ent``, a versioned one-slot map. At most 16 executables are
+bound; a symlink, a directory or a non-executable file is not.
+The map is read-only to BPF programs. Only the bootstrap may open it
+writable, and it freezes the map after the one installation. An empty,
+malformed or mismatched binding grants no role. Executable mappings of a
+trusted task must come from the bound runtime, and the boot completion
+and runtime configuration paths check the binding again.

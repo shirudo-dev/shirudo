@@ -139,7 +139,7 @@ jobs:
             SHIRUDO=/usr/bin/shirudo \
               SHIRUDO_BUILD=/usr/libexec/shirudo/shirudo-build \
               SHIRUDO_GEN_RUNTIME=/usr/libexec/shirudo/gen-image/shirudo-gen-runtime \
-              sh .github/scripts/check-runtime-image.sh shirudo-target
+              sh .github/scripts/check-runtime-image.sh shirudo-runtime shirudo-target
 
             # Verify that shirudo build works without a local copy of vmlinux.h
             rm -rf /tmp/shirudo-smoke && mkdir -p /tmp/shirudo-smoke

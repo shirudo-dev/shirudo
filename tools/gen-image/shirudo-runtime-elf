@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+"""Link and stage the fixed runtime entry without rewriting its final ELF."""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+
+RUNTIME = "/run/shirudo/runtime"
+ENTRY = RUNTIME + "/usr/bin/shirudo"
+SAFE_PATH = re.compile(r"/[A-Za-z0-9_./+\-]+\Z")
+
+
+def run(argv):
+    # Build-host inspection must not inherit target loader overrides.
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith("LD_") and k not in ("GLIBC_TUNABLES", "LOCPATH")}
+    return subprocess.check_output(argv, text=True, env={**env, "LC_ALL": "C"})
+
+
+def safe_path(path):
+    if not SAFE_PATH.fullmatch(path) or str(Path(path)) != path or ".." in Path(path).parts:
+        raise ValueError("unsafe ELF closure path: " + path)
+    return path
+
+
+def elf(path):
+    program = run(["readelf", "-lW", str(path)])
+    dynamic = run(["readelf", "-dW", str(path)])
+    interpreters = re.findall(r"Requesting program interpreter: ([^\]]+)\]", program)
+    if len(interpreters) > 1:
+        raise ValueError("multiple ELF interpreters")
+    tags = {}
+    for tag, value in re.findall(r"\((\w+)\).*?\[([^\]]*)\]", dynamic):
+        tags.setdefault(tag, []).append(value)
+    for name in tags.get("NEEDED", []):
+        if "/" in name or not re.fullmatch(r"[A-Za-z0-9_.+\-]+", name):
+            raise ValueError("non-SONAME ELF dependency: " + name)
+    if any(tag in tags for tag in ("AUDIT", "DEPAUDIT", "FILTER", "AUXILIARY")):
+        raise ValueError("unsupported ELF dynamic loading directive")
+    return {"interpreter": interpreters[0] if interpreters else None,
+            "needed": tags.get("NEEDED", []), "rpath": tags.get("RPATH", []),
+            "runpath": tags.get("RUNPATH", []),
+            "nodeflib": bool(re.search(r"\(FLAGS_1\).*\bNODEFLIB\b", dynamic))}
+
+
+def record(path):
+    path = Path(path)
+    return {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "size": path.stat().st_size, "mode": path.stat().st_mode & 0o777}
+
+
+def closure(binary):
+    metadata = elf(binary)
+    interpreter = metadata["interpreter"]
+    if not interpreter and not metadata["needed"]:
+        return {"static": True, "interpreter": None, "libraries": [], "rpath": "", "needed": []}
+    if not interpreter or not Path(safe_path(interpreter)).is_file():
+        raise ValueError("bootstrap needs an existing absolute ELF interpreter")
+    # The input is the trusted build product, never an untrusted target upload.
+    listing = run(["ldd", str(Path(binary).resolve())])
+    if "not found" in listing:
+        raise ValueError("bootstrap library is missing")
+    paths = {interpreter, *re.findall(r"(?:=>\s+|^\s*)(/\S+)", listing, re.M)}
+    needed = set(metadata["needed"])
+    for path in sorted(paths):
+        safe_path(path)
+        shared = elf(path)
+        if shared["rpath"] or shared["runpath"]:
+            raise ValueError("shared library has its own search path: " + path)
+        needed.update(shared["needed"])
+    by_name = {}
+    for path in sorted(paths):
+        name = Path(path).name
+        if name in by_name and Path(path).read_bytes() != Path(by_name[name]).read_bytes():
+            raise ValueError("ambiguous closure library: " + name)
+        by_name[name] = path
+    if not needed <= by_name.keys():
+        raise ValueError("incomplete bootstrap DT_NEEDED closure: " + repr(needed - by_name.keys()))
+    directories = sorted({str(Path(path).parent) for path in paths})
+    return {"interpreter": interpreter, "libraries": sorted(paths),
+            "rpath": ":".join(RUNTIME + d for d in directories),
+            "needed": sorted(needed)}
+
+
+def validate(binary, layout, *, static_ok=False):
+    metadata = elf(binary)
+    if (static_ok or layout.get("static")) and not metadata["interpreter"] and not metadata["needed"]:
+        return
+    if metadata["interpreter"] != RUNTIME + layout["interpreter"]:
+        raise ValueError("runtime PT_INTERP must name the authenticated runtime loader")
+    if metadata["rpath"] != [layout["rpath"]] or metadata["runpath"]:
+        raise ValueError("runtime needs the exact transitive DT_RPATH and no DT_RUNPATH")
+    if not metadata["nodeflib"]:
+        raise ValueError("runtime needs DF_1_NODEFLIB")
+    if not set(metadata["needed"]) <= {Path(p).name for p in layout["libraries"]}:
+        raise ValueError("runtime dependencies exceed the bootstrap closure")
+
+
+def stage(binary, bootstrap, root, extras=()):
+    layout = closure(bootstrap)
+    validate(binary, layout)
+    root = Path(root)
+    files = {"usr/bin/shirudo": Path(binary)}
+    for extra in extras:
+        name = "usr/bin/" + Path(extra).name
+        if name in files:
+            raise ValueError("duplicate runtime executable: " + name)
+        validate(extra, layout, static_ok=True)
+        files[name] = Path(extra)
+    files.update({p.lstrip("/"): Path(p) for p in layout["libraries"]})
+    for name, source in files.items():
+        target = root / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # Newly staged trees never replace a config/public-key path.
+        if target.exists() or target.is_symlink():
+            raise ValueError("runtime output already exists: " + str(target))
+        if name == "usr/bin/shirudo" and layout.get("static"):
+            subprocess.run(["llvm-strip", "-o", str(target), str(source)], check=True)
+        else:
+            shutil.copyfile(source, target)
+        target.chmod(0o755 if name.startswith("usr/bin/") or str(source) == layout["interpreter"] else 0o644)
+    return {"format": "shirudo.runtime-closure.v1", "entry": ENTRY,
+            "interpreter": RUNTIME + layout["interpreter"] if layout["interpreter"] else None, "rpath": layout["rpath"],
+            "files": {name: record(root / name) for name in sorted(files)}}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command", choices=("link-flags", "inspect", "validate", "stage"))
+    parser.add_argument("--binary", type=Path, required=True)
+    parser.add_argument("--bootstrap-binary", type=Path)
+    parser.add_argument("--root", type=Path)
+    parser.add_argument("--extra-binary", action="append", type=Path, default=[])
+    args = parser.parse_args()
+    if args.command in ("link-flags", "inspect"):
+        layout = closure(args.binary)
+        if args.command == "link-flags" and layout.get("static"):
+            print("")
+        elif args.command == "link-flags":
+            print("-Wl,--dynamic-linker=" + RUNTIME + layout["interpreter"],
+                  "-Wl,--disable-new-dtags,-rpath," + layout["rpath"], "-Wl,-z,nodefaultlib")
+        else:
+            print(json.dumps(layout, sort_keys=True))
+    else:
+        if not args.bootstrap_binary:
+            parser.error("--bootstrap-binary is required")
+        if args.command == "stage":
+            if not args.root:
+                parser.error("--root is required")
+            result = stage(args.binary, args.bootstrap_binary, args.root, args.extra_binary)
+            print(json.dumps(result, sort_keys=True, indent=2))
+        else:
+            validate(args.binary, closure(args.bootstrap_binary))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+        raise SystemExit("shirudo-runtime-elf: " + str(error)) from error

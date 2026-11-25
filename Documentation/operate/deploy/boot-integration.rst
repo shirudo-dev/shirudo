@@ -194,7 +194,8 @@ Build the runtime image
 
    .. code-block:: console
 
-      operator$ shirudo-gen-runtime --binary <target-binary> \
+      operator$ shirudo-gen-runtime --binary <runtime-binary> \
+          --bootstrap-binary <target-binary> \
           --bootstrap-conf runtime.conf --cert <bpf-cert> \
           --config-cert <config-keys-dir>/cert.der --output runtime \
           --keys-dir <config-keys-dir> --unit-output runtime-service.conf
@@ -367,10 +368,10 @@ the initrd, from the binary the UKI authenticates.
 
       target# systemctl daemon-reload
 
-For a dynamically linked binary, use the invocation that
-``shirudo-gen-runtime`` printed, which runs the binary through the
-image's own loader and libraries, in place of
-``/run/shirudo/runtime/usr/bin/shirudo``.
+``make runtime`` builds ``<runtime-binary>``, the entry the service starts
+directly (``shirudo-runtime``, installed by the target package as
+``/usr/libexec/shirudo/shirudo-runtime``). It never runs through a loader:
+only exec of that entry gets Shirudo's full role.
 :doc:`/reference/systemd-units` lists the units and their schedules.
 
 The deb and rpm packages enable ``shirudo.service`` and the five timers
@@ -473,9 +474,7 @@ alias in your root shell:
 
    target# alias shirudo=/run/shirudo/runtime/usr/bin/shirudo
 
-The operate pages write ``target# shirudo`` for this binary. A
-dynamically linked runtime binary runs through the image's loader, with
-the invocation that ``shirudo-gen-runtime`` prints. Of the target
+The operate pages write ``target# shirudo`` for this binary. Of the target
 commands, only ``version`` and ``help`` work from another copy.
 
 Boot and verify

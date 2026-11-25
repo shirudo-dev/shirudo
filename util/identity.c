@@ -25,6 +25,7 @@
 #include "io.h"
 #include "paths.h"
 #include "tamper.h"
+#include <shirudo/runtime_entry.h>
 
 const struct guard_map shirudo_guard_maps[GUARD_MAP_COUNT] = {
 	[GUARD_IDENTITY] = {
@@ -66,6 +67,11 @@ const struct guard_map shirudo_guard_maps[GUARD_MAP_COUNT] = {
 		"shirudo_integrity", INTEGRITY_PIN,
 		BPF_MAP_TYPE_ARRAY, sizeof(__u32),
 		sizeof(__u64), INTEGRITY_MAX, 0,
+	},
+	[GUARD_RUNTIME_ENTRY] = {
+		"shirudo_rt_ent", BPFFS_DIR "/runtime_entry_v1",
+		BPF_MAP_TYPE_ARRAY, sizeof(__u32),
+		sizeof(struct shirudo_runtime_entry), 1, BPF_F_RDONLY_PROG,
 	},
 };
 

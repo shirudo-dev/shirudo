@@ -2,4 +2,5 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 
+# Fresh full authority is granted only to the bound runtime entry inode.
 exec /run/shirudo/runtime/usr/bin/shirudo "$@"

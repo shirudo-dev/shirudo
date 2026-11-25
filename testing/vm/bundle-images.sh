@@ -20,7 +20,8 @@ cp -a "$work/verity/public/." "$bundle/verity/"
 sed 's/@config_image@/config-boot-keys/g' "$templates/runtime.conf.in" \
 	>"$work/runtime.conf"
 "$source_dir/tools/gen-image/shirudo-gen-runtime" \
-	--binary "$bundle/root/usr/local/bin/shirudo" \
+	--binary "$bundle/root/usr/local/libexec/shirudo/shirudo-runtime" \
+	--bootstrap-binary "$bundle/root/usr/local/bin/shirudo" \
 	--bootstrap-conf "$work/runtime.conf" --cert "$keys/cert.der" \
 	--config-cert "$work/verity/public/config-c.der" \
 	--config-cert "$work/verity/public/config-d.der" --output "$bundle/verity/runtime" \

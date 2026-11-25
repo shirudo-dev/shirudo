@@ -49,6 +49,7 @@ fi
 target_root="${work_dir}/target-package"
 dpkg-deb -x "$target_deb" "$target_root"
 target_binary="${target_root}/usr/bin/shirudo"
+target_runtime="${target_root}/usr/libexec/shirudo/shirudo-runtime"
 builder=/usr/libexec/shirudo/shirudo-build
 sudo apt-get install -y --no-install-recommends "$operator_deb"
 test -x "$target_binary"
@@ -69,7 +70,8 @@ shirudo genkey --keys-dir "$config_keys_dir"
 	--builder "$builder"
 
 "${SHIRUDO_DIR}/tools/gen-image/shirudo-gen-runtime" \
-	--binary "$target_binary" \
+	--binary "$target_runtime" \
+	--bootstrap-binary "$target_binary" \
 	--bootstrap-conf "$runtime_conf" \
 	--cert "$bpf_cert" \
 	--config-cert "${config_keys_dir}/cert.der" \

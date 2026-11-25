@@ -115,7 +115,7 @@ PKG_PATHS := prefix=$(PKG_PREFIX) exec_prefix=$(PKG_PREFIX) \
 bintar-pkg: config $(ROOT)/packaging/tar/install.sh
 	@printf '  STAGE   $(INSTALLER_STAGE_PATH)  (static PIE)\n'
 	$(Q)rm -rf $(INSTALLER_STAGE_PATH) $(INSTALLER_TARBALL_PATH)
-	$(Q)rm -f $(ROOT)/shirudo $(ROOT)/shirudo-target
+	$(Q)rm -f $(ROOT)/shirudo $(ROOT)/shirudo-target $(ROOT)/shirudo-runtime
 	$(Q)install -d $(INSTALLER_STAGE_PATH) $(dir $(INSTALLER_TARBALL_PATH))
 	+$(Q)$(MAKE) -C $(ROOT) target-deps
 	+$(Q)$(MAKE) -C $(ROOT) target-config

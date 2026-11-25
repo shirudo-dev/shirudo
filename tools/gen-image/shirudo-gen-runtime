@@ -9,16 +9,20 @@ here=$(cd "$(dirname "$0")" && pwd)
 usage()
 {
 	cat <<'EOF'
-usage: shirudo-gen-runtime --binary <shirudo-target> --bootstrap-conf <file>
+usage: shirudo-gen-runtime --binary <shirudo-runtime> --bootstrap-binary <shirudo-target>
+       --bootstrap-conf <file>
        --cert <initial-BPF-cert.der> --config-cert <config-cert.der>
        --output <prefix> --keys-dir <operator-key-directory>
        [--size <MiB>] [--builder <shirudo-build>] [--unit-output <file>]
+       [--closure-output <file>]
        [--extra-binary <trusted-ELF>] [--config-cert <additional-cert.der>]
 
-Package the trusted executable without its symbols, bootstrap settings and
-public certificates. Static targets run directly. Dynamic executables bring
-their loader and libraries. Repeat --config-cert to allow overlapping keys.
-Use trusted inputs: ldd invokes dynamic loaders on the operator.
+Package the trusted executable, its complete dynamic-library closure,
+authenticated bootstrap settings and public certificates into a runtime image.
+Build the final ELF with make runtime. The separate bootstrap input must be
+trusted: ldd invokes its dynamic loader on the operator. Final bytes are validated
+and copied unchanged; dynamic extra binaries need the same runtime link flags.
+Repeat --config-cert to allow overlapping keys.
 EOF
 }
 
@@ -27,6 +31,8 @@ parse_args()
 	while [ $# -gt 0 ]; do
 		case "$1" in
 		--binary) binary=${2:?}; shift 2 ;;
+		--bootstrap-binary) bootstrap_binary=${2:?}; shift 2 ;;
+		--closure-output) closure_output=${2:?}; shift 2 ;;
 		--bootstrap-conf) conf=${2:?}; shift 2 ;;
 		--cert) cert=${2:?}; shift 2 ;;
 		--config-cert) config_certs+=("${2:?}"); shift 2 ;;
@@ -42,19 +48,13 @@ parse_args()
 	done
 }
 
-elf_interpreter()
-{
-	LC_ALL=C readelf -l "$1" |
-		sed -n 's/.*Requesting program interpreter: \([^]]*\)].*/\1/p'
-}
-
 check_inputs()
 {
 	local file i j
 
-	for file in "$binary" "$conf" "$cert"; do
+	for file in "$binary" "$bootstrap_binary" "$conf" "$cert"; do
 		[ -n "$file" ] && [ -f "$file" ] ||
-			die 'binary, bootstrap config and BPF public certificate are required'
+			die 'runtime/bootstrap binaries, bootstrap config and BPF public certificate are required'
 	done
 	[ "${#config_certs[@]}" -gt 0 ] || die 'a config public certificate is required'
 	[ "${#config_certs[@]}" -le 16 ] || die 'at most 16 config certificates are allowed'
@@ -66,14 +66,10 @@ check_inputs()
 		done
 	done
 	check_image_options "$output" "$keys_dir" "$size"
-	require_command readelf 'install binutils (readelf)'
-	require_command ldd 'ldd is required on the operator'
-	require_command llvm-strip 'install LLVM (llvm-strip)'
-	LC_ALL=C readelf -h "$binary" >/dev/null || die 'target binary is not ELF'
-	interpreter=$(elf_interpreter "$binary")
-	if [ -n "$interpreter" ]; then
-		[ "${interpreter:0:1}" = / ] && [ -f "$interpreter" ] ||
-			die "interpreter not found: $interpreter"
+	require_command python3 'install Python 3 for runtime ELF validation'
+	"$here/shirudo-runtime-elf" validate --binary "$binary" --bootstrap-binary "$bootstrap_binary"
+	if [ -n "$closure_output" ]; then
+		require_new_output "$closure_output" 'closure output'
 	fi
 }
 
@@ -98,57 +94,16 @@ stage_config_certificates()
 
 stage_files()
 {
+	local extra
+	local -a stage_args=(stage --binary "$binary" --bootstrap-binary "$bootstrap_binary" --root "$work/root")
+
 	mkdir -p "$work/root/usr/bin" "$work/root/etc/shirudo" "$work/root/keys"
-	# llvm-strip, unlike binutils strip, handles a target of another architecture.
-	llvm-strip -o "$work/root/usr/bin/shirudo" "$binary"
-	chmod 0755 "$work/root/usr/bin/shirudo"
 	install -m 0644 "$cert" "$work/root/keys/cert.der"
 	stage_config_certificates
-	: >"$work/ldd"
-	: >"$work/interpreters"
-	if [ -n "$interpreter" ]; then
-		LC_ALL=C ldd "$binary" >"$work/ldd" || die 'could not resolve target libraries'
-		printf '%s\n' "$interpreter" >"$work/interpreters"
-	fi
-}
-
-stage_extra_binaries()
-{
-	local extra name extra_interpreter
-
 	for extra in "${extra_binaries[@]}"; do
-		[ -f "$extra" ] && [ -x "$extra" ] || die "extra binary not executable: $extra"
-		name=$(basename "$extra")
-		[ ! -e "$work/root/usr/bin/$name" ] || die "duplicate executable name: $name"
-		install -m 0755 "$extra" "$work/root/usr/bin/$name"
-		LC_ALL=C readelf -h "$extra" >/dev/null || die "extra binary is not ELF: $extra"
-		extra_interpreter=$(elf_interpreter "$extra")
-		if [ -n "$extra_interpreter" ]; then
-			printf '%s\n' "$extra_interpreter" >>"$work/interpreters"
-		fi
-		if LC_ALL=C readelf -d "$extra" | grep '(NEEDED)' >/dev/null; then
-			LC_ALL=C ldd "$extra" >>"$work/ldd" || die "could not resolve libraries: $extra"
-		fi
+		stage_args+=(--extra-binary "$extra")
 	done
-}
-
-stage_libraries()
-{
-	local lib directory
-
-	! grep -q 'not found' "$work/ldd" || die 'target libraries are missing'
-	cp "$work/interpreters" "$work/libraries"
-	awk '/^[[:space:]]*\// { print $1 } /=> \// { print $3 }' \
-		"$work/ldd" >>"$work/libraries"
-	sort -u "$work/libraries" -o "$work/libraries"
-	while IFS= read -r lib; do
-		[ -f "$lib" ] && [ "${lib:0:1}" = / ] || die "bad library path: $lib"
-		mkdir -p "$work/root$(dirname "$lib")"
-		cp -L "$lib" "$work/root$lib"
-		directory="/run/shirudo/runtime$(dirname "$lib")"
-		case ":$library_path:" in *":$directory:"*) ;;
-		*) library_path=${library_path:+$library_path:}$directory ;; esac
-	done <"$work/libraries"
+	"$here/shirudo-runtime-elf" "${stage_args[@]}" >"$work/closure.json"
 }
 
 build_runtime_image()
@@ -156,34 +111,17 @@ build_runtime_image()
 	"$here/shirudo-gen-image" --source "$work/root" --output "$output" \
 		--keys-dir "$keys_dir" --kind runtime --size "$size" --builder "$builder"
 	printf 'Runtime invocation (after the authenticated image is mounted):\n' >&2
-	if [ -n "$interpreter" ]; then
-		printf '%q --inhibit-cache --library-path %q %q init\n' \
-			"/run/shirudo/runtime$interpreter" "$library_path" \
-			/run/shirudo/runtime/usr/bin/shirudo >&2
-	else
-		printf '/run/shirudo/runtime/usr/bin/shirudo init\n' >&2
+	printf '%s init\n' /run/shirudo/runtime/usr/bin/shirudo >&2
+	if [ -n "$closure_output" ]; then
+		(set -o noclobber; cat "$work/closure.json" >"$closure_output")
 	fi
 }
 
 write_service()
 {
-	local interpreter_escaped library_path_escaped
-
 	[ -n "$unit_output" ] || return 0
 	require_new_output "$unit_output" 'unit output'
-	case "$interpreter$library_path" in *[[:space:]\\\"%]*) die 'runtime paths cannot be encoded in a systemd ExecStart' ;; esac
-	interpreter_escaped=$(escape_sed_replacement "$interpreter")
-	library_path_escaped=$(escape_sed_replacement "$library_path")
-	if [ -z "$interpreter" ]; then
-		(set -o noclobber; cat "$here/runtime-service-static.conf.in" >"$unit_output")
-		return
-	fi
-	(
-		set -o noclobber
-		sed -e "s|@interpreter@|$interpreter_escaped|g" \
-			-e "s|@library_path@|$library_path_escaped|g" \
-			"$here/runtime-service.conf.in" >"$unit_output"
-	)
+	(set -o noclobber; cat "$here/runtime-service.conf.in" >"$unit_output")
 }
 
 main()
@@ -193,23 +131,20 @@ main()
 	work=$(mktemp -d)
 	trap 'rm -rf "$work"' EXIT
 	stage_files
-	stage_extra_binaries
-	stage_libraries
 	build_runtime_image
 	write_service
 }
 
 binary=
+bootstrap_binary=
+closure_output=
 conf=
 cert=
 config_certs=()
 output=
 keys_dir=
-# The stripped static target with its certificates, plus about 1 MiB.
-# .github/scripts/check-runtime-image.sh fails CI once it no longer fits.
-size=15
+size=128
 builder=${SHIRUDO_BUILD:-shirudo-build}
 unit_output=
-library_path=
 extra_binaries=()
 main "$@"

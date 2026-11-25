@@ -51,7 +51,7 @@ export prefix exec_prefix bindir libexecdir sharedir libdir mandir completionsdi
        systemdunitdir udevrulesdir dracutmodulesdir SHIRUDO_TARGET_PKG_CONFIG_PATH \
        SHIRUDO_TARGET_STATIC_LIBDIR
 
-.PHONY: all help target target-deps target-deps-clean shirudo-target target-config shirudo-build quote-check quote-check-deps docs bpf-deps install install-target install-operator clean distclean config tests proofs proofs-cbmc proofs-lean4 sparse tags cscope
+.PHONY: all help target runtime target-deps target-deps-clean shirudo-target target-config shirudo-build quote-check quote-check-deps docs bpf-deps install install-target install-operator clean distclean config tests proofs proofs-cbmc proofs-lean4 sparse tags cscope
 
 all: config
 	+$(Q)$(MAKE) -f Makefile.shirudo PROFILE=operator CONFIG_MK=config.mk all
@@ -72,6 +72,10 @@ target-deps-clean:
 		TARGET_DEPS_DIR="$(TARGET_DEPS_DIR)" clean
 
 target: shirudo-target
+
+# Link a separate final ELF for the authenticated, fixed runtime mount.
+runtime: shirudo-target
+	+$(Q)$(MAKE) -f Makefile.shirudo PROFILE=target CONFIG_MK=config-target.mk shirudo-runtime
 
 shirudo-target:
 	+$(Q)$(MAKE) target-deps

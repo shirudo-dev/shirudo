@@ -639,7 +639,8 @@ static int freeze_task_maps(struct bpf_object *obj)
 			break;
 		}
 		/* Expected roots change for each mapping. */
-		if ((i != GUARD_ROOTS && bpf_map_freeze(fd)) ||
+		if ((i != GUARD_ROOTS && i != GUARD_RUNTIME_ENTRY &&
+		     bpf_map_freeze(fd)) ||
 		    bpf_obj_pin(fd, expected->pin)) {
 			ret = -errno;
 			break;

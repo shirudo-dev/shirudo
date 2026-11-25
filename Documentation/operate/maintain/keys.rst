@@ -408,7 +408,8 @@ signing changes from C to D.
    .. code-block:: console
 
       operator$ shirudo genkey --keys-dir <config-D>
-      operator$ shirudo-gen-runtime --binary <target-binary> \
+      operator$ shirudo-gen-runtime --binary <runtime-binary> \
+          --bootstrap-binary <target-binary> \
           --bootstrap-conf runtime.conf --cert <bpf-cert> \
           --config-cert <config-C>/cert.der \
           --config-cert <config-D>/cert.der \

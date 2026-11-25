@@ -107,3 +107,5 @@ __pycache__/
 
 # Lean 4 build output
 /testing/proofs/lean4/.lake/
+# Final runtime is linked separately from the bootstrap target.
+/shirudo-runtime

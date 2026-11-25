@@ -783,8 +783,10 @@ int BPF_PROG(shirudo_seal_bprm_check_security,
 		return -ENOMEM;
 	policy->candidate |= value;
 	real_inode = bpf_real_data_inode(bprm->file);
+	authority = bpf_task_storage_get(&shirudo_tasks, task, NULL, 0);
 	trusted = real_inode == BPF_CORE_READ(bprm, file, f_inode) &&
-		  shirudo_file_runtime(bprm->file);
+		  shirudo_file_runtime_entry(bprm->file,
+					     authority && authority->trusted);
 	if (trusted && BPF_CORE_READ(task, ptrace))
 		return shirudo_tamper_deny(TAMPER_EXEC_TRACED, -EACCES);
 	if (trusted && (BPF_CORE_READ(bprm, unsafe) & LSM_UNSAFE_SHARE))

@@ -47,6 +47,7 @@
 #include "malloc.h"
 #include "log.h"
 #include "paths.h"
+#include "runtime_entry.h"
 #include "seal.h"
 #include "tpm.h"
 
@@ -363,6 +364,8 @@ static int load_runtime_config(bool trusted_boot)
 		return -errno;
 	if (!trusted_boot) {
 		ret = runtime_observed(root.st_dev);
+		if (!ret)
+			ret = shirudo_runtime_entry_check(RUNTIME_DIR);
 		if (ret)
 			return ret;
 	}
@@ -455,6 +458,8 @@ static int mount_runtime(bool trusted_boot)
 		ret = dm_verity_mount(&device, RUNTIME_DIR,
 				      true);
 	}
+	if (!ret && !trusted_boot)
+		ret = shirudo_runtime_entry_bind(RUNTIME_DIR, &device);
 	if (ret && created) {
 		cleanup = dm_verity_remove(&device, false);
 		if (cleanup)
@@ -1065,7 +1070,9 @@ int image_boot_complete(void)
 	struct config_update_record record;
 	int ret;
 
-	ret = config_update_read(&image.update, &record);
+	ret = shirudo_runtime_entry_check(RUNTIME_DIR);
+	if (!ret)
+		ret = config_update_read(&image.update, &record);
 	if (!ret)
 		ret = config_mount_check(&record);
 	if (!ret)

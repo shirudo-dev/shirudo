@@ -276,8 +276,10 @@ without the protection.
      - The runtime image holds no executable that exposes a generic
        primitive: a shell or interpreter, ``bpftool``, TPM tools,
        ``keyctl``, mount or device-mapper tools, a file editor.
-     - Authority follows the exec, not the program. Every executable on
-       the runtime image hands root shirudo's authority.
+     - Authority follows the exec, not the program. Exec of an executable
+       the bootstrap bound from the image's ``usr/bin``, the entry
+       ``usr/bin/shirudo`` and the image's own tools, hands root shirudo's
+       authority. The image's loader and libraries grant none.
      - No.
    * - A15
      - The TPM is a correct TPM 2.0 with RSA-3072 and ECC P-256 support
@@ -430,7 +432,9 @@ authority is in the TCB too, the Lua decoders it runs included.
 Every other process on the target, root with every capability among
 them, is outside the TCB and constrained by it. Root is not trusted
 because it is root. A task gains authority only by a successful exec of
-a file on the runtime image (T3).
+an executable the bootstrap bound from the runtime image's ``usr/bin``.
+A task with authority keeps it across exec of another file on the same
+image (T3). Direct exec of the image's ELF loader grants none.
 
 The operator TCB is the operator host, the signing key, clang/LLVM,
 libbpf, ``veritysetup`` and ``mkfs.ext4`` (A12). The verifier is a

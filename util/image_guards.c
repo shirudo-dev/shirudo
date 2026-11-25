@@ -26,6 +26,16 @@
 #include "paths.h"
 #include "tamper.h"
 
+static const struct bpf_obj_get_opts ro_pin = {
+	.sz = sizeof(ro_pin),
+	.file_flags = BPF_F_RDONLY,
+};
+
+static const struct bpf_get_fd_by_id_opts ro_id = {
+	.sz = sizeof(ro_id),
+	.open_flags = BPF_F_RDONLY,
+};
+
 const struct image_guard
 shirudo_seal_guards[SEAL_HOOK_COUNT] = {
 	{ "shirudo_seal_socket_post_create", SEAL_SOCKET_POST_CREATE_PIN },
@@ -231,7 +241,7 @@ static int guard_map_ids(__u32 ids[GUARD_MAP_COUNT])
 		const struct guard_map *expected =
 			&shirudo_guard_maps[i];
 
-		fd = bpf_obj_get(expected->pin);
+		fd = bpf_obj_get_opts(expected->pin, &ro_pin);
 		if (fd < 0)
 			return -errno;
 		ret = guard_map_check(fd, expected, &ids[i]);
@@ -255,7 +265,7 @@ static int guard_program_maps(const struct bpf_prog_info *program,
 	int fd, ret;
 
 	for (i = 0; i < program->nr_map_ids; i++) {
-		fd = bpf_map_get_fd_by_id(map_ids[i]);
+		fd = bpf_map_get_fd_by_id_opts(map_ids[i], &ro_id);
 		if (fd < 0)
 			return -errno;
 		memset(&info, 0, sizeof(info));
