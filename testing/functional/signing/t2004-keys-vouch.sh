@@ -5,7 +5,7 @@
 # t2004 -- vouching for a certificate: `keys vouch` signs with the
 # operator key, `keys add` admits a certificate only with a vouch that
 # verifies under a member of the set, and the loader admits nothing
-# dropped in without one.
+# dropped in without one and refuses a set with a classical certificate.
 
 cd "$(dirname "$0")/../.."
 . ./test-lib.sh
@@ -15,6 +15,7 @@ H=helper/test-keys
 [ -x "$S" ] || test_skip_all "shirudo not built"
 [ -x "$SHB" ] || test_skip_all "shirudo-build not built (make shirudo-build)"
 [ -x "$H" ] || test_skip_all "test-keys helper not built (make test-helpers)"
+command -v openssl >/dev/null 2>&1 || test_skip_all "no openssl"
 export SHIRUDO_BUILD=$SHB
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
@@ -90,6 +91,46 @@ test_expect_success 'a certificate dropped in without a vouch is not a member' '
 	cp "$W/c-by-d.vouch" "$W/keys/trusted/$fp_d.vouch" &&
 	./$H load "$W/keys" | grep -qx "n=3 revoked=0 unvouched=1" &&
 	rm -f "$W/keys/trusted/$fp_d.der" "$W/keys/trusted/$fp_d.vouch"
+'
+
+# keys vouch refuses a classical certificate, so openssl makes the vouch:
+# the loader must refuse what an ML-DSA-87 member signed for one.
+test_expect_success 'a classical certificate a member vouched for refuses the set' '
+	openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+		-keyout "$W/ec.pem" -outform DER -out "$W/ec.der" -days 1 \
+		-subj "/CN=t2004" >/dev/null 2>&1 &&
+	fp_ec=$(fp "$W/ec.der") &&
+	{ printf "shirudo-key-vouch\0"; cat "$W/ec.der"; } >"$W/ec.payload" &&
+	openssl cms -sign -binary -md sha512 -in "$W/ec.payload" \
+		-signer "$W/a/cert.der" -inkey "$W/a/signing_key.pem" \
+		-outform DER -out "$W/ec.vouch" -nosmimecap -nocerts -keyid &&
+	cp "$W/ec.der" "$W/keys/trusted/$fp_ec.der" &&
+	cp "$W/ec.vouch" "$W/keys/trusted/$fp_ec.vouch" &&
+	! ./$H load "$W/keys" >"$W/ec.out" 2>&1 &&
+	grep -q "$fp_ec.der is EC; shirudo accepts only ML-DSA-87" "$W/ec.out" &&
+	rm -f "$W/keys/trusted/$fp_ec.der" "$W/keys/trusted/$fp_ec.vouch" &&
+	./$H load "$W/keys" | grep -qx "n=3 revoked=0 unvouched=0"
+'
+
+test_expect_success 'image admission checks a vouched signer before applying revocations' '
+	fp_ec=$(fp "$W/ec.der") &&
+	cp -R "$W/keys" "$W/image-keys" &&
+	mkdir -p "$W/image-keys/revoked" &&
+	cp "$W/ec.der" "$W/image-keys/trusted/$fp_ec.der" &&
+	cp "$W/ec.vouch" "$W/image-keys/trusted/$fp_ec.vouch" &&
+	cp "$W/ec.der" "$W/image-keys/revoked/$fp_ec.der" &&
+	! ./$H image "$W/image-keys" >"$W/image.out" 2>&1 &&
+	grep -q "$fp_ec.der is EC; shirudo accepts only ML-DSA-87" "$W/image.out" &&
+	rm "$W/image-keys/trusted/$fp_ec.der" "$W/image-keys/trusted/$fp_ec.vouch" &&
+	./$H image "$W/image-keys" | grep -qx "n=3 revoked=1 unvouched=0"
+'
+
+test_expect_success 'a classical primary certificate refuses the set' '
+	mkdir -p "$W/ec-primary" &&
+	cp "$W/ec.der" "$W/ec-primary/cert.der" &&
+	! ./$H load "$W/ec-primary" >"$W/ec-primary.out" 2>&1 &&
+	grep -q "ec-primary/cert.der is EC; shirudo accepts only ML-DSA-87" \
+		"$W/ec-primary.out"
 '
 
 test_expect_success 'add refuses a revoked certificate however well vouched' '

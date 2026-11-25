@@ -74,11 +74,15 @@ certificate. ``shirudo keys vouch``, ``shirudo keys add`` and the image
 tooling for the config certificate refuse a certificate whose key is not
 ML-DSA-87.
 
-What accepts other algorithms
------------------------------
+What each verifier accepts
+--------------------------
 
-The ML-DSA-87 rule is enforced where shirudo signs, not everywhere it
-verifies:
+Operator artifacts use ML-DSA-87. Their detached CMS signatures are
+verified in userspace by
+:src:`util/crypto_openssl.c`'s ``verify_detached()``, which refuses a
+certificate whose key is not ML-DSA-87 before it reads the signature,
+and the loader of the trusted set refuses the whole set when one of
+its certificates holds another key:
 
 .. list-table::
    :header-rows: 1
@@ -88,25 +92,24 @@ verifies:
      - Accepts
    * - Kernel, loader signatures
      - Any algorithm the kernel's X.509 and PKCS#7 code supports for a
-       certificate in ``.bpf``. ``init`` enrolls the runtime image's
-       certificate and the vouched signers without checking their
-       algorithm. The pre-flight check ``cert_algorithm`` refuses
-       anything but ML-DSA-87, but in the initrd it reads
-       ``/etc/shirudo/keys``, not that set (threat model U4).
+       certificate in ``.bpf``, which ``init`` seals around the trusted
+       set. That set holds ML-DSA-87 certificates only: a runtime
+       primary or a vouched signer of another algorithm makes
+       ``init`` fail before it enrolls anything.
    * - Target, Java upatch signatures
-     - Any algorithm OpenSSL supports for a certificate of the runtime's
-       set that ``.bpf`` holds, as for the kernel's check of a loader
-       (threat model T15).
+     - ML-DSA-87 under a certificate of the runtime's set that ``.bpf``
+       holds (threat model T15).
    * - Target, config roots
      - ML-DSA-87 under one of the runtime bootstrap's config certificates.
        The target checks this exact set before the kernel's dm-verity
        signature check (threat model A7).
    * - ``shirudo bpm``, indexes and tree publications
-     - Whatever algorithm the repository certificate or active BPF signer holds
-       (threat model U4).
+     - ML-DSA-87 under the repository certificate or an active BPF
+       signer. A repository certificate of another algorithm verifies
+       nothing.
    * - Vouch check on the target
-     - Whatever algorithm the vouching certificate holds; the vouched
-       certificate's algorithm is not checked on the target.
+     - ML-DSA-87 under a member of the set, for a vouched certificate
+       that is ML-DSA-87 itself.
    * - TLS peers and endorsement key certificates
      - Whatever their certificate authorities use (residual risk R9).
 

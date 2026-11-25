@@ -292,37 +292,18 @@ static void check_cert_algorithm(struct preflight_result *r)
 	struct preflight_check *c =
 		next_slot(r, PRE_CERT_ALGORITHM, "cert_algorithm");
 	struct trusted_set set;
-	size_t i;
+	int ret;
 
-	if (preflight_keys(&set)) {
-		pass(c);
-		strscpy_literal(c->detail, "skipped (cert unreadable)");
+	ret = preflight_keys(&set);
+	if (ret == -EKEYREJECTED) {
+		fail(r, c, "%s is %s; shirudo accepts only ML-DSA-87 "
+		     "certificates (re-key with shirudo genkey)",
+		     set.refused, set.refused_algorithm);
 		return;
 	}
-	for (i = 0; i < set.n; i++) {
-		struct cert cert = {};
-		char name[64];
-		int ret;
-
-		if (keys_cert_read(&set.certs[i], &cert)) {
-			fail(r, c, "%s: cannot parse", set.certs[i].path);
-			return;
-		}
-		ret = cert_key_algorithm(&cert, name, sizeof(name));
-		cert_free(&cert);
-		if (ret) {
-			fail(r, c, "%s: cannot determine public-key algorithm",
-			     set.certs[i].path);
-			return;
-		}
-		if (strcmp(name, "ML-DSA-87") != 0) {
-			fail(r, c, "%s is %s; shirudo accepts only ML-DSA-87 "
-			     "certificates (re-key with shirudo genkey)",
-			     set.certs[i].path, name);
-			return;
-		}
-	}
 	pass(c);
+	if (ret)
+		strscpy_literal(c->detail, "skipped (cert unreadable)");
 }
 
 /*

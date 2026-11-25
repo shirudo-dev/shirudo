@@ -67,7 +67,8 @@ table lists every key.
      - Signed loaders of upatches and tree publications. A certificate
        joins the set when its
        vouch verifies under a certificate already in the set, starting
-       from the runtime primary. The set holds at most 16 certificates.
+       from the runtime primary. The set holds at most 16 certificates,
+       each with an ML-DSA-87 key.
    * - Revocation records
      - ``keys/revoked/<fingerprint>.der`` in the config image
      - Nothing. Each record removes the certificate it holds from the
@@ -270,7 +271,7 @@ that config on an existing target and reboot when appropriate.
    ``<standby-fingerprint>`` is the fingerprint that step 2 printed. Init
    pairs ``<name>.der`` with ``<name>.vouch`` by name. It refuses the whole
    config when a certificate under ``keys/trusted`` has no vouch that
-   verifies.
+   verifies or a key other than ML-DSA-87.
 
 4. Build and sign the config as
    :doc:`/operate/deploy/boot-integration` describes. For a new target,

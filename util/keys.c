@@ -196,9 +196,32 @@ int keys_cert_read(const struct trusted_cert *c,
 	return ret ? ret : cert_read_der(der, len, cert);
 }
 
+/*
+ * The kernel verifies a loader under any algorithm it can parse, and
+ * init enrols the set in .bpf, so a certificate of another kind would
+ * let a classical signature load BPF: it refuses the whole set. The
+ * check comes before der_keep(), whose store is never emptied and
+ * would otherwise fill up with what no set took.
+ */
+static int set_require_mldsa87(struct trusted_set *set, const char *path,
+			       const __u8 *der, size_t der_sz)
+{
+	int ret;
+
+	ret = cert_der_require_mldsa87(der, der_sz, set->refused_algorithm,
+				       sizeof(set->refused_algorithm));
+	if (ret != -EKEYREJECTED)
+		return ret;
+	if (strscpy(set->refused, path, sizeof(set->refused)) < 0)
+		return -ENAMETOOLONG;
+	pr_err("%s is %s; shirudo accepts only ML-DSA-87", path,
+	       set->refused_algorithm);
+	return ret;
+}
+
 /* The certificate at path, its digests, and its bytes kept for the set. */
-static int keys_take_file(const char *path, __u8 sha256[32],
-			  __u8 fingerprint[32])
+static int keys_take_file(struct trusted_set *set, const char *path,
+			  __u8 sha256[32], __u8 fingerprint[32])
 {
 	size_t der_sz = 0;
 	__u8 *der = NULL;
@@ -208,6 +231,8 @@ static int keys_take_file(const char *path, __u8 sha256[32],
 	if (ret)
 		return ret;
 	ret = keys_digest_der(der, der_sz, sha256, fingerprint);
+	if (!ret)
+		ret = set_require_mldsa87(set, path, der, der_sz);
 	if (!ret)
 		ret = der_keep(sha256, der, der_sz);
 	xfree(der, der_sz);
@@ -351,7 +376,9 @@ static int set_add(struct trusted_set *set, const char *path,
 	if (set->n >= KEYS_MAX)
 		return -E2BIG;
 	if (der) {
-		ret = der_keep(sha256, der, der_sz);
+		ret = set_require_mldsa87(set, path, der, der_sz);
+		if (!ret)
+			ret = der_keep(sha256, der, der_sz);
 		if (ret)
 			return ret;
 	}
@@ -598,7 +625,7 @@ static int load_set(const char *primary, const char *keys_dir,
 			return -ENAMETOOLONG;
 		revoked_dir = revoked;
 	}
-	ret = keys_take_file(primary, sha256, fingerprint);
+	ret = keys_take_file(set, primary, sha256, fingerprint);
 	if (ret)
 		return ret;
 	if (!keys_is_revoked(revoked_dir, fingerprint)) {
@@ -641,7 +668,7 @@ static int load_set_at(const char *primary, int keys_fd, const char *display,
 	int ret;
 
 	memset(set, 0, sizeof(*set));
-	ret = keys_take_file(primary, sha256, fingerprint);
+	ret = keys_take_file(set, primary, sha256, fingerprint);
 	if (ret)
 		return ret;
 	ret = set_add(set, primary, sha256, fingerprint, NULL, NULL, 0);

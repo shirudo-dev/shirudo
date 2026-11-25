@@ -2,11 +2,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 
-"""Exercise BPM keys without modifying the host's trust store.
-
---isolated-keys also tests writes, for a harness whose compiled key paths
-point to BPM_TEST_KEYS_DIR. Never use this flag with the production binary.
-"""
+"""Exercise BPM keys, isolating writes in a private mount namespace."""
 
 import hashlib
 import http.server
@@ -27,17 +23,29 @@ def main():
     isolated = sys.argv[2:] == ["--isolated-keys"]
     with tempfile.TemporaryDirectory(prefix="shirudo-bpm-key-test-") as tmp:
         root = Path(tmp)
-        keys = root / "keys"
-        env = dict(os.environ, BPM_TEST_KEYS_DIR=str(keys),
-                   BPM_OCI_SCHEME="http", NO_PROXY="127.0.0.1",
+        var_lib = root / "var-lib"
+        etc = root / "etc"
+        keys = var_lib / "shirudo/keys"
+        registry = etc / "shirudo/bpm"
+        prefix = []
+        if isolated:
+            var_lib.mkdir()
+            etc.mkdir()
+            prefix = ["unshare", "--mount", "--propagation", "private", "sh", "-ec",
+                      'mount --bind "$1" /var/lib && mount --bind "$2" /etc && '
+                      'shift 2 && exec "$@"', "test-bpm-key", str(var_lib), str(etc)]
+        env = dict(os.environ, BPM_OCI_SCHEME="http", NO_PROXY="127.0.0.1",
                    no_proxy="127.0.0.1",
                    REGISTRY_AUTH_FILE=str(root / "absent-auth.json"))
         for name in ("BPM_OCI_CA_FILE", "BPM_OCI_USERNAME", "BPM_OCI_PASSWORD"):
             env.pop(name, None)
 
+        def bpm(*args):
+            return subprocess.run([*prefix, binary, "bpm", *args], cwd=root,
+                                  env=env, capture_output=True, text=True)
+
         def run(*args, ok=True):
-            result = subprocess.run([binary, "bpm", "key", *args], cwd=root,
-                                    env=env, capture_output=True, text=True)
+            result = bpm("key", *args)
             assert (result.returncode == 0) == ok, (args, result)
             return result.stdout.strip()
 
@@ -45,10 +53,10 @@ def main():
             return subprocess.run(["openssl", *args], cwd=root, input=body,
                                   capture_output=True, check=True).stdout
 
-        def certificate(name):
+        def certificate(name, newkey="ML-DSA-87"):
             pem = root / f"{name}.pem"
             der = root / f"{name}.der"
-            openssl("req", "-x509", "-newkey", "rsa:2048", "-nodes",
+            openssl("req", "-x509", "-newkey", newkey, "-nodes",
                     "-keyout", f"{name}.key", "-out", str(pem),
                     "-days", "1", "-subj", f"/CN={name}")
             openssl("x509", "-in", str(pem), "-outform", "DER", "-out", str(der))
@@ -67,6 +75,7 @@ def main():
 
         pem, der, fingerprint = certificate("first")
         _, other, other_fp = certificate("second")
+        _, classical, classical_fp = certificate("classical", "rsa:2048")
         bee = package("package.bee", der.read_bytes())
         assert run("--list-cmds").splitlines() == ["add", "fingerprint", "list"]
         for command in ("add", "fingerprint", "list"):
@@ -77,6 +86,7 @@ def main():
         assert run("fingerprint", str(der)) == fingerprint
         assert run("fingerprint", str(pem)) == fingerprint
         assert run("fingerprint", str(bee)) == fingerprint
+        assert run("fingerprint", str(classical)) == classical_fp
         assert hashlib.sha256(der.read_bytes()).hexdigest() != fingerprint
         (root / "invalid.der").write_text("not a certificate")
         run("fingerprint", str(root / "invalid.der"), ok=False)
@@ -91,11 +101,23 @@ def main():
         print("certificate and package fingerprints, help, and invalid inputs: passed")
 
         if isolated:
-            assert run("list") == ""
-            assert run("add", str(bee)) == fingerprint
-            assert (keys / "cert.der").read_bytes() == der.read_bytes()
+            assert json.loads(run("list", "--json"))["fingerprints"] == []
+            refused = bpm("key", "add", str(classical))
+            assert refused.returncode and "accepts only ML-DSA-87" in refused.stderr, refused
+            assert not keys.exists()
+            register = ("config", "register", "add", "src", "oci://registry.example", "--cert")
+            refused = bpm(*register, str(classical))
+            assert refused.returncode == 2 and "accepts only ML-DSA-87" in refused.stderr, refused
+            assert not registry.exists()
+            added = bpm(*register, str(pem))
+            assert added.returncode == 0, added
+            assert (registry / "keys/src.der").read_bytes() == der.read_bytes()
+            assert (registry / "registries.d/src.conf").is_file()
             assert run("add", str(pem)) == fingerprint
-            assert (keys / "cert.der").read_bytes() == der.read_bytes()
+            assert os.readlink(keys / "cert.der") == f"/var/lib/shirudo/keys/{fingerprint}.der"
+            assert (keys / f"{fingerprint}.der").read_bytes() == der.read_bytes()
+            assert run("add", str(bee)) == fingerprint
+            assert (keys / f"{fingerprint}.der").read_bytes() == der.read_bytes()
             run("add", str(other), ok=False)
             assert not (keys / f"{other_fp}.der").exists()
             shutil.copyfile(other, keys / f"{other_fp}.der")
@@ -103,10 +125,10 @@ def main():
             (keys / ("1" * 64 + ".der")).write_text("invalid")
             (keys / ("2" * 64 + ".der")).symlink_to(der)
             (keys / ("3" * 64 + ".der")).mkdir()
-            assert run("list").splitlines() == sorted([fingerprint, other_fp])
+            assert json.loads(run("list", "--json"))["fingerprints"] == sorted([fingerprint, other_fp])
             (keys / f"{other_fp}.der").unlink()
             (keys / f"{other_fp.upper()}.DER").write_bytes(other.read_bytes())
-            assert run("list").splitlines() == sorted([fingerprint, other_fp])
+            assert json.loads(run("list", "--json"))["fingerprints"] == sorted([fingerprint, other_fp])
             print("isolated key installation, repeat add, replacement refusal, sorted listing: passed")
 
         payload = bee.read_bytes()
@@ -153,12 +175,12 @@ def main():
             assert run("fingerprint", reference + "valid") == fingerprint
             if isolated:
                 assert run("add", reference + "valid") == fingerprint
-                assert (keys / "cert.der").read_bytes() == der.read_bytes()
+                assert (keys / f"{fingerprint}.der").read_bytes() == der.read_bytes()
             for tag in ("bad-digest", "bad-size", "missing-layer"):
                 run("fingerprint", reference + tag, ok=False)
                 if isolated:
                     run("add", reference + tag, ok=False)
-                    assert (keys / "cert.der").read_bytes() == der.read_bytes()
+                    assert (keys / f"{fingerprint}.der").read_bytes() == der.read_bytes()
             def pull(tag):
                 return subprocess.run([binary, "bpm", "pull", reference + tag],
                                       cwd=root, env=env, capture_output=True,

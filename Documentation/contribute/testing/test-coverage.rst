@@ -182,8 +182,9 @@ signed config image.
        ``attest predict`` agreement, signatures accepted from either
        active signer and refused after that signer is revoked
    * - ``t2004-keys-vouch``
-     - ``keys vouch``, and ``keys add`` admitting only vouched
-       certificates
+     - ``keys vouch``, ``keys add`` admitting only vouched
+       certificates, and refusal of a classical signer even when the
+       config image also records its revocation
    * - ``t2005-keys-signer``
      - Signer identification for a revocation purge, prediction of a
        revoke event
@@ -689,7 +690,10 @@ signed config image.
    * - ``t7003-bpm-key``
      - ``bpm key`` from files and OCI references, ``bpm pull``, which
        replaces no file, not even after a failed digest, and names none
-       after a layer title that is not a package name
+       after a layer title that is not a package name; with a private
+       mount namespace, ``key add`` and ``config register add`` writing
+       the certificate they read, in DER; both refusing a certificate
+       that is not ML-DSA-87 before they write
    * - ``t7004-bpm-repo-update``
      - The repository update unit and timer and their package
        scriptlets, as text
@@ -1189,7 +1193,7 @@ Coverage by area
        ``t6004``, ``t6104``, ``t6112``, ``t6129``, ``t6140``
    * - Signing keys and the trusted set
      - ``t2001``, ``t2002``, ``t2003``, ``t2004``, ``t2005``,
-       ``t5003``. Unit: ``io``
+       ``t5003``. Unit: ``crypto_openssl``, ``io``
    * - TPM register
      - ``t4001``, ``t4003``, ``t4101``, ``t4102``, ``t4103``,
        ``t6125``, ``t6128``, ``t6143``, ``t6144``. Unit: ``chain``

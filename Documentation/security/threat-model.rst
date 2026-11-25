@@ -442,7 +442,7 @@ TLS certificates, and whatever remote access an administrator uses. A
 registry can withhold and replay signed content. It cannot forge a
 upatch, because the kernel verifies every loader (T1). What a registry
 can do to indexes, tree publications and the transport is described in
-T7 and U3 to U4.
+T7 and U3.
 
 The evidence boundary runs through the attestation document. Only two
 parts of what ``shirudo attest`` produces are authenticated: the
@@ -1254,9 +1254,8 @@ settings opts exact host names into the classical groups ``X25519`` and
 ``secp256r1`` as well, and shirudo logs a warning when one is
 negotiated.
 
-A registry can still withhold or replay signed content (R8). The
-environment of the bpm units selects parts of the transport (U3), index
-and tree signatures accept algorithms other than ML-DSA (U4).
+A registry can still withhold or replay signed content (R8), and the
+environment of the bpm units selects parts of the transport (U3).
 
 .. rst-class:: facts
 
@@ -1277,7 +1276,7 @@ and tree signatures accept algorithms other than ML-DSA (U4).
    ``bpm-tree-state-pending``, ``bpm-tree-state-replay``,
    ``bpm-tree-reader``, ``json-string``,
    ``json-limits``
-:Residual: R8, R9, U3, U4, U15
+:Residual: R8, R9, U3, U15
 
 T8 Quantum-capable adversaries against the trust anchor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1291,21 +1290,31 @@ vouch`` and ``shirudo keys add`` refuse another kind of certificate.
 Digests are SHA-256 and SHA-512. :doc:`cryptography` lists every
 algorithm and where it is used.
 
-On the target, the pre-flight check ``cert_algorithm`` refuses a
-certificate other than ML-DSA-87 in the key directory it reads. In the
-initrd that is ``/etc/shirudo/keys``, not the runtime image's set that
-``init`` enrolls (U4).
+The kernel verifies a loader under whatever algorithm a certificate in
+``.bpf`` holds, so the target keeps every other algorithm out of what
+it trusts. The loader of the trusted set refuses the whole set when the
+runtime image's certificate or a vouched signer is not ML-DSA-87, so
+``init`` fails before it enrolls one, and a live config that adds one
+is not activated. Every signature shirudo checks in userspace, of an
+index, a tree publication, a package, a vouch, a Java upatch or a
+config root, verifies only under an ML-DSA-87 certificate, so a
+repository certificate of another algorithm verifies nothing. The
+pre-flight check ``cert_algorithm`` reports such a set in the key
+directory it reads.
 
 .. rst-class:: facts
 
 :Adversary: a future adversary with a cryptographically relevant
    quantum computer and recorded signatures and traffic
-:Enforced at: no hook; the operator's signing code and the pre-flight
-   check ``cert_algorithm``
-:Refusal: the signing command fails; ``init`` fails its pre-flight
+:Enforced at: no hook; the operator's signing code, the loader of the
+   trusted set, the userspace signature check and the pre-flight check
+   ``cert_algorithm``
+:Refusal: the signing command fails; loading the trusted set fails,
+   and with it ``init``, a config activation or the command that needs
+   the set; the signature check fails
 :Counters: none
 :Tests: ``t2001``, ``t2002``, ``t2004``
-:Residual: R9, U4
+:Residual: R9
 
 .. _tm-t9:
 
@@ -2037,20 +2046,6 @@ U3 The environment reaches authorized processes
       absent or empty and owned by root, and watch who runs runtime
       commands.
 
-U4 Signatures other than ML-DSA-87 are accepted in places
-   :Affects: Repository indexes, tree publications and the trust set
-      ``init`` enrolls.
-   :Consequence: Index and tree signatures verify with whatever
-      algorithm the certificate holds, and no step checks that a
-      repository certificate is ML-DSA-87. The pre-flight check
-      ``cert_algorithm`` runs on the initrd's ``/etc/shirudo/keys``,
-      not on the runtime image's certificate and the vouched signers
-      that ``init`` enrolls, and the kernel accepts other algorithms in
-      ``.bpf``.
-   :Status: Code-path reading, not reproduced.
-   :Meanwhile: Use only certificates that ``shirudo genkey`` made, for
-      repositories too.
-
 U6 The eventlog becomes unreadable at 8 MiB
    :Affects: Every reader of the eventlog: replay, ``shirudo status``,
       ``shirudo attest`` and ``init``.
@@ -2269,8 +2264,6 @@ The deployer:
 - Keeps generic tools off the runtime image (A14)
 - Keeps the environment files of the units absent or empty (U3) and
   starts every shirudo unit from the runtime image (U7)
-- Uses only ML-DSA-87 certificates from ``shirudo genkey``, repository
-  certificates included (U4)
 - Treats the TPM owner password as known to root (R20)
 - Checks the fingerprint of every certificate it installs (U15)
 - Watches the size of the eventlog (U6) and the keepalives, and treats a

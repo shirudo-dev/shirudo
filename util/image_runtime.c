@@ -295,7 +295,6 @@ static void close_config_certificates(void)
 static int read_config_certificate(size_t index, dev_t device)
 {
 	struct config_certificate *key = &image.certificates[index];
-	char algorithm[32];
 	int fd, ret;
 	size_t i;
 
@@ -307,9 +306,7 @@ static int read_config_certificate(size_t index, dev_t device)
 	if (!ret)
 		ret = cert_read_der(key->der, key->size, &key->parsed);
 	if (!ret)
-		ret = cert_key_algorithm(&key->parsed, algorithm, sizeof(algorithm));
-	if (!ret && strcmp(algorithm, "ML-DSA-87"))
-		ret = -EKEYREJECTED;
+		ret = cert_require_mldsa87(&key->parsed, NULL, 0);
 	if (!ret)
 		ret = cert_pubkey_digest(&key->parsed, key->fingerprint);
 	if (ret)

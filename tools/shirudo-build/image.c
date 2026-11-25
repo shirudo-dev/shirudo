@@ -150,15 +150,11 @@ static int verify_root_signature(const char root[65], const __u8 *signature,
 				 size_t size, const char *path)
 {
 	struct cert cert = {};
-	char algorithm[32];
 	int ret;
 
 	ret = cert_read_file(path, &cert);
 	if (!ret)
-		ret = cert_key_algorithm(&cert, algorithm,
-					 sizeof(algorithm));
-	if (!ret && strcmp(algorithm, "ML-DSA-87"))
-		ret = -EKEYREJECTED;
+		ret = cert_require_mldsa87(&cert, NULL, 0);
 	if (!ret && cms_signed_by(signature, size, &cert) != 1)
 		ret = -EKEYREJECTED;
 	if (!ret)

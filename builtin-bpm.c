@@ -255,50 +255,6 @@ static int pull_package(const char *raw)
 	return download_package(raw, -1);
 }
 
-static int copy_file_ex(const char *src, const char *dst, mode_t mode,
-			bool exclusive)
-{
-	struct stat in_st, out_st;
-	int in, out, ret = 0;
-	__u8 buf[65536];
-	ssize_t n;
-
-	in = open(src, O_RDONLY | O_CLOEXEC);
-	if (in < 0)
-		return -errno;
-	/* O_TRUNC on a destination that is the source would empty both. */
-	if (!fstat(in, &in_st) && !stat(dst, &out_st) &&
-	    in_st.st_dev == out_st.st_dev && in_st.st_ino == out_st.st_ino) {
-		close(in);
-		return exclusive ? -EEXIST : 0;
-	}
-	out = seal_open(dst, O_WRONLY | O_CREAT |
-			(exclusive ? O_EXCL : O_TRUNC), mode);
-	if (out < 0) {
-		close(in);
-		return out;
-	}
-	while ((n = read(in, buf, sizeof(buf))) > 0) {
-		ret = write_complete(out, buf, (size_t)n);
-		if (ret)
-			break;
-	}
-	if (n < 0 && !ret)
-		ret = -errno;
-	if (fsync(out) && !ret)
-		ret = -errno;
-	close(in);
-	close(out);
-	if (ret)
-		unlink(dst);
-	return ret;
-}
-
-static int copy_file(const char *src, const char *dst, mode_t mode)
-{
-	return copy_file_ex(src, dst, mode, false);
-}
-
 static int source_path(const char *name, char *out, size_t out_sz)
 {
 	if (!bpm_name_ok(name))
@@ -744,24 +700,20 @@ static int cert_file_matches_active(const char *path)
 	return ret;
 }
 
-static int key_fingerprint(const __u8 *der, size_t len, char hex[65])
+static int key_fingerprint(const struct cert *cert, char hex[65])
 {
 	__u8 digest[CRYPTO_SHA256_LEN];
-	struct cert cert = {};
 	int ret;
 
-	ret = cert_read_memory(der, len, &cert);
+	ret = cert_pubkey_digest(cert, digest);
 	if (!ret)
-		ret = cert_pubkey_digest(&cert, digest);
-	cert_free(&cert);
-	if (ret)
-		return ret;
-	hex_encode(digest, sizeof(digest), hex);
-	return 0;
+		hex_encode(digest, sizeof(digest), hex);
+	return ret;
 }
 
 static int key_file_fingerprint(const char *path, char hex[65])
 {
+	struct cert cert = {};
 	size_t len = 0;
 	__u8 *der;
 	int ret;
@@ -769,7 +721,10 @@ static int key_file_fingerprint(const char *path, char hex[65])
 	ret = keys_read_der(path, &der, &len);
 	if (ret)
 		return ret;
-	ret = key_fingerprint(der, len, hex);
+	ret = cert_read_memory(der, len, &cert);
+	if (!ret)
+		ret = key_fingerprint(&cert, hex);
+	cert_free(&cert);
 	xfree(der, len);
 	return ret;
 }
@@ -791,16 +746,13 @@ static int write_key(const char *dst, const __u8 *der, size_t len)
 	return ret;
 }
 
-static int install_key(const __u8 *der, size_t len)
+static int install_key(const char *hex, const __u8 *der, size_t len)
 {
-	char hex[65], dst[PATH_MAX];
 	bool active, made = false;
+	char dst[PATH_MAX];
 	struct stat st;
 	int ret;
 
-	ret = key_fingerprint(der, len, hex);
-	if (ret)
-		return ret;
 	ret = seal_mkdir_p(KEYS_DIR, 0700);
 	if (ret)
 		return ret;
@@ -1615,14 +1567,65 @@ static int bpm_register_remove(int argc, const char **argv,
 	return 0;
 }
 
+/*
+ * The certificate either command writes becomes the primary of the
+ * trusted set or the key of a repository's index, and the set and the
+ * signature check take ML-DSA-87 alone.
+ */
+static int signing_cert_der(const struct cert *cert, const char *command,
+			    const char *source, __u8 **der, size_t *len)
+{
+	char alg[32] = {};
+	int ret;
+
+	ret = cert_require_mldsa87(cert, alg, sizeof(alg));
+	if (ret) {
+		pr_err("%s: %s is %s; shirudo accepts only ML-DSA-87",
+		       command, source, alg);
+		return ret;
+	}
+	return cert_encode_der(cert, der, len);
+}
+
+/*
+ * The bytes written are those of the certificate parsed here, in DER
+ * whatever form path held: a second read of path could find others.
+ */
+static int register_source(const char *path, struct bpm_source *s)
+{
+	struct cert cert = {};
+	__u8 *der = NULL;
+	size_t len = 0;
+	int ret;
+
+	ret = cert_read_file(path, &cert);
+	if (!ret)
+		ret = signing_cert_der(&cert, "bpm: register add", path, &der,
+				       &len);
+	cert_free(&cert);
+	if (ret) {
+		if (ret != -EKEYREJECTED)
+			pr_err("bpm: register add: cannot read certificate %s: %s",
+			       path, strerror(-ret));
+		return EXIT_USAGE;
+	}
+	ret = seal_mkdir_p(BPM_REGISTRIES_DIR, 0700);
+	if (!ret)
+		ret = seal_mkdir_p(BPM_KEYS_DIR, 0700);
+	if (!ret)
+		ret = seal_write_file(s->key_file, der, len, 0644);
+	xfree(der, len);
+	if (!ret)
+		ret = save_source(s);
+	return ret ? 1 : 0;
+}
+
 static int bpm_register_add(int argc, const char **argv)
 {
 	struct bpm_oci_client probe __cleanup(bpm_oci_client_clear) = {};
 	const char *values[ARRAY_SIZE(bpm_register_add_opts)] = {};
 	struct bpm_source s = {};
 	const char *args[2], *key;
-	char managed[PATH_MAX];
-	struct cert cert = {};
 	struct opt_parser p;
 	size_t n;
 	int ret;
@@ -1657,27 +1660,15 @@ static int bpm_register_add(int argc, const char **argv)
 			      "%s/%s", s.name, BPM_INDEX_REPOSITORY_NAME) < 0) {
 		return EXIT_USAGE;
 	}
-	if (cert_read_file(key, &cert) ||
-	    !bpm_name_ok(s.name) ||
-	    bpm_oci_parse_endpoint(s.endpoint, &probe) ||
+	if (!bpm_name_ok(s.name) || bpm_oci_parse_endpoint(s.endpoint, &probe) ||
 	    source_index_repository_valid(s.endpoint, s.index_repository)) {
-		cert_free(&cert);
 		pr_err("bpm: register add requires a valid endpoint, index repository and --cert certificate");
 		return EXIT_USAGE;
 	}
-	cert_free(&cert);
-	if (seal_mkdir_p(BPM_REGISTRIES_DIR, 0700) ||
-	    seal_mkdir_p(BPM_KEYS_DIR, 0700))
-		return 1;
-	if (strsprintf(managed, sizeof(managed), "%s/%s.der",
+	if (strsprintf(s.key_file, sizeof(s.key_file), "%s/%s.der",
 		       BPM_KEYS_DIR, s.name) < 0)
 		return 1;
-	if (copy_file(key, managed, 0644))
-		return 1;
-	if (strlen(managed) >= sizeof(s.key_file))
-		return 1;
-	bpm_copy_string(s.key_file, sizeof(s.key_file), managed);
-	return save_source(&s) ? 1 : 0;
+	return register_source(key, &s);
 }
 
 static int cmd_bpm_config(int argc, const char **argv)
@@ -2908,13 +2899,36 @@ static const struct help bpm_key_help = {
 		  "  shirudo bpm key list",
 };
 
+static int process_key(const char *source, const __u8 *bytes, size_t size,
+		       bool install)
+{
+	struct cert cert = {};
+	__u8 *der = NULL;
+	size_t len = 0;
+	char hex[65];
+	int ret;
+
+	ret = cert_read_memory(bytes, size, &cert);
+	if (!ret)
+		ret = key_fingerprint(&cert, hex);
+	if (!ret && install) {
+		ret = signing_cert_der(&cert, "bpm key add", source, &der, &len);
+		if (!ret)
+			ret = install_key(hex, der, len);
+	}
+	cert_free(&cert);
+	xfree(der, len);
+	if (!ret)
+		puts(hex);
+	return ret;
+}
+
 static int cmd_bpm_key(int argc, const char **argv)
 {
 	size_t len = 0, cap = 0, n;
 	const char *sub, *source;
 	struct opt_parser p;
 	__u8 *der = NULL;
-	char hex[65];
 	int ret;
 
 	if (argc < 2 || is_help(argv[1])) {
@@ -2955,11 +2969,7 @@ static int cmd_bpm_key(int argc, const char **argv)
 		return bpm_fail("initialize curl", -EIO);
 	ret = key_source_read(source, &der, &len, &cap);
 	if (!ret) {
-		ret = key_fingerprint(der, len, hex);
-		if (!ret && !strcmp(sub, "add"))
-			ret = install_key(der, len);
-		if (!ret)
-			puts(hex);
+		ret = process_key(source, der, len, !strcmp(sub, "add"));
 		xfree(der, cap);
 	}
 	return bpm_finish(-1, ret, !strcmp(sub, "add") ?

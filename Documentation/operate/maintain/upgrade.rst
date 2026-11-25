@@ -51,6 +51,22 @@ Before you begin
   :ref:`runtime-invocation`.
 - A canary target with the same packages as the fleet, to try a new
   kernel on first.
+- Check the BPF primary in the runtime image and every certificate in
+  the selected config image's ``keys/trusted/``, including certificates
+  also listed in ``keys/revoked/``. Init checks historical vouches before
+  applying revocations. An older target's ``shirudo status --show-full``
+  lists the active set and can omit a revoked signer whose certificate
+  still prevents the new runtime from starting enforcement.
+- Before upgrading, replace any primary or vouched signer of another
+  algorithm with an ML-DSA-87 key from ``shirudo genkey``. Remove the old
+  signer and its vouch from ``keys/trusted/`` and re-vouch surviving
+  signers through the new primary or another retained ML-DSA-87 member.
+  Keep the revocation records. Rebuild the affected images and boot the
+  exact runtime and config on the canary. Check that ``shirudo status``
+  reports enforcement before rolling them out.
+- Check each repository's configured index certificate as well. Replace
+  a classical repository key and sign the index with its replacement
+  before switching clients to it.
 
 Version ID
 ----------

@@ -551,23 +551,16 @@ static const struct help keys_add_help = {
 static int check_cert_algorithm(const __u8 *der, size_t der_sz,
 				const char *what)
 {
-	struct cert cert = {};
-	char name[64] = {};
+	char alg[32] = {};
 	int ret;
 
-	ret = cert_read_der(der, der_sz, &cert);
-	if (ret) {
-		pr_err("keys add: %s is not a certificate", what);
-		return ret;
-	}
-	ret = cert_key_algorithm(&cert, name, sizeof(name));
-	cert_free(&cert);
-	if (ret || strcmp(name, "ML-DSA-87")) {
+	ret = cert_der_require_mldsa87(der, der_sz, alg, sizeof(alg));
+	if (ret == -EKEYREJECTED)
 		pr_err("keys add: %s is %s; shirudo accepts only ML-DSA-87",
-		       what, ret ? "of an unknown algorithm" : name);
-		return -EKEYREJECTED;
-	}
-	return 0;
+		       what, alg);
+	else if (ret)
+		pr_err("keys add: %s is not a certificate", what);
+	return ret;
 }
 
 /*

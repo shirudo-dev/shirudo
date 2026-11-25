@@ -38,26 +38,32 @@ struct trusted_cert {
  * verifies under the primary or under a member admitted before it;
  * one without is counted in n_unvouched and is not a member, nor is
  * one whose fingerprint the revoked directory names. n_revoked counts
- * that directory's certificates.
+ * that directory's certificates. A load that meets a certificate whose
+ * key is not ML-DSA-87 refuses the whole set and names that certificate
+ * in refused and its algorithm in refused_algorithm.
  */
 struct trusted_set {
 	struct trusted_cert	certs[KEYS_MAX];
 	size_t				n;
 	size_t				n_revoked;
 	size_t				n_unvouched;
+	char				refused[PATH_MAX];
+	char				refused_algorithm[32];
 };
 
 /*
  * Load cert.der and, when with_trusted, trusted/<fingerprint>.der from
  * the keys directory, leaving out the keys revoked_dir names; NULL
- * means revoked/ beside them. -ENOENT when there is no cert.der.
+ * means revoked/ beside them. -ENOENT when there is no cert.der, and
+ * -EKEYREJECTED only when a certificate is not ML-DSA-87.
  */
 int keys_load(const char *keys_dir, const char *revoked_dir,
 	      bool with_trusted, struct trusted_set *set);
 
 /*
  * The set of a config image, read through its root descriptor; historical
- * vouches are validated before revoked signing keys are excluded.
+ * vouches are validated before revoked signing keys are excluded. Fails
+ * as keys_load() does.
  */
 int keys_load_image_at(const char *primary, int keys_fd,
 		       bool with_trusted,

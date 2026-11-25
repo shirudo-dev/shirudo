@@ -251,6 +251,29 @@ void cert_free(struct cert *cert)
 	cert->impl = NULL;
 }
 
+int cert_encode_der(const struct cert *cert, __u8 **der, size_t *size)
+{
+	__u8 *buf, *next;
+	int len;
+
+	if (!cert || !cert->impl || !der || !size)
+		return -EINVAL;
+	len = i2d_X509(cert->impl, NULL);
+	if (len <= 0)
+		return -EINVAL;
+	buf = xmalloc((size_t)len);
+	if (!buf)
+		return -ENOMEM;
+	next = buf;
+	if (i2d_X509(cert->impl, &next) != len) {
+		xfree(buf, (size_t)len);
+		return -EINVAL;
+	}
+	*der = buf;
+	*size = (size_t)len;
+	return 0;
+}
+
 /*
  * SHA-256 over the DER SubjectPublicKeyInfo, the bytes Go's
  * x509.MarshalPKIXPublicKey writes; X509_pubkey_digest() hashes only the
@@ -306,6 +329,39 @@ int cert_key_algorithm(const struct cert *cert,
 	if (strscpy(out, name, out_sz) < 0)
 		return -ENAMETOOLONG;
 	return 0;
+}
+
+static bool cert_is_mldsa87(const struct cert *cert)
+{
+	EVP_PKEY *pub;
+
+	if (!cert || !cert->impl)
+		return false;
+	pub = X509_get0_pubkey(cert->impl);
+	return pub && EVP_PKEY_is_a(pub, "ML-DSA-87");
+}
+
+int cert_require_mldsa87(const struct cert *cert, char *alg, size_t alg_sz)
+{
+	if (cert_is_mldsa87(cert))
+		return 0;
+	if (alg && cert_key_algorithm(cert, alg, alg_sz) && alg_sz > 1)
+		memcpy(alg, "?", 2);
+	return -EKEYREJECTED;
+}
+
+int cert_der_require_mldsa87(const __u8 *der, size_t der_sz,
+			     char *alg, size_t alg_sz)
+{
+	struct cert cert = {};
+	int ret;
+
+	ret = cert_read_der(der, der_sz, &cert);
+	if (ret)
+		return ret;
+	ret = cert_require_mldsa87(&cert, alg, alg_sz);
+	cert_free(&cert);
+	return ret;
 }
 
 int cert_subject(const struct cert *cert, char *out, size_t out_sz)
@@ -369,9 +425,13 @@ static CMS_ContentInfo *read_cms(const __u8 *signature, size_t len)
 }
 
 /*
- * The algorithm comes from the SignerInfo, so an ML-DSA signature,
- * with signedAttrs and SHA-512 or bare on OpenSSL 4, and an RSA one
- * verify through one call; ML-DSA needs libcrypto >= 3.5.
+ * The detached CMS signature of an index, a tree publication, a
+ * package, a vouch, a Java upatch or a config root, stands on this one
+ * call, so a certificate of any other algorithm is refused here: a
+ * classical key would let an adversary who can break it forge them all.
+ * With ML-DSA-87 the SignerInfo decides the rest, so a signature with
+ * signedAttrs and SHA-512 and a bare one on OpenSSL 4 verify alike;
+ * ML-DSA needs libcrypto >= 3.5.
  */
 int verify_detached(const __u8 *payload, size_t payload_len,
 		    const __u8 *signature, size_t signature_len,
@@ -386,6 +446,8 @@ int verify_detached(const __u8 *payload, size_t payload_len,
 	if (!payload || !signature || !cert || !cert->impl ||
 	    payload_len > INT_MAX || signature_len > INT_MAX)
 		return -EINVAL;
+	if (!cert_is_mldsa87(cert))
+		return -EKEYREJECTED;
 	data = BIO_new_mem_buf(payload, (int)payload_len);
 	out = BIO_new(BIO_s_null());
 	store = X509_STORE_new();
