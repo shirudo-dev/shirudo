@@ -273,6 +273,45 @@ kexec and kdump
    second kernel, such as pstore, which shirudo does not hook. Reboot
    through the firmware instead of kexec.
 
+Shutdown initramfs and soft reboot
+----------------------------------
+
+:Mechanism: The mount guards keep the private bpffs and every mount above
+   it in place in the host's mount namespace, so that nothing detaches
+   the pins (R3 in :doc:`/security/threat-model`). Host PID 1 is exempt
+   only while it switches from the initrd root to the root file system,
+   and the exemption ends when it has unmounted the initrd root. From
+   then on ``lsm/sb_mount`` refuses every caller a legacy request to make
+   ``/`` or another mount above the bpffs private and a legacy
+   ``MS_MOVE`` in that namespace, and ``lsm/sb_pivotroot`` every pivot
+   there. systemd changes root a second time in two places, both as
+   PID 1: ``systemd-shutdown`` returns to a shutdown initramfs unpacked
+   at ``/run/initramfs``, and a soft reboot enters ``/run/nextroot``.
+   Each begins by making ``/`` recursively private, then pivots, then
+   falls back to ``MS_MOVE``.
+:Symptom: Every shutdown moves ``BpffsMount`` once: ``systemd-shutdown``
+   asks for private mounts before it unmounts, logs ``Failed to make
+   mounts private, ignoring`` and goes on. With an executable
+   ``/run/initramfs/shutdown`` it then logs ``Failed to set "/" mount
+   propagation to private: Operation not permitted`` and ``Failed to
+   switch root to "/run/initramfs"``, moves ``BpffsMount`` again, does
+   not run the shutdown initramfs and reboots, halts or powers off from
+   the root file system. Storage below the root that only the shutdown
+   initramfs detaches, such as device mapper, MD RAID or a network block
+   device, is not detached before the reset. ``systemctl soft-reboot``
+   with an operating system tree at ``/run/nextroot`` logs ``Failed to
+   switch root, trying to continue`` and restarts userspace on the root
+   it had. A caller that reaches the pivot is refused with ``EPERM`` and
+   moves ``BpffsUmountAbove``. This is a reading of the hooks and of the
+   systemd 259 source and is not tested on a target; ``t6158`` covers
+   the refusals themselves.
+:What to do: Do not rely on a shutdown initramfs on targets, and choose
+   root storage that is consistent once ``systemd-shutdown`` has
+   remounted it read-only. Do not place a tree at ``/run/nextroot``:
+   change the root file system with a full reboot, which also gives the
+   new root a boot of its own to be measured in. Count the shutdown's
+   ``BpffsMount`` into the baseline of your hosts.
+
 Module loading and kernel live patching
 ---------------------------------------
 

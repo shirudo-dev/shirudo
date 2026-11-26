@@ -404,9 +404,12 @@ Hooks in bpf2
        bpffs mount survives on the target root. A walk beyond 1024
        mounts, 32 levels or 4 masters is refused.
    * - ``lsm/sb_pivotroot``
-     - A pivot in the namespace containing the recorded bpffs. Host
-       PID 1 may pivot from the recorded initrd root to the recorded
-       target root.
+     - To every caller: a pivot in the namespace containing the recorded
+       bpffs. Host PID 1 may pivot from the recorded initrd root to the
+       recorded target root. That exception ends with the handoff, and
+       PID 1's later pivots are refused like any other: a return to
+       ``/run/initramfs`` at shutdown and a soft reboot into
+       ``/run/nextroot``, see :doc:`/operate/plan/interoperability`.
      - ``EPERM`` and ``BpffsUmountAbove``.
      - A pivot in another mount namespace proceeds.
    * - ``lsm/move_mount``
@@ -425,7 +428,9 @@ Hooks in bpf2
        initrd handoff. A legacy ``MS_MOVE`` onto any mount of the
        recorded bpffs's mount namespace, which reaches the hook without
        its source, with the same PID 1 exception; ``move_mount(2)``
-       moves a mount there. A mount onto a
+       moves a mount there. After the handoff the exception is over, and
+       PID 1's request to make ``/`` private at shutdown or for a soft
+       reboot is refused. A mount onto a
        path in ``/run/shirudo`` or on a config image to a task without
        authority. The source of a bind is not checked.
      - ``EPERM``: ``BpffsMount``; others uncounted
