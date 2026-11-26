@@ -178,6 +178,49 @@ jobs:
             shirudo-static.tar.gz.spdx.json
           if-no-files-found: error
 
+  publish-deb:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: deb
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      packages: write
+    steps:
+      - name: Download Debian packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: shirudo-deb
+          path: ${{ runner.temp }}/shirudo-packages
+
+      - name: Prepare OCI image containing Debian packages
+        env:
+          PACKAGE_DIR: ${{ runner.temp }}/shirudo-packages
+        run: |
+          set -euo pipefail
+          image_root="${RUNNER_TEMP}/shirudo-deb-image"
+          install -d "${image_root}"
+          cp "${PACKAGE_DIR}"/*.deb "${image_root}/"
+          cp "${PACKAGE_DIR}"/*.spdx.json "${image_root}/"
+          printf 'FROM scratch\nCOPY . /\n' > "${image_root}/Dockerfile"
+
+      - name: Log in to GitHub Container Registry
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Publish Debian packages to GitHub Container Registry
+        run: |
+          set -euo pipefail
+          image=ghcr.io/shirudo-dev/shirudo-deb
+          docker build \
+            --label org.opencontainers.image.source=https://github.com/shirudo-dev/shirudo \
+            --tag "${image}:${GITHUB_SHA}" \
+            --tag "${image}:main" \
+            "${RUNNER_TEMP}/shirudo-deb-image"
+          docker push "${image}:${GITHUB_SHA}"
+          docker push "${image}:main"
+
   image-assets:
     needs: deb
     runs-on: ubuntu-26.04
@@ -483,6 +526,55 @@ jobs:
             shirudo-operator-*.rpm
             shirudo-operator-*.rpm.spdx.json
           if-no-files-found: error
+
+  publish-rpm:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [rpm-target, rpm-operator]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      packages: write
+    steps:
+      - name: Download target RPM packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: shirudo-rpm-target
+          path: ${{ runner.temp }}/shirudo-rpms
+
+      - name: Download operator RPM packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: shirudo-rpm-operator
+          path: ${{ runner.temp }}/shirudo-rpms
+
+      - name: Prepare OCI image containing RPM packages
+        env:
+          PACKAGE_DIR: ${{ runner.temp }}/shirudo-rpms
+        run: |
+          set -euo pipefail
+          image_root="${RUNNER_TEMP}/shirudo-rpm-image"
+          install -d "${image_root}"
+          cp "${PACKAGE_DIR}"/*.rpm "${image_root}/"
+          cp "${PACKAGE_DIR}"/*.spdx.json "${image_root}/"
+          printf 'FROM scratch\nCOPY . /\n' > "${image_root}/Dockerfile"
+
+      - name: Log in to GitHub Container Registry
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Publish RPM packages to GitHub Container Registry
+        run: |
+          set -euo pipefail
+          image=ghcr.io/shirudo-dev/shirudo-rpm
+          docker build \
+            --label org.opencontainers.image.source=https://github.com/shirudo-dev/shirudo \
+            --tag "${image}:${GITHUB_SHA}" \
+            --tag "${image}:main" \
+            "${RUNNER_TEMP}/shirudo-rpm-image"
+          docker push "${image}:${GITHUB_SHA}"
+          docker push "${image}:main"
 
   release:
     if: github.event_name == 'push' && github.ref_type == 'tag'
