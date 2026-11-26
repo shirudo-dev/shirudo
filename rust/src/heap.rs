@@ -71,7 +71,7 @@ static ALLOCATOR: Scrubbing = Scrubbing;
 /// The xmalloc family's allocator, for memory that C code frees or
 /// hands over and that Rust code hands to C: zeroed when it is given out
 /// and scrubbed when it comes back, as every Rust allocation is.
-pub(crate) use capi::{libc_free, xcalloc, xfree, xmalloc, xstrfree, xstrndup};
+pub(crate) use capi::{xcalloc, xfree, xmalloc, xstrfree, xstrndup};
 
 mod capi {
     use core::ffi::{c_char, c_void};
@@ -156,17 +156,5 @@ mod capi {
         }
         // SAFETY: the caller's string, with its NUL.
         unsafe { xfree(s.cast(), strlen(s) + 1) };
-    }
-
-    /// Frees what the C library or a library on it allocated, as
-    /// scandir(), getline() and realpath() do; the one path for that
-    /// memory, since C code may not name free().
-    ///
-    /// # Safety
-    ///
-    /// `p` is NULL or a block the C library's malloc gave.
-    pub unsafe extern "C" fn libc_free(p: *mut c_void) {
-        // SAFETY: the caller's block, freed once.
-        unsafe { free(p) };
     }
 }

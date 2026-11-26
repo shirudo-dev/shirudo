@@ -8,16 +8,15 @@
 use core::ffi::{CStr, c_char, c_int};
 
 use crate::errno::{
-    E2BIG, EFBIG, EINTR, EINVAL, EIO, EISDIR, ELOOP, ENAMETOOLONG, ENOENT, ENOTDIR, EPERM, ESTALE,
+    EFBIG, EINTR, EINVAL, EIO, EISDIR, ELOOP, ENAMETOOLONG, ENOENT, ENOTDIR, EPERM, ESTALE,
 };
-use crate::ffi;
 use crate::sys::libc::Zeroed;
 use crate::sys::libc::{
-    AT_EMPTY_PATH, AT_SYMLINK_NOFOLLOW, Dir, File, LOCK_EX, O_CLOEXEC, O_CREAT, O_DIRECTORY,
-    O_EXCL, O_NOFOLLOW, O_NONBLOCK, O_PATH, O_RDONLY, PATH_MAX, S_IFDIR, S_IFLNK, S_IFMT, S_IFREG,
-    S_ISVTX, STATX_ATTR_MOUNT_ROOT, STATX_BASIC_STATS, Statfs, Statx, close, closedir, errno,
-    fdopendir, flock, fstatfs, fsync, ftruncate, geteuid, getline, open, openat, pread, readdir,
-    readlinkat, set_errno, statx, syscall, write,
+    AT_EMPTY_PATH, AT_SYMLINK_NOFOLLOW, Dir, LOCK_EX, O_CLOEXEC, O_CREAT, O_DIRECTORY, O_EXCL,
+    O_NOFOLLOW, O_NONBLOCK, O_PATH, O_RDONLY, PATH_MAX, S_IFDIR, S_IFLNK, S_IFMT, S_IFREG, S_ISVTX,
+    STATX_ATTR_MOUNT_ROOT, STATX_BASIC_STATS, Statfs, Statx, close, closedir, errno, fdopendir,
+    flock, fstatfs, fsync, ftruncate, geteuid, open, openat, pread, readdir, readlinkat, set_errno,
+    statx, syscall, write,
 };
 use crate::util::seal;
 use core::ptr::NonNull;
@@ -374,40 +373,6 @@ pub(crate) fn read_whole(fd: BorrowedFd<'_>, max: usize) -> Result<Vec<u8>, c_in
         done += n as usize;
     }
     Ok(buf)
-}
-
-/// One line of text of at most `max` bytes before its newline, in
-/// getline()'s buffer: 1, 0 at the end, -E2BIG for a longer line and
-/// -EINVAL for one holding a NUL.
-///
-/// # Safety
-///
-/// `f` is an open stream, and `line` and `cap` getline()'s buffer and
-/// its size.
-pub(crate) unsafe fn read_text_line(
-    f: *mut File,
-    line: *mut *mut c_char,
-    cap: *mut usize,
-    max: usize,
-) -> c_int {
-    set_errno(0);
-    // SAFETY: the caller's stream and buffer.
-    let n = unsafe { getline(line, cap, f) };
-    if n < 0 {
-        let e = errno();
-
-        return if e != 0 { -e } else { 0 };
-    }
-    // SAFETY: the n bytes getline() read into the caller's buffer.
-    let text = unsafe { ffi::slice((*line).cast::<u8>(), n as usize) };
-    if text.contains(&0) {
-        return -EINVAL;
-    }
-    let mut n = text.len();
-    if text[n - 1] == b'\n' {
-        n -= 1;
-    }
-    if n > max { -E2BIG } else { 1 }
 }
 
 /// Whether `p` names something beneath the directory `dir`.

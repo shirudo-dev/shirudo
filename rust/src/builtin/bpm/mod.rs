@@ -15,23 +15,21 @@ mod package;
 mod source;
 mod tree;
 
-use core::ffi::{CStr, c_char, c_int};
-use core::ptr;
+use core::ffi::{CStr, c_int};
 use std::ffi::CString;
-use std::io;
+use std::fs::File;
+use std::io::{self, BufRead, BufReader};
 use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
 
 use crate::errno::{EINVAL, EIO, ENAMETOOLONG};
 use crate::ffi;
-use crate::heap::libc_free;
 use crate::sys::curl::{CURL_GLOBAL_DEFAULT, CURLE_OK, curl_global_cleanup, curl_global_init};
 use crate::sys::libc::{
-    Dir, File, LOCK_UN, PATH_MAX, closedir, errno, fclose, fdopen, fdopendir, flock, fwrite,
-    opendir, readdir, stdout, strerror, unlink,
+    Dir, LOCK_UN, PATH_MAX, closedir, errno, fdopendir, flock, fwrite, opendir, readdir, stdout,
+    strerror, unlink,
 };
 use crate::util::identity;
 use crate::util::io::lock_exclusive;
-use crate::util::io::read_text_line;
 use crate::util::seal;
 
 /// A negative errno, or a command's own non-zero status.
@@ -190,8 +188,8 @@ fn remove(path: &CStr) {
     unsafe { unlink(path.as_ptr()) };
 }
 
-/// A stdio stream, closed when it goes.
-struct Stream(*mut File);
+/// A file of source or tree settings, read one line at a time.
+struct Stream(BufReader<File>);
 
 impl Stream {
     /// A stream on `fd`, which it takes over, or the -errno `fd` is.
@@ -201,48 +199,34 @@ impl Stream {
         }
         // SAFETY: an fd the caller hands over.
         let fd = unsafe { OwnedFd::from_raw_fd(fd) };
-        // SAFETY: the fd, which the stream owns once open.
-        let f = unsafe { fdopen(fd.as_raw_fd(), c"r".as_ptr()) };
-        if f.is_null() {
-            return Err(last_err());
-        }
-        core::mem::forget(fd);
-        Ok(Stream(f))
+        Ok(Stream(BufReader::new(File::from(fd))))
     }
 
-    /// Each line of at most PATH_MAX - 1 bytes to `each`, as a C string
-    /// in a writable buffer, until one fails; a line read badly is its
-    /// error.
+    /// Each line of at most PATH_MAX - 1 bytes to `each`, including its
+    /// newline and a final NUL. A NUL in the file is invalid.
     fn lines(&mut self, mut each: impl FnMut(&mut [u8]) -> Result) -> Result {
-        let mut line: *mut c_char = ptr::null_mut();
-        let mut cap = 0;
-        let mut ret = Ok(());
+        let mut line = Vec::new();
 
-        while ret.is_ok() {
-            // SAFETY: the stream, and getline()'s buffer for it.
-            let got = unsafe { read_text_line(self.0, &mut line, &mut cap, PATH_MAX - 1) };
-            if got == 0 {
-                break;
+        loop {
+            line.clear();
+            let n = self
+                .0
+                .read_until(b'\n', &mut line)
+                .map_err(|e| -e.raw_os_error().unwrap_or(EIO))?;
+            if n == 0 {
+                return Ok(());
             }
-            ret = if got < 0 {
-                Err(got)
-            } else {
-                // SAFETY: getline() leaves a C string in its buffer.
-                let len = unsafe { ffi::c_str(line) }.len();
-                // SAFETY: the buffer's string and its NUL.
-                each(unsafe { core::slice::from_raw_parts_mut(line.cast(), len + 1) })
-            };
+            if line.contains(&0) {
+                return Err(-EINVAL);
+            }
+            let text_len = n - usize::from(line.last() == Some(&b'\n'));
+            if text_len > PATH_MAX - 1 {
+                return Err(-crate::errno::E2BIG);
+            }
+            line.try_reserve(1).map_err(|_| -crate::errno::ENOMEM)?;
+            line.push(0);
+            each(&mut line)?;
         }
-        // SAFETY: getline()'s buffer, from the C library's malloc.
-        unsafe { libc_free(line.cast()) };
-        ret
-    }
-}
-
-impl Drop for Stream {
-    fn drop(&mut self) {
-        // SAFETY: the stream's own FILE.
-        unsafe { fclose(self.0) };
     }
 }
 
