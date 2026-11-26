@@ -352,7 +352,6 @@ VM enrolled its certificate. You sign with that key on the host.
       Loader:
         Instructions:          off=360 len=992
         Log buffer size:       1048576
-        Metadata:              (none)
         Data:                  off=6205 len=2400
 
       Signature:

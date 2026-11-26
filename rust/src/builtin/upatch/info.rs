@@ -74,7 +74,6 @@ fn json(u: &Upatch, path: &[u8]) -> c_int {
     e.kv_string(b"payload_sha256", &hex(&h.payload_sha256));
     e.kv_int(b"loader_insns_len", i64::from(h.loader_insns_len));
     e.kv_int(b"signature_len", i64::from(h.signature_len));
-    e.kv_int(b"metadata_len", i64::from(h.metadata_len));
     e.kv_int(b"data_len", i64::from(h.data_len));
     e.kv_int(b"log_buf_sz", i64::from(h.log_buf_sz));
     e.kv_int(b"file_size", json_len(u.bytes().len()));
@@ -149,17 +148,12 @@ fn text(u: &Upatch, path: &[u8]) {
         "Log buffer size:",
         h.log_buf_sz.to_string().as_bytes(),
     ));
-    for (label, off, len) in [
-        ("Metadata:", h.metadata_off, h.metadata_len),
-        ("Data:", h.data_off, h.data_len),
-    ] {
-        let v = if len != 0 {
-            format!("off={off} len={len}")
-        } else {
-            "(none)".into()
-        };
-        t.extend(section(label, v.as_bytes()));
-    }
+    let data = if h.data_len != 0 {
+        format!("off={} len={}", h.data_off, h.data_len)
+    } else {
+        "(none)".into()
+    };
+    t.extend(section("Data:", data.as_bytes()));
 
     t.extend_from_slice(b"\nSignature:\n");
     t.extend(section("Offset:", h.signature_off.to_string().as_bytes()));

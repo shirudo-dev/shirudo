@@ -64,7 +64,6 @@ struct Header<'a> {
     payload_sha256: &'a [u8; 32],
     loader: (u32, u32),
     signature: (u32, u32),
-    metadata: (u32, u32),
     data: (u32, u32),
     log_buf_sz: u32,
     rodata_data_off: u32,
@@ -88,8 +87,8 @@ impl Header<'_> {
             self.loader.1,
             self.signature.0,
             self.signature.1,
-            self.metadata.0,
-            self.metadata.1,
+            0, // reserved2
+            0, // reserved3
             self.data.0,
             self.data.1,
             self.log_buf_sz,
@@ -201,15 +200,15 @@ fn write_signed(
 ) -> Result<(), SetFailed> {
     let (sig, digest) =
         sign(src.loader(), data, (&keys.pkey, &keys.cert)).map_err(SetFailed::Output)?;
-    let (sh, insns_len, meta) = (&src.hdr, src.loader().len(), src.metadata());
+    let (sh, insns_len) = (&src.hdr, src.loader().len());
     let loader_off = HEADER_SIZE;
     let sig_off = loader_off + insns_len;
     let data_off = sig_off + sig.len();
-    let meta_off = data_off + data.len();
-    if meta_off > u32::MAX as usize {
+    let end = data_off + data.len();
+    if end > u32::MAX as usize {
         return Err(SetFailed::Output(-EOVERFLOW));
     }
-    if meta_off + meta.len() > FILE_MAX {
+    if end > FILE_MAX {
         return Err(SetFailed::Output(-E2BIG));
     }
     let hdr = Header {
@@ -219,10 +218,6 @@ fn write_signed(
         payload_sha256: &digest,
         loader: (loader_off as u32, insns_len as u32),
         signature: (sig_off as u32, sig.len() as u32),
-        metadata: (
-            if meta.is_empty() { 0 } else { meta_off as u32 },
-            meta.len() as u32,
-        ),
         data: (
             if data.is_empty() { 0 } else { data_off as u32 },
             data.len() as u32,
@@ -247,7 +242,7 @@ fn write_signed(
     let written = file
         .set_len(0)
         .and_then(|()| {
-            [&hdr.bytes()[..], src.loader(), &sig, data, meta]
+            [&hdr.bytes()[..], src.loader(), &sig, data]
                 .iter()
                 .try_for_each(|b| file.write_all(b))
         })
@@ -663,7 +658,6 @@ fn finalize(mut obj: Object, out: &CStr, c: &Contents, keys: (&CStr, &CStr)) -> 
         payload_sha256: &digest,
         loader: (HEADER_SIZE as u32, insns.len() as u32),
         signature: (sig_off as u32, sig.len() as u32),
-        metadata: (0, 0),
         data: (data_off as u32, signed.len() as u32),
         log_buf_sz: LOG_BUF_SZ,
         rodata_data_off,
@@ -756,7 +750,6 @@ fn finalize_java(
         payload_sha256: &digest,
         loader: (0, 0),
         signature: (HEADER_SIZE as u32, sig.len() as u32),
-        metadata: (0, 0),
         data: (data_off as u32, signed.len() as u32),
         log_buf_sz: 0,
         rodata_data_off: 0,

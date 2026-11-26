@@ -53,10 +53,6 @@ order and what ``data`` holds.
      - ``data_off``, ``data_len``
      - The loader's data blob (libbpf's ``gen_loader_opts.data``), then
        the signed sections, their directory and the trailer.
-   * - ``metadata``
-     - ``metadata_off``, ``metadata_len``
-     - Absent. ``shirudo build`` sets both fields to 0. The target never
-       reads this region.
 
 .. figure:: /images/reference-upatch-layout.svg
    :alt: A strip of the file: an unsigned 360-byte header, then
@@ -128,11 +124,11 @@ Header
      - Non-zero.
    * - 320
      - 4
-     - ``metadata_off``
+     - ``reserved2``
      - 0.
    * - 324
      - 4
-     - ``metadata_len``
+     - ``reserved3``
      - 0.
    * - 328
      - 4
@@ -184,7 +180,7 @@ Signature
      - Value
    * - Signed bytes
      - ``loader_insns`` followed by ``data``, exactly as stored. The header
-       and ``metadata`` are outside the signature.
+       is outside the signature.
    * - Encoding
      - DER CMS ``SignedData``, detached (no encapsulated content), no
        certificates. The signer is identified by its subject key
@@ -345,10 +341,9 @@ Java payloads
 ~~~~~~~~~~~~~
 
 A Java payload (``type`` 2) carries a Java agent ``.jar`` instead of a BPF
-loader. It has no loader instructions and no ``metadata``, and
-``loader_insns_off``, ``log_buf_sz``, ``nr_maps``, ``nr_progs`` and
-``rodata_data_off`` are 0. Its ``data`` holds only signed sections, so the
-signature covers ``data`` alone and ``payload_sha256`` is SHA-256 of
+loader. It has no loader instructions, and ``loader_insns_off``,
+``log_buf_sz``, ``nr_maps``, ``nr_progs`` and ``rodata_data_off`` are 0.
+Its ``data`` holds only signed sections, so the signature covers ``data`` alone and ``payload_sha256`` is SHA-256 of
 ``data``. The kernel never sees a Java payload. The target verifies its
 signature in userspace with OpenSSL, against the unrevoked certificates of
 the authenticated runtime's set, and then requires the signer to be a key
@@ -770,10 +765,8 @@ signed bytes and trusts others as they are.
        other signed bytes.
    * - ``log_buf_sz``
      - Ignored.
-   * - ``metadata_off``, ``metadata_len``
-     - Bounds-checked. Not read on the target.
-   * - ``magic``, ``version``, ``type``, ``reserved1``, section offsets and
-       lengths
+   * - ``magic``, ``version``, ``type``, ``reserved1`` to ``reserved3``,
+       section offsets and lengths
      - Checked by the reader, see `Reader validation`_.
 
 Reader validation
@@ -787,17 +780,17 @@ rejects the file.
 #. ``magic`` equals ``0x53485244554e4150``.
 #. ``version`` equals 1.
 #. ``name`` contains a NUL.
-#. ``reserved1`` is 0.
-#. ``signature``, ``metadata`` and ``data`` each lie inside the file, and
-   each non-empty one starts at or after offset 360.
+#. ``reserved1``, ``reserved2`` and ``reserved3`` are 0.
+#. ``signature`` and ``data`` each lie inside the file, and each
+   non-empty one starts at or after offset 360.
 #. ``signature_len`` is not 0.
 #. ``type`` is 1 or 2.
 #. For ``type`` 1: ``loader_insns_off`` is at least 360 and a multiple of
    8, ``loader_insns_len`` is a multiple of 8 and not 0, the region lies
    inside the file, and ``rodata_data_off`` is at most ``data_len``.
 #. For ``type`` 2: ``loader_insns_off``, ``loader_insns_len``,
-   ``metadata_len``, ``log_buf_sz``, ``nr_maps``, ``nr_progs`` and
-   ``rodata_data_off`` are 0, and ``data_len`` is not.
+   ``log_buf_sz``, ``nr_maps``, ``nr_progs`` and ``rodata_data_off`` are
+   0, and ``data_len`` is not.
 
 The reader then parses the signed sections. A failure here does not reject
 the file. The reader treats the whole directory as absent, so a load or an
@@ -910,8 +903,8 @@ Versioning
 A section tag the reader does not know makes it treat the directory as
 absent. A new section therefore needs readers that know its tag before
 writers emit it. Reserved fields are 0 in every file a writer emits. The
-reader checks ``reserved1``, the directory entries' ``reserved`` and the
-``UPUT`` ``reserved`` field. It does not check ``flags``
+reader checks ``reserved1`` to ``reserved3``, the directory entries'
+``reserved`` and the ``UPUT`` ``reserved`` field. It does not check ``flags``
 bits 1 to 31 or the ``DCDB`` ``reserved`` field.
 
 Limits

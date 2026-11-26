@@ -209,7 +209,6 @@ Read the artifact back before it leaves the operator host:
    Loader:
      Instructions:          off=360 len=1376
      Log buffer size:       1048576
-     Metadata:              (none)
      Data:                  off=6589 len=3480
 
    Signature:

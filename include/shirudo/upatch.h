@@ -52,8 +52,8 @@ struct upatch_header {
 	__le32		loader_insns_len;
 	__le32		signature_off;
 	__le32		signature_len;
-	__le32		metadata_off;
-	__le32		metadata_len;
+	__le32		reserved2;		/* zero */
+	__le32		reserved3;		/* zero */
 	__le32		data_off;		/* gen_loader_opts.data */
 	__le32		data_len;
 	__le32		log_buf_sz;		/* verifier-log buf size */

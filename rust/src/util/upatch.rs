@@ -125,8 +125,8 @@ pub struct UpatchHostHeader {
     pub(crate) loader_insns_len: u32,
     pub(crate) signature_off: u32,
     pub(crate) signature_len: u32,
-    pub(crate) metadata_off: u32,
-    pub(crate) metadata_len: u32,
+    pub(crate) reserved2: u32,
+    pub(crate) reserved3: u32,
     pub(crate) data_off: u32,
     pub(crate) data_len: u32,
     pub(crate) log_buf_sz: u32,
@@ -335,8 +335,8 @@ fn parse_header(m: &[u8]) -> Result<UpatchHostHeader, c_int> {
         loader_insns_len: field(1),
         signature_off: field(2),
         signature_len: field(3),
-        metadata_off: field(4),
-        metadata_len: field(5),
+        reserved2: field(4),
+        reserved3: field(5),
         data_off: field(6),
         data_len: field(7),
         log_buf_sz: field(8),
@@ -346,7 +346,13 @@ fn parse_header(m: &[u8]) -> Result<UpatchHostHeader, c_int> {
         ty: field(12),
         reserved1: field(13),
     };
-    if h.magic != MAGIC || h.version != VERSION || !has_nul(&h.name) || h.reserved1 != 0 {
+    if h.magic != MAGIC
+        || h.version != VERSION
+        || !has_nul(&h.name)
+        || h.reserved1 != 0
+        || h.reserved2 != 0
+        || h.reserved3 != 0
+    {
         return Err(-EINVAL);
     }
     Ok(h)
@@ -381,7 +387,6 @@ fn validate_bpf_bounds(h: &UpatchHostHeader, n: usize) -> Result<(), c_int> {
 fn validate_java_bounds(h: &UpatchHostHeader) -> Result<(), c_int> {
     if h.loader_insns_off != 0
         || h.loader_insns_len != 0
-        || h.metadata_len != 0
         || h.log_buf_sz != 0
         || h.nr_maps != 0
         || h.nr_progs != 0
@@ -397,7 +402,6 @@ fn validate_java_bounds(h: &UpatchHostHeader) -> Result<(), c_int> {
 /// its container and describes one supported payload type.
 fn validate_bounds(h: &UpatchHostHeader, n: usize) -> Result<(), c_int> {
     if !section_inside(h.signature_off, h.signature_len, n)
-        || !section_inside(h.metadata_off, h.metadata_len, n)
         || !section_inside(h.data_off, h.data_len, n)
         || h.signature_len == 0
     {
@@ -722,11 +726,6 @@ impl Upatch<'_> {
     /// The loader's signature.
     pub(crate) fn signature(&self) -> &[u8] {
         self.section(self.hdr.signature_off, self.hdr.signature_len)
-    }
-
-    /// The unsigned metadata, none when there is none.
-    pub(crate) fn metadata(&self) -> &[u8] {
-        self.section(self.hdr.metadata_off, self.hdr.metadata_len)
     }
 
     /// The loader's data, the signed sections behind it.
