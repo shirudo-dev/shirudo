@@ -27,7 +27,7 @@ use crate::util::bpm_tree::TreeOperation;
 use crate::util::crypto_openssl::{
     Sha256Ctx, sha256_final, sha256_free, sha256_init, sha256_update,
 };
-use crate::util::io::{memfd, read_file};
+use crate::util::io::{self, memfd};
 use crate::util::seal;
 use crate::util::upatch::Upatch;
 
@@ -349,16 +349,8 @@ pub(super) fn repo_update(named: Option<&[u8]>) -> c_int {
 /// The entries of the cached index of source `name`.
 pub(super) fn cached_index(name: &[u8]) -> Result<Vec<IndexEntry>> {
     let cache = cache_path(name)?;
-    let mut body: *mut u8 = core::ptr::null_mut();
-    let mut len = 0;
-
-    // SAFETY: a C string and room for the buffer and its length.
-    status(unsafe { read_file(cache.as_ptr(), 64 << 20, (&raw mut body).cast(), &mut len) })?;
-    // SAFETY: read_file() gives len bytes.
-    let parsed = index_parse(unsafe { core::slice::from_raw_parts(body, len) });
-    // SAFETY: read_file()'s buffer of len + 1 bytes.
-    unsafe { crate::heap::xfree(body.cast(), len + 1) };
-    parsed
+    let body = io::read(&cache, 64 << 20)?;
+    index_parse(&body)
 }
 
 /// The entry of `name` in `entries`: of `version` when given, else the

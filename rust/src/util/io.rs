@@ -5,14 +5,12 @@
 //! records an append keeps whole, opens beneath a directory, text lines,
 //! and whether a file may steer what shirudo trusts.
 
-use core::ffi::{CStr, c_char, c_int, c_void};
+use core::ffi::{CStr, c_char, c_int};
 
 use crate::errno::{
-    E2BIG, EFBIG, EINTR, EINVAL, EIO, EISDIR, ELOOP, ENAMETOOLONG, ENOENT, ENOMEM, ENOTDIR, EPERM,
-    ESTALE,
+    E2BIG, EFBIG, EINTR, EINVAL, EIO, EISDIR, ELOOP, ENAMETOOLONG, ENOENT, ENOTDIR, EPERM, ESTALE,
 };
 use crate::ffi;
-use crate::heap::xmalloc;
 use crate::sys::libc::Zeroed;
 use crate::sys::libc::{
     AT_EMPTY_PATH, AT_SYMLINK_NOFOLLOW, Dir, File, LOCK_EX, O_CLOEXEC, O_CREAT, O_DIRECTORY,
@@ -378,31 +376,6 @@ pub(crate) fn read_whole(fd: BorrowedFd<'_>, max: usize) -> Result<Vec<u8>, c_in
     Ok(buf)
 }
 
-/// What a read gave, into `*out`, xmalloc'd to `*len + 1` bytes and
-/// NUL-terminated, for the callers that still free it so.
-///
-/// # Safety
-///
-/// `out` is room for a pointer and `len` for a length.
-unsafe fn hand_over(read: Result<Vec<u8>, c_int>, out: *mut c_void, len: *mut usize) -> c_int {
-    let body = match read {
-        Ok(body) => body,
-        Err(err) => return err,
-    };
-    // SAFETY: an allocation of the body and a NUL, zeroed.
-    let buf = unsafe { xmalloc(body.len() + 1) }.cast::<u8>();
-    if buf.is_null() {
-        return -ENOMEM;
-    }
-    // SAFETY: the allocation's room for the body, and the caller's rooms.
-    unsafe {
-        core::ptr::copy_nonoverlapping(body.as_ptr(), buf, body.len());
-        *out.cast::<*mut u8>() = buf;
-        *len = body.len();
-    }
-    0
-}
-
 /// One line of text of at most `max` bytes before its newline, in
 /// getline()'s buffer: 1, 0 at the end, -E2BIG for a longer line and
 /// -EINVAL for one holding a NUL.
@@ -479,23 +452,6 @@ pub(crate) fn read(path: &CStr, max: usize) -> Result<Vec<u8>, c_int> {
     let fd = open_checked(path, O_RDONLY, trusted_dirs(), open_regular)?;
 
     read_whole(fd.as_fd(), max)
-}
-
-/// As [`read`], into `*out`, xmalloc'd to `*len + 1` bytes and
-/// NUL-terminated.
-///
-/// # Safety
-///
-/// `path` is a C string, `out` room for a pointer and `len` for a
-/// length.
-pub(crate) unsafe fn read_file(
-    path: *const c_char,
-    max: usize,
-    out: *mut c_void,
-    len: *mut usize,
-) -> c_int {
-    // SAFETY: the caller's C string and rooms.
-    unsafe { hand_over(read(CStr::from_ptr(path), max), out, len) }
 }
 
 const TRUSTED_DIRS: [&CStr; 2] = [ETC_DIR, VAR_LIB];

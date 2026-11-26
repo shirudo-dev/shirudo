@@ -28,7 +28,6 @@ use crate::errno::{
     EACCES, EBADMSG, EINVAL, ENAMETOOLONG, ENODEV, ENOENT, ENOSPC, EOPNOTSUPP, EPERM, EPROTO,
     ESTALE,
 };
-use crate::heap::xfree;
 use crate::sys::libc::{O_DIRECTORY, O_RDONLY, close, errno, getxattr};
 use crate::sys::upatch::UPATCH_INSTALL_TARGET_MISSING;
 use crate::sys::version::shirudo_version_id;
@@ -41,7 +40,7 @@ use crate::util::eventlog;
 use crate::util::help::{Help, HelpSection};
 use crate::util::hex::hex_decode;
 use crate::util::identity;
-use crate::util::io::{open_beneath_same_mount, read_fd, read_file};
+use crate::util::io::{open_beneath_same_mount, read_fd};
 use crate::util::java_agent;
 use crate::util::json::JsonEmit;
 use crate::util::kernel_abi;
@@ -291,24 +290,7 @@ fn version_gate(a: &OpArgs, rep: &mut OpReport, op: &[u8]) -> Result<(), ()> {
 
 /// The file at `path`, at most UPATCH_FILE_MAX bytes of it, or -errno.
 fn read(path: &CStr) -> Result<Vec<u8>, c_int> {
-    let (mut buf, mut len): (*mut u8, usize) = (core::ptr::null_mut(), 0);
-    // SAFETY: a C string and room for the buffer and its length.
-    let ret = unsafe {
-        read_file(
-            path.as_ptr(),
-            UPATCH_FILE_MAX,
-            (&raw mut buf).cast(),
-            &mut len,
-        )
-    };
-    if ret != 0 {
-        return Err(ret);
-    }
-    // SAFETY: the len bytes read.
-    let data = unsafe { crate::ffi::slice(buf, len) }.to_vec();
-    // SAFETY: the buffer and its NUL, freed once.
-    unsafe { xfree(buf.cast(), len + 1) };
-    Ok(data)
+    crate::util::io::read(path, UPATCH_FILE_MAX)
 }
 
 fn archive_path(name: &[u8]) -> CString {
