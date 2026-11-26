@@ -241,10 +241,10 @@ or shorter, and "lengths 0 to 6" every input of each of those lengths.
      - Header lines up to 26 bytes, NULs included, with the line's copy
        and the challenge's field set to 24 and 4 bytes for their 4096
        and 2048
-     - The whole line taken, and one too long for the copy or holding a
-       NUL read not at all; values terminated, without a leading blank,
-       a location without CR or LF; a challenge that fits kept whole, a
-       longer one dropped rather than cut
+     - A new HTTP response clears the previous challenge and location.
+       Other lines too long for the copy or containing a NUL are ignored.
+       Values are terminated and leading blanks skipped. A location has
+       no CR or LF. A challenge must fit in full.
    * - ``bpm-oci-buffer``
      - ``bpm_buffer_append()``
      - A buffer of 0, 3, 8, 12 and 15 bytes holding any shorter body,

@@ -186,7 +186,29 @@ static void token_refused_leaves_none(void)
 	}
 }
 
+static void registry_owns_the_auth_challenge(void)
+{
+	const char *base = "https://Registry.example";
+	struct bpm_http_response r = {};
+	char header[] = "WWW-Authenticate: Basic realm=registry\r\n";
+	char status[] = "HTTP/2 401\r\n";
+
+	EXPECT_TRUE(registry_origin(base, "https://registry.example:443/blob"));
+	EXPECT_FALSE(registry_origin(base, "https://cdn.example/blob"));
+	EXPECT_FALSE(registry_origin(base, "https://registry.example:444/blob"));
+	EXPECT_FALSE(registry_origin(base, "http://registry.example/blob"));
+	EXPECT_FALSE(registry_origin(base, NULL));
+	EXPECT_FALSE(registry_origin("https://[fe80::1%25eth0]",
+				     "https://[fe80::1%25eth1]/blob"));
+
+	bpm_header(header, 1, sizeof(header) - 1, &r);
+	EXPECT_TRUE(r.www_auth[0]);
+	bpm_header(status, 1, sizeof(status) - 1, &r);
+	EXPECT_FALSE(r.www_auth[0]);
+}
+
 static const struct unit_case cases[] = {
+	UNIT_CASE(registry_owns_the_auth_challenge),
 	UNIT_CASE(manifest_layer_is_a_whole_descriptor),
 	UNIT_CASE(digest_names_a_blob_as_a_registry_does),
 	UNIT_CASE(auth_file_with_a_nul_is_refused),

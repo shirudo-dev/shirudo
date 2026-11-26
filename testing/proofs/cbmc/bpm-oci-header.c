@@ -7,7 +7,7 @@
  * line, reads none longer than its copy nor one holding a NUL, and the
  * challenge and location it keeps are terminated inside their fields, the
  * location without a line break, a challenge longer than its field
- * dropped rather than cut.
+ * dropped rather than cut. A new HTTP response clears both prior fields.
  * The copy and the challenge's field are of 24 and 4 bytes here, for 4096
  * and 2048, which are past what CBMC can hold: the checks against them
  * are the same expressions.
@@ -85,8 +85,17 @@ void harness(void)
 	size_t n;
 
 	__CPROVER_assume(n <= LINE_MAX);
+	if (named(line, n, "HTTP/")) {
+		r.www_auth[0] = 'a';
+		r.location[0] = 'b';
+	}
 	__CPROVER_assert(bpm_header(line, 1, n, &r) == n,
 			 "the whole line taken");
+	if (named(line, n, "HTTP/")) {
+		__CPROVER_assert(!r.www_auth[0] && !r.location[0],
+				 "no headers carried to a new response");
+		return;
+	}
 	if (n >= BPM_OCI_HEADER_LINE_MAX) {
 		__CPROVER_assert(!r.www_auth[0] && !r.location[0],
 				 "a line longer than the copy read not at all");

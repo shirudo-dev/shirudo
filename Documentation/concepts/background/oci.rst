@@ -101,6 +101,10 @@ authentication instead. Container tools keep one base64
 ``user:password`` per registry host in the ``auths`` object of a
 ``config.json``.
 
+Shirudo follows blob redirects to storage hosts. Only the configured
+registry's scheme, host and port may return a challenge that starts
+authentication. The registry may name a separate token service.
+
 How shirudo uses a registry
 ---------------------------
 

@@ -161,6 +161,12 @@ static size_t bpm_header(void *ptr, size_t size, size_t nmemb, void *ud)
 	size_t n = size * nmemb;
 	char *v;
 
+	/* A redirect, proxy response or 1xx starts a separate header block. */
+	if (span_has_prefix_nocase(ptr, n, "HTTP/")) {
+		r->www_auth[0] = '\0';
+		r->location[0] = '\0';
+		return n;
+	}
 	if (span_to_str(line, sizeof(line), ptr, n))
 		return n;
 	v = line;
@@ -422,6 +428,43 @@ static int bpm_curl_deadlines(CURL *curl, __u64 room)
 	return 0;
 }
 
+static bool origin_part_matches(CURLU *registry, CURLU *peer, CURLUPart part)
+{
+	char *a = NULL, *b = NULL;
+	CURLUcode ra, rb;
+	bool match;
+
+	ra = curl_url_get(registry, part, &a, CURLU_DEFAULT_PORT);
+	rb = curl_url_get(peer, part, &b, CURLU_DEFAULT_PORT);
+	if (ra || rb)
+		match = part == CURLUPART_ZONEID &&
+			ra == CURLUE_NO_ZONEID && rb == CURLUE_NO_ZONEID;
+	else if (part == CURLUPART_ZONEID)
+		match = !strcmp(a, b);
+	else
+		match = str_equals_nocase(a, b);
+	curl_free(a);
+	curl_free(b);
+	return match;
+}
+
+static bool registry_origin(const char *base, const char *url)
+{
+	CURLU *registry = curl_url(), *peer = curl_url();
+	bool match;
+
+	match = registry && peer && url &&
+		!curl_url_set(registry, CURLUPART_URL, base, CURLU_DISALLOW_USER) &&
+		!curl_url_set(peer, CURLUPART_URL, url, CURLU_DISALLOW_USER) &&
+		origin_part_matches(registry, peer, CURLUPART_SCHEME) &&
+		origin_part_matches(registry, peer, CURLUPART_HOST) &&
+		origin_part_matches(registry, peer, CURLUPART_PORT) &&
+		origin_part_matches(registry, peer, CURLUPART_ZONEID);
+	curl_url_cleanup(peer);
+	curl_url_cleanup(registry);
+	return match;
+}
+
 static int curl_once_ex(struct bpm_oci_client *c, const char *method,
 			const char *url, const char *accept,
 			const char *content_type, const void *body, size_t body_len,
@@ -430,6 +473,7 @@ static int curl_once_ex(struct bpm_oci_client *c, const char *method,
 {
 	struct curl_slist *headers = NULL, *next;
 	char errbuf[CURL_ERROR_SIZE] = {};
+	char *effective = NULL;
 	long status = 0;
 	CURLcode cc;
 	CURL *curl;
@@ -545,6 +589,12 @@ static int curl_once_ex(struct bpm_oci_client *c, const char *method,
 	cc = curl_easy_perform(curl);
 	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
 	r->status = status;
+	/* A retry starts at url. Only the registry may ask for one. */
+	if (r->www_auth[0] &&
+	    (status != 401 || !registry_origin(c->base_url, url) ||
+	     curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &effective) ||
+	     !registry_origin(c->base_url, effective)))
+		r->www_auth[0] = '\0';
 	if (cc != CURLE_OK) {
 		pr_err("bpm OCI request %s: %s", url, errbuf[0] ? errbuf : curl_easy_strerror(cc));
 		status = -1;
