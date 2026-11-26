@@ -878,9 +878,12 @@ signed config image.
        package tree, archive and state.
    * - ``t7116-bpm-package-install``
      - BPM installs a signed upatch from the fixture registry and keeps
-       its archive. A bind over staging or the package store makes install
-       refuse without loading a patch or recording state. Without the bind,
-       install succeeds again.
+       the archive beside the version. With a sealed directory bound
+       over the staging directory or the package store, or the private
+       bpffs bound over the store, in a mount namespace of root's,
+       install refuses: neither the archive nor the version lands in
+       what the bind shows, nothing is loaded and no state is written.
+       Without a bind it installs again.
 
 ``otel`` (8)
 ~~~~~~~~~~~~

@@ -42,9 +42,6 @@ impl Install {
     /// Open this boot's package directory and a staged archive. The
     /// version is created only after its digest is checked.
     pub(super) fn open(name: &[u8], version: &[u8]) -> Result<Self> {
-        if !name_ok(name) || !version_ok(version) {
-            return Err(-EINVAL);
-        }
         let root = identity::state_root_open()
             .map_err(|err| if err == -ENOENT { -ENODEV } else { err })?;
         Self::open_at(root.as_fd(), name, version)
@@ -94,6 +91,15 @@ impl Install {
         let dir = self.dir.as_ref().ok_or(-EINVAL)?;
         let fd = seal::open_child(dir.as_fd(), c"cert.der", O_RDONLY | O_NONBLOCK)?;
         Ok(key::fd_matches_active(fd.as_fd()))
+    }
+
+    /// Every certificate failure rejects the package as an untrusted key.
+    pub(super) fn check_cert(&self) -> Result {
+        if self.cert_matches_active().unwrap_or(false) {
+            Ok(())
+        } else {
+            Err(-crate::errno::EKEYREJECTED)
+        }
     }
 
     /// Unload the old version in reverse name order, then load the new

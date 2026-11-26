@@ -134,9 +134,7 @@ pub(super) fn package_install(
             return Err(-EKEYREJECTED);
         }
         install.extract()?;
-        if !install.cert_matches_active()? {
-            return Err(-EKEYREJECTED);
-        }
+        install.check_cert()?;
         install.load(old_version)
     })();
     install.finish(result)
