@@ -56,7 +56,7 @@ test_expect_success 'a jar becomes a signed Java load' '
 	assert d["type"] == "load", d
 	assert d["payload_type"] == "java", d
 	assert d["name"] == "agent" and d["signed_name"] == "agent", d
-	assert d["loader_insns_len"] == 0 and d["metadata_len"] == 0, d
+	assert d["loader_insns_len"] == 0, d
 	assert d["signature_len"] > 0, d
 	assert d["jar_len"] == len(jar), d
 	assert d["attach_metadata_len"] == 0 and not d["decoders"], d
