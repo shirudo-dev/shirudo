@@ -124,7 +124,8 @@ counter.
        reaches the recorded bpffs mount, or a tree the walk cannot
        finish, with the checked initrd handoff exception.
        ``lsm/sb_pivotroot`` counts a refused pivot in the protected
-       namespace. ``lsm/inode_rmdir``,
+       namespace, one by host PID 1 after the initrd handoff
+       included. ``lsm/inode_rmdir``,
        ``lsm/inode_unlink``, ``lsm/inode_rename``: the removal or rename
        of the mount point of that mount or of one above it, which
        detaches or moves the mounts on it in every namespace, to a task
@@ -132,7 +133,8 @@ counter.
      - ``EPERM``
    * - ``BpffsMount``
      - move, mount over or remount of the private bpffs, or a refused
-       legacy propagation change on its mount ancestry
+       legacy propagation change on its mount ancestry, which systemd
+       requests at every shutdown
      - ``lsm/move_mount``, ``lsm/sb_mount``, ``lsm/sb_remount``, every
        caller
      - ``EPERM``
