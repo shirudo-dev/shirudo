@@ -755,6 +755,15 @@ int no_descriptor(int flags, const char *path, char *real)
 {
 	return realpath(path, real) ? flags : -errno;
 }
+
+int committed(int dirfd, const char *name, const char *tmp, const void *data)
+{
+	int fd = openat(dirfd, tmp, O_WRONLY | O_CREAT | O_CLOEXEC, 0600);
+
+	if (fd < 0)
+		return -errno;
+	return commit_file(dirfd, name, tmp, fd, data);
+}
 EOF
 }
 

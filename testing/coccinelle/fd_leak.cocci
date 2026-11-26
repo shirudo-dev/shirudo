@@ -3,7 +3,8 @@
 //
 // A descriptor that was opened is closed, returned, stored or handed to
 // what closes it (fdopen(), fdopendir(), gzdopen(), a BIO with
-// BIO_CLOSE) on every path out of the function once the open succeeded.
+// BIO_CLOSE, commit_file()) on every path out of the function once the
+// open succeeded.
 // A leak on an error path goes unnoticed in a one-shot command until a
 // loop or a retry runs out of descriptors, and keeps open what it should
 // not. The locks of eventlog_lock() and seal_lock() are descriptors too,
@@ -45,11 +46,14 @@ if (\(fd < 0\|fd == -1\)) S
     when != fdopendir(fd)
     when != gzdopen(fd, ...)
     when != BIO_new_fd(fd, BIO_CLOSE)
+    when != commit_file(..., fd, ...)
     when != \(_exit\|exit\|abort\)(...)
 (
   return fd;
 |
   return <+... close(fd) ...+>;
+|
+  return commit_file(..., fd, ...);
 |
   return@p2 ...;
 )
@@ -80,11 +84,14 @@ if (\(fd < 0\|fd == -1\)) S
     when != fdopendir(fd)
     when != gzdopen(fd, ...)
     when != BIO_new_fd(fd, BIO_CLOSE)
+    when != commit_file(..., fd, ...)
     when != \(_exit\|exit\|abort\)(...)
 (
   return fd;
 |
   return <+... close(fd) ...+>;
+|
+  return commit_file(..., fd, ...);
 |
   return@p2 ...;
 )
