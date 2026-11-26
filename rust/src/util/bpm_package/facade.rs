@@ -11,43 +11,26 @@ use super::archive::{self, Found};
 use super::publication::{self, Signed};
 use super::{IndexEntry, index};
 use crate::errno::EINVAL;
-use crate::heap::xfree;
 use crate::util::bpm_oci::{Client, MAX_ENTRIES};
 use crate::util::bpm_tree::TreePublication;
 
 /// A negative errno.
 type Result<T> = core::result::Result<T, c_int>;
 
-/// A member's bytes, which the xmalloc family holds with a NUL after
-/// them.
+/// A member's bytes and their trailing NUL, owned by this value.
 pub(crate) struct Member {
-    data: *mut u8,
-    len: usize,
+    data: Vec<u8>,
 }
 
 impl Member {
     pub(crate) fn bytes(&self) -> &[u8] {
-        if self.data.is_null() {
-            return &[];
-        }
-        // SAFETY: a member read holds len bytes at data.
-        unsafe { core::slice::from_raw_parts(self.data, self.len) }
+        &self.data[..self.data.len() - 1]
     }
 
     /// The bytes, writable, as text_sanitize() takes them.
     pub(crate) fn bytes_mut(&mut self) -> &mut [u8] {
-        if self.data.is_null() {
-            return &mut [];
-        }
-        // SAFETY: a member read holds len bytes at data, this one's own.
-        unsafe { core::slice::from_raw_parts_mut(self.data, self.len) }
-    }
-}
-
-impl Drop for Member {
-    fn drop(&mut self) {
-        // SAFETY: the reader's allocation of len + 1 bytes, or NULL.
-        unsafe { xfree(self.data.cast(), self.len + 1) };
+        let len = self.data.len() - 1;
+        &mut self.data[..len]
     }
 }
 
@@ -61,18 +44,14 @@ pub(crate) fn read_member_in(
     found_dir: Option<&mut [u8]>,
     max: usize,
 ) -> Result<Member> {
-    let mut read = Member {
-        data: ptr::null_mut(),
-        len: 0,
-    };
+    let mut read = None;
     let mut found = Found {
-        out: &mut read.data,
-        out_len: &mut read.len,
+        out: &mut read,
         dir: found_dir,
     };
 
     match archive::read_member_in(archive, Some(member), package_dir, &mut found, max) {
-        0 => Ok(read),
+        0 => read.map(|data| Member { data }).ok_or(-EINVAL),
         err => Err(err),
     }
 }
@@ -86,18 +65,14 @@ pub(crate) fn read_member_fd(
     found_dir: Option<&mut [u8]>,
     max: usize,
 ) -> Result<Member> {
-    let mut read = Member {
-        data: ptr::null_mut(),
-        len: 0,
-    };
+    let mut read = None;
     let mut found = Found {
-        out: &mut read.data,
-        out_len: &mut read.len,
+        out: &mut read,
         dir: found_dir,
     };
 
     match archive::read_member_fd(fd, Some(member), package_dir, &mut found, max) {
-        0 => Ok(read),
+        0 => read.map(|data| Member { data }).ok_or(-EINVAL),
         err => Err(err),
     }
 }

@@ -5,15 +5,12 @@
 //! records, and the signer of the certificate it carries.
 
 use core::ffi::{CStr, c_int};
-use core::ptr;
 
 use openssl::x509::{X509, X509Ref};
 
 use super::PackageInfo;
-use super::archive::{Found, read_member_in};
+use super::facade::read_member_in;
 use crate::errno::{EINVAL, EKEYREJECTED};
-use crate::ffi;
-use crate::heap::xfree;
 use crate::text::cstr;
 use crate::util::bpm_oci::{MAX_DIGEST, MAX_NAME, copy_string, package_name_ok, version_ok};
 use crate::util::crypto_openssl::{pubkey_digest, x509_from_der_bio};
@@ -46,34 +43,14 @@ fn read_x509_memory(body: &[u8]) -> Option<X509> {
 /// The name, version and signer of the `.bee` at `archive` into `info`,
 /// with the certificate that signed it.
 pub(crate) fn load_info(archive: &CStr, info: &mut PackageInfo) -> c_int {
-    let mut environment: *mut u8 = ptr::null_mut();
-    let mut environment_len = 0;
-    let ret = read_member_in(
-        archive,
-        Some(b"build-environment.json"),
-        None,
-        &mut Found {
-            out: &mut environment,
-            out_len: &mut environment_len,
-            dir: None,
-        },
-        MEMBER_MAX,
-    );
+    let environment =
+        match read_member_in(archive, b"build-environment.json", None, None, MEMBER_MAX) {
+            Ok(member) => member,
+            Err(err) => return err,
+        };
+    let ret = identify(archive, environment.bytes(), info);
     if ret != 0 {
-        return ret;
-    }
-    // SAFETY: read_member_in() gave environment_len bytes at
-    // environment, which stay until freed below.
-    let text = unsafe { ffi::slice(environment, environment_len) };
-    let ret = identify(archive, text, info);
-
-    // SAFETY: the allocation read_member_in() made, given back once.
-    unsafe { xfree(environment.cast(), environment_len + 1) };
-    if ret != 0 {
-        // SAFETY: NULL, or the certificate read_member_in() gave.
-        unsafe { xfree(info.cert.cast(), info.cert_len + 1) };
-        info.cert = ptr::null_mut();
-        info.cert_len = 0;
+        info.cert = None;
     }
     ret
 }
@@ -107,23 +84,12 @@ fn identify(archive: &CStr, environment: &[u8], info: &mut PackageInfo) -> c_int
     {
         return -EINVAL;
     }
-    let ret = read_member_in(
-        archive,
-        Some(b"cert.der"),
-        None,
-        &mut Found {
-            out: &mut info.cert,
-            out_len: &mut info.cert_len,
-            dir: None,
-        },
-        MEMBER_MAX,
-    );
-    if ret != 0 {
-        return ret;
-    }
-    // SAFETY: the cert_len bytes read_member_in() left at cert.
-    let body = unsafe { ffi::slice(info.cert.cast_const(), info.cert_len) };
-    let cert = read_x509_memory(body);
+    let member = match read_member_in(archive, b"cert.der", None, None, MEMBER_MAX) {
+        Ok(member) => member,
+        Err(err) => return err,
+    };
+    let cert = read_x509_memory(member.bytes());
+    info.cert = Some(member);
 
     signed_by(cert.as_deref(), &parsed, info)
 }

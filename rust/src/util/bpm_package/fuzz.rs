@@ -14,7 +14,6 @@ use std::sync::OnceLock;
 use super::info::load_info;
 use super::{PackageInfo, extract_fd, index_parse, read_member_in, semver_compare};
 use crate::fuzzing::{fuzz_target, input_gzip_file};
-use crate::heap::xfree;
 use crate::text::cstr;
 
 fuzz_target!(shirudo_fuzz_bpm_tar, shirudo_fuzz_bpm_tar_init, |data| {
@@ -73,12 +72,8 @@ fuzz_target!(
             return;
         };
         let dest = base.join("pkg");
-        // SAFETY: an identity of nothing, for which zeros are the value.
-        let mut info: PackageInfo = unsafe { core::mem::zeroed() };
-        if load_info(&input.path, &mut info) == 0 {
-            // SAFETY: the certificate the read gave, freed once.
-            unsafe { xfree(info.cert.cast(), info.cert_len + 1) };
-        }
+        let mut info = PackageInfo::new();
+        let _ = load_info(&input.path, &mut info);
         if std::fs::DirBuilder::new().mode(0o700).create(&dest).is_ok()
             && let Ok(dir) = std::fs::File::open(&dest)
         {

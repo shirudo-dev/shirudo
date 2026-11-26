@@ -16,8 +16,6 @@ use super::tar::{
     padding,
 };
 use crate::errno::{E2BIG, EFBIG, EINVAL, EIO, ENOENT, ENOMEM, EPERM};
-use crate::ffi;
-use crate::heap::{xfree, xmalloc};
 use crate::sys::libc::{O_CREAT, O_EXCL, O_WRONLY, errno};
 use crate::text::{at, cstr};
 use crate::util::bpm_oci::{MAX_PACKAGE_BYTES, MAX_PACKAGE_ENTRIES};
@@ -125,13 +123,12 @@ fn header_name(h: &[u8; BLOCK]) -> Option<&[u8]> {
 
 /// What `read_member_in()` fills on success.
 pub(super) struct Found<'a> {
-    pub out: &'a mut *mut u8,
-    pub out_len: &'a mut usize,
+    pub out: &'a mut Option<Vec<u8>>,
     pub dir: Option<&'a mut [u8]>,
 }
 
-/// One member of a gzip'd ustar `.bee` into an xmalloc'd buffer of
-/// `out_len + 1` bytes. `member` is relative to the single top-level
+/// One member of a gzip'd ustar `.bee` into an owned buffer.
+/// `member` is relative to the single top-level
 /// package directory; `package_dir` pins that directory when known, the
 /// found directory reports it otherwise.
 pub(super) fn read_member_in(
@@ -174,10 +171,7 @@ fn read_member_gz(
     let ret = find_member(&mut gz, member, package_dir, found, max);
 
     if gz.close() != Z_OK && ret == 0 {
-        // SAFETY: the allocation find_member() made, given back once.
-        unsafe { xfree((*found.out).cast(), *found.out_len + 1) };
-        *found.out = core::ptr::null_mut();
-        *found.out_len = 0;
+        *found.out = None;
         return -EINVAL;
     }
     ret
@@ -240,30 +234,23 @@ fn take_member(
         return -E2BIG;
     };
     let size = alloc - 1;
-    // SAFETY: xmalloc() returns NULL or alloc zeroed bytes.
-    let body = unsafe { xmalloc(alloc) }.cast::<u8>();
-    if body.is_null() {
+    let mut body = Vec::new();
+    if body.try_reserve_exact(alloc).is_err() {
         return -ENOMEM;
     }
-    // SAFETY: the alloc bytes xmalloc() just gave, which nothing else
-    // holds.
-    let buf = unsafe { ffi::bytes_mut(body, alloc) };
+    body.resize(alloc, 0);
     let mut done = 0;
 
     while done < size {
         let want = (size - done).min(CHUNK);
-        let n = gz.read(&mut buf[done..done + want]);
+        let n = gz.read(&mut body[done..done + want]);
 
         if n <= 0 {
-            // SAFETY: the allocation above, given back once.
-            unsafe { xfree(body.cast(), alloc) };
             return -EINVAL;
         }
         done += n as usize;
     }
-    buf[size] = 0;
-    *found.out = body;
-    *found.out_len = size;
+    *found.out = Some(body);
     if let Some(d) = found.dir.as_deref_mut() {
         d[..dir.len()].copy_from_slice(dir);
         d[dir.len()] = 0;

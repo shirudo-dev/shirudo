@@ -16,7 +16,6 @@ use super::build::{self, Override, cstring};
 use super::download::{Download, digest_ok};
 use super::{archive, error, path};
 use crate::errno::{EACCES, EINVAL, EIO, EKEYREJECTED, ENAMETOOLONG, ENOENT, ENOTDIR};
-use crate::heap::xfree;
 use crate::shirudo_build::{KeyFiles, check_keys, package};
 use crate::util::bpm_package::{PackageInfo, load_info, read_member_in, semver_compare};
 use crate::util::help::{Help, HelpSection};
@@ -32,8 +31,7 @@ pub(super) struct Info(pub(super) PackageInfo);
 
 impl Info {
     pub(super) fn load(package: &CStr) -> Result<Self, c_int> {
-        // SAFETY: an all-zero info is an empty one.
-        let mut info = Info(unsafe { core::mem::zeroed() });
+        let mut info = Info(PackageInfo::new());
         match load_info(package, &mut info.0) {
             0 => Ok(info),
             err => Err(err),
@@ -41,20 +39,7 @@ impl Info {
     }
 
     pub(super) fn cert(&self) -> &[u8] {
-        if self.0.cert.is_null() {
-            return &[];
-        }
-        // SAFETY: the info's certificate.
-        unsafe { crate::ffi::slice(self.0.cert, self.0.cert_len) }
-    }
-}
-
-impl Drop for Info {
-    fn drop(&mut self) {
-        if !self.0.cert.is_null() {
-            // SAFETY: the certificate the info holds, of len + 1 bytes.
-            unsafe { xfree(self.0.cert.cast(), self.0.cert_len + 1) };
-        }
+        self.0.cert.as_ref().map_or(&[], |cert| cert.bytes())
     }
 }
 

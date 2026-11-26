@@ -38,16 +38,23 @@ pub struct IndexEntry {
     pub(crate) package_size: i64,
 }
 
-/// `struct bpm_package_info`: a package's identity, and its signer's
-/// certificate in an allocation of `cert_len + 1` bytes, which `xfree()`
-/// releases.
-#[repr(C)]
+/// A package's identity and its signer's certificate.
 pub struct PackageInfo {
     pub(crate) name: [u8; MAX_NAME],
     pub(crate) version: [u8; MAX_NAME],
     pub(crate) signer: [u8; MAX_DIGEST],
-    pub(crate) cert: *mut u8,
-    pub(crate) cert_len: usize,
+    pub(crate) cert: Option<facade::Member>,
+}
+
+impl PackageInfo {
+    pub(crate) fn new() -> Self {
+        Self {
+            name: [0; MAX_NAME],
+            version: [0; MAX_NAME],
+            signer: [0; MAX_DIGEST],
+            cert: None,
+        }
+    }
 }
 
 /// `enum bpm_upatch_member`: what a file of a package's upatches/ is.
@@ -60,7 +67,6 @@ pub enum UpatchMember {
 }
 
 const _: () = assert!(size_of::<IndexEntry>() == 1160);
-const _: () = assert!(size_of::<PackageInfo>() == 400);
 const _: () = assert!(size_of::<UpatchMember>() == size_of::<core::ffi::c_int>());
 
 impl IndexEntry {
