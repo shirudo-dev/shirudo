@@ -1107,27 +1107,6 @@ int BPF_PROG(shirudo_lsm_sb_umount, struct vfsmount *mnt, int flags,
 	return ret ? ret : shirudo_image_mount(sb, true);
 }
 
-SEC("lsm/move_mount")
-int BPF_PROG(shirudo_lsm_move_mount, const struct path *from_path,
-	     const struct path *to_path, int ret)
-{
-	struct super_block *from = BPF_CORE_READ(from_path, mnt, mnt_sb);
-	struct super_block *to = BPF_CORE_READ(to_path, mnt, mnt_sb);
-
-	if (ret)
-		return ret;
-	if (shirudo_parent_mount(from, false) ||
-	    shirudo_parent_mount(to, true))
-		return -EPERM;
-	if (shirudo_deny_bpffs_mount(BPF_CORE_READ(from, s_dev),
-				     TAMPER_BPFFS_MOUNT) ||
-	    shirudo_deny_bpffs_mount(BPF_CORE_READ(to, s_dev),
-				     TAMPER_BPFFS_MOUNT))
-		return -EPERM;
-	ret = shirudo_image_mount(from, true);
-	return ret ? ret : shirudo_image_mount(to, true);
-}
-
 /* Only the host's PID 1 can cross between the two roots recorded by bootstrap. */
 static __always_inline bool shirudo_initrd_pid1(const struct mount_record *rec)
 {
@@ -1145,8 +1124,12 @@ static __always_inline bool shirudo_initrd_pid1(const struct mount_record *rec)
 	return BPF_CORE_READ(root, mnt_id_unique) == rec->initrd_root_id;
 }
 
-static __always_inline int shirudo_propagation(struct mount *target,
-					       unsigned long type)
+/*
+ * Refuse a change to the recorded bpffs mount or to a mount above it,
+ * in the namespace bootstrap recorded, to every caller but PID 1 on the
+ * initrd root.
+ */
+static __always_inline int shirudo_bpffs_tree_change(struct mount *target)
 {
 	struct mnt_namespace *ns;
 	struct mount_record *rec;
@@ -1154,13 +1137,6 @@ static __always_inline int shirudo_propagation(struct mount *target,
 	__u32 zero = 0;
 	int i;
 
-	/*
-	 * The kernel refuses to move a mount whose parent is shared, so a
-	 * request to share only restores what this guard keeps. Tools ask
-	 * for it on directories below the ancestry: ip netns on /run/netns.
-	 */
-	if (type == SHIRUDO_MS_SHARED)
-		return 0;
 	rec = bpf_map_lookup_elem(&shirudo_mnt_rec, &zero);
 	if (!rec)
 		return 0;
@@ -1185,6 +1161,40 @@ static __always_inline int shirudo_propagation(struct mount *target,
 	}
 deny:
 	return shirudo_tamper_deny(TAMPER_BPFFS_MOUNT, -EPERM);
+}
+
+static __always_inline int shirudo_propagation(struct mount *target,
+					       unsigned long type)
+{
+	/*
+	 * The kernel refuses to move a mount whose parent is shared, so a
+	 * request to share only restores what this guard keeps. Tools ask
+	 * for it on directories below the ancestry: ip netns on /run/netns.
+	 */
+	if (type == SHIRUDO_MS_SHARED)
+		return 0;
+	return shirudo_bpffs_tree_change(target);
+}
+
+SEC("lsm/move_mount")
+int BPF_PROG(shirudo_lsm_move_mount, const struct path *from_path,
+	     const struct path *to_path, int ret)
+{
+	struct super_block *from = BPF_CORE_READ(from_path, mnt, mnt_sb);
+	struct super_block *to = BPF_CORE_READ(to_path, mnt, mnt_sb);
+
+	if (ret)
+		return ret;
+	if (shirudo_parent_mount(from, false) ||
+	    shirudo_parent_mount(to, true))
+		return -EPERM;
+	if (shirudo_deny_bpffs_mount(BPF_CORE_READ(from, s_dev),
+				     TAMPER_BPFFS_MOUNT) ||
+	    shirudo_deny_bpffs_mount(BPF_CORE_READ(to, s_dev),
+				     TAMPER_BPFFS_MOUNT))
+		return -EPERM;
+	ret = shirudo_image_mount(from, true);
+	return ret ? ret : shirudo_image_mount(to, true);
 }
 
 SEC("lsm/sb_pivotroot")
