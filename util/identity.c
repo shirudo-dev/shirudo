@@ -193,7 +193,7 @@ int identity_check_state_root(const struct identity *id, int fd)
 
 int state_root_open(void)
 {
-	struct identity id;
+	struct identity id = {};
 	int bpffs, fd, ret;
 
 	bpffs = bpffs_open_identity(&id);

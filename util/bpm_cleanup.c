@@ -23,7 +23,8 @@
 
 static int remove_package_entry(int parent, const char *name, __u32 depth);
 
-static int empty_package_dir(DIR *dir, __u32 depth, bool directives)
+/* fd is the descriptor dir reads, which dirfd() may fail to give back. */
+static int empty_package_dir(DIR *dir, int fd, __u32 depth, bool directives)
 {
 	struct dirent *entry;
 	int ret;
@@ -38,7 +39,7 @@ static int empty_package_dir(DIR *dir, __u32 depth, bool directives)
 		if ((bpm_upatch_member(entry->d_name, strlen(entry->d_name)) ==
 		     BPM_UPATCH_UNLOAD) != directives)
 			continue;
-		ret = remove_package_entry(dirfd(dir), entry->d_name, depth + 1);
+		ret = remove_package_entry(fd, entry->d_name, depth + 1);
 		if (ret && ret != -ENOENT)
 			return ret;
 	}
@@ -56,11 +57,11 @@ static int remove_open_dir(int parent, const char *name, int fd, __u32 depth)
 		close(fd);
 		return ret;
 	}
-	ret = empty_package_dir(dir, depth, false);
+	ret = empty_package_dir(dir, fd, depth, false);
 	if (!ret) {
 		/* A stop with a load member left must leave its directive too. */
 		rewinddir(dir);
-		ret = empty_package_dir(dir, depth, true);
+		ret = empty_package_dir(dir, fd, depth, true);
 	}
 	if (!ret && unlinkat(parent, name, AT_REMOVEDIR))
 		ret = -errno;
