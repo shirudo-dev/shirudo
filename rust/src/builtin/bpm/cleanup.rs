@@ -166,7 +166,11 @@ fn unload_version(
 
 /// Detach the current version, then remove every version of this package.
 pub(super) fn uninstall(st: &BpmStateEntry) -> Result {
-    let store = package_store_open()?;
+    let store = match package_store_open() {
+        Ok(store) => store,
+        Err(err) if err == -ENOENT => return Ok(()),
+        Err(err) => return Err(err),
+    };
     uninstall_at(store.as_fd(), st, &crate::builtin::upatch::remove_fd)
 }
 
