@@ -76,6 +76,20 @@ test_expect_success 'bpm uninstall and list validate their arguments' '
 	$SHIRUDO bpm uninstall --help 2>&1 | grep -q "usage: shirudo bpm uninstall <package>"
 '
 
+# A host that ran no init has nothing to load a package into. The suite
+# also runs in the target guest, where these commands go on.
+if [ ! -e /run/shirudo/bpffs/lsm_link ]; then
+	test_expect_success 'bpm install, upgrade and uninstall need enforcement' '
+		for cmd in "install example/pkg" upgrade "uninstall pkg"; do
+			rc=0
+			out=$($SHIRUDO bpm $cmd 2>&1) || rc=$?
+			[ "$rc" -eq 1 ] || return 1
+			echo "$out" | grep -q "bpm ${cmd%% *}: enforcement is not active; run shirudo init first" ||
+				return 1
+		done
+	'
+fi
+
 test_expect_success 'bpm parses repository source and tree configuration lines' '
 	out=$($BPM_SOURCE_HELPER) &&
 	echo "$out" | grep -qx "endpoint=oci://registry.test:5443" &&
