@@ -28,8 +28,8 @@ use crate::util::map_read::{self, MapSummary};
 const JSON_MAX: usize = 8 * 1024 * 1024;
 
 pub(crate) use ops::{
-    UPATCH_PURGE_NO_ARCHIVE, UPATCH_PURGE_OTHER_SIGNER, install, purge, purge_check, remove,
-    remove_fd,
+    UPATCH_PURGE_NO_ARCHIVE, UPATCH_PURGE_NO_SIGNER, UPATCH_PURGE_OTHER_SIGNER, install, purge,
+    purge_check, remove, remove_fd,
 };
 
 static SUBCMDS: [HelpItem; 7] = [

@@ -59,6 +59,7 @@ const UPATCHES_DIR_C: &CStr = c"/var/lib/shirudo/upatches";
 pub(super) const LSM_LINK_PIN: &CStr = c"/run/shirudo/bpffs/lsm_link";
 pub(crate) const UPATCH_PURGE_OTHER_SIGNER: c_int = 2;
 pub(crate) const UPATCH_PURGE_NO_ARCHIVE: c_int = 3;
+pub(crate) const UPATCH_PURGE_NO_SIGNER: c_int = 4;
 const UPATCH_FILE_MAX: usize = 16 * 1024 * 1024;
 const DIGEST_LEN: usize = 32;
 const KERNEL_ABI_DETAIL_MAX: usize = 256;
@@ -1683,8 +1684,9 @@ pub(crate) fn remove_fd(path: &CStr, fd: BorrowedFd<'_>) -> c_int {
 /// and checks the signer on what that read finds: an upgrade may have
 /// replaced the upatch since the caller's scan with one another key
 /// signed. 1 when the unload was measured, 0 when only the archive went,
-/// UPATCH_PURGE_OTHER_SIGNER when another key signed the archive,
-/// UPATCH_PURGE_NO_ARCHIVE when it has gone, or -errno on failure.
+/// UPATCH_PURGE_OTHER_SIGNER when another key signed it,
+/// UPATCH_PURGE_NO_ARCHIVE when it is gone, UPATCH_PURGE_NO_SIGNER when
+/// its signer cannot be read and nothing runs under the name, or -errno.
 /// -ENOENT from the register lock or a pin is a failure.
 pub(crate) fn purge(name: &CStr, signer: *const Cert, reason: &CStr) -> c_int {
     if !name_valid(Some(name.to_bytes())) {
@@ -1754,11 +1756,42 @@ pub(crate) fn purge_check(name: &CStr) -> c_int {
     cms_check_signers(u.signature())
 }
 
+fn purge_name_runs(name: &[u8]) -> Result<bool, c_int> {
+    if pinned(name)? {
+        return Ok(true);
+    }
+    let jar = java_agent::agent_path(name)?;
+    match fs::symlink_metadata(os(jar.to_bytes())) {
+        Ok(_) => Ok(true),
+        Err(err) if err.raw_os_error() == Some(ENOENT) => Ok(false),
+        Err(err) => Err(io_err(&err)),
+    }
+}
+
+fn purge_no_signer(name: &[u8], err: c_int) -> c_int {
+    match purge_name_runs(name) {
+        Err(run_err) => run_err,
+        Ok(true) => err,
+        Ok(false) => {
+            log_warn(
+                &[
+                    b"upatch purge: ",
+                    name,
+                    b".upatch names no signer: ",
+                    strerr(-err),
+                ]
+                .concat(),
+            );
+            UPATCH_PURGE_NO_SIGNER
+        }
+    }
+}
+
 fn purge_locked(name: &[u8], signer: *const Cert, reason: &[u8]) -> c_int {
     let u = match purge_archive(name) {
         Ok(Some(u)) => u,
         Ok(None) => return UPATCH_PURGE_NO_ARCHIVE,
-        Err(err) => return err,
+        Err(err) => return purge_no_signer(name, err),
     };
     let archived = archive_path(name);
     let sig = u.signature();
@@ -1767,12 +1800,11 @@ fn purge_locked(name: &[u8], signer: *const Cert, reason: &[u8]) -> c_int {
     let payload = u.hdr.payload_sha256;
     let payload_type = u.hdr.ty;
     drop(u);
+    if ret < 0 {
+        return purge_no_signer(name, ret);
+    }
     if ret != 1 {
-        return if ret < 0 {
-            ret
-        } else {
-            UPATCH_PURGE_OTHER_SIGNER
-        };
+        return UPATCH_PURGE_OTHER_SIGNER;
     }
 
     // As for unload: the event first, then the detach it describes.

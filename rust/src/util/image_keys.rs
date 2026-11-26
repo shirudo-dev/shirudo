@@ -260,9 +260,11 @@ pub(crate) fn apply(root_fd: c_int, boot: bool) -> c_int {
     if ret != 0 {
         return ret;
     }
-    let ret = check_purge(root_fd);
-    if ret != 0 {
-        return ret;
+    if !boot {
+        let ret = check_purge(root_fd);
+        if ret != 0 {
+            return ret;
+        }
     }
     revocations(root_fd, true, boot).err().unwrap_or(0)
 }

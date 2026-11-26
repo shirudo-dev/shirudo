@@ -19,7 +19,9 @@ use openssl::hash::MessageDigest;
 use openssl::pkey::{HasPublic, PKey, PKeyRef, Private};
 use openssl::x509::{X509, X509NameRef};
 
-use crate::builtin::upatch::{UPATCH_PURGE_NO_ARCHIVE, UPATCH_PURGE_OTHER_SIGNER};
+use crate::builtin::upatch::{
+    UPATCH_PURGE_NO_ARCHIVE, UPATCH_PURGE_NO_SIGNER, UPATCH_PURGE_OTHER_SIGNER,
+};
 use crate::errno::{EACCES, EINVAL, EIO, EKEYREJECTED, ENODEV, ENOENT, ENOKEY};
 use crate::ffi;
 use crate::sys::identity::Identity;
@@ -1046,9 +1048,10 @@ pub(crate) fn revoke_check() -> c_int {
 /// Every archived upatch the revoked certificate signed goes: the kernel
 /// would refuse to restore it at the next boot, and keeping it loaded
 /// would keep running what a key nobody trusts any more authorised. The
-/// rest are still tried when one fails. How many went, or the last
-/// error.
-fn purge_signed_by(der: &[u8]) -> c_int {
+/// At boot, an archive with no readable signer is left for restore to
+/// ignore if nothing runs under its name. The rest are still tried when
+/// one fails. How many went, or the last error.
+fn purge_signed_by(der: &[u8], boot: bool) -> c_int {
     let mut cert = Cert::new();
     let (mut ret, mut purged) = (0, 0);
 
@@ -1078,6 +1081,19 @@ fn purge_signed_by(der: &[u8]) -> c_int {
         if prc == UPATCH_PURGE_OTHER_SIGNER || prc == UPATCH_PURGE_NO_ARCHIVE {
             continue;
         }
+        if prc == UPATCH_PURGE_NO_SIGNER && boot {
+            warn(&[
+                b"keys revoke: ",
+                name,
+                b".upatch is left for boot-restore to ignore",
+            ]);
+            continue;
+        }
+        let prc = if prc == UPATCH_PURGE_NO_SIGNER {
+            -crate::errno::EBADMSG
+        } else {
+            prc
+        };
         if prc < 0 {
             error(&[b"keys revoke: purge ", name, b": ", strerr(-prc)]);
             ret = prc;
@@ -1124,7 +1140,7 @@ pub(crate) fn revoke_image(der: &[u8], boot: bool) -> c_int {
             }
         }
     }
-    purge_signed_by(der).min(0)
+    purge_signed_by(der, boot).min(0)
 }
 
 fn keys_show(args: &[&CStr]) -> c_int {

@@ -76,11 +76,12 @@ const ST_NOEXEC: u64 = 8;
 /// _IOR(0x12, 128, __u64).
 const BLKGETDISKSEQ: core::ffi::c_ulong = 0x8008_1280;
 
-/// Why a config is prepared: for the boot, in the initrd, as a live
-/// update, or to stage it for the next boot.
+/// Why a config is prepared: in the initrd, for the boot activation
+/// event, as a live update, or to stage it for the next boot.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Prepare {
     Boot,
+    BootEvent,
     Update,
     Stage,
 }
@@ -640,14 +641,14 @@ fn remove_candidate(device: &mut DmVerity) -> c_int {
 
 /// The candidate's BPF trust set, valid; for a live update, also all
 /// held by the kernel, which enrols a set only at boot.
-fn candidate_keys(fd: c_int, enrolled: bool) -> c_int {
+fn candidate_keys(fd: c_int, purpose: Prepare) -> c_int {
     let mut set = TrustedSet::default();
     let mut ret = image_keys::validate_set(RUNTIME_CERT_PATH, fd, &mut set);
-    if ret == 0 && enrolled {
+    if ret == 0 && purpose != Prepare::Stage {
         ret = image_keys::check_set(&set);
     }
     // Before the activation PCR is extended, which nothing takes back.
-    if ret == 0 && enrolled {
+    if ret == 0 && purpose == Prepare::Update {
         ret = image_keys::check_purge(fd);
     }
     if ret == -ENOKEY {
@@ -750,7 +751,7 @@ fn prepare_config(s: &mut State, target: &ConfigUpdateTarget, purpose: Prepare) 
                 ret = crate::util::image_config::validate(fd);
             }
             if ret == 0 && !trusted_boot {
-                ret = candidate_keys(fd, purpose == Prepare::Update);
+                ret = candidate_keys(fd, purpose);
             }
         }
     }
@@ -853,7 +854,12 @@ impl ConfigUpdateOps for RuntimeOps {
     }
 
     fn prepare(&self, target: &ConfigUpdateTarget) -> Result<(), c_int> {
-        match with_state(|s| prepare_config(s, target, Prepare::Update)) {
+        let purpose = if self.boot {
+            Prepare::BootEvent
+        } else {
+            Prepare::Update
+        };
+        match with_state(|s| prepare_config(s, target, purpose)) {
             0 => Ok(()),
             err => Err(err),
         }
