@@ -138,7 +138,7 @@ app-sandbox
    * - Package
      - ``app-sandbox``, from :src:`upatches/app-sandbox/Beefile`
    * - upatch
-     - ``app-sandbox``, built from ``app-sandbox.bpf.c``: twelve ``lsm``
+     - ``app-sandbox``, built from ``app-sandbox.bpf.c``: nineteen ``lsm``
        programs and no state of its own
    * - Policy labels
      - one ``[[upatches.policy]]`` table per sandbox, ``apache`` and
@@ -167,17 +167,28 @@ bit and the rules of ``sandbox_policy``, and refuse with ``EACCES``:
      - executing a file that carries neither the sandbox's bit nor one
        its ``exec`` rule names
    * - ``lsm/socket_connect``, ``lsm/socket_sendmsg``
-     - an IPv4 or IPv6 peer outside the networks of its ``network`` rule
+     - an IPv4 or IPv6 peer matching a ``deny.network`` CIDR, or outside
+       the networks of its ``network`` rule
    * - ``lsm/socket_create``
-     - a raw or packet socket, when it has a ``network`` rule
+     - a socket whose family is listed in ``deny.families``, or a raw or
+       packet socket when it has a ``network`` rule
+   * - ``lsm/unix_stream_connect``, ``lsm/unix_may_send``
+     - a filesystem-bound ``AF_UNIX`` peer whose resolved dentry matches
+       a ``deny.unix`` pattern
    * - ``lsm/inode_create``, ``lsm/inode_mkdir``, ``lsm/inode_mknod``,
        ``lsm/inode_symlink``, ``lsm/inode_link``
-     - a new name that matches a ``deny.create`` pattern
+     - a new name matching a ``deny.create`` pattern, and hard-linking a
+       source matching ``deny.read``
    * - ``lsm/inode_rename``
-     - a rename from or to a name that matches a ``deny.rename`` pattern
+     - a rename from or to a name matching a ``deny.rename`` pattern, or
+       from a source matching ``deny.read``
    * - ``lsm/file_open``, ``lsm/inode_setattr``
-     - opening for writing, or truncating, a name that matches a
-       ``deny.write`` pattern
+     - opening for writing or truncating a name matching ``deny.write``,
+       and opening for reading a name matching ``deny.read``
+   * - ``lsm/userns_create``, ``lsm/sb_mount``, ``lsm/move_mount``,
+       ``lsm/ptrace_access_check``, ``lsm/kernel_module_request``
+     - the privileged operations listed in ``deny.ops`` (``userns``,
+       ``mount``, cross-process ``ptrace``, ``module``)
 
 ``gen_policy.py`` joins the two halves of a sandbox by its name: it
 reads the bit from the Beefile and the rules from ``sandbox.toml``, and
