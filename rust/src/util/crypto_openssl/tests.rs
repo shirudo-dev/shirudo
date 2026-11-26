@@ -24,7 +24,7 @@ fn sha256_buffer_zeroes_a_failed_digest() {
 }
 
 #[test]
-fn archived_signers_remain_identifiable() {
+fn signers_need_a_complete_envelope() {
     let corpus = std::fs::read(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../testing/fuzz/corpus/cms/cert-and-signature"
@@ -50,14 +50,6 @@ fn archived_signers_remain_identifiable() {
     // SAFETY: the signature bytes and the live certificate remain valid.
     let signed_by = unsafe { cms_signed_by(signature.as_ptr(), signature.len(), &cert) };
     assert_eq!(signed_by, -EINVAL);
-    // SAFETY: the signature bytes and the live certificate remain valid.
-    let archived = unsafe { cms_archive_signed_by(signature.as_ptr(), signature.len(), &cert) };
-    assert_eq!(archived, 1);
-
-    *signature.last_mut().expect("trailing byte") = 1;
-    // SAFETY: the signature bytes and the live certificate remain valid.
-    let archived = unsafe { cms_archive_signed_by(signature.as_ptr(), signature.len(), &cert) };
-    assert_eq!(archived, -EINVAL);
     // SAFETY: cert owns the certificate read above.
     unsafe { cert_free(&mut cert) };
 }

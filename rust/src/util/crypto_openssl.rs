@@ -724,9 +724,8 @@ fn cms_has_signers(cms: &CmsContentInfo) -> bool {
     true
 }
 
-/// Parse a complete CMS envelope. Older archived signatures may have
-/// trailing zero padding; only signer attribution uses that form.
-fn read_cms(signature: &[u8], archive: bool) -> Option<CmsContentInfo> {
+/// Parse a complete CMS envelope with at least one signer.
+fn read_cms(signature: &[u8]) -> Option<CmsContentInfo> {
     let len = c_long::try_from(signature.len())
         .ok()
         .filter(|&n| n > 0 && n <= c_int::MAX.into())?;
@@ -741,9 +740,7 @@ fn read_cms(signature: &[u8], archive: bool) -> Option<CmsContentInfo> {
     // SAFETY: d2i leaves next within the input slice after success.
     let consumed = usize::try_from(unsafe { next.offset_from(signature.as_ptr()) }).ok()?;
     let suffix = signature.get(consumed..)?;
-    if (!suffix.is_empty() && (!archive || suffix.iter().any(|&byte| byte != 0)))
-        || !cms_has_signers(&cms)
-    {
+    if !suffix.is_empty() || !cms_has_signers(&cms) {
         return None;
     }
     Some(cms)
@@ -751,7 +748,7 @@ fn read_cms(signature: &[u8], archive: bool) -> Option<CmsContentInfo> {
 
 /// Check a new artifact before handing its signature to the kernel.
 pub(crate) fn cms_check_signers(signature: &[u8]) -> c_int {
-    if read_cms(signature, false).is_some() {
+    if read_cms(signature).is_some() {
         0
     } else {
         clear_errors();
@@ -805,7 +802,7 @@ pub(crate) fn verify_detached_x509(payload: &[u8], signature: &[u8], x509: &X509
         let store = store.build();
         let mut signers = Stack::new()?;
         signers.push(x509.to_owned())?;
-        let Some(mut cms) = read_cms(signature, false) else {
+        let Some(mut cms) = read_cms(signature) else {
             return Err(ErrorStack::get());
         };
         cms.verify(
@@ -827,8 +824,8 @@ pub(crate) fn verify_detached_x509(payload: &[u8], signature: &[u8], x509: &X509
 
 /// Match a parsed signer identifier to this certificate without verifying
 /// the signature itself.
-fn signer_matches(signature: &[u8], x509: &X509Ref, archive: bool) -> c_int {
-    let Some(cms) = read_cms(signature, archive) else {
+fn signer_matches(signature: &[u8], x509: &X509Ref) -> c_int {
+    let Some(cms) = read_cms(signature) else {
         clear_errors();
         return -EINVAL;
     };
@@ -845,7 +842,7 @@ fn signer_matches(signature: &[u8], x509: &X509Ref, archive: bool) -> c_int {
     c_int::from(named)
 }
 
-/// Attribute a complete, new CMS signature to a certificate.
+/// Attribute a complete CMS signature to a certificate.
 ///
 /// # Safety
 ///
@@ -864,29 +861,7 @@ pub(crate) unsafe fn cms_signed_by(
         return -EINVAL;
     }
     // SAFETY: the caller's signature_len bytes.
-    signer_matches(unsafe { slice(signature, signature_len) }, x509, false)
-}
-
-/// Attribute an already archived signature, including old zero padding.
-///
-/// # Safety
-///
-/// `signature` holds `signature_len` bytes, and `cert` is NULL or
-/// points to a certificate.
-pub(crate) unsafe fn cms_archive_signed_by(
-    signature: *const u8,
-    signature_len: usize,
-    cert: *const Cert,
-) -> c_int {
-    // SAFETY: the caller passes NULL or a cert.
-    let Some(x509) = (unsafe { x509_of(cert) }) else {
-        return -EINVAL;
-    };
-    if signature.is_null() {
-        return -EINVAL;
-    }
-    // SAFETY: the caller's signature_len bytes.
-    signer_matches(unsafe { slice(signature, signature_len) }, x509, true)
+    signer_matches(unsafe { slice(signature, signature_len) }, x509)
 }
 
 /// HMAC-SHA-256 of `data` under `key`.

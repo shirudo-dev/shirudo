@@ -36,7 +36,7 @@ use crate::text::cstr;
 use crate::util::bpf_sys::bpf_obj_get;
 use crate::util::chain::{self, memneq_explicit};
 use crate::util::config::{self, Scrubbed};
-use crate::util::crypto_openssl::{Cert, cms_archive_signed_by};
+use crate::util::crypto_openssl::{Cert, cms_signed_by};
 use crate::util::eventlog;
 use crate::util::help::{Help, HelpSection};
 use crate::util::hex::hex_decode;
@@ -1771,7 +1771,7 @@ fn purge_locked(name: &[u8], signer: *const Cert, reason: &[u8]) -> c_int {
     }
     let sig = u.signature();
     // SAFETY: the archive's signature and the caller's certificate.
-    let ret = unsafe { cms_archive_signed_by(sig.as_ptr(), sig.len(), signer) };
+    let ret = unsafe { cms_signed_by(sig.as_ptr(), sig.len(), signer) };
     let payload = u.hdr.payload_sha256;
     let payload_type = u.hdr.ty;
     drop(u);
