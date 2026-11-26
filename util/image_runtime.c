@@ -52,6 +52,8 @@
 
 enum config_prepare {
 	CONFIG_PREPARE_BOOT,
+	/* The boot's activation event, of the config init just enrolled. */
+	CONFIG_PREPARE_BOOT_EVENT,
 	CONFIG_PREPARE_UPDATE,
 	CONFIG_PREPARE_STAGE,
 };
@@ -613,16 +615,20 @@ static int remove_candidate(struct dm_verity *device)
 	return ret;
 }
 
-static noinline_for_stack int candidate_keys(int fd, bool enrolled)
+static noinline_for_stack int candidate_keys(int fd,
+					     enum config_prepare purpose)
 {
 	struct trusted_set set = {};
 	int ret;
 
 	ret = keys_validate_image_set(RUNTIME_CERT_PATH, fd, &set);
-	if (!ret && enrolled)
+	if (!ret && purpose != CONFIG_PREPARE_STAGE)
 		ret = keys_check_image_set(&set);
-	/* Before the activation PCR is extended, which nothing takes back. */
-	if (!ret && enrolled)
+	/*
+	 * Before the activation PCR is extended, which nothing takes back.
+	 * A boot enrolled no revoked key and purges what it can.
+	 */
+	if (!ret && purpose == CONFIG_PREPARE_UPDATE)
 		ret = keys_check_image_purge(fd);
 	if (ret == -ENOKEY)
 		pr_err("image: BPF signer was not enrolled at boot; "
@@ -729,8 +735,7 @@ static int prepare_config(struct image_context *current,
 	if (!ret)
 		ret = image_config_validate(current->candidate_fd);
 	if (!ret && !trusted_boot)
-		ret = candidate_keys(current->candidate_fd,
-				     purpose == CONFIG_PREPARE_UPDATE);
+		ret = candidate_keys(current->candidate_fd, purpose);
 out:
 	if (ret && created) {
 		close_candidate();
@@ -781,6 +786,12 @@ static int prepare_update(void *ctx,
 	return prepare_config(ctx, target, CONFIG_PREPARE_UPDATE);
 }
 
+static int prepare_boot_event(void *ctx,
+			      const struct config_update_target *target)
+{
+	return prepare_config(ctx, target, CONFIG_PREPARE_BOOT_EVENT);
+}
+
 static int activate_update(void *ctx,
 			   const struct config_update_target *target)
 {
@@ -807,7 +818,7 @@ static const struct config_update_ops boot_ops = {
 	.boot_identity = boot_identity,
 	.pcr_read = pcr_read,
 	.pcr_extend = pcr_extend,
-	.prepare = prepare_update,
+	.prepare = prepare_boot_event,
 	.activate = activate_boot,
 	.seal = seal_fd,
 };

@@ -189,7 +189,7 @@ int keys_apply_image(int root_fd, bool boot)
 	int ret;
 
 	ret = keys_validate_image(root_fd);
-	if (!ret)
+	if (!ret && !boot)
 		ret = keys_check_image_purge(root_fd);
 	return ret ? ret : revocations(root_fd, true, boot, &records);
 }

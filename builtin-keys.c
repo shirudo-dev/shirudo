@@ -886,8 +886,14 @@ int keys_revoke_check(void)
  * would refuse to restore it at the next boot, and keeping it loaded
  * would keep running what a key nobody trusts any more authorised. The
  * rest are still tried when one fails.
+ *
+ * A boot enrolls no revoked key, so the kernel loads nothing one signed
+ * and boot-restore is left to ignore an archive that names no signer.
+ * Refusing it would fail every boot, with no command to remove the file.
+ * Live, the key was trusted until now and such an archive fails the
+ * revocation, as keys_revoke_check() says before anything changed.
  */
-static int purge_signed_by(const __u8 *der, size_t der_sz,
+static int purge_signed_by(const __u8 *der, size_t der_sz, bool boot,
 			   size_t *unloaded)
 {
 	struct cert cert = {};
@@ -922,6 +928,13 @@ static int purge_signed_by(const __u8 *der, size_t der_sz,
 		if (prc == UPATCH_PURGE_OTHER_SIGNER ||
 		    prc == UPATCH_PURGE_NO_ARCHIVE)
 			continue;
+		if (prc == UPATCH_PURGE_NO_SIGNER && boot) {
+			pr_warn("keys revoke: %s.upatch is left for boot-restore to ignore",
+				name);
+			continue;
+		}
+		if (prc == UPATCH_PURGE_NO_SIGNER)
+			prc = -EBADMSG;
 		if (prc < 0) {
 			pr_err("keys revoke: purge %s: %s", name,
 			       strerror(-prc));
@@ -969,7 +982,7 @@ int keys_revoke_image(const __u8 *der, size_t size, bool boot)
 				return ret;
 		}
 	}
-	ret = purge_signed_by(der, size, &unloaded);
+	ret = purge_signed_by(der, size, boot, &unloaded);
 	return min(ret, 0);
 }
 

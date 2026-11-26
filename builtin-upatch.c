@@ -4100,6 +4100,44 @@ int upatch_purge_check(const char *name)
 	return ret;
 }
 
+/*
+ * 1 when something may run under a name whose archive does not say what
+ * it is: its pin directory, or a jar. A reboot takes both away.
+ */
+static int purge_name_runs(const char *name)
+{
+	char jar[PATH_MAX];
+	struct stat st;
+	int ret;
+
+	ret = upatch_pinned(name);
+	if (ret)
+		return ret;
+	ret = java_agent_path(name, jar, sizeof(jar));
+	if (ret)
+		return ret;
+	if (!lstat(jar, &st))
+		return 1;
+	return errno == ENOENT ? 0 : -errno;
+}
+
+/*
+ * An archive no signer can be read from: err, unless nothing runs under
+ * its name, which leaves the revocation nothing to unload.
+ */
+static int purge_no_signer(const char *name, int err)
+{
+	int runs = purge_name_runs(name);
+
+	if (runs < 0)
+		return runs;
+	if (runs)
+		return err;
+	pr_warn("upatch purge: %s.upatch names no signer: %s", name,
+		strerror(-err));
+	return UPATCH_PURGE_NO_SIGNER;
+}
+
 static int upatch_purge_locked(const char *name, const struct cert *signer,
 			       const char *reason)
 {
@@ -4113,14 +4151,18 @@ static int upatch_purge_locked(const char *name, const struct cert *signer,
 		       UPATCHES_DIR, name) < 0)
 		return -ENAMETOOLONG;
 	ret = purge_archive_open(persisted, name, &u);
+	if (ret < 0)
+		return purge_no_signer(name, ret);
 	if (ret)
 		return ret;
 	ret = cms_signed_by(upatch_signature(&u), u.hdr.signature_len, signer);
 	memcpy(payload, u.hdr.payload_sha256, sizeof(payload));
 	type = u.hdr.type;
 	upatch_close(&u);
+	if (ret < 0)
+		return purge_no_signer(name, ret);
 	if (ret != 1)
-		return ret < 0 ? ret : UPATCH_PURGE_OTHER_SIGNER;
+		return UPATCH_PURGE_OTHER_SIGNER;
 
 	/* As for unload: the event first, then the detach it describes. */
 	loaded = purge_is_loaded(name, type);

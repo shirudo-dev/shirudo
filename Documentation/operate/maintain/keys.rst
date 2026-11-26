@@ -457,7 +457,12 @@ Limits
   ``/var/lib/shirudo/upatches`` holds an archive no signer can be read
   from. ``shirudo image update`` then prints ``keys revoke:
   <name>.upatch names no signer: <error>; nothing revoked`` and changes
-  nothing: no key is unlinked and nothing is measured.
+  nothing: no key is unlinked and nothing is measured. A boot does not
+  refuse: ``init`` logs ``keys revoke: <name>.upatch is left for
+  boot-restore to ignore`` and completes. An archive that does not parse
+  is then not restored, and ``shirudo status`` does not report it: the
+  node reads ``ok`` with a loaded set, in ``status`` and in the
+  keepalive, that is one upatch short.
 - Vouches are historical authorizations. Revoking A does not
   automatically revoke B merely because A vouched for it. After a
   compromise, the config signer must explicitly revoke any certificate

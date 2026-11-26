@@ -245,11 +245,14 @@ struct cert;
  * that signed the upatch was revoked: 1 when the unload was measured,
  * 0 when only the archive went, UPATCH_PURGE_OTHER_SIGNER when the archive
  * stays because another key signed it, UPATCH_PURGE_NO_ARCHIVE when the
- * name has none, -errno on failure. An -ENOENT is a failure like any
- * other: the register lock or a pin was not there.
+ * name has none, UPATCH_PURGE_NO_SIGNER when it stays because no signer
+ * can be read from it and nothing runs under its name, -errno on
+ * failure. An -ENOENT is a failure like any other: the register lock or
+ * a pin was not there.
  */
 #define UPATCH_PURGE_OTHER_SIGNER	2
 #define UPATCH_PURGE_NO_ARCHIVE		3
+#define UPATCH_PURGE_NO_SIGNER		4
 int upatch_purge(const char *name, const struct cert *signer,
 		 const char *reason);
 

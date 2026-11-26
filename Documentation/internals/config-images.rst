@@ -231,7 +231,12 @@ It then activates it:
 
 At boot, ``init`` runs the same sequence as a boot event for the selected
 config, but completes it only at the end of ``init``, after the restore
-and the register binding. :doc:`boot-flow` gives the boot order. Figure 1
+and the register binding. A live update refuses a config with revocation
+records, in step 1 and again in step 6, while the archive holds a file no
+signer can be read from. A boot enrolls no revoked key and leaves such a
+file for the restore to ignore, unless a pin directory or a jar of its
+name exists, as after an ``init`` run by hand in a boot that loaded
+upatches. :doc:`boot-flow` gives the boot order. Figure 1
 shows the sequence, the two ways into it, and the span in which an
 interruption leaves the selection pending.
 

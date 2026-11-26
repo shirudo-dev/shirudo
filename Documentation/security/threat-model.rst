@@ -1841,7 +1841,13 @@ R13 Revocation reaches a target only through a config
    the config PCR and again before it unlinks the first key, and refuses
    without changing anything while one is there. An error that the check
    could not foresee still fails the purge part-way, and the activation
-   stays pending.
+   stays pending. A boot activation does not make that check: it enrolls
+   no revoked key, so nothing such a key signed passes the signature
+   check of a restore, and an archive the purge cannot attribute is left
+   for the restore to ignore as long as nothing runs under its name. A
+   node boots with such an archive, less the upatch it held; a refusal
+   would fail ``init`` at every boot, with no command that removes the
+   file.
    BPF loads require a complete CMS envelope, and the purge reads an
    archived signature by the same rule.
    At boot the revoked key is not enrolled, and the init event's
