@@ -2780,6 +2780,9 @@ static int package_uninstall(const struct bpm_state_entry *st)
 	int store, ret;
 
 	store = package_store_open();
+	/* As for a package directory that is gone: nothing left to unload. */
+	if (store == -ENOENT)
+		return 0;
 	if (store < 0)
 		return store;
 	ret = bpm_uninstall_at(store, st);
