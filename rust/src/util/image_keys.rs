@@ -109,36 +109,35 @@ fn revoked_cert(dir: c_int, name: &CStr, dev: (u32, u32)) -> Result<Vec<u8>, c_i
 }
 
 /// Checks every revocation of the image at `root_fd`, in directory
-/// order, and with `apply` revokes each from the kernel: 0 or the first
-/// error. An image without keys/revoked/ revokes nothing.
-fn revocations(root_fd: c_int, apply: bool, boot: bool) -> c_int {
+/// order, and with `apply` revokes each from the kernel. Returns the
+/// number of records or the first error. An image without keys/revoked/
+/// revokes nothing.
+fn revocations(root_fd: c_int, apply: bool, boot: bool) -> Result<usize, c_int> {
     // SAFETY: the caller's root fd, open for the call, which
     // validate_set() had image_config::validate() stat first.
-    let root = match stat_fd(unsafe { BorrowedFd::borrow_raw(root_fd) }) {
-        Ok(root) => root,
-        Err(err) => return err,
-    };
+    let root = stat_fd(unsafe { BorrowedFd::borrow_raw(root_fd) })?;
     let dev = (root.stx_dev_major, root.stx_dev_minor);
     let keys = match open_dir(root_fd, c"keys") {
         Ok(Some(fd)) => fd,
-        Ok(None) => return 0,
-        Err(err) => return err,
+        Ok(None) => return Ok(0),
+        Err(err) => return Err(err),
     };
     let revoked = match open_dir(keys.as_raw_fd(), c"revoked") {
         Ok(Some(fd)) => fd,
-        Ok(None) => return 0,
-        Err(err) => return err,
+        Ok(None) => return Ok(0),
+        Err(err) => return Err(err),
     };
     drop(keys);
     let dir_fd = revoked.as_raw_fd();
     // SAFETY: the open directory, whose fd the stream takes over.
     let dir = unsafe { fdopendir(dir_fd) };
     if dir.is_null() {
-        return last_errno();
+        return Err(last_errno());
     }
     let _ = revoked.into_raw_fd();
 
     let mut ret = 0;
+    let mut records = 0;
     loop {
         // The end of the stream tells from an error by errno alone.
         set_errno(0);
@@ -165,10 +164,11 @@ fn revocations(root_fd: c_int, apply: bool, boot: bool) -> c_int {
         if ret != 0 {
             break;
         }
+        records += 1;
     }
     // SAFETY: the stream, closed once with its fd.
     unsafe { closedir(dir) };
-    ret
+    if ret == 0 { Ok(records) } else { Err(ret) }
 }
 
 /// The trust set of the config image at `root_fd`: its config, its
@@ -184,8 +184,7 @@ pub(crate) fn validate_set(primary: &CStr, root_fd: c_int, set: &mut TrustedSet)
         ));
         return ret;
     }
-    let ret = revocations(root_fd, false, false);
-    if ret != 0 {
+    if let Err(ret) = revocations(root_fd, false, false) {
         error(format!(
             "image trust set: validate revocations: {}",
             text(ret)
@@ -245,13 +244,25 @@ pub(crate) fn validate(root_fd: c_int) -> c_int {
     if ret != 0 { ret } else { check_set(&set) }
 }
 
+/// Check stored archives only when this image has a revocation record.
+pub(crate) fn check_purge(root_fd: c_int) -> c_int {
+    match revocations(root_fd, false, false) {
+        Ok(0) => 0,
+        Ok(_) => crate::builtin::keys::revoke_check(),
+        Err(err) => err,
+    }
+}
+
 /// Validates the trust set of the image at `root_fd`, then revokes what
 /// it revokes, as a boot or a live update records it.
 pub(crate) fn apply(root_fd: c_int, boot: bool) -> c_int {
     let ret = validate(root_fd);
     if ret != 0 {
-        ret
-    } else {
-        revocations(root_fd, true, boot)
+        return ret;
     }
+    let ret = check_purge(root_fd);
+    if ret != 0 {
+        return ret;
+    }
+    revocations(root_fd, true, boot).err().unwrap_or(0)
 }

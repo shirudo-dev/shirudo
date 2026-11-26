@@ -19,7 +19,7 @@ use openssl::hash::MessageDigest;
 use openssl::pkey::{HasPublic, PKey, PKeyRef, Private};
 use openssl::x509::{X509, X509NameRef};
 
-use crate::builtin::upatch::UPATCH_PURGE_OTHER_SIGNER;
+use crate::builtin::upatch::{UPATCH_PURGE_NO_ARCHIVE, UPATCH_PURGE_OTHER_SIGNER};
 use crate::errno::{EACCES, EINVAL, EIO, EKEYREJECTED, ENODEV, ENOENT, ENOKEY};
 use crate::ffi;
 use crate::sys::identity::Identity;
@@ -1006,6 +1006,43 @@ fn measure_revoke(sha256: &[u8; 32], fp_hex: &[u8]) -> c_int {
     ret
 }
 
+/// A revocation cannot safely start while any stored archive has no signer.
+pub(crate) fn revoke_check() -> c_int {
+    let files = match dir_names(UPATCHES_DIR.as_bytes(), |n| name_has_suffix(n, b".upatch")) {
+        Ok(files) => files,
+        Err(err) => return if err == -ENOENT { 0 } else { err },
+    };
+    let mut ret = 0;
+    for file in &files {
+        let name = file.strip_suffix(b".upatch").unwrap_or(file);
+        let err = if !name_valid(Some(name)) {
+            error(&[b"keys revoke: invalid archive filename"]);
+            -EINVAL
+        } else {
+            let name_c = message(&[name]);
+            let err = crate::builtin::upatch::purge_check(&name_c);
+            if err == UPATCH_PURGE_NO_ARCHIVE {
+                0
+            } else {
+                if err != 0 {
+                    error(&[
+                        b"keys revoke: ",
+                        name,
+                        b".upatch names no signer: ",
+                        strerr(-err),
+                        b"; nothing revoked",
+                    ]);
+                }
+                err
+            }
+        };
+        if ret == 0 && err != 0 {
+            ret = err;
+        }
+    }
+    ret
+}
+
 /// Every archived upatch the revoked certificate signed goes: the kernel
 /// would refuse to restore it at the next boot, and keeping it loaded
 /// would keep running what a key nobody trusts any more authorised. The
@@ -1038,7 +1075,7 @@ fn purge_signed_by(der: &[u8]) -> c_int {
         }
         let name_c = message(&[name]);
         let prc = crate::builtin::upatch::purge(&name_c, (&raw const cert).cast(), c"key_revoke");
-        if prc == UPATCH_PURGE_OTHER_SIGNER {
+        if prc == UPATCH_PURGE_OTHER_SIGNER || prc == UPATCH_PURGE_NO_ARCHIVE {
             continue;
         }
         if prc < 0 {

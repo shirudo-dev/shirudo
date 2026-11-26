@@ -36,7 +36,7 @@ use crate::text::cstr;
 use crate::util::bpf_sys::bpf_obj_get;
 use crate::util::chain::{self, memneq_explicit};
 use crate::util::config::{self, Scrubbed};
-use crate::util::crypto_openssl::{Cert, cms_signed_by};
+use crate::util::crypto_openssl::{Cert, cms_check_signers, cms_signed_by};
 use crate::util::eventlog;
 use crate::util::help::{Help, HelpSection};
 use crate::util::hex::hex_decode;
@@ -58,6 +58,7 @@ use crate::util::upatch_verify::{archive_verify, loaded_payload};
 const UPATCHES_DIR_C: &CStr = c"/var/lib/shirudo/upatches";
 pub(super) const LSM_LINK_PIN: &CStr = c"/run/shirudo/bpffs/lsm_link";
 pub(crate) const UPATCH_PURGE_OTHER_SIGNER: c_int = 2;
+pub(crate) const UPATCH_PURGE_NO_ARCHIVE: c_int = 3;
 const UPATCH_FILE_MAX: usize = 16 * 1024 * 1024;
 const DIGEST_LEN: usize = 32;
 const KERNEL_ABI_DETAIL_MAX: usize = 256;
@@ -1716,22 +1717,47 @@ fn purge_is_loaded(name: &[u8], payload_type: u32) -> Result<bool, c_int> {
     }
 }
 
-fn purge_locked(name: &[u8], signer: *const Cert, reason: &[u8]) -> c_int {
+fn purge_archive(name: &[u8]) -> Result<Option<Upatch<'static>>, c_int> {
     let archived = archive_path(name);
     if archived.as_bytes().len() >= 4096 {
-        return -ENAMETOOLONG;
+        return Err(-ENAMETOOLONG);
     }
     let fd = match seal::open_read(archived.as_bytes()) {
         Ok(fd) => fd,
-        Err(err) => return err,
+        Err(err) if err == -ENOENT => return Ok(None),
+        Err(err) => return Err(err),
     };
-    let u = match Upatch::read(&fs::File::from(fd)) {
-        Ok(u) => u,
-        Err(err) => return err,
-    };
+    let u = Upatch::read(&fs::File::from(fd))?;
     if !u.name_signed() || u.name() != name {
-        return -EBADMSG;
+        return Err(-EBADMSG);
     }
+    Ok(Some(u))
+}
+
+/// Check one archive under the register lock before any key is revoked.
+pub(crate) fn purge_check(name: &CStr) -> c_int {
+    if !name_valid(Some(name.to_bytes())) {
+        return -EINVAL;
+    }
+    let _lock = match eventlog::lock() {
+        Ok(lock) => lock,
+        Err(err) => return err,
+    };
+    let u = match purge_archive(name.to_bytes()) {
+        Ok(Some(u)) => u,
+        Ok(None) => return UPATCH_PURGE_NO_ARCHIVE,
+        Err(err) => return err,
+    };
+    cms_check_signers(u.signature())
+}
+
+fn purge_locked(name: &[u8], signer: *const Cert, reason: &[u8]) -> c_int {
+    let u = match purge_archive(name) {
+        Ok(Some(u)) => u,
+        Ok(None) => return UPATCH_PURGE_NO_ARCHIVE,
+        Err(err) => return err,
+    };
+    let archived = archive_path(name);
     let sig = u.signature();
     // SAFETY: the archive's signature and the caller's certificate.
     let ret = unsafe { cms_signed_by(sig.as_ptr(), sig.len(), signer) };

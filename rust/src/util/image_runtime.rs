@@ -646,6 +646,9 @@ fn candidate_keys(fd: c_int, enrolled: bool) -> c_int {
     if ret == 0 && enrolled {
         ret = image_keys::check_set(&set);
     }
+    if ret == 0 && enrolled {
+        ret = image_keys::check_purge(fd);
+    }
     if ret == -ENOKEY {
         error("image: BPF signer was not enrolled at boot; reboot with the new trusted key set required".into());
     }
