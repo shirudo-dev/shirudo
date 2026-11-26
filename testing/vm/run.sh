@@ -1956,6 +1956,9 @@ if [[ "$VM_ROLE" == target ]]; then
 	# seal it, as a production initrd does.
 	KERNEL_LSM_ARGS="lsm=bpf bpf.keyring_unsealed=1"
 	KERNEL_LSM_ARGS+=" dm_verity.keyring_unsealed=1 initcall_debug ignore_loglevel"
+	if [[ "$VM_INITRD" == 1 && "$VM_SUITE" == tpm ]]; then
+		KERNEL_LSM_ARGS+=" trace_event=syscalls:sys_exit_pivot_root"
+	fi
 fi
 KERNEL_NET_DEVICE="virtio-net-pci,netdev=net0"
 
