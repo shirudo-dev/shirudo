@@ -4048,34 +4048,6 @@ static int purge_is_loaded(const char *name, __u32 type)
 	return ret ? ret : 1;
 }
 
-/* The load member of an older package may have no unload directive. */
-int upatch_member_active_fd(int fd)
-{
-	char name[UPATCH_NAME_MAX + 1];
-	struct upatch u;
-	int ret;
-
-	ret = upatch_open_fd(fd, &u);
-	if (ret)
-		return ret;
-	upatch_header_name(&u, name);
-	if (upatch_is_unload(&u) || !upatch_name_signed(&u) || !upatch_name_valid(name)) {
-		ret = -EINVAL;
-	} else if (u.hdr.type == UPATCH_TYPE_JAVA) {
-		ret = purge_is_loaded(name, u.hdr.type);
-	} else {
-		ret = open_upatch_pin_dir(name);
-		if (ret >= 0) {
-			close(ret);
-			ret = 1;
-		} else if (ret == -ENOENT) {
-			ret = 0;
-		}
-	}
-	upatch_close(&u);
-	return ret;
-}
-
 static int upatch_purge_locked(const char *name, const struct cert *signer,
 			       const char *reason)
 {

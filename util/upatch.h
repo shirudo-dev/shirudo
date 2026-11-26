@@ -234,8 +234,6 @@ int upatch_restore(const char *path);
 int upatch_install(const char *path);
 int upatch_remove(const char *path);
 int upatch_remove_fd(const char *path, int fd);
-/* 1 when the load member is active, 0 when absent, or -errno. */
-int upatch_member_active_fd(int fd);
 
 /* A missing optional kprobe module permits tree projection advancement. */
 #define UPATCH_INSTALL_TARGET_MISSING	2

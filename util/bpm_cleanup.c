@@ -100,7 +100,8 @@ static int directive_compare_desc(const void *left, const void *right)
 	return strcmp(b->path, a->path);
 }
 
-static int check_unpaired_load(int dir, const char *name)
+/* A package ships each load member with the directive that undoes it. */
+static int check_load_directive(int dir, const char *name)
 {
 	char pair[NAME_MAX + 1];
 	int fd, ret;
@@ -109,22 +110,14 @@ static int check_unpaired_load(int dir, const char *name)
 	if (ret)
 		return ret;
 	fd = seal_open_child(dir, pair, O_RDONLY | O_NONBLOCK);
-	if (fd >= 0) {
-		close(fd);
-		return 0;
-	}
-	if (fd != -ENOENT)
-		return fd;
-	fd = seal_open_child(dir, name, O_RDONLY | O_NONBLOCK);
-	if (fd < 0)
-		return fd;
-	ret = upatch_member_active_fd(fd);
-	close(fd);
-	if (ret > 0) {
-		pr_err("bpm uninstall: active %s is missing %s", name, pair);
+	if (fd == -ENOENT) {
+		pr_err("bpm uninstall: %s is missing %s", name, pair);
 		return -ENODATA;
 	}
-	return ret;
+	if (fd < 0)
+		return fd;
+	close(fd);
+	return 0;
 }
 
 /* Keep the files we checked open through signature verification. */
@@ -144,7 +137,7 @@ static int open_directives(DIR *dir, const char *version_path,
 			return -errno;
 		kind = bpm_upatch_member(entry->d_name, strlen(entry->d_name));
 		if (kind == BPM_UPATCH_LOAD) {
-			ret = check_unpaired_load(dirfd(dir), entry->d_name);
+			ret = check_load_directive(dirfd(dir), entry->d_name);
 			if (ret)
 				return ret;
 		}

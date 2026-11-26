@@ -18,14 +18,6 @@
 static int calls;
 static char order[4];
 static bool refuse;
-static int active;
-
-int upatch_member_active_fd(int fd)
-{
-	char byte;
-
-	return pread(fd, &byte, 1, 0) == 1 && byte == 'l' ? active : -EINVAL;
-}
 
 int upatch_remove_fd(const char *path, int fd)
 {
@@ -101,20 +93,21 @@ static void uninstall_retires_all_versions_after_detach(void)
 	finish_package(&p);
 }
 
-static void unpaired_load_must_be_inactive(void)
+static void load_without_directive_stops_uninstall(void)
 {
 	struct package p = {};
 
 	new_package(&p);
-	put_file(p.fd, "sample/1/upatches/load.upatch", 'l');
-	active = 1;
+	put_file(p.fd, "sample/1/upatches/a.upatch", 'l');
+	put_file(p.fd, "sample/1/upatches/a.unload.upatch", 'a');
+	put_file(p.fd, "sample/1/upatches/b.upatch", 'l');
 	EXPECT_EQ(bpm_uninstall_at(p.fd, &p.st), -ENODATA);
-	active = -EIO;
-	EXPECT_EQ(bpm_uninstall_at(p.fd, &p.st), -EIO);
-	EXPECT_EQ(faccessat(p.fd, "sample/1/upatches/load.upatch", F_OK, 0), 0);
-	active = 0;
-	ASSERT_EQ(bpm_uninstall_at(p.fd, &p.st), 0);
 	EXPECT_EQ(calls, 0);
+	EXPECT_EQ(faccessat(p.fd, "sample/1/upatches/a.upatch", F_OK, 0), 0);
+	EXPECT_EQ(faccessat(p.fd, "sample/1/upatches/b.upatch", F_OK, 0), 0);
+	put_file(p.fd, "sample/1/upatches/b.unload.upatch", 'b');
+	ASSERT_EQ(bpm_uninstall_at(p.fd, &p.st), 0);
+	EXPECT_STREQ(order, "ba");
 	finish_package(&p);
 }
 
@@ -152,7 +145,7 @@ static void cleanup_requires_a_single_child_directory(void)
 
 static const struct unit_case cases[] = {
 	UNIT_CASE(uninstall_retires_all_versions_after_detach),
-	UNIT_CASE(unpaired_load_must_be_inactive),
+	UNIT_CASE(load_without_directive_stops_uninstall),
 	UNIT_CASE(retry_finishes_a_partly_removed_package),
 	UNIT_CASE(cleanup_requires_a_single_child_directory),
 	{}
