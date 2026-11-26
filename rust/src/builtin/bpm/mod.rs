@@ -296,3 +296,45 @@ pub(crate) fn source_key_open(name: &[u8]) -> c_int {
         Err(err) => err,
     }
 }
+
+#[cfg(test)]
+mod line_tests {
+    use super::{PATH_MAX, Result, Stream};
+    use crate::errno::{E2BIG, EINVAL};
+    use std::io::Write;
+    use std::os::fd::IntoRawFd;
+    use std::os::unix::net::UnixStream;
+
+    fn read_lines(text: &[u8]) -> Result<Vec<Vec<u8>>> {
+        let (read, mut write) = UnixStream::pair().unwrap();
+        write.write_all(text).unwrap();
+        drop(write);
+        let mut stream = Stream::from_fd(read.into_raw_fd())?;
+        let mut lines = Vec::new();
+        stream.lines(|line| {
+            lines.push(line.to_vec());
+            Ok(())
+        })?;
+        Ok(lines)
+    }
+
+    #[test]
+    fn keeps_newline_and_nul_terminator() {
+        assert_eq!(
+            read_lines(b"one\r\ntwo").unwrap(),
+            vec![b"one\r\n\0".to_vec(), b"two\0".to_vec()]
+        );
+        assert!(read_lines(b"").unwrap().is_empty());
+    }
+
+    #[test]
+    fn rejects_nul_and_long_lines() {
+        assert_eq!(read_lines(b"a\0b\n"), Err(-EINVAL));
+        let mut longest = vec![b'a'; PATH_MAX - 1];
+        longest.push(b'\n');
+        assert_eq!(read_lines(&longest).unwrap()[0].len(), PATH_MAX + 1);
+        let mut too_long = vec![b'a'; PATH_MAX];
+        too_long.push(b'\n');
+        assert_eq!(read_lines(&too_long), Err(-E2BIG));
+    }
+}
