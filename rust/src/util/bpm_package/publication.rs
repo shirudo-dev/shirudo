@@ -5,12 +5,10 @@
 //! certificate, and the signed tree publication a registry holds.
 
 use core::ffi::{CStr, c_int};
-use core::ptr;
 use std::os::fd::BorrowedFd;
 
 use crate::errno::{EBADMSG, EINVAL, ENAMETOOLONG, ENOMEM};
 use crate::ffi;
-use crate::heap::{xcalloc, xfree};
 use crate::sys::libc::PATH_MAX;
 use crate::text::{contains, cstr, strsprintf};
 use crate::util::bpm_oci::{
@@ -127,13 +125,11 @@ fn tree_manifest_canonical(manifest: &[u8], layers: &[Descriptor]) -> c_int {
 struct Fetch {
     manifest: BpmBuffer,
     sig: BpmBuffer,
-    layers: *mut Descriptor,
+    layers: Vec<Descriptor>,
 }
 
 impl Drop for Fetch {
     fn drop(&mut self) {
-        // SAFETY: NULL, or the MAX_ENTRIES descriptors xcalloc() gave.
-        unsafe { xfree(self.layers.cast(), MAX_ENTRIES * size_of::<Descriptor>()) };
         buffer_free(&mut self.manifest);
         buffer_free(&mut self.sig);
     }
@@ -198,7 +194,7 @@ fn fetch_checked(
     let mut f = Fetch {
         manifest: BpmBuffer::new(),
         sig: BpmBuffer::new(),
-        layers: ptr::null_mut(),
+        layers: Vec::new(),
     };
     let ret = get_memory(
         c,
@@ -221,14 +217,11 @@ fn fetch_checked(
     if strsprintf(manifest_digest, &[b"sha256:", cstr(&hex)]).is_err() {
         return -ENAMETOOLONG;
     }
-    // SAFETY: xcalloc gives room for MAX_ENTRIES descriptors, zeroed.
-    f.layers = unsafe { xcalloc(MAX_ENTRIES, size_of::<Descriptor>()) }.cast();
-    if f.layers.is_null() {
+    if f.layers.try_reserve_exact(MAX_ENTRIES).is_err() {
         return -ENOMEM;
     }
-    // SAFETY: xcalloc() gave room for MAX_ENTRIES descriptors, zeroed.
-    let room = unsafe { core::slice::from_raw_parts_mut(f.layers, MAX_ENTRIES) };
-    let ret = parse_manifest(manifest, room, &mut nl, None);
+    f.layers.resize_with(MAX_ENTRIES, Descriptor::new);
+    let ret = parse_manifest(manifest, &mut f.layers, &mut nl, None);
     if ret != 0 {
         return ret;
     }
@@ -238,8 +231,7 @@ fn fetch_checked(
     if n > MAX_ENTRIES {
         return -EINVAL;
     }
-    // SAFETY: parse_manifest wrote n descriptors at layers.
-    let layers = unsafe { ffi::slice(f.layers, n) };
+    let layers = &f.layers[..n];
     let ret = tree_manifest_canonical(manifest, layers);
     if ret != 0 {
         return ret;
