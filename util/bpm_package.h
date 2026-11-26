@@ -16,6 +16,8 @@
 #include "bpm_oci.h"
 #include "bpm_tree.h"
 
+#define BPM_MAX_UPATCHES	128
+
 struct trusted_set;
 
 struct bpm_index_entry {

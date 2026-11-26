@@ -2,6 +2,9 @@
 /* Copyright (c) 2026 Authors of shirudo */
 
 #include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <string.h>
 
 #include <shirudo/misc.h>
@@ -9,6 +12,7 @@
 
 #include "bpm_state.h"
 #include "io.h"
+#include "identity.h"
 #include "json.h"
 #include "malloc.h"
 #include "paths.h"
@@ -99,13 +103,36 @@ int bpm_state_emit(const struct bpm_state_entry *st, int n, char *buf,
 	return 0;
 }
 
+static int read_state_file(char **body, size_t *len)
+{
+	int active, root, bpm, fd, ret;
+
+	active = enforcement_active();
+	if (active <= 0)
+		return active ? active : read_file(BPM_STATE_PATH, STATE_FILE_MAX, body, len);
+	root = state_root_open();
+	if (root < 0)
+		return root == -ENOENT ? -ENODEV : root;
+	bpm = seal_open_child(root, "bpm", O_RDONLY | O_DIRECTORY);
+	close(root);
+	if (bpm < 0)
+		return bpm;
+	fd = seal_open_child(bpm, "state.json", O_RDONLY | O_NONBLOCK);
+	close(bpm);
+	if (fd < 0)
+		return fd;
+	ret = read_fd(fd, BPM_STATE_PATH, STATE_FILE_MAX, body, len);
+	close(fd);
+	return ret;
+}
+
 int bpm_state_read(struct bpm_state_entry *st, int *n)
 {
 	size_t len;
 	char *body;
 	int ret;
 
-	ret = read_file(BPM_STATE_PATH, STATE_FILE_MAX, &body, &len);
+	ret = read_state_file(&body, &len);
 	if (ret == -ENOENT) {
 		*n = 0;
 		return 0;
@@ -114,6 +141,34 @@ int bpm_state_read(struct bpm_state_entry *st, int *n)
 		return ret;
 	ret = bpm_state_parse(body, len, st, n);
 	xfree(body, len + 1);
+	return ret;
+}
+
+static int write_state_file(const char *buf, size_t len)
+{
+	int active, root, bpm, ret;
+
+	active = enforcement_active();
+	if (active < 0)
+		return active;
+	if (!active) {
+		ret = seal_mkdir_p(BPM_VAR_DIR, 0700);
+		return ret ? ret : seal_write_file(BPM_STATE_PATH, buf, len, 0600);
+	}
+	root = state_root_open();
+	if (root < 0)
+		return root;
+	if (mkdirat(root, "bpm", 0700) && errno != EEXIST) {
+		ret = -errno;
+		close(root);
+		return ret;
+	}
+	bpm = seal_open_child(root, "bpm", O_RDONLY | O_DIRECTORY);
+	close(root);
+	if (bpm < 0)
+		return bpm;
+	ret = seal_replace_locked_at(bpm, "state.json", buf, len, 0600);
+	close(bpm);
 	return ret;
 }
 
@@ -128,9 +183,7 @@ int bpm_state_write(const struct bpm_state_entry *st, int n)
 		return -ENOMEM;
 	ret = bpm_state_emit(st, n, buf, STATE_EMIT_MAX, &len);
 	if (!ret)
-		ret = seal_mkdir_p(BPM_VAR_DIR, 0700);
-	if (!ret)
-		ret = seal_write_file(BPM_STATE_PATH, buf, len, 0600);
+		ret = write_state_file(buf, len);
 	xfree(buf, STATE_EMIT_MAX);
 	return ret;
 }

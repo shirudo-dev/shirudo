@@ -37,6 +37,8 @@ struct identity {
 	__s32	dm_verity_keys[IDENTITY_KEYS_MAX];
 	__u32	nv_index;
 	__u32	config_pcr;
+	__u64	state_dev;
+	__u64	state_ino;
 };
 
 #define TASK_TRUSTED	1
@@ -75,7 +77,7 @@ struct task_policy {
 
 BUILD_BUG_ON(sizeof(struct device_authority) != 48);
 BUILD_BUG_ON(sizeof(struct task_authority) != 8);
-BUILD_BUG_ON(sizeof(struct identity) != 648);
+BUILD_BUG_ON(sizeof(struct identity) != 664);
 BUILD_BUG_ON(sizeof(struct task_policy) != 16);
 
 /* The bpffs mount init made, which the unmount guard keeps mounted. */
@@ -142,5 +144,8 @@ int identity_read_at(int dirfd, const char *name, struct identity *out);
  * not on that bpffs, another -errno when it cannot be opened or read.
  */
 int bpffs_root_open(void);
+/* The sealed state directory whose device and inode init froze this boot. */
+int state_root_open(void);
+int identity_check_state_root(const struct identity *id, int fd);
 
 #endif /* SHIRUDO_UTIL_IDENTITY_H */

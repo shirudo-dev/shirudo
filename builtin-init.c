@@ -680,6 +680,10 @@ static int identity_devices(struct identity *id)
 	if (stat(RUN_DIR, &st))
 		return -errno;
 	id->run_dev = kernel_dev(st.st_dev);
+	if (stat(VAR_LIB, &st))
+		return -errno;
+	id->state_dev = st.st_dev;
+	id->state_ino = st.st_ino;
 	return 0;
 }
 

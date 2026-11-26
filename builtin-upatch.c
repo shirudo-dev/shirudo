@@ -1595,6 +1595,21 @@ static int obj_pin(int fd, const char *path)
 	return ret >= 0 ? 0 : -errno;
 }
 
+static int open_upatch_pin_dir(const char *name)
+{
+	char path[PATH_MAX];
+	int root, fd;
+
+	if (upatch_pin_path(path, sizeof(path), name, NULL))
+		return -ENAMETOOLONG;
+	root = bpffs_root_open();
+	if (root < 0)
+		return root == -ENOENT ? -ENODEV : root;
+	fd = open_beneath_same_mount(root, path + sizeof(BPFFS_DIR), O_RDONLY | O_DIRECTORY);
+	close(root);
+	return fd;
+}
+
 /*
  * A pin a load left when it died before its link is bound to maps nothing
  * reaches any more: replace it.
@@ -3343,14 +3358,15 @@ static int remove_pin_dir(const char *name)
  * one read. A copy on disk, under a name another command can take, or a
  * file read again, could set them apart.
  */
-static int read_upatch(const char *src, __u8 **buf, size_t *len,
+static int read_upatch(const char *src, int fd, __u8 **buf, size_t *len,
 		       struct upatch *u)
 {
 	int ret;
 
 	*buf = NULL;
 	*len = 0;
-	ret = read_file(src, UPATCH_FILE_MAX, buf, len);
+	ret = fd < 0 ? read_file(src, UPATCH_FILE_MAX, buf, len) :
+		       read_fd(fd, src, UPATCH_FILE_MAX, buf, len);
 	if (ret)
 		return ret;
 	ret = upatch_open_memory(*buf, *len, u);
@@ -3524,7 +3540,7 @@ static int upatch_load(const struct load_args *args)
 			 "load") != 0)
 		goto done;
 
-	err = read_upatch(file, &buf, &len, &u);
+	err = read_upatch(file, -1, &buf, &len, &u);
 	if (err) {
 		pr_err("upatch load: read %s: %s", file, strerror(-err));
 		rep_fail(&rep, "parse", "parser_rejected", -err,
@@ -3729,7 +3745,7 @@ static int java_unload_locked(const char *name,
 	return 0;
 }
 
-static int cmd_upatch_unload(int argc, const char **argv)
+static int cmd_upatch_unload(int argc, const char **argv, int fd)
 {
 	const char *file, *expect_chain, *expect_version_id, *report;
 	struct op_report rep = { .op = "upatch_unload", .phase = "done" };
@@ -3757,7 +3773,7 @@ static int cmd_upatch_unload(int argc, const char **argv)
 	 * signature check covers must be the bytes acted on after it, and a
 	 * file of root's is root's to rewrite between the two.
 	 */
-	err = read_upatch(file, &buf, &len, &u);
+	err = read_upatch(file, fd, &buf, &len, &u);
 	if (err) {
 		pr_err("upatch unload: read %s: %s", file, strerror(-err));
 		rep_fail(&rep, "parse", "parser_rejected", -err,
@@ -3980,6 +3996,34 @@ static int purge_is_loaded(const char *name, __u32 type)
 	return ret ? ret : 1;
 }
 
+/* The load member of an older package may have no unload directive. */
+int upatch_member_active_fd(int fd)
+{
+	char name[UPATCH_NAME_MAX + 1];
+	struct upatch u;
+	int ret;
+
+	ret = upatch_open_fd(fd, &u);
+	if (ret)
+		return ret;
+	upatch_header_name(&u, name);
+	if (upatch_is_unload(&u) || !upatch_name_signed(&u) || !upatch_name_valid(name)) {
+		ret = -EINVAL;
+	} else if (u.hdr.type == UPATCH_TYPE_JAVA) {
+		ret = purge_is_loaded(name, u.hdr.type);
+	} else {
+		ret = open_upatch_pin_dir(name);
+		if (ret >= 0) {
+			close(ret);
+			ret = 1;
+		} else if (ret == -ENOENT) {
+			ret = 0;
+		}
+	}
+	upatch_close(&u);
+	return ret;
+}
+
 static int upatch_purge_locked(const char *name, const struct cert *signer,
 			       const char *reason)
 {
@@ -4078,11 +4122,16 @@ int upatch_install(const char *path)
 	return upatch_load(&args);
 }
 
-int upatch_remove(const char *path)
+int upatch_remove_fd(const char *path, int fd)
 {
 	const char *argv[] = { "unload", "--no-precheck", path };
 
-	return cmd_upatch_unload(3, argv);
+	return cmd_upatch_unload(3, argv, fd);
+}
+
+int upatch_remove(const char *path)
+{
+	return upatch_remove_fd(path, -1);
 }
 
 /*
@@ -5350,7 +5399,7 @@ int cmd_upatch(int argc, const char **argv)
 	if (strcmp(canonical, "load") == 0)
 		return cmd_upatch_load(argc - 1, argv + 1);
 	if (strcmp(canonical, "unload") == 0)
-		return cmd_upatch_unload(argc - 1, argv + 1);
+		return cmd_upatch_unload(argc - 1, argv + 1, -1);
 	if (strcmp(canonical, "list") == 0)
 		return cmd_upatch_list(argc - 1, argv + 1);
 	if (strcmp(canonical, "get") == 0)

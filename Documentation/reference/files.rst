@@ -136,7 +136,7 @@ the label as foreign. In the initrd, ``init`` binds
    * - ``locks/bpm.lock``
      - ``bpm``
      - ``0600``
-     - Lock of ``repo update``, ``tree sync``, ``install``,
+     - Before enforcement, lock of ``repo update``, ``tree sync``, ``install``,
        ``uninstall`` and ``upgrade``.
    * - ``bpm/state.json``
      - ``bpm install``, ``uninstall``, ``upgrade``

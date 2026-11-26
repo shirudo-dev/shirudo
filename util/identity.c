@@ -24,6 +24,7 @@
 #include "integrity.h"
 #include "io.h"
 #include "paths.h"
+#include "seal.h"
 #include "tamper.h"
 
 const struct guard_map shirudo_guard_maps[GUARD_MAP_COUNT] = {
@@ -148,20 +149,57 @@ int identity_read(struct identity *out)
  * enters it, so the one directory that holds the identity pin and lies
  * on the device it records is the bpffs root, reached through any mount.
  */
-int bpffs_root_open(void)
+static int bpffs_open_identity(struct identity *id)
 {
-	struct identity id;
 	struct stat st;
 	int fd, ret;
 
 	fd = open(BPFFS_DIR, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
 	if (fd < 0)
 		return -errno;
-	ret = identity_read_at(fd, IDENTITY_PIN_NAME, &id);
+	ret = identity_read_at(fd, IDENTITY_PIN_NAME, id);
 	if (!ret && fstat(fd, &st))
 		ret = -errno;
-	if (!ret && kernel_dev(st.st_dev) != id.sb_dev)
+	if (!ret && kernel_dev(st.st_dev) != id->sb_dev)
 		ret = -EXDEV;
+	if (ret) {
+		close(fd);
+		return ret;
+	}
+	return fd;
+}
+
+int bpffs_root_open(void)
+{
+	struct identity id;
+
+	return bpffs_open_identity(&id);
+}
+
+int identity_check_state_root(const struct identity *id, int fd)
+{
+	struct stat st;
+
+	if (fstat(fd, &st))
+		return -errno;
+	if (!S_ISDIR(st.st_mode) || st.st_dev != id->state_dev || st.st_ino != id->state_ino)
+		return -EXDEV;
+	return 0;
+}
+
+int state_root_open(void)
+{
+	struct identity id;
+	int bpffs, fd, ret;
+
+	bpffs = bpffs_open_identity(&id);
+	if (bpffs < 0)
+		return bpffs;
+	close(bpffs);
+	fd = seal_open_state_root();
+	if (fd < 0)
+		return fd;
+	ret = identity_check_state_root(&id, fd);
 	if (ret) {
 		close(fd);
 		return ret;

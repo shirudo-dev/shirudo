@@ -112,8 +112,9 @@ Usage
      - no
      - no
 
-The lock is ``/var/lib/shirudo/locks/bpm.lock``. A locked subcommand waits
-for it. The helper subcommands execute ``shirudo-build`` (see
+On an enforcing target the lock is an exclusive flock on the state directory
+whose device and inode init recorded at boot. Before enforcement BPM uses
+``/var/lib/shirudo/locks/bpm.lock``. A locked subcommand waits for it. The helper subcommands execute ``shirudo-build`` (see
 :doc:`shirudo`). ``shirudo bpm --help`` and ``--list-cmds`` show ``build``
 and ``push`` only where the helper resolves. Elsewhere they are unknown
 subcommands. ``config update``, ``tree append`` and ``tree show`` always
@@ -554,8 +555,13 @@ run, so a new version in a registered index reaches every target that
 runs the timer.
 
 ``uninstall <name>`` applies the package's shipped unload directives in
-reverse name order, each measured, removes the package directory and
-drops it from the state.
+reverse name order. BPM opens the directives from the installed version
+and reads each from the descriptor it checked. A missing directive for
+an active load stops uninstall. An interrupted uninstall can finish if
+the remaining load members are inactive or the directory is already
+empty. Successful uninstall removes the whole package directory,
+including archives and older versions left by upgrades. Uninstall and
+failed-install cleanup refuse to cross mounts below the state root.
 
 ``list`` prints the installed packages under the heading ``Installed
 packages:`` as a table with the columns ``NAME``, ``VERSION`` and

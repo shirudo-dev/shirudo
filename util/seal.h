@@ -62,6 +62,11 @@ int seal_mkdir_p(const char *path, mode_t mode);
  */
 int seal_open_read(const char *path);
 
+/* Open VAR_LIB itself and require its seal on the opened directory. */
+int seal_open_state_root(void);
+/* One child of parent, on its mount and carrying its label. */
+int seal_open_child(int parent, const char *name, int flags);
+
 /*
  * seal_open_read() of an entry whose directory must carry the label:
  * one of root's making, which no task without authority can label,
@@ -74,6 +79,10 @@ bool seal_owns(const char *path);
 
 /* Whether the directory path names an entry of carries the seal label. */
 bool seal_parent_labeled(const char *path);
+
+/* Under the caller's lock, stage a new file beside a single child name. */
+int seal_replace_locked_at(int parent, const char *name, const void *data, size_t len,
+			   mode_t mode);
 
 int seal_write_file(const char *path, const void *data, size_t len,
 		    mode_t mode);

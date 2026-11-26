@@ -10,7 +10,6 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <ftw.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -34,6 +33,7 @@
 #include <shirudo/string.h>
 
 #include "builtin.h"
+#include "util/bpm_cleanup.h"
 #include "util/bpm_oci.h"
 #include "util/bpm_package.h"
 #include "util/bpm_state.h"
@@ -46,6 +46,7 @@
 #include "util/help.h"
 #include "util/hex.h"
 #include "util/io.h"
+#include "util/identity.h"
 #include "util/initrd.h"
 #include "util/java_agent.h"
 #include "util/image_config.h"
@@ -70,7 +71,37 @@ struct bpm_source {
 
 static int sha256_file_hex(const char *path, char *hex, size_t hex_sz);
 static int sha256_fd_hex(int fd, char *hex, size_t hex_sz);
-static int remove_tree(const char *path);
+static int package_store_open(void)
+{
+	int state, bpm, packages;
+
+	state = state_root_open();
+	if (state < 0)
+		return state;
+	bpm = seal_open_child(state, "bpm", O_RDONLY | O_DIRECTORY);
+	close(state);
+	if (bpm < 0)
+		return bpm;
+	packages = seal_open_child(bpm, "packages", O_RDONLY | O_DIRECTORY);
+	close(bpm);
+	return packages;
+}
+
+static int remove_partial_version(const char *name, const char *version)
+{
+	int store, package, ret;
+
+	store = package_store_open();
+	if (store < 0)
+		return store;
+	package = seal_open_child(store, name, O_RDONLY | O_DIRECTORY);
+	close(store);
+	if (package < 0)
+		return package;
+	ret = bpm_pkg_remove_at(package, version);
+	close(package);
+	return ret;
+}
 
 static int prepare_direct_install(const char *raw, struct bpm_source *source,
 				  struct bpm_index_entry *entry)
@@ -454,10 +485,24 @@ static int save_source(const struct bpm_source *s)
 
 static int with_bpm_lock(void)
 {
-	int ret;
+	int fd, ret;
 
-	ret = seal_mkdir_p(LOCKS_DIR, 0700);
-	return ret ? ret : seal_lock(BPM_LOCK_PATH);
+	ret = enforcement_active();
+	if (ret < 0)
+		return ret;
+	if (!ret) {
+		ret = seal_mkdir_p(LOCKS_DIR, 0700);
+		return ret ? ret : seal_lock(BPM_LOCK_PATH);
+	}
+	fd = state_root_open();
+	if (fd < 0)
+		return fd;
+	ret = lock_exclusive(fd);
+	if (ret) {
+		close(fd);
+		return ret;
+	}
+	return fd;
 }
 
 static int bpm_fail(const char *action, int ret)
@@ -1134,8 +1179,6 @@ static void sort_old_pairs(char (*unloads)[PATH_MAX], char (*loads)[PATH_MAX],
 	}
 }
 
-#define INSTALL_PATHS_MAX	128
-
 static int package_install(const struct bpm_source *s, const struct bpm_index_entry *entry,
 			   const char *old_path, const char *old_version)
 {
@@ -1153,11 +1196,11 @@ static int package_install(const struct bpm_source *s, const struct bpm_index_en
 	int nloaded = 0, nactive = 0, nold = 0, nold_removed = 0;
 
 	/* 1.5 MiB of paths, which a stack frame should not carry. */
-	loaded = xcalloc(3 * INSTALL_PATHS_MAX, PATH_MAX);
+	loaded = xcalloc(3 * BPM_MAX_UPATCHES, PATH_MAX);
 	if (!loaded)
 		return -ENOMEM;
-	old_loads = loaded + INSTALL_PATHS_MAX;
-	old_unloads = old_loads + INSTALL_PATHS_MAX;
+	old_loads = loaded + BPM_MAX_UPATCHES;
+	old_unloads = old_loads + BPM_MAX_UPATCHES;
 	ret = bpm_oci_parse_endpoint(s->endpoint, &c);
 	if (ret)
 		goto out;
@@ -1291,7 +1334,7 @@ static int package_install(const struct bpm_source *s, const struct bpm_index_en
 			}
 			if (stat(up, &st) || !S_ISREG(st.st_mode))
 				continue;
-			if (nloaded >= INSTALL_PATHS_MAX) {
+			if (nloaded >= BPM_MAX_UPATCHES) {
 				ret = -E2BIG;
 				break;
 			}
@@ -1325,7 +1368,7 @@ static int package_install(const struct bpm_source *s, const struct bpm_index_en
 					char load[NAME_MAX + 1];
 
 					if (bpm_upatch_member(de->d_name, len) !=
-					    BPM_UPATCH_UNLOAD || nold >= INSTALL_PATHS_MAX)
+					    BPM_UPATCH_UNLOAD || nold >= BPM_MAX_UPATCHES)
 						continue;
 					if (bpm_upatch_pair(de->d_name, len, load,
 							    sizeof(load)) ||
@@ -1400,9 +1443,14 @@ out:
 	if (ret && archive[0])
 		unlink(archive);
 	/* What failed to install must not block the next attempt. */
-	if (ret && extracted)
-		remove_tree(package_dir);
-	xfree(loaded, 3 * INSTALL_PATHS_MAX * PATH_MAX);
+	if (ret && extracted) {
+		int err = remove_partial_version(entry->name, entry->version);
+
+		if (err && err != -ENOENT)
+			pr_warn("bpm install: could not clean up %s: %s",
+				package_dir, strerror(-err));
+	}
+	xfree(loaded, 3 * BPM_MAX_UPATCHES * PATH_MAX);
 	return ret;
 }
 
@@ -2723,90 +2771,15 @@ out:
 	return ret;
 }
 
-static int remove_tree_entry(const char *path, const struct stat *st,
-			     int type, struct FTW *ftw)
-{
-	if (type == FTW_DP || type == FTW_D)
-		return rmdir(path) ? -1 : 0;
-	return unlink(path) ? -1 : 0;
-}
-
-static int remove_tree(const char *path)
-{
-	if (nftw(path, remove_tree_entry, 32, FTW_DEPTH | FTW_PHYS))
-		return errno ? -errno : -EIO;
-	return 0;
-}
-
-static int path_compare_desc(const void *left, const void *right)
-{
-	return strcmp(right, left);
-}
-
-/*
- * Detach a package's upatches through the signed unload directives it
- * shipped, in reverse name order, then remove the package tree. The
- * caller drops the state entry only after this succeeded, so a failed
- * detach leaves the package listed and loadable again.
- */
 static int package_uninstall(const struct bpm_state_entry *st)
 {
-	char dir[PATH_MAX], updir[PATH_MAX];
-	char (*unloads)[PATH_MAX];
-	struct dirent *de;
-	int n = 0, ret = 0;
-	DIR *d;
+	int store, ret;
 
-	if (strsprintf(updir, sizeof(updir), "%s/upatches", st->path) < 0)
-		return -ENAMETOOLONG;
-	unloads = xcalloc(128, PATH_MAX);
-	if (!unloads)
-		return -ENOMEM;
-	/*
-	 * A tree already gone, from an uninstall that died before it
-	 * wrote the state, leaves nothing to unload: the retry converges.
-	 */
-	d = opendir(updir);
-	if (!d && errno != ENOENT) {
-		ret = -errno;
-		goto out;
-	}
-	while (d && (de = readdir(d))) {
-		if (bpm_upatch_member(de->d_name, strlen(de->d_name)) !=
-		    BPM_UPATCH_UNLOAD)
-			continue;
-		if (n >= 128) {
-			ret = -E2BIG;
-			break;
-		}
-		if (strsprintf(unloads[n], PATH_MAX, "%s/%s", updir, de->d_name) < 0) {
-			ret = -ENAMETOOLONG;
-			break;
-		}
-		n++;
-	}
-	if (d)
-		closedir(d);
-	if (ret)
-		goto out;
-	qsort(unloads, (size_t)n, PATH_MAX, path_compare_desc);
-	for (int i = 0; i < n; i++) {
-		if (upatch_remove(unloads[i])) {
-			pr_err("bpm uninstall: unload %s failed", unloads[i]);
-			ret = -EIO;
-			goto out;
-		}
-	}
-	if (strsprintf(dir, sizeof(dir), "%s/%s", BPM_PACKAGES_DIR,
-		       st->name) < 0) {
-		ret = -ENAMETOOLONG;
-		goto out;
-	}
-	ret = remove_tree(dir);
-	if (ret == -ENOENT)
-		ret = 0;
-out:
-	xfree(unloads, 128 * PATH_MAX);
+	store = package_store_open();
+	if (store < 0)
+		return store;
+	ret = bpm_uninstall_at(store, st);
+	close(store);
 	return ret;
 }
 

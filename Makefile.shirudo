@@ -269,6 +269,7 @@ UTIL_SRCS := \
     util/bpm_tree_state.c \
     util/bpm_oci.c \
     util/curl.c \
+    util/bpm_cleanup.c \
     util/bpm_package.c \
     util/bpm_state.c \
     util/kconfig.c \

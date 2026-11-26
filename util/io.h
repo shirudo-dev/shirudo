@@ -36,6 +36,8 @@ int append_line(int fd, const char *path, const char *line, size_t len);
 int read_file(const char *path, size_t max, void *out, size_t *len);
 int read_fd(int fd, const char *label, size_t max, void *out, size_t *len);
 int open_beneath(int dirfd, const char *rel, int flags);
+/* Also refuse mount crossings, including bind mounts of the same file system. */
+int open_beneath_same_mount(int dirfd, const char *rel, int flags);
 int read_text_line(FILE *f, char **line, size_t *cap, size_t max);
 
 /*

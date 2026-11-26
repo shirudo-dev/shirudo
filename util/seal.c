@@ -9,6 +9,8 @@
 #include <fcntl.h>
 #include <ftw.h>
 #include <limits.h>
+#include <linux/magic.h>
+#include <sys/vfs.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -274,6 +276,53 @@ static int seal_open_dir(const char *path, bool create, mode_t mode)
 		return ret;
 	}
 	return dfd;
+}
+
+/* The initrd may bind the state root itself across file systems. */
+int seal_open_state_root(void)
+{
+	char label[SEAL_LABEL_LEN];
+	struct statfs fs;
+	ssize_t len;
+	int fd, ret;
+
+	fd = seal_open_dir(VAR_LIB, false, 0);
+	if (fd < 0)
+		return fd;
+	if (fstatfs(fd, &fs)) {
+		ret = -errno;
+	} else if (fs.f_type == BPF_FS_MAGIC) {
+		ret = -EXDEV;
+	} else {
+		len = seal_fget(fd, label);
+		if (len == SEAL_LABEL_LEN && !memcmp(label, SEAL_LABEL, sizeof(label)))
+			return fd;
+		ret = len < 0 ? (int)len : -EPERM;
+	}
+	close(fd);
+	return ret;
+}
+
+static bool is_child_name(const char *name)
+{
+	return name && *name && !strchr(name, '/') && strcmp(name, ".") && strcmp(name, "..");
+}
+
+int seal_open_child(int parent, const char *name, int flags)
+{
+	int fd, ret;
+
+	if (!is_child_name(name))
+		return -EINVAL;
+	fd = open_beneath_same_mount(parent, name, flags);
+	if (fd < 0)
+		return fd;
+	ret = seal_same(parent, fd);
+	if (ret) {
+		close(fd);
+		return ret;
+	}
+	return fd;
 }
 
 static int seal_open_parent(const char *path, const char **name)
@@ -614,27 +663,11 @@ int seal_mkdir_p(const char *path, mode_t mode)
 	return 0;
 }
 
-static int write_file(const char *path, const void *data, size_t len,
-		      mode_t mode, bool exact)
+static int commit_file(int dfd, const char *name, const char *tmp, int fd,
+		       const void *data, size_t len, mode_t mode, bool exact)
 {
-	char tmp[NAME_MAX + 1];
-	const char *name;
-	int dfd, fd, ret;
+	int ret;
 
-	dfd = seal_open_parent(path, &name);
-	if (dfd < 0)
-		return dfd;
-	if (strsprintf(tmp, sizeof(tmp), "%s.tmp", name) < 0) {
-		close(dfd);
-		return -ENAMETOOLONG;
-	}
-	fd = openat(dfd, tmp, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC |
-		    O_NOFOLLOW, mode);
-	if (fd < 0) {
-		ret = -errno;
-		close(dfd);
-		return ret;
-	}
 	ret = seal_inherit(dfd, fd);
 	if (!ret && exact && fchmod(fd, mode))
 		ret = -errno;
@@ -650,6 +683,47 @@ static int write_file(const char *path, const void *data, size_t len,
 		ret = -errno;
 	if (ret)
 		unlinkat(dfd, tmp, 0);
+	return ret;
+}
+
+static int write_file_at(int dfd, const char *name, const void *data, size_t len,
+			 mode_t mode, bool exact, bool exclusive)
+{
+	char tmp[NAME_MAX + 1];
+	int fd, flags = O_TRUNC;
+
+	if (strsprintf(tmp, sizeof(tmp), "%s.tmp", name) < 0)
+		return -ENAMETOOLONG;
+	if (exclusive) {
+		/* The caller holds the lock. Discard an interrupted write. */
+		if (unlinkat(dfd, tmp, 0) && errno != ENOENT)
+			return -errno;
+		flags = O_EXCL;
+	}
+	fd = openat(dfd, tmp, O_WRONLY | O_CREAT | O_CLOEXEC | O_NOFOLLOW | flags, mode);
+	if (fd < 0)
+		return -errno;
+	return commit_file(dfd, name, tmp, fd, data, len, mode, exact);
+}
+
+int seal_replace_locked_at(int parent, const char *name, const void *data, size_t len,
+			   mode_t mode)
+{
+	if (!is_child_name(name))
+		return -EINVAL;
+	return write_file_at(parent, name, data, len, mode, false, true);
+}
+
+static int write_file(const char *path, const void *data, size_t len,
+		      mode_t mode, bool exact)
+{
+	const char *name;
+	int dfd, ret;
+
+	dfd = seal_open_parent(path, &name);
+	if (dfd < 0)
+		return dfd;
+	ret = write_file_at(dfd, name, data, len, mode, exact, false);
 	close(dfd);
 	return ret;
 }

@@ -25,6 +25,8 @@ struct sb_id {
 	__s32	dm_verity_keys[IDENTITY_KEYS_MAX];
 	__u32	nv_index;
 	__u32	config_pcr;
+	__u64	state_dev;
+	__u64	state_ino;
 };
 
 struct {

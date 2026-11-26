@@ -130,12 +130,12 @@ int append_line(int fd, const char *path, const char *line, size_t len)
  * mounts or links elsewhere, /proc/<pid>/fd before an exec say, is
  * followed.
  */
-int open_beneath(int dirfd, const char *rel, int flags)
+static int open_resolved(int dirfd, const char *rel, int flags, __u64 resolve)
 {
 	struct open_how how = {
 		.flags = (__u64)flags | O_CLOEXEC,
 		.resolve = RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS |
-			   RESOLVE_NO_MAGICLINKS,
+			   RESOLVE_NO_MAGICLINKS | resolve,
 	};
 	long fd;
 
@@ -143,6 +143,16 @@ int open_beneath(int dirfd, const char *rel, int flags)
 		return -EINVAL;
 	fd = syscall(SYS_openat2, dirfd, rel, &how, sizeof(how));
 	return fd < 0 ? -errno : (int)fd;
+}
+
+int open_beneath(int dirfd, const char *rel, int flags)
+{
+	return open_resolved(dirfd, rel, flags, 0);
+}
+
+int open_beneath_same_mount(int dirfd, const char *rel, int flags)
+{
+	return open_resolved(dirfd, rel, flags, RESOLVE_NO_XDEV);
 }
 
 /* The whole regular file behind the descriptor, from its start, xmalloc'd. */
