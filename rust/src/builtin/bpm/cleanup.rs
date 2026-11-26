@@ -9,7 +9,7 @@ use std::ffi::CString;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 
 use super::{Result, error, path};
-use crate::errno::{E2BIG, EINVAL, EIO, ENAMETOOLONG, ENODATA, ENOENT, ENOTDIR};
+use crate::errno::{E2BIG, EINVAL, EIO, ENAMETOOLONG, ENODATA, ENODEV, ENOENT, ENOTDIR};
 use crate::sys::libc::{
     AT_REMOVEDIR, O_DIRECTORY, O_NONBLOCK, O_RDONLY, S_IFMT, S_IFREG, errno, unlinkat,
 };
@@ -75,7 +75,9 @@ pub(super) fn remove_partial_version(name: &[u8], version: &[u8]) -> Result {
 }
 
 fn package_store_open() -> Result<OwnedFd> {
-    let state = identity::state_root_open()?;
+    // Missing init pins are not a missing package or version.
+    let state =
+        identity::state_root_open().map_err(|err| if err == -ENOENT { -ENODEV } else { err })?;
     let bpm = seal::open_child(state.as_fd(), c"bpm", O_RDONLY | O_DIRECTORY)?;
     seal::open_child(bpm.as_fd(), c"packages", O_RDONLY | O_DIRECTORY)
 }

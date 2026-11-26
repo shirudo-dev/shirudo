@@ -126,6 +126,23 @@ fn fail(action: &[u8], ret: c_int) -> c_int {
     1
 }
 
+/// A package changes state only where Shirudo enforces policy.
+fn needs_enforcement(action: &[u8]) -> c_int {
+    let active = identity::enforcement_active();
+    if active > 0 {
+        return 0;
+    }
+    if active < 0 {
+        return fail(action, active);
+    }
+    error(&[
+        b"bpm ",
+        action,
+        b": enforcement is not active; run shirudo init first",
+    ]);
+    1
+}
+
 /// The bpm lock, held until it goes.
 struct Lock(OwnedFd);
 

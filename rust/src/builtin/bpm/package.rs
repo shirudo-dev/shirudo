@@ -18,7 +18,7 @@ use super::fetch::{self, sha256_file};
 use super::source::{self, Source};
 use super::{
     PACKAGE_MEDIA, PACKAGES_DIR, Result, STAGING_DIR, curl_ready, error, fail, finish, lock,
-    os_err, path, print, remove, status, warn,
+    needs_enforcement, os_err, path, print, remove, status, warn,
 };
 use crate::errno::{E2BIG, EEXIST, EINVAL, EIO, EKEYREJECTED, ENAMETOOLONG, ENOENT};
 use crate::sys::libc::{F_OK, O_CREAT, O_EXCL, O_NOFOLLOW, O_TRUNC, O_WRONLY, access};
@@ -368,6 +368,10 @@ fn set(field: &mut [u8], value: &[u8]) {
 /// an active package is not even looked up; `bpm upgrade` changes
 /// versions.
 pub(super) fn install(reference: &[u8]) -> c_int {
+    let ret = needs_enforcement(b"install");
+    if ret != 0 {
+        return ret;
+    }
     if !curl_ready() {
         return fail(b"initialize curl", -EIO);
     }
@@ -452,6 +456,10 @@ pub(super) fn install(reference: &[u8]) -> c_int {
 /// version its cached index lists. Packages upgraded before a failure
 /// stay on record.
 pub(super) fn upgrade() -> c_int {
+    let ret = needs_enforcement(b"upgrade");
+    if ret != 0 {
+        return ret;
+    }
     if !curl_ready() {
         return fail(b"initialize curl", -EIO);
     }
@@ -577,6 +585,10 @@ pub(super) fn list(json: bool) -> c_int {
 pub(super) fn uninstall(name: &[u8]) -> c_int {
     if !name_ok(name) {
         return fail(b"uninstall", -EINVAL);
+    }
+    let ret = needs_enforcement(b"uninstall");
+    if ret != 0 {
+        return ret;
     }
     let held = match lock() {
         Ok(held) => held,
