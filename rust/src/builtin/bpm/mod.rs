@@ -340,4 +340,14 @@ mod line_tests {
         too_long.push(b'\n');
         assert_eq!(read_lines(&too_long), Err(-E2BIG));
     }
+
+    #[test]
+    fn accepts_final_line_at_limit_without_newline() {
+        let longest = vec![b'a'; PATH_MAX - 1];
+        let lines = read_lines(&longest).unwrap();
+        assert_eq!(lines, vec![[longest, vec![0]].concat()]);
+
+        let too_long = vec![b'a'; PATH_MAX + 2];
+        assert_eq!(read_lines(&too_long), Err(-E2BIG));
+    }
 }
