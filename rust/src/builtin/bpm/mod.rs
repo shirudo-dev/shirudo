@@ -18,7 +18,7 @@ mod tree;
 use core::ffi::{CStr, c_int};
 use std::ffi::CString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, Read};
 use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
 
 use crate::errno::{EINVAL, EIO, ENAMETOOLONG};
@@ -209,8 +209,8 @@ impl Stream {
 
         loop {
             line.clear();
-            let n = self
-                .0
+            let n = (&mut self.0)
+                .take(PATH_MAX as u64 + 1)
                 .read_until(b'\n', &mut line)
                 .map_err(|e| -e.raw_os_error().unwrap_or(EIO))?;
             if n == 0 {
@@ -218,6 +218,9 @@ impl Stream {
             }
             if line.contains(&0) {
                 return Err(-EINVAL);
+            }
+            if n == PATH_MAX + 1 && line.last() != Some(&b'\n') {
+                return Err(-crate::errno::E2BIG);
             }
             let text_len = n - usize::from(line.last() == Some(&b'\n'));
             if text_len > PATH_MAX - 1 {
