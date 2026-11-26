@@ -151,8 +151,8 @@ Attest
 
 7. The operator chooses a fresh nonce, and ``shirudo attest
    --nonce=<hex>`` on the target produces evidence: a TPM quote over the
-   PCRs and a TPM certification of the register, both signed by the TPM's
-   attestation key, together with this boot's eventlog records. On the
+   PCRs and matching register certifications on either side of the quote,
+   all signed by the TPM's attestation key, together with this boot's eventlog records. On the
    operator host, ``shirudo attest predict`` computes the register value
    the shipped certificates and artifacts must produce, and ``shirudo
    attest verify`` checks the signatures and the nonce, replays the records

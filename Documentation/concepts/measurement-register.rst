@@ -197,9 +197,10 @@ Attestation
 
 To read the register without trusting the target, the operator chooses a
 fresh nonce and runs ``shirudo attest --nonce=<hex>`` on the target. The
-TPM produces two signed statements: a quote over a set of PCRs, by default
-0 to 7, 9 and 11 to 15, and a certification of the register's name and
-value. It signs both with its attestation key, a restricted signing key
+TPM certifies the patch register, quotes the selected PCRs and certifies
+the register again. The two readings must agree, and each signature is
+bound to the preceding step. The default PCRs are 0 to 7, 9 and 11 to 15.
+The TPM uses its attestation key, a restricted signing key
 that it derives from its endorsement seed with a fixed template, so the
 same TPM always yields the same key. The command adds this boot's
 eventlog records and the TPM's endorsement key, and writes the evidence

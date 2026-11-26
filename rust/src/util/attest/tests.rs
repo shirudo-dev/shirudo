@@ -114,10 +114,10 @@ fn every_bounded_report_line_ends_with_a_line_feed() {
 #[test]
 fn record_without_own_digest_is_rejected() {
     let valid = format!(
-        r#"{{"nonce":"","pcr_mask":1,"pcrs":[],"ak":{{}},"quote":{{}},"register":{{}},"eventlog":[{{"type":"other","digest":"{D64}"}}]}}"#
+        r#"{{"nonce":"","pcr_mask":1,"pcrs":[],"ak":{{}},"quote":{{"attest":"00","signature":"00"}},"register":{{"attest":"00","signature":"00","after_attest":"00","after_signature":"00"}},"eventlog":[{{"type":"other","digest":"{D64}"}}]}}"#
     );
     let missing = format!(
-        r#"{{"nonce":"","pcr_mask":1,"pcrs":[],"ak":{{}},"quote":{{}},"register":{{}},"eventlog":[{{"type":"other","digest":"{D64}"}},{{"type":"other"}}]}}"#
+        r#"{{"nonce":"","pcr_mask":1,"pcrs":[],"ak":{{}},"quote":{{"attest":"00","signature":"00"}},"register":{{"attest":"00","signature":"00","after_attest":"00","after_signature":"00"}},"eventlog":[{{"type":"other","digest":"{D64}"}},{{"type":"other"}}]}}"#
     );
     assert!(parse_evidence(&mut Parse::new(), valid.as_bytes()).is_ok());
     assert_eq!(
@@ -194,9 +194,9 @@ fn config_nvpcr_replay_input_needs_the_listed_name_and_full_value() {
 #[test]
 fn config_nvpcr_evidence_requires_all_certification_fields() {
     let base =
-        br#"{"nonce":"","pcr_mask":1,"pcrs":[],"ak":{},"quote":{},"register":{},"eventlog":[]}"#;
-    let incomplete = br#"{"nonce":"","pcr_mask":1,"pcrs":[],"ak":{},"quote":{},"register":{},"eventlog":[],"config_nvpcr":{"name":"00","attest":"00"}}"#;
-    let complete = br#"{"nonce":"","pcr_mask":1,"pcrs":[],"ak":{},"quote":{},"register":{},"eventlog":[],"config_nvpcr":{"name":"00","attest":"00","signature":"00"}}"#;
+        br#"{"nonce":"","pcr_mask":1,"pcrs":[],"ak":{},"quote":{"attest":"00","signature":"00"},"register":{"attest":"00","signature":"00","after_attest":"00","after_signature":"00"},"eventlog":[]}"#;
+    let incomplete = br#"{"nonce":"","pcr_mask":1,"pcrs":[],"ak":{},"quote":{"attest":"00","signature":"00"},"register":{"attest":"00","signature":"00","after_attest":"00","after_signature":"00"},"eventlog":[],"config_nvpcr":{"name":"00","attest":"00"}}"#;
+    let complete = br#"{"nonce":"","pcr_mask":1,"pcrs":[],"ak":{},"quote":{"attest":"00","signature":"00"},"register":{"attest":"00","signature":"00","after_attest":"00","after_signature":"00"},"eventlog":[],"config_nvpcr":{"name":"00","attest":"00","signature":"00","after_attest":"00","after_signature":"00"}}"#;
 
     assert_eq!(
         parse_evidence(&mut Parse::new(), base),

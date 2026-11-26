@@ -1,8 +1,8 @@
-<svg xmlns='http://www.w3.org/2000/svg' width='900.0' height='450.0' viewBox='-72 -72 674.996 337.498' class='fig fig-f-ink' role='img'><!-- Documentation/figures/internals-attest-verify.tex, sha256 22c95455a91851a00ffab63e4a8b11326f44960ffdbb32205d96049e37cc5d51 --><style>.fig-f-ink{fill:var(--fig-ink,#171b22)}.fig-s-ink{stroke:var(--fig-ink,#171b22)}.fig-f-muted{fill:var(--fig-muted,#5d6675)}.fig-s-muted{stroke:var(--fig-muted,#5d6675)}.fig-f-line{fill:var(--fig-line,#8a93a0)}.fig-s-line{stroke:var(--fig-line,#8a93a0)}.fig-f-grid{fill:var(--fig-grid,#e2e6eb)}.fig-s-grid{stroke:var(--fig-grid,#e2e6eb)}.fig-f-axis{fill:var(--fig-axis,#c3c9d1)}.fig-s-axis{stroke:var(--fig-axis,#c3c9d1)}.fig-f-accent{fill:var(--fig-accent,#8b1e3f)}.fig-s-accent{stroke:var(--fig-accent,#8b1e3f)}.fig-f-s1{fill:var(--fig-s1,#2a78d6)}.fig-s-s1{stroke:var(--fig-s1,#2a78d6)}.fig-f-s2{fill:var(--fig-s2,#eb6834)}.fig-s-s2{stroke:var(--fig-s2,#eb6834)}.fig-f-s3{fill:var(--fig-s3,#1baf7a)}.fig-s-s3{stroke:var(--fig-s3,#1baf7a)}.fig-f-s4{fill:var(--fig-s4,#eda100)}.fig-s-s4{stroke:var(--fig-s4,#eda100)}.fig-f-free{fill:var(--fig-free,#dde2e8)}.fig-s-free{stroke:var(--fig-free,#dde2e8)}.fig-f-on{fill:var(--fig-on,#ffffff)}.fig-s-on{stroke:var(--fig-on,#ffffff)}@media (prefers-color-scheme:dark){.fig-f-ink{fill:var(--fig-ink,#e4e8ee)}.fig-s-ink{stroke:var(--fig-ink,#e4e8ee)}.fig-f-muted{fill:var(--fig-muted,#9ba5b3)}.fig-s-muted{stroke:var(--fig-muted,#9ba5b3)}.fig-f-line{fill:var(--fig-line,#8a93a0)}.fig-s-line{stroke:var(--fig-line,#8a93a0)}.fig-f-grid{fill:var(--fig-grid,#262d37)}.fig-s-grid{stroke:var(--fig-grid,#262d37)}.fig-f-axis{fill:var(--fig-axis,#39414c)}.fig-s-axis{stroke:var(--fig-axis,#39414c)}.fig-f-accent{fill:var(--fig-accent,#e8899f)}.fig-s-accent{stroke:var(--fig-accent,#e8899f)}.fig-f-s1{fill:var(--fig-s1,#3987e5)}.fig-s-s1{stroke:var(--fig-s1,#3987e5)}.fig-f-s2{fill:var(--fig-s2,#d95926)}.fig-s-s2{stroke:var(--fig-s2,#d95926)}.fig-f-s3{fill:var(--fig-s3,#199e70)}.fig-s-s3{stroke:var(--fig-s3,#199e70)}.fig-f-s4{fill:var(--fig-s4,#c98500)}.fig-s-s4{stroke:var(--fig-s4,#c98500)}.fig-f-free{fill:var(--fig-free,#2f3640)}.fig-s-free{stroke:var(--fig-free,#2f3640)}.fig-f-on{fill:var(--fig-on,#ffffff)}.fig-s-on{stroke:var(--fig-on,#ffffff)}}</style>
+<svg xmlns='http://www.w3.org/2000/svg' width='900.0' height='450.0' viewBox='-72 -72 674.996 337.498' class='fig fig-f-ink' role='img'><!-- Documentation/figures/internals-attest-verify.tex, sha256 7573b00d4937d30fadbc5e03bb6d174e2c936fcea1ccbf4733f1d5f4e0f26302 --><style>.fig-f-ink{fill:var(--fig-ink,#171b22)}.fig-s-ink{stroke:var(--fig-ink,#171b22)}.fig-f-muted{fill:var(--fig-muted,#5d6675)}.fig-s-muted{stroke:var(--fig-muted,#5d6675)}.fig-f-line{fill:var(--fig-line,#8a93a0)}.fig-s-line{stroke:var(--fig-line,#8a93a0)}.fig-f-grid{fill:var(--fig-grid,#e2e6eb)}.fig-s-grid{stroke:var(--fig-grid,#e2e6eb)}.fig-f-axis{fill:var(--fig-axis,#c3c9d1)}.fig-s-axis{stroke:var(--fig-axis,#c3c9d1)}.fig-f-accent{fill:var(--fig-accent,#8b1e3f)}.fig-s-accent{stroke:var(--fig-accent,#8b1e3f)}.fig-f-s1{fill:var(--fig-s1,#2a78d6)}.fig-s-s1{stroke:var(--fig-s1,#2a78d6)}.fig-f-s2{fill:var(--fig-s2,#eb6834)}.fig-s-s2{stroke:var(--fig-s2,#eb6834)}.fig-f-s3{fill:var(--fig-s3,#1baf7a)}.fig-s-s3{stroke:var(--fig-s3,#1baf7a)}.fig-f-s4{fill:var(--fig-s4,#eda100)}.fig-s-s4{stroke:var(--fig-s4,#eda100)}.fig-f-free{fill:var(--fig-free,#dde2e8)}.fig-s-free{stroke:var(--fig-free,#dde2e8)}.fig-f-on{fill:var(--fig-on,#ffffff)}.fig-s-on{stroke:var(--fig-on,#ffffff)}@media (prefers-color-scheme:dark){.fig-f-ink{fill:var(--fig-ink,#e4e8ee)}.fig-s-ink{stroke:var(--fig-ink,#e4e8ee)}.fig-f-muted{fill:var(--fig-muted,#9ba5b3)}.fig-s-muted{stroke:var(--fig-muted,#9ba5b3)}.fig-f-line{fill:var(--fig-line,#8a93a0)}.fig-s-line{stroke:var(--fig-line,#8a93a0)}.fig-f-grid{fill:var(--fig-grid,#262d37)}.fig-s-grid{stroke:var(--fig-grid,#262d37)}.fig-f-axis{fill:var(--fig-axis,#39414c)}.fig-s-axis{stroke:var(--fig-axis,#39414c)}.fig-f-accent{fill:var(--fig-accent,#e8899f)}.fig-s-accent{stroke:var(--fig-accent,#e8899f)}.fig-f-s1{fill:var(--fig-s1,#3987e5)}.fig-s-s1{stroke:var(--fig-s1,#3987e5)}.fig-f-s2{fill:var(--fig-s2,#d95926)}.fig-s-s2{stroke:var(--fig-s2,#d95926)}.fig-f-s3{fill:var(--fig-s3,#199e70)}.fig-s-s3{stroke:var(--fig-s3,#199e70)}.fig-f-s4{fill:var(--fig-s4,#c98500)}.fig-s-s4{stroke:var(--fig-s4,#c98500)}.fig-f-free{fill:var(--fig-free,#2f3640)}.fig-s-free{stroke:var(--fig-free,#2f3640)}.fig-f-on{fill:var(--fig-on,#ffffff)}.fig-s-on{stroke:var(--fig-on,#ffffff)}}</style>
 <defs>
 <path id='internals-attest-verify-g1-39' d='M1.596-8.032C1.007-8.032 .75-7.722 .75-7.304V-7.068C.75-6.715 .932-6.426 1.339-6.351C1.189-5.826 .867-5.408 .407-4.98H1.328C1.971-5.483 2.431-6.34 2.431-7.101V-7.304C2.431-7.722 2.174-8.032 1.596-8.032Z'/>
 <path id='internals-attest-verify-g1-57' d='M5.901-4.669C5.901-6.458 4.894-7.604 3.181-7.604C1.532-7.604 .471-6.533 .471-5.023C.471-3.609 1.414-2.71 2.656-2.71C3.599-2.71 4.07-3.234 4.348-3.813L4.434-3.791C4.102-2.27 3.074-1.264 1.317 0H3.224C4.477-.846 5.901-2.528 5.901-4.669ZM3.181-3.802C2.399-3.802 1.917-4.252 1.917-5.066V-5.226C1.917-6.04 2.399-6.49 3.181-6.49C3.973-6.49 4.445-6.04 4.445-5.226V-5.066C4.445-4.252 3.973-3.802 3.181-3.802Z'/>
-<path id='internals-attest-verify-g1-58' d='M1.703 .118C2.292 .118 2.56-.214 2.56-.664V-.857C2.56-1.317 2.292-1.649 1.703-1.649C1.125-1.649 .846-1.317 .846-.857V-.664C.846-.214 1.125 .118 1.703 .118ZM1.703-3.941C2.292-3.941 2.56-4.273 2.56-4.723V-4.916C2.56-5.376 2.292-5.708 1.703-5.708C1.125-5.708 .846-5.376 .846-4.916V-4.723C.846-4.273 1.125-3.941 1.703-3.941Z'/>
+<path id='internals-attest-verify-g1-58' d='M1.703-3.941C2.292-3.941 2.56-4.273 2.56-4.723V-4.916C2.56-5.376 2.292-5.708 1.703-5.708C1.125-5.708 .846-5.376 .846-4.916V-4.723C.846-4.273 1.125-3.941 1.703-3.941ZM1.703 .118C2.292 .118 2.56-.214 2.56-.664V-.857C2.56-1.317 2.292-1.649 1.703-1.649C1.125-1.649 .846-1.317 .846-.857V-.664C.846-.214 1.125 .118 1.703 .118Z'/>
 <path id='internals-attest-verify-g1-67' d='M3.781 .129C5.119 .129 6.008-.525 6.544-1.639L5.398-2.313C5.151-1.639 4.627-1.125 3.781-1.125C2.731-1.125 2.056-1.853 2.056-3.138V-4.316C2.056-5.591 2.731-6.351 3.781-6.351C4.616-6.351 5.087-5.901 5.301-5.237L6.512-5.88C5.987-7.036 5.119-7.604 3.781-7.604C1.81-7.604 .557-6.201 .557-3.684S1.81 .129 3.781 .129Z'/>
 <path id='internals-attest-verify-g1-78' d='M5.269 0H6.822V-7.475H5.483V-2.088H5.451L4.68-3.641L2.431-7.475H.878V0H2.217V-5.387H2.249L3.02-3.834L5.269 0Z'/>
 <path id='internals-attest-verify-g1-80' d='M2.292 0V-2.849H4.241C5.623-2.849 6.458-3.77 6.458-5.162C6.458-6.544 5.623-7.475 4.241-7.475H.878V0H2.292ZM2.292-6.244H4.113C4.659-6.244 4.991-5.955 4.991-5.408V-4.916C4.991-4.37 4.659-4.07 4.113-4.07H2.292V-6.244Z'/>
@@ -232,11 +232,11 @@
 <use x='-28.258' y='-72' href='#internals-attest-verify-g1-102'/>
 <use x='-24.388' y='-72' href='#internals-attest-verify-g1-121'/>
 <use x='-18.755' y='-72' href='#internals-attest-verify-g1-58'/>
-<use x='-12.8' y='-72' href='#internals-attest-verify-g1-118'/>
-<use x='-7.264' y='-72' href='#internals-attest-verify-g1-97'/>
-<use x='-1.254' y='-72' href='#internals-attest-verify-g1-108'/>
-<use x='1.906' y='-72' href='#internals-attest-verify-g1-117'/>
-<use x='8.227' y='-72' href='#internals-attest-verify-g1-101'/>
+<use x='-12.789' y='-72' href='#internals-attest-verify-g1-118'/>
+<use x='-7.253' y='-72' href='#internals-attest-verify-g1-97'/>
+<use x='-1.244' y='-72' href='#internals-attest-verify-g1-108'/>
+<use x='1.917' y='-72' href='#internals-attest-verify-g1-117'/>
+<use x='8.238' y='-72' href='#internals-attest-verify-g1-101'/>
 </g>
 <g stroke='none' transform='matrix(1.004 0 0 -1.004 519.438 -120.45)' class='fig-f-muted'>
 <use x='-72' y='-72' href='#internals-attest-verify-g1-84'/>
@@ -278,10 +278,10 @@
 <use x='-28.258' y='-72' href='#internals-attest-verify-g1-102'/>
 <use x='-24.388' y='-72' href='#internals-attest-verify-g1-121'/>
 <use x='-18.755' y='-72' href='#internals-attest-verify-g1-58'/>
-<use x='-12.8' y='-72' href='#internals-attest-verify-g1-110'/>
-<use x='-6.479' y='-72' href='#internals-attest-verify-g1-97'/>
-<use x='-.47' y='-72' href='#internals-attest-verify-g1-109'/>
-<use x='9.076' y='-72' href='#internals-attest-verify-g1-101'/>
+<use x='-12.789' y='-72' href='#internals-attest-verify-g1-110'/>
+<use x='-6.468' y='-72' href='#internals-attest-verify-g1-97'/>
+<use x='-.459' y='-72' href='#internals-attest-verify-g1-109'/>
+<use x='9.087' y='-72' href='#internals-attest-verify-g1-101'/>
 </g>
 <g stroke='none' transform='matrix(1.004 0 0 -1.004 519.438 -195.73)' class='fig-f-muted'>
 <use x='-72' y='-72' href='#internals-attest-verify-g1-105'/>
@@ -311,10 +311,10 @@
 <use x='-52.016' y='-72' href='#internals-attest-verify-g1-116'/>
 <use x='-48.038' y='-72' href='#internals-attest-verify-g1-101'/>
 <use x='-42.04' y='-72' href='#internals-attest-verify-g1-58'/>
-<use x='-36.084' y='-72' href='#internals-attest-verify-g1-80'/>
-<use x='-29.194' y='-72' href='#internals-attest-verify-g1-67'/>
-<use x='-22.292' y='-72' href='#internals-attest-verify-g1-82'/>
-<use x='-12.617' y='-72' href='#internals-attest-verify-g1-57'/>
+<use x='-36.074' y='-72' href='#internals-attest-verify-g1-80'/>
+<use x='-29.183' y='-72' href='#internals-attest-verify-g1-67'/>
+<use x='-22.281' y='-72' href='#internals-attest-verify-g1-82'/>
+<use x='-12.606' y='-72' href='#internals-attest-verify-g1-57'/>
 </g>
 <g stroke='none' transform='matrix(1.004 0 0 -1.004 519.438 -271.011)' class='fig-f-muted'>
 <use x='-72' y='-72' href='#internals-attest-verify-g1-105'/>
@@ -351,15 +351,15 @@
 <use x='-14.23' y='-72' href='#internals-attest-verify-g1-99'/>
 <use x='-8.715' y='-72' href='#internals-attest-verify-g1-116'/>
 <use x='-4.694' y='-72' href='#internals-attest-verify-g1-58'/>
-<use x='1.261' y='-72' href='#internals-attest-verify-g1-105'/>
-<use x='4.228' y='-72' href='#internals-attest-verify-g1-110'/>
-<use x='10.549' y='-72' href='#internals-attest-verify-g1-105'/>
-<use x='13.516' y='-72' href='#internals-attest-verify-g1-116'/>
-<use x='20.074' y='-72' href='#internals-attest-verify-g1-101'/>
-<use x='25.975' y='-72' href='#internals-attest-verify-g1-118'/>
-<use x='31.522' y='-72' href='#internals-attest-verify-g1-101'/>
-<use x='37.521' y='-72' href='#internals-attest-verify-g1-110'/>
-<use x='43.842' y='-72' href='#internals-attest-verify-g1-116'/>
+<use x='1.272' y='-72' href='#internals-attest-verify-g1-105'/>
+<use x='4.239' y='-72' href='#internals-attest-verify-g1-110'/>
+<use x='10.56' y='-72' href='#internals-attest-verify-g1-105'/>
+<use x='13.527' y='-72' href='#internals-attest-verify-g1-116'/>
+<use x='20.084' y='-72' href='#internals-attest-verify-g1-101'/>
+<use x='25.986' y='-72' href='#internals-attest-verify-g1-118'/>
+<use x='31.533' y='-72' href='#internals-attest-verify-g1-101'/>
+<use x='37.532' y='-72' href='#internals-attest-verify-g1-110'/>
+<use x='43.853' y='-72' href='#internals-attest-verify-g1-116'/>
 </g>
 <g stroke='none' transform='matrix(1.004 0 0 -1.004 519.438 -346.292)' class='fig-f-muted'>
 <use x='-72' y='-72' href='#internals-attest-verify-g1-105'/>
@@ -525,18 +525,29 @@
 <use x='-56.201' y='-72' href='#internals-attest-verify-g3-116'/>
 <use x='-52.991' y='-72' href='#internals-attest-verify-g3-101'/>
 <use x='-47.913' y='-72' href='#internals-attest-verify-g3-100'/>
-<use x='-40.365' y='-72' href='#internals-attest-verify-g3-119'/>
-<use x='-33.261' y='-72' href='#internals-attest-verify-g3-105'/>
-<use x='-30.949' y='-72' href='#internals-attest-verify-g3-116'/>
-<use x='-27.702' y='-72' href='#internals-attest-verify-g3-104'/>
-<use x='-20.265' y='-72' href='#internals-attest-verify-g3-116'/>
-<use x='-17.018' y='-72' href='#internals-attest-verify-g3-104'/>
-<use x='-11.764' y='-72' href='#internals-attest-verify-g3-101'/>
-<use x='-4.503' y='-72' href='#internals-attest-verify-g3-110'/>
-<use x='.751' y='-72' href='#internals-attest-verify-g3-111'/>
-<use x='5.931' y='-72' href='#internals-attest-verify-g3-110'/>
-<use x='11.185' y='-72' href='#internals-attest-verify-g3-99'/>
-<use x='15.782' y='-72' href='#internals-attest-verify-g3-101'/>
+<use x='-40.365' y='-72' href='#internals-attest-verify-g3-98'/>
+<use x='-35' y='-72' href='#internals-attest-verify-g3-101'/>
+<use x='-29.922' y='-72' href='#internals-attest-verify-g3-116'/>
+<use x='-26.675' y='-72' href='#internals-attest-verify-g3-119'/>
+<use x='-19.617' y='-72' href='#internals-attest-verify-g3-101'/>
+<use x='-14.539' y='-72' href='#internals-attest-verify-g3-101'/>
+<use x='-9.461' y='-72' href='#internals-attest-verify-g3-110'/>
+<use x='-2.024' y='-72' href='#internals-attest-verify-g3-114'/>
+<use x='1.325' y='-72' href='#internals-attest-verify-g3-101'/>
+<use x='6.403' y='-72' href='#internals-attest-verify-g3-103'/>
+<use x='11.287' y='-72' href='#internals-attest-verify-g3-105'/>
+<use x='13.599' y='-72' href='#internals-attest-verify-g3-115'/>
+<use x='18.039' y='-72' href='#internals-attest-verify-g3-116'/>
+<use x='21.249' y='-72' href='#internals-attest-verify-g3-101'/>
+<use x='26.327' y='-72' href='#internals-attest-verify-g3-114'/>
+<use x='31.905' y='-72' href='#internals-attest-verify-g3-114'/>
+<use x='35.254' y='-72' href='#internals-attest-verify-g3-101'/>
+<use x='40.332' y='-72' href='#internals-attest-verify-g3-97'/>
+<use x='45.271' y='-72' href='#internals-attest-verify-g3-100'/>
+<use x='50.636' y='-72' href='#internals-attest-verify-g3-105'/>
+<use x='52.949' y='-72' href='#internals-attest-verify-g3-110'/>
+<use x='58.203' y='-72' href='#internals-attest-verify-g3-103'/>
+<use x='63.087' y='-72' href='#internals-attest-verify-g3-115'/>
 </g>
 <g transform='matrix(1.004 0 0 -1.004 519.438 -287.573)' stroke='none' class='fig-f-muted'>
 <use x='-72' y='-72' href='#internals-attest-verify-g3-112'/>

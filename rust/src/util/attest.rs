@@ -181,9 +181,13 @@ struct Parse {
     reg_value_hex: [u8; 65],
     reg_attest_hex: [u8; 2 * ATTEST_MAX + 1],
     reg_sig_hex: [u8; 2 * SIGNATURE_MAX + 1],
+    reg_after_attest_hex: [u8; 2 * ATTEST_MAX + 1],
+    reg_after_sig_hex: [u8; 2 * SIGNATURE_MAX + 1],
     nvpcr_name_hex: [u8; 2 * NAME_LEN + 1],
     nvpcr_attest_hex: [u8; 2 * ATTEST_MAX + 1],
     nvpcr_sig_hex: [u8; 2 * SIGNATURE_MAX + 1],
+    nvpcr_after_attest_hex: [u8; 2 * ATTEST_MAX + 1],
+    nvpcr_after_sig_hex: [u8; 2 * SIGNATURE_MAX + 1],
     pcr_index: i64,
     pcr_value_hex: [u8; 65],
     pcr_have: u32,
@@ -238,9 +242,13 @@ impl Parse {
             reg_value_hex: [0; 65],
             reg_attest_hex: [0; 2 * ATTEST_MAX + 1],
             reg_sig_hex: [0; 2 * SIGNATURE_MAX + 1],
+            reg_after_attest_hex: [0; 2 * ATTEST_MAX + 1],
+            reg_after_sig_hex: [0; 2 * SIGNATURE_MAX + 1],
             nvpcr_name_hex: [0; 2 * NAME_LEN + 1],
             nvpcr_attest_hex: [0; 2 * ATTEST_MAX + 1],
             nvpcr_sig_hex: [0; 2 * SIGNATURE_MAX + 1],
+            nvpcr_after_attest_hex: [0; 2 * ATTEST_MAX + 1],
+            nvpcr_after_sig_hex: [0; 2 * SIGNATURE_MAX + 1],
             pcr_index: 0,
             pcr_value_hex: [0; 65],
             pcr_have: 0,
@@ -329,6 +337,59 @@ fn quote_covers(quote: &Attestation, mask: u32, values: &[[u8; 32]; 24]) -> bool
     pcr_values_digest(mask, values).is_some_and(|d| !memneq_explicit(&d, &a.pcr_digest))
 }
 
+/// The quote commits to the opening NV certifications, including their
+/// TPM signatures, even when the TPM clock has not advanced.
+fn snapshot_quote_nonce(register: &[u8], config: Option<&[u8]>) -> Result<[u8; 32], c_int> {
+    let mut hashes = [0u8; 64];
+    let mut digest = [0u8; 32];
+    let ret = sha256_into(register, &mut digest);
+    if ret != 0 {
+        return Err(ret);
+    }
+    hashes[..32].copy_from_slice(&digest);
+    if let Some(config) = config {
+        let ret = sha256_into(config, &mut digest);
+        if ret != 0 {
+            return Err(ret);
+        }
+        hashes[32..].copy_from_slice(&digest);
+    }
+    sha256(&hashes)
+}
+
+fn same_nv(a: &TpmAttest, a_bytes: &[u8], b: &TpmAttest, b_bytes: &[u8]) -> bool {
+    a.ty == ST_ATTEST_NV
+        && b.ty == ST_ATTEST_NV
+        && a.reset_count == b.reset_count
+        && a.restart_count == b.restart_count
+        && a.firmware_version == b.firmware_version
+        && a.offset == 0
+        && b.offset == 0
+        && a.index_name_len == NAME_LEN
+        && b.index_name_len == NAME_LEN
+        && a.index_name == b.index_name
+        && a.nv_len == 32
+        && b.nv_len == 32
+        && a.nv_data_in(a_bytes)
+            .is_some_and(|value| b.nv_data_in(b_bytes) == Some(value))
+}
+
+fn certify_after_quote(
+    tpm: &Tpm,
+    ak: &Key<'_>,
+    index: u32,
+    nonce: &[u8; 32],
+    before: &Attestation,
+) -> Result<Attestation, c_int> {
+    let after = tpm.nv_certify(ak, index, nonce)?;
+    let a = quoted(before).ok_or(-EBADMSG)?;
+    let b = quoted(&after).ok_or(-EBADMSG)?;
+    if !same_nv(&a, &before.attest, &b, &after.attest) {
+        return Err(-EAGAIN);
+    }
+    Ok(after)
+}
+
 /// What the TPM gave the evidence: the PCRs quoted and their values, the
 /// register's value and name, the quote and the certification, the keys'
 /// public parts, and the credential a challenge carried.
@@ -339,7 +400,8 @@ struct Measured {
     nv: NvInfo,
     quote: Attestation,
     certify: Attestation,
-    config_nvpcr: Option<(NvInfo, Attestation)>,
+    register_after: Attestation,
+    config_nvpcr: Option<(NvInfo, Attestation, Attestation)>,
     ak: KeyPublic,
     ek: KeyPublic,
     ek_rsa: bool,
@@ -452,15 +514,17 @@ fn measure(
     if !nv.defined || !nv.written {
         return Err(-ENODEV);
     }
-    let register = tpm.nv_read(NV_INDEX)?;
     let ak = tpm.ak_create()?;
-    let quote = quote_pcrs(&tpm, &ak, nonce, pcr_mask, &mut values)?;
-    if config.present
-        && quoted(&quote).is_none_or(|q| !quote_matches_config(config, &q, &values, in_nvpcr))
-    {
-        return Err(-EUCLEAN);
-    }
-    // A quote covers PCRs, so an NV index needs its own AK signature.
+    let certify = tpm.nv_certify(&ak, NV_INDEX, nonce)?;
+    let certified = quoted(&certify).ok_or(-EBADMSG)?;
+    let register: [u8; 32] = if certified.ty == ST_ATTEST_NV && certified.nv_len == 32 {
+        certified
+            .nv_data_in(&certify.attest)
+            .and_then(|data| data.try_into().ok())
+            .ok_or(-EBADMSG)?
+    } else {
+        return Err(-EBADMSG);
+    };
     let config_nvpcr = if in_nvpcr {
         let info = tpm.nv_info(config.pcr)?;
         let certification = tpm.nv_certify(&ak, config.pcr, nonce)?;
@@ -474,7 +538,24 @@ fn measure(
     } else {
         None
     };
-    let certify = tpm.nv_certify(&ak, NV_INDEX, nonce)?;
+    let quote_nonce = snapshot_quote_nonce(
+        &certify.signature,
+        config_nvpcr.as_ref().map(|(_, c)| c.signature.as_slice()),
+    )?;
+    let quote = quote_pcrs(&tpm, &ak, &quote_nonce, pcr_mask, &mut values)?;
+    if config.present
+        && quoted(&quote).is_none_or(|q| !quote_matches_config(config, &q, &values, in_nvpcr))
+    {
+        return Err(-EUCLEAN);
+    }
+    let after_nonce = sha256(&quote.signature)?;
+    let config_nvpcr = config_nvpcr
+        .map(|(info, before)| {
+            let after = certify_after_quote(&tpm, &ak, config.pcr, &after_nonce, &before)?;
+            Ok::<_, c_int>((info, before, after))
+        })
+        .transpose()?;
+    let register_after = certify_after_quote(&tpm, &ak, NV_INDEX, &after_nonce, &certify)?;
     let (ek_certificate, ek_cert_rsa) = ek_certificate_base64(&tpm);
     // The endorsement key the certificate describes, or the one the
     // challenge was made for; a TPM without a certificate yields its ECC
@@ -498,6 +579,7 @@ fn measure(
         nv,
         quote,
         certify,
+        register_after,
         config_nvpcr,
         ak: ak_public,
         ek: ek_public,
@@ -526,6 +608,13 @@ fn document_room(m: &Measured, logs: &[&Option<Vec<u8>>; 2], config: &Evidence) 
         need = need.saturating_add(2usize.saturating_mul(size));
     }
     need.min(JSON_MAX_BYTES)
+}
+
+fn emit_certification(e: &mut JsonEmit, before: &Attestation, after: &Attestation) {
+    emit_hex(e, b"attest", &before.attest);
+    emit_hex(e, b"signature", &before.signature);
+    emit_hex(e, b"after_attest", &after.attest);
+    emit_hex(e, b"after_signature", &after.signature);
 }
 
 /// attest: the target's register, its quoted PCRs, its keys and logs,
@@ -615,14 +704,12 @@ fn emit_evidence(
     e.kv_int(b"pcr", i64::from(CHAIN_PCR));
     emit_hex(e, b"name", m.nv.name());
     emit_hex(e, b"value", &m.register);
-    emit_hex(e, b"attest", &m.certify.attest);
-    emit_hex(e, b"signature", &m.certify.signature);
+    emit_certification(e, &m.certify, &m.register_after);
     e.obj_close();
-    if let Some((info, certification)) = &m.config_nvpcr {
+    if let Some((info, before, after)) = &m.config_nvpcr {
         e.obj_open_key(b"config_nvpcr");
         emit_hex(e, b"name", info.name());
-        emit_hex(e, b"attest", &certification.attest);
-        emit_hex(e, b"signature", &certification.signature);
+        emit_certification(e, before, after);
         e.obj_close();
     }
     e.arr_open(b"eventlog");
@@ -958,6 +1045,7 @@ fn check_signed(
     what: &[u8],
     attest_hex: &[u8],
     sig_hex: &[u8],
+    expected_nonce: Option<&[u8]>,
 ) -> Result<Signed, c_int> {
     let mut bytes = vec![0u8; ATTEST_MAX];
     let mut sig = [0u8; SIGNATURE_MAX];
@@ -966,7 +1054,15 @@ fn check_signed(
     let attest_len = decode_max(cstr(attest_hex), &mut bytes)?;
     let sig = hex_text(sig_hex, &mut sig)?;
     bytes.truncate(attest_len);
-    let checked = check_attest(rep, signer, what, &bytes, sig, &mut attest);
+    let checked = check_attest(
+        rep,
+        signer,
+        what,
+        &bytes,
+        sig,
+        expected_nonce.unwrap_or(signer.nonce),
+        &mut attest,
+    );
     Ok(Signed {
         bytes,
         attest,
@@ -982,6 +1078,7 @@ fn check_attest(
     what: &[u8],
     bytes: &[u8],
     sig: &[u8],
+    expected_nonce: &[u8],
     attest: &mut TpmAttest,
 ) -> bool {
     if attest_parse(bytes, attest) != 0 {
@@ -1007,11 +1104,14 @@ fn check_attest(
         attest_signer(attest, signer.name) == Ok(true),
         &[what, b": signed by the key as an endorsement primary"].concat(),
     );
-    let nonce = signer.nonce;
     let carried = attest.extra_in(bytes).is_some_and(|extra| {
-        extra.len() == nonce.len() && (nonce.is_empty() || !memneq_explicit(extra, nonce))
+        extra.len() == expected_nonce.len()
+            && (expected_nonce.is_empty() || !memneq_explicit(extra, expected_nonce))
     });
-    rep.check(carried, &[what, b": carries the nonce"].concat());
+    rep.check(
+        carried,
+        &[what, b": carries the expected challenge"].concat(),
+    );
     true
 }
 
@@ -1047,6 +1147,8 @@ fn parse_evidence(p: &mut Parse, evidence: &[u8]) -> Result<(bool, bool, bool), 
         JsonField::string(c"name", |p: &mut Parse| &mut p.nvpcr_name_hex),
         JsonField::string(c"attest", |p| &mut p.nvpcr_attest_hex),
         JsonField::string(c"signature", |p| &mut p.nvpcr_sig_hex),
+        JsonField::string(c"after_attest", |p| &mut p.nvpcr_after_attest_hex),
+        JsonField::string(c"after_signature", |p| &mut p.nvpcr_after_sig_hex),
     ];
     let reg_sub = [
         JsonField::string(c"nv_index", |p: &mut Parse| &mut p.reg_index),
@@ -1055,6 +1157,8 @@ fn parse_evidence(p: &mut Parse, evidence: &[u8]) -> Result<(bool, bool, bool), 
         JsonField::string(c"value", |p| &mut p.reg_value_hex),
         JsonField::string(c"attest", |p| &mut p.reg_attest_hex),
         JsonField::string(c"signature", |p| &mut p.reg_sig_hex),
+        JsonField::string(c"after_attest", |p| &mut p.reg_after_attest_hex),
+        JsonField::string(c"after_signature", |p| &mut p.reg_after_sig_hex),
     ];
     let upatch_sub = [
         JsonField::string(c"name", |p: &mut Parse| &mut p.upatch_name),
@@ -1108,11 +1212,63 @@ fn parse_evidence(p: &mut Parse, evidence: &[u8]) -> Result<(bool, bool, bool), 
     if have_nvpcr && !nvpcr_sub.iter().all(JsonField::seen) {
         return Err(-EINVAL);
     }
+    if !signed_fields_valid(&p.quote_attest_hex, &p.quote_sig_hex)
+        || !signed_fields_valid(&p.reg_attest_hex, &p.reg_sig_hex)
+        || !signed_fields_valid(&p.reg_after_attest_hex, &p.reg_after_sig_hex)
+        || (have_nvpcr
+            && (!signed_fields_valid(&p.nvpcr_attest_hex, &p.nvpcr_sig_hex)
+                || !signed_fields_valid(&p.nvpcr_after_attest_hex, &p.nvpcr_after_sig_hex)))
+    {
+        return Err(-EINVAL);
+    }
     Ok((
         ek_sub.iter().all(JsonField::seen),
         cred_sub[0].seen(),
         have_nvpcr,
     ))
+}
+
+fn signed_fields_valid(attest_hex: &[u8], sig_hex: &[u8]) -> bool {
+    let mut attest = [0u8; ATTEST_MAX];
+    let mut sig = [0u8; SIGNATURE_MAX];
+    decode_max(cstr(attest_hex), &mut attest).is_ok_and(|len| len != 0)
+        && decode_max(cstr(sig_hex), &mut sig).is_ok_and(|len| len != 0)
+}
+
+fn signature_bytes(hex: &[u8]) -> Result<Vec<u8>, c_int> {
+    let mut signature = vec![0u8; SIGNATURE_MAX];
+    let len = decode_max(cstr(hex), &mut signature)?;
+    if len == 0 {
+        return Err(-EINVAL);
+    }
+    signature.truncate(len);
+    Ok(signature)
+}
+
+fn check_after_quote(
+    rep: &mut Report,
+    signer: &Signer<'_>,
+    what: &[u8],
+    before: &Signed,
+    attest_hex: &[u8],
+    sig_hex: &[u8],
+    nonce: &[u8; 32],
+) -> Result<(), c_int> {
+    if !before.checked {
+        return Ok(());
+    }
+    let after = check_signed(rep, signer, what, attest_hex, sig_hex, Some(nonce))?;
+    if after.checked {
+        rep.check(
+            same_nv(&before.attest, &before.bytes, &after.attest, &after.bytes),
+            &[
+                what,
+                b": same index and value on both sides of the PCR quote",
+            ]
+            .concat(),
+        );
+    }
+    Ok(())
 }
 
 /// attest verify: the evidence checked against what the operator
@@ -1145,18 +1301,35 @@ pub(crate) fn verify(
         name: &ak_name,
         nonce,
     };
+    let register_sig = signature_bytes(&p.reg_sig_hex)?;
+    let config_sig = if have_nvpcr {
+        Some(signature_bytes(&p.nvpcr_sig_hex)?)
+    } else {
+        None
+    };
+    let quote_nonce = snapshot_quote_nonce(&register_sig, config_sig.as_deref())?;
+    let quote_sig = signature_bytes(&p.quote_sig_hex)?;
+    let after_nonce = sha256(&quote_sig)?;
+
     let quote = check_signed(
         rep,
         &signer,
         b"quote",
         &p.quote_attest_hex,
         &p.quote_sig_hex,
+        Some(&quote_nonce),
     )?;
     check_quote(rep, &mut p, &quote);
-    let certify = check_signed(rep, &signer, b"register", &p.reg_attest_hex, &p.reg_sig_hex)?;
+    let certify = check_signed(
+        rep,
+        &signer,
+        b"register",
+        &p.reg_attest_hex,
+        &p.reg_sig_hex,
+        None,
+    )?;
     let register = read_register(&p)?;
     check_certify(rep, &register, &certify);
-    // A restart clears the register as a reset does.
     if quote.checked && certify.checked {
         let (q, c) = (&quote.attest, &certify.attest);
         rep.check(
@@ -1166,7 +1339,17 @@ pub(crate) fn verify(
             b"quote and certification are of one TPM boot",
         );
     }
-    let nvpcr_value = check_config_nvpcr(rep, &p, expect, &signer, &quote, have_nvpcr)?;
+    check_after_quote(
+        rep,
+        &signer,
+        b"register after quote",
+        &certify,
+        &p.reg_after_attest_hex,
+        &p.reg_after_sig_hex,
+        &after_nonce,
+    )?;
+    let nvpcr_value =
+        check_config_nvpcr(rep, &p, expect, &signer, &quote, have_nvpcr, &after_nonce)?;
     check_config(
         rep,
         &p,
@@ -1420,6 +1603,7 @@ fn check_config_nvpcr(
     signer: &Signer<'_>,
     quote: &Signed,
     present: bool,
+    after_nonce: &[u8; 32],
 ) -> Result<Option<[u8; 32]>, c_int> {
     if !present {
         if expect.config_nvpcr_name.is_some() {
@@ -1437,6 +1621,7 @@ fn check_config_nvpcr(
         b"config NvPCR",
         &p.nvpcr_attest_hex,
         &p.nvpcr_sig_hex,
+        None,
     )?;
     let value = certified_nvpcr_value(&signed, &name);
     rep.check(
@@ -1460,6 +1645,15 @@ fn check_config_nvpcr(
     } else {
         rep.note(b"config NvPCR has no operator pin; use --expect-config-nvpcr");
     }
+    check_after_quote(
+        rep,
+        signer,
+        b"config NvPCR after quote",
+        &signed,
+        &p.nvpcr_after_attest_hex,
+        &p.nvpcr_after_sig_hex,
+        after_nonce,
+    )?;
     Ok(value)
 }
 
