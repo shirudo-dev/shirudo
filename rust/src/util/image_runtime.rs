@@ -646,6 +646,7 @@ fn candidate_keys(fd: c_int, enrolled: bool) -> c_int {
     if ret == 0 && enrolled {
         ret = image_keys::check_set(&set);
     }
+    // Before the activation PCR is extended, which nothing takes back.
     if ret == 0 && enrolled {
         ret = image_keys::check_purge(fd);
     }

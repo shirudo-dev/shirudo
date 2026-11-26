@@ -1683,8 +1683,9 @@ pub(crate) fn remove_fd(path: &CStr, fd: BorrowedFd<'_>) -> c_int {
 /// and checks the signer on what that read finds: an upgrade may have
 /// replaced the upatch since the caller's scan with one another key
 /// signed. 1 when the unload was measured, 0 when only the archive went,
-/// UPATCH_PURGE_OTHER_SIGNER when another key signed the archive, -errno
-/// otherwise.
+/// UPATCH_PURGE_OTHER_SIGNER when another key signed the archive,
+/// UPATCH_PURGE_NO_ARCHIVE when it has gone, or -errno on failure.
+/// -ENOENT from the register lock or a pin is a failure.
 pub(crate) fn purge(name: &CStr, signer: *const Cert, reason: &CStr) -> c_int {
     if !name_valid(Some(name.to_bytes())) {
         return -EINVAL;
@@ -1735,6 +1736,8 @@ fn purge_archive(name: &[u8]) -> Result<Option<Upatch<'static>>, c_int> {
 }
 
 /// Check one archive under the register lock before any key is revoked.
+/// Returns 0 when its signer can be read, UPATCH_PURGE_NO_ARCHIVE when
+/// it has gone, or -errno for a bad archive or lock failure.
 pub(crate) fn purge_check(name: &CStr) -> c_int {
     if !name_valid(Some(name.to_bytes())) {
         return -EINVAL;
