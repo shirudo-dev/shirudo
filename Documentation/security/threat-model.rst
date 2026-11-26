@@ -738,7 +738,7 @@ and the returned link's ifindex around attachment.
    ``PinXattr``, ``BpffsUmount``, ``BpffsUmountAbove``, ``BpffsMount``
 :Tests: ``t6105``, ``t6106``, ``t6107``, ``t6108``, ``t6109``,
    ``t6116``, ``t6119``, ``t6120``, ``t6121``, ``t6138``, ``t6155``,
-   ``t3111``
+   ``t6158``, ``t3111``
 :Residual: R1, R2, R3, U17
 
 .. _tm-t3:
