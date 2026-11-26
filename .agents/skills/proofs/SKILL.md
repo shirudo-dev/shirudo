@@ -184,9 +184,9 @@ determining its events.
   `proof.h` (as `upatch-rodata.c` does). Such a copy is also
   pathologically slow, wrong bytes or not: when a proof stalls in
   `memcpy()`, look for a literal source chosen by symbolic data first.
-- CBMC 5.95 also reads wrong bytes at a symbolic offset from a heap
-  object of struct type that a `memcpy()` filled, `xreallocarray()`'s
-  for one; a wrong value can make a check pass as well as fail. Read
+- CBMC 5.95 also reads wrong bytes at a symbolic offset from a
+  heap-allocated struct that a `memcpy()` filled; a wrong value can make
+  a check pass as well as fail. Read
   such an object by its members, never cast to bytes.
 - It does so without a `memcpy()` and on the stack too: a read through a
   `char *` at an index that depends on the data, as

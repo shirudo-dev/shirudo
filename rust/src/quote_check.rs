@@ -263,8 +263,8 @@ static HELP: Help = Help::new(
     None,
 );
 
-/// The verdict of one line as read_text_line() reads it: a NUL in it, or
-/// more bytes than the longest row has, is a malformed row.
+/// The verdict of one input line: a NUL or a row longer than the
+/// permitted maximum makes it malformed.
 fn line_check(line: &[u8]) -> Result<QuoteResult, c_int> {
     let row = line.strip_suffix(b"\n").unwrap_or(line);
     let mut res = QuoteResult::malformed();

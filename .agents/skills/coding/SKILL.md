@@ -235,31 +235,18 @@ took a token from the first bytes of an answer that was no text.
   `tree_operation_digest()` does. Two strings set side by side hash
   like one string cut elsewhere.
 
-Instead of
+A whole-file read returns bytes. Search them as bytes:
 
-```c
-ret = read_file(path, max, &body, &len);
-if (ret)
-	return ret;
-entry = strstr(body, needle);
+```rust
+let body = io::read(path, max)?;
+let found = body.split(|&b| b == b'\n').any(|line| line == needle);
 ```
 
-write
-
-```c
-ret = read_file(path, max, &body, &len);
-if (ret)
-	return ret;
-ret = span_to_str(body, len + 1, body, len);
-if (ret)
-	goto out;
-entry = strstr(body, needle);
-```
-
-The `read_unterminated` and `file_as_string` rules of
-`testing/coccinelle` report the first of these and a buffer a read left
-unterminated; a field, a pointer with a length and a digest are for
-review.
+When a C API needs a string, `CString::new(body)` checks for an embedded
+NUL and adds the terminator. The `read_unterminated` and
+`file_as_string` Coccinelle rules still catch C buffers used as strings
+before that check. A fixed-size field, a pointer with a length and a
+digest still need review.
 
 ### State that changes under you
 
@@ -446,9 +433,9 @@ without a body.
   empty: a path or value is refused, a helper formatting display text
   returns the error, and status shows `"?"`. Constant text is copied,
   not formatted.
-- `xstrdup()` measures with `strlen()`, so outside input gets
-  `xstrndup(s, bound)`. `xfree(p, size)` and `xstrfree()` scrub before
-  they free.
+- A C string from outside gets a length bound before `strlen()` or
+  another call that searches for its terminator. Counted bytes stay
+  counted until a checked conversion makes them a C string.
 - In C, `ret` holds a return code and `err` an errno kept beside the
   value a function returns, and there are no `(void)` casts.
 - Internal names carry no `shirudo_` prefix; it stays only where a name

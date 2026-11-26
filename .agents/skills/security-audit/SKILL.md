@@ -175,9 +175,9 @@ descriptors and `unsafe` blocks rule out neither, so read them as C.
   input chose. In BPF, what the verifier does not track: a map entry
   never deleted, arena memory never freed, storage that outlives its
   owner.
-- **Use after free.** A pointer into a buffer that was freed, grown
-  with `xreallocarray()` or as a `Vec`, or handed to a library that owns
-  it now, a field of a parsed document after its body is gone, a second
+- **Use after free.** A pointer into a freed buffer, a `Vec` after it
+  grows, or storage after a library takes ownership; a field of a parsed
+  document after its body is gone; a second
   free on an error path, a raw pointer kept past the drop of what it
   points into, as `as_ptr()` of a temporary. In BPF, a map value used
   after its entry was deleted or replaced, a pointer kept across a call
@@ -231,10 +231,10 @@ descriptors and `unsafe` blocks rule out neither, so read them as C.
   over several strings delimits or counts each; whether a length is
   narrowed before it bounds a copy or a compare; and whether a name is
   checked once before it is printed, hashed or put in a path. Bytes
-  become a string through `span_to_str()`, `read_text_line()` or
-  `json_parse()`, and a field through the `memchr()` of its parser:
-  look for the reader that has none of them, and for a strict JSON
-  writer given text nobody checked, which fails the whole document. The
+  become a C string through `CString::new()` or a checked terminator;
+  a counted line needs a length and NUL check, and a JSON string its
+  parser's decoding. Look for a reader that skips those checks, or a
+  strict JSON writer given unchecked text, which fails the document. The
   `read_unterminated` and `file_as_string` rules match a buffer a read
   left unterminated and a file searched as a string; a field whose NUL
   another function checked and a copy terminated by hand they do not
