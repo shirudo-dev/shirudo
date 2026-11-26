@@ -1044,14 +1044,14 @@ OCI registry. The macOS workflow checks the Lima template with
 Unit suites and fuzz targets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The unit tests beside the Rust modules cover 32 modules in
+The unit tests beside the Rust modules cover 33 modules in
 :src:`rust/src/util/`: ``attest``, ``bpm_oci``, ``bpm_package``,
 ``bpm_state``, ``bpm_tree``, ``bpm_tree_overlap``, ``bpm_tree_state``,
 ``chain``, ``conditions``, ``crypto_openssl``, ``curl``, ``decode``,
 ``eventlog``, ``format``, ``hex``, ``integrity``, ``io``, ``json``,
 ``keepalive``, ``keepalive_quote``, ``kernel_abi``,
 ``kernel_build_id``, ``kernel_release``, ``measured``, ``options``,
-``sysinfo``, ``tamper``, ``upatch``, ``upatch_pins``,
+``seal``, ``sysinfo``, ``tamper``, ``upatch``, ``upatch_pins``,
 ``upatch_resolve``, ``upatch_verify`` and ``xdp``. Tests also cover
 :src:`rust/src/text.rs` and the quote checks in
 :src:`rust/src/quote_check.rs`.

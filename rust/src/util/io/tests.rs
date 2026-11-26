@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::errno::{EINVAL, EIO, EISDIR, ELOOP, ENOTDIR, EPERM, ESTALE};
+use crate::sys::libc::O_WRONLY;
 use crate::testutil::TempDir;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -71,6 +72,32 @@ fn open_beneath_same_mount_refuses_a_bind() {
     ));
     // SAFETY: the bind mount made above, in this test thread's namespace.
     assert_eq!(unsafe { libc::umount2(alias.as_ptr(), 0) }, 0);
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "openat2 is unavailable in Miri")]
+fn create_beneath_same_mount_makes_one_new_file() {
+    let dir = TempDir::new();
+    let parent = File::open(dir.join("")).unwrap();
+    let made = create_beneath_same_mount(parent.as_raw_fd(), c"new", O_WRONLY, 0o600).unwrap();
+    assert_eq!(
+        File::from(made).metadata().unwrap().permissions().mode() & 0o7777,
+        0o600
+    );
+    assert!(matches!(
+        create_beneath_same_mount(parent.as_raw_fd(), c"new", O_WRONLY, 0o600),
+        Err(err) if err == -crate::errno::EEXIST
+    ));
+    assert!(matches!(
+        create_beneath_same_mount(parent.as_raw_fd(), c"../new", O_WRONLY, 0o600),
+        Err(err) if err == -crate::errno::EXDEV
+    ));
+    symlink("missing", dir.join("link")).unwrap();
+    assert!(matches!(
+        create_beneath_same_mount(parent.as_raw_fd(), c"link", O_WRONLY, 0o600),
+        Err(err) if err == -crate::errno::EEXIST
+    ));
+    assert!(!dir.join("missing").exists());
 }
 
 #[test]

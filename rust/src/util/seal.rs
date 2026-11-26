@@ -918,3 +918,6 @@ pub(crate) fn write_file_mode(path: &[u8], data: &[u8], mode: u32) -> Result<(),
 pub(crate) fn write_file(path: &[u8], data: &[u8], mode: u32) -> Result<(), c_int> {
     write_file_inner(path, data, mode, false)
 }
+
+#[cfg(test)]
+mod tests;
