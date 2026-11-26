@@ -15,3 +15,4 @@ tree.
    concepts
    kernel-fix-tutorial
    examples
+   java-watch

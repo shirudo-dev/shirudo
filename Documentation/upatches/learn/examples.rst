@@ -220,6 +220,7 @@ when a JVM maps ``libjvm.so`` and freed when its process exits or
 executes another program, so every read returns the whole list and
 takes nothing away. A slot's sequence word carries its state and a
 generation, and the serializer reads it as a seqlock reader.
+:doc:`java-watch` follows its programs hook by hook.
 ``t3121-java-watch`` loads it with real JVMs
 (:doc:`/contribute/testing/test-coverage`).
 
