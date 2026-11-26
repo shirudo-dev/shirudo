@@ -309,7 +309,7 @@ fn record_decode(data: &[u8], state: bool) -> Result<ConfigUpdateRecord, c_int> 
         || json.sequence <= 0
         || !(0..=i64::from(u32::MAX)).contains(&json.reset)
         || !(0..=i64::from(u32::MAX)).contains(&json.restart)
-        || !(0..=15).contains(&json.pcr)
+        || !(0..=i64::from(u32::MAX)).contains(&json.pcr)
         || config_measure::pcr_valid(json.pcr as u32) != 0
         || (json.kind != i64::from(EVENT_BOOT) && json.kind != i64::from(EVENT_UPDATE))
         || hex::decode(cstr(&json.root), &mut record.target.root_hash).is_err()
