@@ -1680,7 +1680,7 @@ R3 Pins depend on the mount tree
    LSM as not attached, and ``upatch load`` and ``upatch unload`` refuse
    ``tampered`` with the message ``lsm_detached`` in their pre-flight.
    The walk's bounds refuse every unmount of a tree they cannot cover.
-   Mitigation: D7.
+   Mitigations: D7, D8, D11.
 
 R4 Config PCR writers are not authenticated
    The config PCR, one of 0 to 15 other than 9 and 11 chosen in the
@@ -2255,6 +2255,28 @@ D10 A payload type in the signed message
    signature made for a Java upatch verifies for nothing a BPF header
    can describe, and the reverse, without resting on the signed
    sections that follow (T15).
+
+D11 Protect the bpffs mount through systemd switch-root
+   Guard pivots and propagation changes in the mount namespace that
+   holds the recorded bpffs (R3). Allow host PID 1 to change propagation
+   and pivot during the initrd handoff. End this exception once PID 1
+   has unmounted the recorded old root. Allow PID 1 to make the mounts
+   shared again after the handoff.
+
+   In the proposed BPF hook, split nested CO-RE reads and read the
+   stored pointer directly from the map value before using CO-RE to
+   read the kernel mount's namespace. Check that the hook builds and
+   loads. Boot a systemd initrd that switches root and verify that it
+   attests, the protected mounts are shared and the mount tamper counter
+   stays unchanged. See the `switch-root review on PR 213
+   <https://github.com/shirudo-dev/shirudo/pull/213#issuecomment-7111239313>`__.
+
+   Cover propagation changes through both ``mount(2)`` and
+   ``mount_setattr(2)``. The latter needs a kernel hook. Test each
+   interface directly. Check that other host tasks cannot make the
+   protected tree private and that unrelated mounts stay usable. See
+   the `propagation test review
+   <https://github.com/shirudo-dev/shirudo/pull/213#issuecomment-7111496290>`__.
 
 Out of scope
 ------------
