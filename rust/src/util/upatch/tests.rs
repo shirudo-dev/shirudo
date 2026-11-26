@@ -56,6 +56,31 @@ fn prog_specs_refuse_another_header_count() {
     }
 }
 
+#[test]
+fn uprobe_targets_keep_their_bytes_after_metadata_is_dropped() {
+    let path = b"/usr/lib/php.so";
+    let mut attach = entry(ATTACH_UPROBE_MULTI, 0);
+    attach[16..24].copy_from_slice(b"function");
+    let mut metadata = metadata(0, &[attach]);
+    for word in [UPROBE_TARGET_MAGIC, UPROBE_TARGET_VERSION, 1, 0] {
+        metadata.extend_from_slice(&word.to_le_bytes());
+    }
+    for word in [0, path.len() as u32, 4, 2] {
+        metadata.extend_from_slice(&word.to_le_bytes());
+    }
+    metadata.extend_from_slice(path);
+    metadata.extend_from_slice(&[1, 2, 3, 4]);
+    metadata.extend_from_slice(&16u64.to_le_bytes());
+    metadata.extend_from_slice(&32u64.to_le_bytes());
+
+    let specs = Specs::parse(&metadata, 0, 1).unwrap();
+    drop(metadata);
+    let spec = &specs.as_slice()[0];
+    assert_eq!(spec.uprobe_path, b"/usr/lib/php.so\0");
+    assert_eq!(spec.uprobe_offsets, [16, 32]);
+    assert_eq!(&spec.build_id[..4], &[1, 2, 3, 4]);
+}
+
 /// Metadata of one kprobe multi program and its UPKS name block.
 fn one_kprobe_multi(kind: u32, names: &[u8], nr_syms: u32) -> Vec<u8> {
     let words = |values: &[u32]| {
