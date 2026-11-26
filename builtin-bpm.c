@@ -71,13 +71,17 @@ struct bpm_source {
 
 static int sha256_file_hex(const char *path, char *hex, size_t hex_sz);
 static int sha256_fd_hex(int fd, char *hex, size_t hex_sz);
+/*
+ * -ENODEV, not -ENOENT, without the identity init pins: callers take
+ * -ENOENT for a package or a version that is not there.
+ */
 static int package_store_open(void)
 {
 	int state, bpm, packages;
 
 	state = state_root_open();
 	if (state < 0)
-		return state;
+		return state == -ENOENT ? -ENODEV : state;
 	bpm = seal_open_child(state, "bpm", O_RDONLY | O_DIRECTORY);
 	close(state);
 	if (bpm < 0)
@@ -2843,6 +2847,23 @@ static const struct help bpm_operator_help = {
 	.n_sections = 1,
 };
 
+/*
+ * A package is installed, upgraded and removed on an enforcing target
+ * only. 0 there, else the exit status, after the message.
+ */
+static int bpm_needs_enforcement(const char *action)
+{
+	int ret = enforcement_active();
+
+	if (ret > 0)
+		return 0;
+	if (ret < 0)
+		return bpm_fail(action, ret);
+	pr_err("bpm %s: enforcement is not active; run shirudo init first",
+	       action);
+	return 1;
+}
+
 static int bpm_finish(int lock, int ret, const char *action)
 {
 	if (lock >= 0) {
@@ -2974,6 +2995,9 @@ static int bpm_install(const char *ref, struct bpm_tables *t)
 	struct bpm_source source_cfg;
 	int n_entries, n_state, lock, ret, i;
 
+	ret = bpm_needs_enforcement("install");
+	if (ret)
+		return ret;
 	if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
 		return bpm_fail("initialize curl", -EIO);
 	lock = with_bpm_lock();
@@ -3044,6 +3068,9 @@ static int bpm_upgrade(const char *unused, struct bpm_tables *t)
 	struct bpm_state_entry *state = t->state;
 	int n_state, lock, ret, wrc, i;
 
+	ret = bpm_needs_enforcement("upgrade");
+	if (ret)
+		return ret;
 	if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
 		return bpm_fail("initialize curl", -EIO);
 	lock = with_bpm_lock();
@@ -3508,6 +3535,9 @@ static int bpm_uninstall_cmd(int argc, const char **argv)
 		return bpm_exit(ret);
 	if (!bpm_name_ok(package))
 		return bpm_fail("uninstall", -EINVAL);
+	ret = bpm_needs_enforcement("uninstall");
+	if (ret)
+		return ret;
 	state = xcalloc(BPM_MAX_STATE, sizeof(*state));
 	if (!state)
 		return bpm_fail("uninstall", -ENOMEM);

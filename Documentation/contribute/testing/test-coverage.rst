@@ -694,7 +694,8 @@ signed config image.
      - Covers
    * - ``t7001-bpm-cli``
      - Subcommands, reference validation before network access, source
-       and tree configuration lines
+       and tree configuration lines, ``install``, ``upgrade`` and
+       ``uninstall`` refused without enforcement
    * - ``t7002-bpm-info``
      - READMEs of local and OCI packages, archive integrity, a download
        kept in a memory file rather than in ``/tmp``, one key

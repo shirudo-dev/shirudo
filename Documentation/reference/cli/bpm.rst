@@ -526,6 +526,12 @@ Options take the value as the next argument or after ``=``, except
 install, upgrade, uninstall and list
 ------------------------------------
 
+``install``, ``upgrade`` and ``uninstall`` run only where enforcement is
+active. On a host that ran no ``shirudo init``, or whose ``init``
+failed, each prints ``bpm <action>: enforcement is not active; run
+shirudo init first`` and exits with status 1, before it reads or changes
+anything.
+
 ``install <source>/<name>[@<version>]`` takes the package from the index
 cached by ``repo update``: the given version, else the greatest. ``install
 oci://<registry>/<repository>:<tag>`` takes the package directly, with the
