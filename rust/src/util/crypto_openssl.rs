@@ -8,6 +8,7 @@
 //! implementation.
 
 use core::ffi::{CStr, c_char, c_int, c_long, c_void};
+use core::marker::PhantomData;
 use core::ptr;
 use std::ffi::CString;
 use std::fs::File;
@@ -115,21 +116,14 @@ fn clear_errors() {
 /// a file: one object, as long as its header says, and libcrypto's
 /// reasons when it is not one.
 pub(crate) fn x509_from_der_bio(der: &[u8]) -> Result<X509, ErrorStack> {
-    let len = c_int::try_from(der.len()).map_err(|_| ErrorStack::get())?;
-    // SAFETY: the bytes, which the BIO reads in place and outlive it,
-    // freed once; the certificate d2i makes, owned from here.
-    unsafe {
-        let bio = ffi::BIO_new_mem_buf(der.as_ptr().cast(), len);
-        if bio.is_null() {
-            return Err(ErrorStack::get());
-        }
-        let x509 = ffi::d2i_X509_bio(bio, ptr::null_mut());
-        ffi::BIO_free_all(bio);
-        if x509.is_null() {
-            return Err(ErrorStack::get());
-        }
-        Ok(X509::from_ptr(x509))
+    let bio = MemBio::from_slice(der)?;
+    // SAFETY: the BIO holds the DER bytes until this call returns.
+    let x509 = unsafe { ffi::d2i_X509_bio(bio.0, ptr::null_mut()) };
+    if x509.is_null() {
+        return Err(ErrorStack::get());
     }
+    // SAFETY: d2i_X509_bio returned a new X509 owned by this value.
+    Ok(unsafe { X509::from_ptr(x509) })
 }
 
 /// The certificate at `path`, PEM or DER, from a file only root may
@@ -537,15 +531,29 @@ pub(crate) unsafe fn cert_key_algorithm(
     0
 }
 
-/// A memory BIO, freed when it goes.
-struct MemBio(*mut ffi::BIO);
+/// A memory BIO, freed when it goes. An input BIO borrows its bytes.
+struct MemBio<'a>(*mut ffi::BIO, PhantomData<&'a [u8]>);
 
-impl MemBio {
+impl MemBio<'static> {
     fn new() -> Option<Self> {
-        // SAFETY: calls that take no pointer.
-        let bio = unsafe { ffi::BIO_new(ffi::BIO_s_mem()) };
+        // SAFETY: BIO_s_mem takes no pointer.
+        let method = unsafe { ffi::BIO_s_mem() };
+        // SAFETY: method is the memory BIO type from libcrypto.
+        let bio = unsafe { ffi::BIO_new(method) };
 
-        (!bio.is_null()).then_some(MemBio(bio))
+        (!bio.is_null()).then_some(MemBio(bio, PhantomData))
+    }
+}
+
+impl<'a> MemBio<'a> {
+    fn from_slice(bytes: &'a [u8]) -> Result<Self, ErrorStack> {
+        let len = c_int::try_from(bytes.len()).map_err(|_| ErrorStack::get())?;
+        // SAFETY: bytes stay live while this BIO borrows them.
+        let bio = unsafe { ffi::BIO_new_mem_buf(bytes.as_ptr().cast(), len) };
+        if bio.is_null() {
+            return Err(ErrorStack::get());
+        }
+        Ok(MemBio(bio, PhantomData))
     }
 
     /// What was written to it.
@@ -562,9 +570,9 @@ impl MemBio {
     }
 }
 
-impl Drop for MemBio {
+impl Drop for MemBio<'_> {
     fn drop(&mut self) {
-        // SAFETY: the BIO made in new(), freed once.
+        // SAFETY: this BIO came from new() or from_slice() and is freed once.
         unsafe { ffi::BIO_free_all(self.0) };
     }
 }
