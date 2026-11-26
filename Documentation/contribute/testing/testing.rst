@@ -46,7 +46,8 @@ Before you begin
   it misses with an install command for ``apt-get`` or ``dnf``. The
   bundle carries the TPM simulator helper, so
   :src:`testing/vm/build-bundle.sh` builds no bundle without
-  ``libtpms-dev``.
+  ``libtpms-dev``. The first bundle also needs network access, to fetch
+  pwru, which exports the pwru upatch of ``t3121``.
 - For the end-to-end tests: Docker on the host, and network access the
   first time, when the runner adds clang 23 from apt.llvm.org and the
   operator's build dependencies, a JDK among them, to the image of the
@@ -623,11 +624,13 @@ and everything it signs, :src:`testing/vm/build-bundle-payload.sh` does
 in the build container: Ubuntu 26.04, the release the VMs run, with its
 OpenSSL 3.5, the static archives its ``libcrypto.a`` names, which
 :src:`.github/scripts/install-static-libcrypto-deps.sh` installs as it
-does in CI, and clang 23, so that it needs nothing of the host's
-toolchain and what it puts into a guest links against the guest's
-libraries. The image builds from :src:`testing/container/Containerfile` on
-first use, with network access, and is tagged ``shirudo-build:<hash>``
-by its inputs; :src:`testing/container/run.sh` builds it and runs a
+does in CI, clang 23, and the Go release pwru needs, which
+:src:`testing/container/install-go.sh` installs from go.dev, so that it
+needs nothing of the host's toolchain and what it puts into a guest
+links against the guest's libraries. The image builds from
+:src:`testing/container/Containerfile` on first use, with network
+access, and is tagged ``shirudo-build:<hash>`` by its inputs;
+:src:`testing/container/run.sh` builds it and runs a
 command in it. The container builds from a copy of the files git sees in
 the checkout, tracked and untracked but not ignored, so uncommitted
 changes are in the bundle and the host's own build is left alone. It
@@ -635,9 +638,15 @@ keeps the static target dependencies it builds under
 ``build/test-vm/cache/target-deps/``, one directory per image and
 :src:`Makefile.target-deps`.
 
+The host fetches `pwru <https://github.com/cilium/pwru>`_ at the commit
+``PWRU_COMMIT`` of :src:`testing/vm/build-bundle.sh` into
+``build/test-vm/cache/pwru/<commit>/`` once, with git, and puts a copy
+into the fixture work. The payload builds it and exports with it, for the
+BTF of the test kernel, the pwru upatch that ``t3121`` loads.
+
 ``BUILD_CONTAINER=0`` builds the bundle in the checkout with the host's
-toolchain, the way the host tier always builds: OpenSSL 3.5 and clang 23,
-found through ``PATH`` and ``LD_LIBRARY_PATH`` as
+toolchain, the way the host tier always builds: OpenSSL 3.5, clang 23
+and, for pwru, Go 1.27, found through ``PATH`` and ``LD_LIBRARY_PATH`` as
 :doc:`/contribute/code/developer-guide` shows. ``CONTAINER`` names another
 engine than the first of ``podman`` and ``docker`` on ``PATH``.
 The bundle script runs Make builds with one job per available CPU reported

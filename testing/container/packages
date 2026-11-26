@@ -1,6 +1,7 @@
 autoconf
 autoconf-archive
 automake
+bison
 build-essential
 ca-certificates
 cryptsetup-bin
@@ -8,6 +9,7 @@ curl
 dpkg-dev
 e2fsprogs
 file
+flex
 git
 gpg
 lcov

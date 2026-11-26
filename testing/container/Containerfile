@@ -6,15 +6,19 @@
 # so that the bundle builds alike on every host and what it carries into a
 # guest links against the libraries the guest has. The static archives that
 # libcrypto.a names come from install-static-libcrypto-deps.sh, as in CI, for
-# the static shirudo-quote-check.
+# the static shirudo-quote-check, and the Go that pwru needs, newer than
+# Ubuntu's, from install-go.sh.
 
 FROM docker.io/library/ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db
 
-COPY packages install-clang.sh install-static-libcrypto-deps.sh /tmp/shirudo-build/
+COPY packages install-clang.sh install-static-libcrypto-deps.sh install-go.sh \
+	/tmp/shirudo-build/
 RUN export DEBIAN_FRONTEND=noninteractive && \
 	apt-get update && \
 	apt-get install -y --no-install-recommends \
 		$(cat /tmp/shirudo-build/packages) && \
 	sh /tmp/shirudo-build/install-static-libcrypto-deps.sh && \
 	sh /tmp/shirudo-build/install-clang.sh && \
+	sh /tmp/shirudo-build/install-go.sh && \
 	rm -rf /var/lib/apt/lists/* /tmp/shirudo-build
+ENV PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=local

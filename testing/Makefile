@@ -130,6 +130,7 @@ TEST_VM_BUNDLE_ARTIFACTS := $(wildcard $(VM_KERNEL_STAMP))
 BUILD_CONTAINER ?= 1
 TEST_VM_BUILD_ENV := $(if $(filter 0,$(BUILD_CONTAINER)),$(ROOT)/config.mk, \
 	$(ROOT)/testing/container/Containerfile $(ROOT)/testing/container/packages \
+	$(ROOT)/testing/container/install-go.sh \
 	$(ROOT)/testing/container/run.sh $(ROOT)/.github/scripts/install-clang.sh \
 	$(ROOT)/.github/scripts/install-static-libcrypto-deps.sh \
 	$(ROOT)/testing/vm/list-source.sh)

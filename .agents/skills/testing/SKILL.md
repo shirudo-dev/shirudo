@@ -124,8 +124,9 @@ parser of input from outside the host gets a target in `testing/fuzz/`.
 - The bundle builds in the build container (`testing/container/`) from
   a copy of the files git sees in the checkout, tracked and untracked but
   not ignored, so uncommitted changes are tested; edit nothing until the
-  copy is made. The first build makes the image, with network access,
-  and the static target dependencies, which takes minutes; say so.
+  copy is made. The first build makes the image and fetches pwru,
+  with network access, and builds the static target dependencies,
+  which takes minutes; say so.
 - With `BUILD_CONTAINER=0` the bundle builds in the checkout itself: edit
   nothing and run no other build there until it is built. It then
   compiles its BPF fixtures with the clang `shirudo-build` was built

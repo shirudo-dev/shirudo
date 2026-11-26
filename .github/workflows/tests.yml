@@ -146,7 +146,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/test-vm/cache
-          key: test-vm-runtime-and-operator-${{ hashFiles('testing/vm/runtime-packages', 'testing/vm/operator-packages', 'testing/vm/prepare-runtime.sh', 'testing/vm/build-bundle.sh', 'testing/vm/arch.sh', '.github/scripts/install-clang.sh', '.github/scripts/install-static-libcrypto-deps.sh', 'testing/container/Containerfile', 'testing/container/packages', 'Makefile.target-deps') }}
+          key: test-vm-runtime-and-operator-${{ hashFiles('testing/vm/runtime-packages', 'testing/vm/operator-packages', 'testing/vm/prepare-runtime.sh', 'testing/vm/build-bundle.sh', 'testing/vm/arch.sh', '.github/scripts/install-clang.sh', '.github/scripts/install-static-libcrypto-deps.sh', 'testing/container/Containerfile', 'testing/container/packages', 'testing/container/install-go.sh', 'Makefile.target-deps') }}
 
       - name: Prepare the test environment
         id: setup

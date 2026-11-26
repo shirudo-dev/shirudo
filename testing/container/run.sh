@@ -14,7 +14,7 @@ set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 root=$(cd "$here/../.." && pwd)
-inputs=("$here/Containerfile" "$here/packages"
+inputs=("$here/Containerfile" "$here/packages" "$here/install-go.sh"
 	"$root/.github/scripts/install-clang.sh"
 	"$root/.github/scripts/install-static-libcrypto-deps.sh")
 image="shirudo-build:$(cat "${inputs[@]}" | sha256sum | cut -c1-16)"

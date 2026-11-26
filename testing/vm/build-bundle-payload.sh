@@ -789,6 +789,44 @@ build_copyfail_detector_fixture()
 	)
 }
 
+# pwru, which build-bundle.sh put into the fixture work, builds with the Go
+# of the build image and exports the upatch t3121 loads for the test
+# kernel: against its BTF, probing the functions t3121 sends UDP to
+# 127.0.0.2 port 4242 over loopback through, which stand in for the
+# kernel's available_filter_functions. One the kernel cannot probe fails
+# the attach in t3121.
+build_pwru_fixture()
+{
+	local keys_dir="$1" src="$FIXTURE_WORK/pwru"
+	local builder="$REPO_ROOT/tools/shirudo-build/shirudo-build"
+	local funcs="$FIXTURE_WORK/pwru-funcs" log="$FIXTURE_WORK/pwru.log"
+	local payload
+
+	[[ -n "${BPF_VMLINUX_BTF:-}" ]] ||
+		die "the pwru fixture needs the test kernel's BTF in BPF_VMLINUX_BTF"
+	printf '%s\n' ip_output __dev_queue_xmit dev_hard_start_xmit \
+		__netif_receive_skb_one_core ip_rcv_core ip_protocol_deliver_rcu \
+		sk_skb_reason_drop >"$funcs"
+	if ! make -C "$src" TARGET_GOARCH="$(go env GOARCH)" \
+		LIBPCAP_ARCH="$(uname -m)-unknown-linux-gnu" pwru >"$log" 2>&1 ||
+		! "$src/pwru" --shirudo-upatch "$TMP_DIR/fixtures/pwru.upatch" \
+			--shirudo-keys-dir "$keys_dir" \
+			--kernel-btf "$BPF_VMLINUX_BTF" \
+			--shirudo-available-funcs "$funcs" \
+			--filter-func "^($(paste -sd '|' "$funcs"))\$" \
+			udp and host 127.0.0.2 and port 4242 >>"$log" 2>&1; then
+		cat "$log" >&2
+		return 1
+	fi
+	payload="$($REPO_ROOT/shirudo upatch info \
+		"$TMP_DIR/fixtures/pwru.upatch" --json |
+		python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+	"$builder" --unload pwru --payload-sha256 "$payload" \
+		-o "$TMP_DIR/fixtures/pwru.unload.upatch" \
+		--key "$keys_dir/signing_key.pem" \
+		--cert "$keys_dir/cert.der" >/dev/null
+}
+
 build_policy_labels_fixture()
 {
 	local source_dir="$FIXTURE_WORK/policy-labels"
@@ -898,6 +936,7 @@ queue_fixture build_af_alg_block_fixture "$FIXTURE_WORK/trusted"
 queue_fixture build_alg_splice_block_fixture "$FIXTURE_WORK/trusted"
 queue_fixture build_copyfail_detector_fixture "$FIXTURE_WORK/trusted"
 queue_fixture build_java_fixture
+queue_fixture build_pwru_fixture "$FIXTURE_WORK/trusted"
 wait_fixture_jobs
 
 basic_payload="$($REPO_ROOT/shirudo upatch info \

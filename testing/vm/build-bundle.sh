@@ -25,6 +25,10 @@ ROOTFS_URL="${TEST_VM_ROOTFS_URL:-$DEFAULT_ROOTFS_URL}"
 ROOTFS_SHA256="${TEST_VM_ROOTFS_SHA256:-}"
 ROOTFS_NAME="ubuntu-26.04-server-cloudimg-${TEST_VM_ARCH_DEB}.img"
 ROOTFS_CACHE="${WORK_DIR}/cache/rootfs/${ROOTFS_NAME}"
+# pwru exports the upatch t3121 loads, from this commit.
+PWRU_URL="https://github.com/cilium/pwru"
+PWRU_COMMIT=89b792bbeea9b1040a4817613b0606727ad30635
+PWRU_CACHE="${WORK_DIR}/cache/pwru/${PWRU_COMMIT}"
 LOCK_FILE="${BUNDLE_DIR}.lock"
 STAMP_FILE="${TEST_VM_BUNDLE_STAMP:-${BUNDLE_DIR}/.stamp}"
 STAMP_INPUTS="${TEST_VM_BUNDLE_INPUTS:-}"
@@ -365,6 +369,27 @@ prepare_runtime_image()
 	fi
 }
 
+# The cache holds the commit's tree, fetched once: git checks each object
+# it fetches against its hash, and the commit against the one pinned.
+fetch_pwru()
+{
+	local tmp="${PWRU_CACHE}.tmp.$$"
+
+	[[ -d "$PWRU_CACHE" ]] && return 0
+	require_command git git
+	rm -rf -- "$tmp"
+	git init -q "$tmp/git"
+	git -C "$tmp/git" fetch -q --depth 1 "$PWRU_URL" "$PWRU_COMMIT" ||
+		die "could not fetch pwru $PWRU_COMMIT from $PWRU_URL"
+	[[ "$(git -C "$tmp/git" rev-parse FETCH_HEAD)" == "$PWRU_COMMIT" ]] ||
+		die "$PWRU_URL gave another commit than $PWRU_COMMIT"
+	mkdir -p "$tmp/tree"
+	git -C "$tmp/git" archive FETCH_HEAD | tar -x -C "$tmp/tree"
+	mkdir -p "$(dirname "$PWRU_CACHE")"
+	mv -T -- "$tmp/tree" "$PWRU_CACHE"
+	rm -rf -- "$tmp"
+}
+
 bundle_is_current()
 {
 	local input built=0
@@ -454,6 +479,8 @@ cleanup()
 	rm -rf -- "$TMP_DIR" "$FIXTURE_WORK"
 }
 trap cleanup EXIT
+fetch_pwru
+cp -a -- "$PWRU_CACHE" "$FIXTURE_WORK/pwru"
 if [[ "$BUILD_CONTAINER" == 0 ]]; then
 	"$REPO_ROOT/testing/vm/build-bundle-payload.sh" "$TMP_DIR" "$FIXTURE_WORK"
 else
