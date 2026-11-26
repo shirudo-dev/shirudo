@@ -94,7 +94,8 @@ python3 - "$WORK/u.upatch" "$WORK" <<'PY'
 import struct, sys
 path, out = sys.argv[1], sys.argv[2]
 b = open(path, "rb").read()
-ioff, ilen, soff, slen, moff, mlen, doff, dlen = struct.unpack_from("<8I", b, 304)
+ioff, ilen, soff, slen = struct.unpack_from("<4I", b, 304)
+doff, dlen = struct.unpack_from("<2I", b, 328)
 open(out + "/sig.der", "wb").write(b[soff:soff + slen])
 content = b[ioff:ioff + ilen] + (b[doff:doff + dlen] if doff else b"")
 open(out + "/content.bin", "wb").write(content)

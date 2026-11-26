@@ -1036,3 +1036,30 @@ pub(super) fn unload_directive(
         unload(name, payload, out, (pkey, cert))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn writer_leaves_reserved_header_words_zero() {
+        let hash = [0u8; 32];
+        let h = Header {
+            name: b"test",
+            ty: TYPE_BPF,
+            flags: 0,
+            payload_sha256: &hash,
+            loader: (360, 8),
+            signature: (368, 1),
+            data: (369, 3),
+            log_buf_sz: 1024,
+            rodata_data_off: 0,
+            nr_maps: 0,
+            nr_progs: 0,
+        };
+        let bytes = h.bytes();
+        assert_eq!(&bytes[320..328], &[0; 8]);
+        assert_eq!(&bytes[328..332], &369u32.to_le_bytes());
+        assert_eq!(&bytes[332..336], &3u32.to_le_bytes());
+    }
+}

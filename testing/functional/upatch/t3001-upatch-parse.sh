@@ -76,9 +76,8 @@ mutate("zero-signature", 316, "<I", 0)
 mutate("loader-in-header", 304, "<I", 359)
 mutate("signature-oob", 312, "<I", 0xfffffff0)
 mutate("data-overflow", 328, "<I", 0xfffffff0)
-data = bytearray(header)
-struct.pack_into("<II", data, 320, 359, 1)
-(root / "metadata-in-header").write_bytes(data)
+mutate("reserved2", 320, "<I", 368)
+mutate("reserved3", 324, "<I", 1)
 mutate("data-len-overflow", 332, "<I", 0xffffffff)
 data = bytearray(header)
 data[16:32] = b"a\x1b[2Jb\xc2\x9bc\xff".ljust(16, bytes([0]))
@@ -90,9 +89,9 @@ test_expect_success 'structured valid container parses' '
 	"$S" upatch info "$WORK/valid-structured" >/dev/null 2>&1
 '
 test_expect_success 'structured header and section bounds fail cleanly' '
-	for f in bad-version rodata-offset-oob reserved1 zero-loader zero-signature \
-		 loader-in-header signature-oob data-overflow metadata-in-header \
-		 data-len-overflow; do reject "$WORK/$f" || exit 1; done
+	for f in bad-version rodata-offset-oob reserved1 reserved2 reserved3 \
+		 zero-loader zero-signature loader-in-header signature-oob \
+		 data-overflow data-len-overflow; do reject "$WORK/$f" || exit 1; done
 '
 test_expect_success 'a name from the file shows its controls as ?' '
 	"$S" upatch info "$WORK/controls-in-name" >"$WORK/info.out" 2>&1 &&

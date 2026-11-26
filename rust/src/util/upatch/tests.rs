@@ -571,3 +571,18 @@ fn xdp_programs_select_disjoint_classes() {
         Some(-EINVAL)
     );
 }
+
+#[test]
+fn reserved_header_words_must_be_zero() {
+    let mut bytes = [0u8; HEADER_SIZE];
+    bytes[..8].copy_from_slice(&MAGIC.to_le_bytes());
+    bytes[8..12].copy_from_slice(&VERSION.to_le_bytes());
+    bytes[16] = b'a';
+    assert!(parse_header(&bytes).is_ok());
+
+    for offset in [320, 324] {
+        bytes[offset] = 1;
+        assert_eq!(parse_header(&bytes).err(), Some(-EINVAL));
+        bytes[offset] = 0;
+    }
+}
