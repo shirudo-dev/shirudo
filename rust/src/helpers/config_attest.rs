@@ -43,7 +43,13 @@ impl ConfigUpdateOps for ReadOnly {
     }
 
     fn pcr_read(&self, pcr: u32) -> Result<[u8; 32], c_int> {
-        with_tpm(|tpm| tpm.pcr_read(pcr))
+        with_tpm(|tpm| {
+            if nvpcr(pcr) {
+                tpm.nv_read(pcr)
+            } else {
+                tpm.pcr_read(pcr)
+            }
+        })
     }
 
     fn pcr_extend(&self, _: u32, _: &[u8; 32]) -> Result<(), c_int> {

@@ -25,12 +25,14 @@ use std::path::PathBuf;
 use super::{helper_main, out};
 use crate::errno::{EINVAL, EIO, EKEYREJECTED, EPERM, ETIMEDOUT, EUCLEAN};
 use crate::util::chain::fold;
+use crate::util::config_measure::nvpcr;
 use crate::util::config_measure::{EVENT_BOOT, event};
 use crate::util::config_update::{
     BootIdentity, Checkpoint, ConfigUpdate, ConfigUpdateOps, ConfigUpdateTarget,
 };
 use crate::util::hex::encode;
 use crate::util::tpm::Tpm;
+use crate::util::tpm_wire::policy_nv_written;
 use libc::ECANCELED;
 
 helper_main!(shirudo_helper_test_config_update, run);
@@ -150,6 +152,7 @@ impl Context<'_> {
             return Err(-EIO);
         }
         match &self.tpm {
+            Some(tpm) if nvpcr(pcr) => tpm.nv_read(pcr),
             Some(tpm) => tpm.pcr_read(pcr),
             None => Ok(self.sim.value),
         }
@@ -188,6 +191,14 @@ impl ConfigUpdateOps for RefCell<Context<'_>> {
             event
         };
         match &c.tpm {
+            Some(tpm) if nvpcr(pcr) => {
+                let mut first = [0u8; 32];
+                let ret = policy_nv_written(&[0u8; 32], false, &mut first);
+                if ret != 0 {
+                    return Err(ret);
+                }
+                tpm.nvpcr_extend(pcr, &first, event)?;
+            }
             Some(tpm) => tpm.pcr_extend(pcr, event)?,
             None => {
                 let ret = fold(&mut c.sim.value, event);

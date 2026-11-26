@@ -208,3 +208,92 @@ fn config_nvpcr_evidence_requires_all_certification_fields() {
         Ok((false, false, true))
     );
 }
+
+#[test]
+fn quote_nonce_commits_to_both_opening_signatures() {
+    let first = b"register signature";
+    let second = b"config signature";
+    let mut hashes = [0u8; 64];
+    hashes[..32].copy_from_slice(&sha256(first).unwrap());
+    hashes[32..].copy_from_slice(&sha256(second).unwrap());
+
+    assert_eq!(snapshot_quote_nonce(first, Some(second)), sha256(&hashes));
+    hashes[32..].fill(0);
+    assert_eq!(snapshot_quote_nonce(first, None), sha256(&hashes));
+    assert_ne!(
+        snapshot_quote_nonce(first, Some(second)),
+        snapshot_quote_nonce(first, None)
+    );
+}
+
+#[test]
+fn closing_certification_requires_same_index_and_value() {
+    let first = [0x42u8; 32];
+    let second = [0x43u8; 32];
+    let mut a = TpmAttest::zeroed();
+    a.ty = ST_ATTEST_NV;
+    a.index_name = [0x53; NAME_LEN];
+    a.index_name_len = NAME_LEN;
+    a.nv_data = first.as_ptr();
+    a.nv_len = 32;
+    let mut b = TpmAttest::zeroed();
+    b.ty = ST_ATTEST_NV;
+    b.index_name = a.index_name;
+    b.index_name_len = NAME_LEN;
+    b.nv_data = first.as_ptr();
+    b.nv_len = 32;
+
+    assert!(same_nv(&a, &first, &b, &first));
+    b.nv_data = second.as_ptr();
+    assert!(!same_nv(&a, &first, &b, &second));
+    b.nv_data = first.as_ptr();
+    b.index_name[0] ^= 1;
+    assert!(!same_nv(&a, &first, &b, &first));
+    b.index_name = a.index_name;
+    b.restart_count += 1;
+    assert!(!same_nv(&a, &first, &b, &first));
+}
+
+#[test]
+fn evidence_requires_the_closing_register_certification() {
+    let complete = br#"{"nonce":"","pcr_mask":1,"pcrs":[],"ak":{},"quote":{"attest":"00","signature":"00"},"register":{"attest":"00","signature":"00","after_attest":"00","after_signature":"00"},"eventlog":[]}"#;
+    let missing = br#"{"nonce":"","pcr_mask":1,"pcrs":[],"ak":{},"quote":{"attest":"00","signature":"00"},"register":{"attest":"00","signature":"00","after_attest":"00"},"eventlog":[]}"#;
+    assert!(parse_evidence(&mut Parse::new(), complete).is_ok());
+    assert_eq!(parse_evidence(&mut Parse::new(), missing), Err(-EINVAL));
+}
+
+#[test]
+fn genuine_snapshot_verifies_and_report_lines_end_cleanly() {
+    let evidence = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../testing/fuzz/corpus/attest/snapshot"
+    ));
+    let expect = AttestExpect {
+        nonce: (1..=16).collect(),
+        ..AttestExpect::default()
+    };
+    let mut full = Report::new(64 * 1024);
+    assert_eq!(verify(evidence, &expect, &mut full), Err(-EKEYREJECTED));
+    assert_eq!(full.failed, 1, "{}", String::from_utf8_lossy(full.text()));
+    let len = full.text().len();
+    assert!(
+        len > 0
+            && full.text().ends_with(
+                b"
+"
+            )
+    );
+
+    for cap in 1..=len {
+        let mut report = Report::new(cap);
+        assert_eq!(verify(evidence, &expect, &mut report), Err(-EKEYREJECTED));
+        assert!(report.text().len() < cap);
+        assert!(
+            report.text().is_empty()
+                || report.text().ends_with(
+                    b"
+"
+                )
+        );
+    }
+}

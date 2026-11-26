@@ -403,6 +403,7 @@ struct Forged {
     ek: KeyPublic,
     quote: Attestation,
     certify: Attestation,
+    after: Attestation,
     nv: NvInfo,
 }
 
@@ -453,8 +454,13 @@ fn forge_on_tpm(
             *value = t.pcr_read(i)?;
         }
     }
-    let quote = t.quote(&ak, nonce, quoted)?;
     let certify = t.nv_certify(&ak, index, nonce)?;
+    let mut signatures = [0u8; 64];
+    signatures[..32].copy_from_slice(&sha256(&certify.signature)?);
+    let quote_nonce = sha256(&signatures)?;
+    let quote = t.quote(&ak, &quote_nonce, quoted)?;
+    let after_nonce = sha256(&quote.signature)?;
+    let after = t.nv_certify(&ak, index, &after_nonce)?;
     // Flushing lets the keys go; keep their public parts.
     let (ak_public, ek_public) = (ak.public().clone(), ek.public().clone());
     drop(ek);
@@ -470,6 +476,7 @@ fn forge_on_tpm(
         ek: ek_public,
         quote,
         certify,
+        after,
         nv,
     })
 }
@@ -572,6 +579,8 @@ fn forge(args: &[&CStr]) -> c_int {
     e.kv_string(b"value", &encode(&f.value));
     e.kv_string(b"attest", &encode(&f.certify.attest));
     e.kv_string(b"signature", &encode(&f.certify.signature));
+    e.kv_string(b"after_attest", &encode(&f.after.attest));
+    e.kv_string(b"after_signature", &encode(&f.after.signature));
     e.obj_close();
     e.arr_open(b"eventlog");
     e.obj_open();

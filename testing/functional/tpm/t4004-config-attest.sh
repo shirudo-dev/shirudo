@@ -85,7 +85,40 @@ PY
 test_expect_success 'genuine TPM evidence verifies against the operator root and PCR choice' '
 	verify "$WORK/b.json" >"$WORK/verified" &&
 	grep -q "^  OK    config: config root history matches the quoted PCR" "$WORK/verified" &&
+	grep -qx "  OK    register after quote: same index and value on both sides of the PCR quote" "$WORK/verified" &&
 	grep -qx "verdict: ok" "$WORK/verified"
+'
+
+test_expect_success 'the TPM signatures order the two register readings around the quote' '
+	python3 - "$WORK/b.json" "$NONCE" <<"PY"
+import hashlib, json, sys
+with open(sys.argv[1]) as source:
+    d = json.load(source)
+def digest(s):
+    return hashlib.sha256(bytes.fromhex(s)).digest()
+def extra(s):
+    attest = bytes.fromhex(s)
+    pos = 8 + int.from_bytes(attest[6:8], "big")
+    size = int.from_bytes(attest[pos:pos+2], "big")
+    return attest[pos+2:pos+2+size]
+r, q = d["register"], d["quote"]
+assert d["schema"] == 1
+assert extra(r["attest"]) == bytes.fromhex(sys.argv[2])
+assert extra(q["attest"]) == hashlib.sha256(digest(r["signature"]) + bytes(32)).digest()
+assert extra(r["after_attest"]) == digest(q["signature"])
+PY
+'
+
+test_expect_success 'the verifier requires the closing TPM certification' '
+	python3 - "$WORK/b.json" "$WORK/incomplete.json" <<"PY" &&
+import json, sys
+with open(sys.argv[1]) as source:
+    d = json.load(source)
+del d["register"]["after_signature"]
+with open(sys.argv[2], "w") as output:
+    json.dump(d, output)
+PY
+	! verify "$WORK/incomplete.json" >/dev/null
 '
 
 test_expect_success 'the standalone bounded parser replays the same signed-PCR selection' '
@@ -175,6 +208,44 @@ test_expect_success 'an inconsistent config history names the check it fails' '
 	grep -qx "verdict: fail" "$WORK/reordered-report"
 '
 
+# An isolated extend index with an unwritten branch for its first extend
+# and the same written branch config updates use on a provisioned target.
+provision_config_nv() (
+	set -e
+	export TPM2TOOLS_TCTI="$SHIRUDO_TPM_TCTI"
+	cd "$WORK"
+	for written in c s; do
+		tpm2_startauthsession -S session
+		tpm2_policynvwritten -S session -L "policy-$written" "$written"
+		tpm2_flushcontext session
+	done
+	tpm2_startauthsession -S session
+	tpm2_policyor -S session -L policy sha256:policy-c,policy-s
+	tpm2_flushcontext session
+	tpm2_nvdefine -C o -s 32 -a "nt=extend|authread|policywrite" \
+		-L policy 0x01818e04
+	tpm2_startauthsession --policy-session -S session
+	tpm2_policynvwritten -S session c
+	tpm2_policyor -S session sha256:policy-c,policy-s
+	head -c 32 /dev/zero > zero
+	tpm2_nvextend 0x01818e04 -P session:session -i zero
+	tpm2_flushcontext session
+)
+
+test_expect_success 'both NV registers are certified across the same PCR quote' '
+	mkdir -m 700 "$WORK/config-nv" &&
+	provision_config_nv &&
+	SHIRUDO_TEST_CONFIG_TPM=1 "$U" "$WORK/config-nv" boot A 25267716 &&
+	"$H" render "$WORK/config-nv" "$NONCE" >"$WORK/nvpcr.json" &&
+	"$S" attest verify --evidence="$WORK/nvpcr.json" --nonce="$NONCE" \
+		--ak-name="$(field "$WORK/b.json" ak.name)" --expect-chain="$CHAIN" \
+		--expect-config-root="$ROOT_A" \
+		--expect-config-nvpcr="$(field "$WORK/nvpcr.json" config_nvpcr.name)" \
+		>"$WORK/nvpcr-report" &&
+	grep -q "^  OK    config NvPCR after quote: same index and value" "$WORK/nvpcr-report" &&
+	grep -qx "verdict: ok" "$WORK/nvpcr-report"
+'
+
 test_expect_success 'pending effects prevent evidence collection despite a measured selection' '
 	! SHIRUDO_TEST_CONFIG_TPM=1 SHIRUDO_TEST_CONFIG_ACTIVATE_FAIL=1 \
 		"$U" "$WORK/config" update C >/dev/null &&
@@ -184,7 +255,7 @@ test_expect_success 'pending effects prevent evidence collection despite a measu
 	! SHIRUDO_TEST_CONFIG_TPM=1 "$U" "$WORK/config" update C >/dev/null
 '
 
-test_expect_success 'legacy evidence remains valid and does not imply config approval' '
+test_expect_success 'evidence without config verifies the patch register alone' '
 	"$R" evidence "$NONCE" >"$WORK/legacy.json" &&
 	"$S" attest verify --evidence="$WORK/legacy.json" --nonce="$NONCE" \
 		--ak-name="$(field "$WORK/legacy.json" ak.name)" \
