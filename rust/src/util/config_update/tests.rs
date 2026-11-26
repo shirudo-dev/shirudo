@@ -218,3 +218,16 @@ fn staged_config_waits_for_a_tpm_reset() {
     assert_eq!(case.init(b'B'), Ok(()));
     assert_eq!(case.check(), Ok(()));
 }
+
+#[test]
+#[cfg_attr(miri, ignore = "journal uses libc openat, flock and fsync")]
+fn config_nv_index_roundtrips_through_journal() {
+    let case = JournalCase::new();
+    let mut journal = case.open();
+    let pcr = crate::util::config_measure::CONFIG_NVPCR_INDEX;
+
+    assert_eq!(journal.boot(&JournalCase::target(b'A'), pcr), Ok(()));
+    assert_eq!(journal.read_state().map(|record| record.pcr), Ok(pcr));
+    assert_eq!(journal.complete_boot(), Ok(()));
+    assert_eq!(journal.check().map(|record| record.pcr), Ok(pcr));
+}
