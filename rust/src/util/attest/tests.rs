@@ -34,6 +34,13 @@ fn pcr_value_is_a_pcr_and_an_equals() {
 
 const D64: &str = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
 
+fn snapshot() -> &'static [u8] {
+    include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../testing/fuzz/corpus/attest/snapshot"
+    ))
+}
+
 /// parse_name_digest() of `spec`: the name and the digest, or the error.
 fn name_digest(spec: &str) -> Result<(Vec<u8>, [u8; 32]), c_int> {
     parse_name_digest(spec.as_bytes()).map(|(name, digest)| (name.to_vec(), digest))
@@ -124,6 +131,32 @@ fn record_without_own_digest_is_rejected() {
         parse_evidence(&mut Parse::new(), missing.as_bytes()),
         Err(-EINVAL)
     );
+}
+
+#[test]
+fn record_without_digest_is_refused() {
+    let evidence = snapshot();
+    let load = b"\"type\":\"upatch_load\"";
+    let digest_key = b"\"digest\":\"";
+    let load_at = evidence
+        .windows(load.len())
+        .position(|part| part == load)
+        .expect("snapshot has an upatch load");
+    let digest_at = evidence[..load_at]
+        .windows(digest_key.len())
+        .rposition(|part| part == digest_key)
+        .expect("snapshot has a preceding digest");
+    let end = digest_at + digest_key.len() + 64 + 2;
+    assert_eq!(&evidence[end - 2..end], b"\",");
+    let mut missing = evidence.to_vec();
+    missing.drain(digest_at..end);
+
+    let expect = AttestExpect {
+        nonce: (1..=16).collect(),
+        ..AttestExpect::default()
+    };
+    let mut rep = Report::new(64 * 1024);
+    assert_eq!(verify(&missing, &expect, &mut rep), Err(-EINVAL));
 }
 
 #[test]
@@ -220,6 +253,7 @@ fn quote_nonce_commits_to_both_opening_signatures() {
     assert_eq!(snapshot_quote_nonce(first, Some(second)), sha256(&hashes));
     hashes[32..].fill(0);
     assert_eq!(snapshot_quote_nonce(first, None), sha256(&hashes));
+    assert_eq!(snapshot_quote_nonce(first, Some(b"")), sha256(&hashes));
     assert_ne!(
         snapshot_quote_nonce(first, Some(second)),
         snapshot_quote_nonce(first, None)
@@ -263,11 +297,38 @@ fn evidence_requires_the_closing_register_certification() {
 }
 
 #[test]
+fn malformed_closing_certification_stops_after_its_failure_line() {
+    let evidence = snapshot();
+    let key = b"\"after_attest\":\"";
+    let start = evidence
+        .windows(key.len())
+        .position(|part| part == key)
+        .expect("snapshot has a closing certification")
+        + key.len();
+    let end = start
+        + evidence[start..]
+            .iter()
+            .position(|&byte| byte == b'"')
+            .expect("closing certification has an end");
+    let mut malformed = evidence.to_vec();
+    malformed.splice(start..end, b"00".iter().copied());
+
+    let expect = AttestExpect {
+        nonce: (1..=16).collect(),
+        ..AttestExpect::default()
+    };
+    let mut report = Report::new(64 * 1024);
+    assert_eq!(verify(&malformed, &expect, &mut report), Err(-EKEYREJECTED));
+    assert!(
+        report
+            .text()
+            .ends_with(b"  FAIL  register after quote: attestation structure unparseable\n")
+    );
+}
+
+#[test]
 fn genuine_snapshot_verifies_and_report_lines_end_cleanly() {
-    let evidence = include_bytes!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../testing/fuzz/corpus/attest/snapshot"
-    ));
+    let evidence = snapshot();
     let expect = AttestExpect {
         nonce: (1..=16).collect(),
         ..AttestExpect::default()
@@ -276,24 +337,12 @@ fn genuine_snapshot_verifies_and_report_lines_end_cleanly() {
     assert_eq!(verify(evidence, &expect, &mut full), Err(-EKEYREJECTED));
     assert_eq!(full.failed, 1, "{}", String::from_utf8_lossy(full.text()));
     let len = full.text().len();
-    assert!(
-        len > 0
-            && full.text().ends_with(
-                b"
-"
-            )
-    );
+    assert!(len > 0 && full.text().ends_with(b"\n"));
 
     for cap in 1..=len {
         let mut report = Report::new(cap);
         assert_eq!(verify(evidence, &expect, &mut report), Err(-EKEYREJECTED));
         assert!(report.text().len() < cap);
-        assert!(
-            report.text().is_empty()
-                || report.text().ends_with(
-                    b"
-"
-                )
-        );
+        assert!(report.text().is_empty() || report.text().ends_with(b"\n"));
     }
 }
