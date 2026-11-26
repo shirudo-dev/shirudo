@@ -184,6 +184,7 @@ void BPF_PROG(shirudo_seal_bprm_committed_creds,
 	struct task_authority *authority;
 	struct task_policy *policy;
 
+	bpf_task_storage_delete(&shirudo_unlink_grant, task);
 	policy = bpf_task_storage_get(&shirudo_task_policy, task, NULL, 0);
 	if (policy) {
 		policy->active = policy->candidate;

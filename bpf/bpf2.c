@@ -8,6 +8,7 @@
  */
 #include "verity.h"
 #include <bpf/bpf_endian.h>
+#include <shirudo/pin_grant.h>
 
 /*
  * BPF mutations require a task marked by successful exec from the runtime
@@ -388,14 +389,78 @@ deny:
 	return shirudo_tamper_deny(TAMPER_BPFFS_UMOUNT_ABOVE, -EPERM);
 }
 
+/* Core pins live outside the per-upatch directories and cannot be granted. */
+static __always_inline bool upatch_directory(struct dentry *d)
+{
+	struct dentry *parent = BPF_CORE_READ(d, d_parent);
+	struct dentry *root = BPF_CORE_READ(d, d_sb, s_root);
+	char name[sizeof("upatches")];
+
+	if ((BPF_CORE_READ(d, d_inode, i_mode) & S_IFMT) != S_IFDIR ||
+	    d == parent || parent == root || BPF_CORE_READ(parent, d_parent) != root ||
+	    BPF_CORE_READ(parent, d_name.len) != sizeof("upatches") - 1)
+		return false;
+	if (bpf_probe_read_kernel_str(name, sizeof(name), BPF_CORE_READ(parent, d_name.name)) !=
+	    sizeof(name))
+		return false;
+	return !bpf_strncmp(name, sizeof(name), "upatches");
+}
+
+static __always_inline int pin_grant_ioctl(struct file *file, unsigned int cmd)
+{
+	struct task_struct *task = bpf_get_current_task_btf();
+	struct sb_id *id = shirudo_policy();
+	struct dentry *d;
+	__u64 *ino;
+
+	if (!id || !id->sb_dev || BPF_CORE_READ(file, f_inode, i_sb, s_dev) != id->sb_dev ||
+	    !shirudo_task_is_self(id))
+		return -EPERM;
+	if (cmd == SHIRUDO_PIN_GRANT_END) {
+		bpf_task_storage_delete(&shirudo_unlink_grant, task);
+		return -SHIRUDO_PIN_GRANT_ACK;
+	}
+	d = BPF_CORE_READ(file, f_path.dentry);
+	if (!upatch_directory(d))
+		return -EPERM;
+	ino = bpf_task_storage_get(&shirudo_unlink_grant, task, NULL,
+				   BPF_LOCAL_STORAGE_GET_F_CREATE);
+	if (!ino)
+		return -ENOMEM;
+	*ino = BPF_CORE_READ(file, f_inode, i_ino);
+	return -SHIRUDO_PIN_GRANT_ACK;
+}
+
+static __always_inline int pin_delete(struct inode *dir, struct dentry *d, bool rmdir)
+{
+	struct task_struct *task = bpf_get_current_task_btf();
+	__u32 dev = BPF_CORE_READ(dir, i_sb, s_dev);
+	struct sb_id *id = shirudo_policy();
+	enum pin_grant_action action;
+	__u64 *grant;
+	int ret;
+
+	ret = shirudo_bpffs_guard(dev, rmdir ? TAMPER_MAX : TAMPER_PIN_UNLINK);
+	if (ret || !id || !id->sb_dev || dev != id->sb_dev || shirudo_bootstrap_task())
+		return ret;
+	grant = bpf_task_storage_get(&shirudo_unlink_grant, task, NULL, 0);
+	action = pin_grant_delete(grant ? *grant : 0, BPF_CORE_READ(d, d_inode, i_ino),
+				  BPF_CORE_READ(dir, i_ino),
+				  BPF_CORE_READ(d, d_parent, d_parent, d_inode, i_ino), rmdir);
+	if (action == PIN_GRANT_CONSUME)
+		bpf_task_storage_delete(&shirudo_unlink_grant, task);
+	if (action != PIN_GRANT_DENY)
+		return 0;
+	return shirudo_tamper_deny(TAMPER_PIN_UNLINK, -EPERM);
+}
+
 SEC("lsm/inode_unlink")
 int BPF_PROG(shirudo_lsm_inode_unlink, struct inode *dir,
 	     struct dentry *dentry, int ret)
 {
 	if (ret)
 		return ret;
-	ret = shirudo_bpffs_guard(BPF_CORE_READ(dir, i_sb, s_dev),
-				  TAMPER_PIN_UNLINK);
+	ret = pin_delete(dir, dentry, false);
 	return ret ? ret : shirudo_mountpoint_guard(dentry);
 }
 
@@ -405,8 +470,7 @@ int BPF_PROG(shirudo_lsm_inode_rmdir, struct inode *dir,
 {
 	if (ret)
 		return ret;
-	ret = shirudo_bpffs_guard(BPF_CORE_READ(dir, i_sb, s_dev),
-				  TAMPER_MAX);
+	ret = pin_delete(dir, dentry, true);
 	return ret ? ret : shirudo_mountpoint_guard(dentry);
 }
 
@@ -559,9 +623,17 @@ int BPF_PROG(shirudo_lsm_inode_rename, struct inode *old_dir,
 	     struct dentry *old_dentry, struct inode *new_dir,
 	     struct dentry *new_dentry, int ret)
 {
+	struct sb_id *id;
+	__u32 dev;
+
 	if (ret)
 		return ret;
-	ret = shirudo_bpffs_guard(BPF_CORE_READ(old_dir, i_sb, s_dev),
+	id = shirudo_policy();
+	dev = BPF_CORE_READ(old_dir, i_sb, s_dev);
+	/* Pin lifecycle operations have no rename step. */
+	if (id && id->sb_dev && id->sb_dev == dev && !shirudo_bootstrap_task())
+		return shirudo_tamper_deny(TAMPER_PIN_RENAME, -EPERM);
+	ret = shirudo_bpffs_guard(dev,
 				  TAMPER_PIN_RENAME);
 	if (!ret)
 		ret = shirudo_bpffs_guard(BPF_CORE_READ(new_dir, i_sb, s_dev),
@@ -1114,6 +1186,8 @@ static __always_inline int shirudo_ioctl(struct file *file, unsigned int cmd,
 {
 	if (ret)
 		return ret;
+	if (cmd == SHIRUDO_PIN_GRANT_BEGIN || cmd == SHIRUDO_PIN_GRANT_END)
+		return pin_grant_ioctl(file, cmd);
 	if (cmd == PERF_EVENT_IOC_SET_BPF)
 		return shirudo_self_or_deny(TAMPER_PERF_ATTACH);
 	if (xfs_attrmulti(file, cmd))

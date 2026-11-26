@@ -837,6 +837,13 @@ signed config image.
        reached through a link another user owns, or an auth file through
        a directory others can write that holds a link, is refused with
        its message before any request
+   * - ``t7115-bpm-package-uninstall``
+     - BPM installs a signed upatch from the fixture registry. With the
+       private bpffs bound over the package or its directives, or a
+       sealed directory bound over the directives, in a mount namespace
+       of root's, uninstall refuses and the pins, the archive and the
+       state stay. Without a bind it detaches the link and retires the
+       package tree, archive and state.
 
 ``otel`` (8)
 ~~~~~~~~~~~~

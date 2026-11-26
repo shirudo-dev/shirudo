@@ -498,6 +498,8 @@ bpf/%.bpf.o: bpf/%.c $(VMLINUX_H) $(BPF_LIBBPF_HEADERS) \
 	    -I$(BPF_UAPI_INCLUDE) \
 	    -c $< -o $@
 
+bpf/bpf2.bpf.o build/unit/identity: include/shirudo/pin_grant.h
+
 # ----- version_id ------------------------------------------------
 
 # Regenerated every build; cheap (one sha256sum invocation).

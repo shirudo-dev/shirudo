@@ -627,11 +627,22 @@ authority (``PerfAttach``).
 
 In the private bpffs, unlink, rename, mkdir, symlink, hard link, rmdir
 and xattr changes need runtime authority (``PinUnlink``, ``PinRename``,
-``PinEntry``, ``PinXattr``; rmdir is refused without a counter). The
+``PinEntry``, ``PinXattr``). The
 VFS removes a rename's victim without asking ``inode_unlink``, so the
 rename hook checks both directories. A symbolic link in place of a pin
 directory would send the next load's pins into a bpffs of root's, and a
 hard link to a pin would keep a link alive past its unlink.
+
+After bootstrap, even a trusted task needs a deletion grant for one
+upatch's directory. The native and compat ioctl hooks take the directory
+from an open file description on the recorded private bpffs. The grant
+is task-local. The caller holds the directory open, keeping its inode
+number unique on that superblock, until it explicitly releases the grant.
+Fork starts without a grant and successful exec clears it. Removing
+the directory consumes it. No grant names a core pin or the upatches
+root. Renaming a pin after bootstrap is refused. This protects against
+unintended cleanup by trusted code. Signed unload verification, the
+payload comparison and measurement still take place in userspace.
 
 The pins live as long as the bpffs superblock, which goes with its last
 mount. ``lsm/sb_umount``, ``lsm/move_mount``, ``lsm/sb_mount`` and

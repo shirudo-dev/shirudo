@@ -7,6 +7,11 @@
 #define PR_GET_ENFORCEMENT 0x53520001
 #define PR_ENFORCING_ERR 1002
 
+/* Private bpffs directory requests acknowledged by the file_ioctl LSM. */
+#define SHIRUDO_PIN_GRANT_BEGIN	0x53520002u
+#define SHIRUDO_PIN_GRANT_END	0x53520003u
+#define SHIRUDO_PIN_GRANT_ACK	1003
+
 /*
  * vmlinux.h carries no UAPI macros, so BPF code takes the ioctl number
  * from here: _IOW('$', 8, __u32) on every supported architecture.

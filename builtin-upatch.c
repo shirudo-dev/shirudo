@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/file.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -33,6 +34,7 @@
 #include <bpf/btf.h>
 #include <bpf/libbpf.h>
 
+#include <shirudo/enforcement.h>
 #include <shirudo/misc.h>
 #include <shirudo/overflow.h>
 #include <shirudo/string.h>
@@ -1610,6 +1612,42 @@ static int open_upatch_pin_dir(const char *name)
 	return fd;
 }
 
+static int pin_grant_request(int fd, __u32 command)
+{
+	int ret = ioctl(fd, command, 0);
+
+	if (ret < 0 && errno == SHIRUDO_PIN_GRANT_ACK)
+		return 0;
+	return ret < 0 ? -errno : -EPROTO;
+}
+
+/* Holding fd prevents inode reuse until the task no longer has authority. */
+static int pin_grant_open(const char *name)
+{
+	int fd, ret;
+
+	fd = open_upatch_pin_dir(name);
+	if (fd < 0)
+		return fd;
+	ret = pin_grant_request(fd, SHIRUDO_PIN_GRANT_BEGIN);
+	if (ret) {
+		close(fd);
+		return ret;
+	}
+	return fd;
+}
+
+static void pin_grant_close(int *fd)
+{
+	if (*fd < 0)
+		return;
+	if (pin_grant_request(*fd, SHIRUDO_PIN_GRANT_END)) {
+		pr_err("upatch: cannot release pin deletion authority; terminating");
+		_exit(EXIT_FAILURE);
+	}
+	close(*fd);
+}
+
 /*
  * A pin a load left when it died before its link is bound to maps nothing
  * reaches any more: replace it.
@@ -1776,6 +1814,7 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 				const struct prog_spec *specs)
 {
 	char dir[PATH_MAX], serializers_dir[PATH_MAX + 16];
+	int grant __cleanup(pin_grant_close) = -1;
 	bool made_dir = false, made_serializers = false;
 	__u32 i, attach_count = 0, attach_seen = 0;
 	struct xdp_device *devices = NULL;
@@ -1820,6 +1859,11 @@ static int attach_and_pin_progs(const struct loader_ctx *cx,
 	ret = mkdir_if_absent(dir, 0700, &made_dir);
 	if (ret) {
 		pr_err("mkdir %s: %s", dir, strerror(-ret));
+		goto out;
+	}
+	grant = pin_grant_open(name);
+	if (grant < 0) {
+		ret = grant;
 		goto out;
 	}
 	count_attach_progs(specs, nr_progs, &attach_count);
@@ -3325,6 +3369,7 @@ static int upatch_pinned(const char *name)
 /* Unlinking the link pin drops its last reference, which detaches. */
 static int remove_pin_dir(const char *name)
 {
+	int grant __cleanup(pin_grant_close) = -1;
 	char dir[PATH_MAX], maps_dir[PATH_MAX + 8];
 	char serializers_dir[PATH_MAX + 16];
 	struct stat st;
@@ -3337,8 +3382,9 @@ static int remove_pin_dir(const char *name)
 	if (strsprintf(serializers_dir, sizeof(serializers_dir),
 		       "%s/serializers", dir) < 0)
 		return -ENAMETOOLONG;
-	if (stat(dir, &st) != 0)
-		return -errno;
+	grant = pin_grant_open(name);
+	if (grant < 0)
+		return grant;
 	if (stat(maps_dir, &st) == 0) {
 		ret = wipe_dir_flat(maps_dir);
 		if (ret)
@@ -5097,6 +5143,7 @@ static int reconcile_collect(struct xdp_work **out, size_t *count,
 }
 
 struct link_scan {
+	const char	*name;
 	__u32	next;
 	bool	dead;
 	bool	collect;
@@ -5111,6 +5158,12 @@ static int scan_link(__u32 index, const char *pin,
 	if (info->type == BPF_LINK_TYPE_XDP && !info->xdp.ifindex) {
 		scan->dead = true;
 		if (scan->collect) {
+			int grant __cleanup(pin_grant_close) = -1;
+
+			grant = pin_grant_open(scan->name);
+
+			if (grant < 0)
+				return grant;
 			if (unlink(pin))
 				return -errno;
 			pr_info("XDP: removed %s, its device is gone", pin);
@@ -5220,7 +5273,7 @@ static int reconcile_apply(const struct xdp_work *w,
 			   const struct xdp_device *devices, size_t count,
 			   struct op_report *rep)
 {
-	struct link_scan scan = { .collect = true };
+	struct link_scan scan = { .name = w->name, .collect = true };
 	__u8 payload[UPATCH_PAYLOAD_HASH_LEN];
 	bool held, needed = false;
 	struct upatch again;

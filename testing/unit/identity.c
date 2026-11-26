@@ -10,6 +10,7 @@
 
 #include "identity.h"
 #include "unit.h"
+#include <shirudo/pin_grant.h>
 
 static void kernel_name_is_the_start_of_a_long_one(void)
 {
@@ -72,7 +73,22 @@ static void state_root_requires_the_recorded_directory(void)
 	ASSERT_EQ(rmdir(path), 0);
 }
 
+static void unlink_grant_only_covers_one_directory(void)
+{
+	enum { root = 1, upatches, selected, sibling, maps, pin };
+
+	EXPECT_EQ(pin_grant_delete(0, pin, selected, upatches, false), PIN_GRANT_DENY);
+	EXPECT_EQ(pin_grant_delete(selected, pin, sibling, upatches, false), PIN_GRANT_DENY);
+	EXPECT_EQ(pin_grant_delete(selected, pin, root, root, false), PIN_GRANT_DENY);
+	EXPECT_EQ(pin_grant_delete(selected, upatches, root, root, true), PIN_GRANT_DENY);
+	EXPECT_EQ(pin_grant_delete(selected, pin, selected, upatches, false), PIN_GRANT_ALLOW);
+	EXPECT_EQ(pin_grant_delete(selected, pin, maps, selected, false), PIN_GRANT_ALLOW);
+	EXPECT_EQ(pin_grant_delete(selected, maps, selected, upatches, true), PIN_GRANT_ALLOW);
+	EXPECT_EQ(pin_grant_delete(selected, selected, upatches, root, true), PIN_GRANT_CONSUME);
+}
+
 static const struct unit_case cases[] = {
+	UNIT_CASE(unlink_grant_only_covers_one_directory),
 	UNIT_CASE(state_root_requires_the_recorded_directory),
 	UNIT_CASE(kernel_name_is_the_start_of_a_long_one),
 	UNIT_CASE(short_name_is_the_whole_one),

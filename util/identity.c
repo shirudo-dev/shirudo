@@ -38,6 +38,10 @@ const struct guard_map shirudo_guard_maps[GUARD_MAP_COUNT] = {
 		BPF_MAP_TYPE_TASK_STORAGE, sizeof(__u32),
 		sizeof(struct task_authority), 0, BPF_F_NO_PREALLOC,
 	},
+	[GUARD_UNLINK_GRANT] = {
+		"shirudo_unlink_grant", BPFFS_DIR "/unlink_grant",
+		BPF_MAP_TYPE_TASK_STORAGE, sizeof(__u32), sizeof(__u64), 0, BPF_F_NO_PREALLOC,
+	},
 	[GUARD_POLICY] = {
 		"shirudo_task_policy", POLICY_PIN,
 		BPF_MAP_TYPE_TASK_STORAGE, sizeof(__u32),

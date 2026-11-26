@@ -867,6 +867,7 @@ static const enum guard_map_index map_release_order[] = {
 	GUARD_IDENTITY,
 	GUARD_TAMPER,
 	GUARD_INTEGRITY,
+	GUARD_UNLINK_GRANT,
 	GUARD_TASKS,
 	GUARD_POLICY,
 	GUARD_SOCKET_POLICY,

@@ -52,6 +52,14 @@ struct {
 	__type(value, struct task_authority);
 } shirudo_tasks SEC(".maps");
 
+/* The caller holds this private bpffs directory open until it drops the grant. */
+struct {
+	__uint(type, BPF_MAP_TYPE_TASK_STORAGE);
+	__uint(map_flags, BPF_F_NO_PREALLOC);
+	__type(key, int);
+	__type(value, __u64);
+} shirudo_unlink_grant SEC(".maps");
+
 static __always_inline struct sb_id *shirudo_policy(void)
 {
 	__u32 zero = 0;

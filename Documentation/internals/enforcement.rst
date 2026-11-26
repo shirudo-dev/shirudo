@@ -55,7 +55,8 @@ The objects share eight maps, which ``init`` hands from ``bpf2`` to
    * - ``shirudo_bpffs_sb``
      - ``identity``
      - The record ``init`` freezes: device numbers of the private bpffs
-       and of ``/run/shirudo``, the runtime root hash, the ``.bpf``
+       and of ``/run/shirudo``, the state root device and inode, the runtime
+       root hash, the ``.bpf``
        keyring serial and kind, the serials of the enrolled keys, the
        ``.dm-verity`` keyring and key serials, the NV index, the NV
        writer's public modulus and seed, and the ECC endorsement key
@@ -66,6 +67,11 @@ The objects share eight maps, which ``init`` hands from ``bpf2`` to
    * - ``shirudo_tasks``
      - ``task_authority``
      - Task storage with each task's mark and exec candidate.
+   * - ``shirudo_unlink_grant``
+     - ``unlink_grant``
+     - Task storage for the inode number of one open upatch directory
+       in the private bpffs. A grant lasts until release, removal of
+       that directory, successful exec or task exit.
    * - ``shirudo_task_policy``
      - ``task_policy``
      - Task storage with committed policy bits and the exec candidate.
@@ -380,9 +386,13 @@ Hooks in bpf2
        it, which the kernel would detach or move in every namespace.
      - ``EPERM``. In the bpffs: ``PinUnlink``, ``PinEntry``
        (mkdir, symlink, link), ``PinRename``, ``PinXattr``. A mount
-       point: ``BpffsUmountAbove``. Rmdir and ``/run/shirudo``
-       uncounted
-     - Closed for those two file systems.
+       point: ``BpffsUmountAbove``. Rmdir by a runtime task outside its
+       grant counts as ``PinUnlink``.
+     - On the private bpffs a runtime task also needs a per-task grant
+       to unlink or remove an upatch directory or its children. The
+       ioctl hooks issue and release the grant on the open directory.
+       Removing that directory or committing an exec clears it.
+       Renames are refused after bootstrap.
    * - ``lsm/sb_umount``
      - To every caller: unmounting the bpffs, an unmount whose subtree or
        propagation reaches the recorded bpffs mount, unmounting
