@@ -9,7 +9,7 @@
 
 use core::ffi::{CStr, c_char, c_int, c_long, c_void};
 use core::marker::PhantomData;
-use core::ptr;
+use core::ptr::{self, NonNull};
 use std::ffi::CString;
 use std::fs::File;
 use std::io::Read;
@@ -1079,37 +1079,59 @@ pub(crate) fn ecdh_p256_ephemeral(
     }
 }
 
-/// # Safety
-///
-/// `inp` holds `in_len` bytes, `out` has room for `cap`, and `out_len`
-/// points to a size.
-pub(crate) unsafe fn base64_decode(
-    inp: *const c_char,
-    in_len: usize,
-    out: *mut u8,
-    cap: usize,
-    out_len: *mut usize,
-) -> c_int {
-    let (mut n, mut fin): (c_int, c_int) = (0, 0);
-    let mut ret = -EINVAL;
+/// Owns the libcrypto base64 decoder until this value drops.
+struct DecodeCtx(NonNull<more::EvpEncodeCtx>);
 
-    // SAFETY: the decoding context, freed once, and the caller's input,
-    // room and size.
-    unsafe {
-        let ctx = more::EVP_ENCODE_CTX_new();
-
-        if !ctx.is_null() && in_len <= c_int::MAX as usize && cap >= 3 * in_len.div_ceil(4) {
-            more::EVP_DecodeInit(ctx);
-            if more::EVP_DecodeUpdate(ctx, out, &mut n, inp.cast(), in_len as c_int) >= 0
-                && more::EVP_DecodeFinal(ctx, out.add(n as usize), &mut fin) >= 0
-            {
-                *out_len = n as usize + fin as usize;
-                ret = 0;
-            }
-        }
-        more::EVP_ENCODE_CTX_free(ctx);
+impl DecodeCtx {
+    fn new() -> Option<Self> {
+        // SAFETY: EVP_ENCODE_CTX_new takes no arguments.
+        NonNull::new(unsafe { more::EVP_ENCODE_CTX_new() }).map(Self)
     }
-    ret
+}
+
+impl Drop for DecodeCtx {
+    fn drop(&mut self) {
+        // SAFETY: this context came from EVP_ENCODE_CTX_new and is freed once.
+        unsafe { more::EVP_ENCODE_CTX_free(self.0.as_ptr()) };
+    }
+}
+
+/// Decode base64 into `out`, returning the number of bytes written.
+/// Keep libcrypto's whitespace and padding rules.
+pub(crate) fn base64_decode(inp: &[u8], out: &mut [u8]) -> Result<usize, c_int> {
+    let in_len = c_int::try_from(inp.len()).map_err(|_| -EINVAL)?;
+    if out.len() < 3 * inp.len().div_ceil(4) {
+        return Err(-EINVAL);
+    }
+    let ctx = DecodeCtx::new().ok_or(-EINVAL)?;
+    let mut n = 0;
+    let mut fin = 0;
+
+    // SAFETY: the context belongs to this call.
+    unsafe { more::EVP_DecodeInit(ctx.0.as_ptr()) };
+    // SAFETY: inp and out are live slices and out has the maximum decoded size.
+    if unsafe {
+        more::EVP_DecodeUpdate(
+            ctx.0.as_ptr(),
+            out.as_mut_ptr(),
+            &mut n,
+            inp.as_ptr(),
+            in_len,
+        )
+    } < 0
+    {
+        return Err(-EINVAL);
+    }
+    let n = usize::try_from(n).map_err(|_| -EINVAL)?;
+    let remaining = out.get_mut(n..).ok_or(-EINVAL)?;
+    // SAFETY: remaining is the output room after DecodeUpdate.
+    if unsafe { more::EVP_DecodeFinal(ctx.0.as_ptr(), remaining.as_mut_ptr(), &mut fin) } < 0 {
+        return Err(-EINVAL);
+    }
+    let fin = usize::try_from(fin).map_err(|_| -EINVAL)?;
+    n.checked_add(fin)
+        .filter(|&len| len <= out.len())
+        .ok_or(-EINVAL)
 }
 
 /// The cert's RSA modulus and exponent, or its P-256 point:

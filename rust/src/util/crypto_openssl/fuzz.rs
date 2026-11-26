@@ -41,19 +41,7 @@ fuzz_target!(shirudo_fuzz_cms, shirudo_fuzz_cms_init, |data| {
         }
     }
     let mut raw = vec![0u8; sig.len() + 1];
-    let mut n = 0;
-    // SAFETY: the signature's bytes and room for what they decode to.
-    if unsafe {
-        base64_decode(
-            sig.as_ptr().cast(),
-            sig.len(),
-            raw.as_mut_ptr(),
-            raw.len(),
-            &mut n,
-        )
-    } == 0
-        && n > sig.len()
-    {
+    if matches!(base64_decode(sig, &mut raw), Ok(n) if n > sig.len()) {
         std::process::abort();
     }
 });

@@ -2138,7 +2138,6 @@ struct HeldCert(Cert);
 /// has.
 fn ek_certificate(b64: &[u8]) -> Option<(HeldCert, CertPubkey)> {
     let mut der = vec![0u8; EK_CERT_MAX];
-    let mut der_len = 0usize;
     let mut cert = HeldCert(Cert::new());
     let mut key = CertPubkey {
         rsa: false,
@@ -2149,17 +2148,8 @@ fn ek_certificate(b64: &[u8]) -> Option<(HeldCert, CertPubkey)> {
         y: [0; 32],
     };
 
-    // SAFETY: the base64's bytes, room for the DER and for its length.
-    let ret = unsafe {
-        base64_decode(
-            b64.as_ptr().cast(),
-            b64.len(),
-            der.as_mut_ptr(),
-            der.len(),
-            &mut der_len,
-        )
-    };
-    let der = der.get(..der_len).filter(|_| ret == 0)?;
+    let der_len = base64_decode(b64, &mut der).ok()?;
+    let der = der.get(..der_len)?;
     // SAFETY: the DER's bytes, and the certificate to read them into.
     if unsafe { cert_read_der(der.as_ptr(), der.len(), &mut cert.0) } != 0 {
         return None;
