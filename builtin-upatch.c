@@ -2564,6 +2564,12 @@ static int loader_prog_load(struct signed_load *sl)
 
 	insns = upatch_loader(u);
 	sig   = upatch_signature(u);
+	if (cms_check_signers(sig, u->hdr.signature_len)) {
+		pr_err("upatch: unreadable CMS signer information");
+		rep_fail(rep, "signed_loader_load", "parser_rejected", EBADMSG,
+			 "invalid CMS signature envelope");
+		return 1;
+	}
 	insn_cnt = u->hdr.loader_insns_len / sizeof(struct bpf_insn);
 
 	upatch_prog_name(u, prog_name, sizeof(prog_name));
@@ -4074,7 +4080,7 @@ static int upatch_purge_locked(const char *name, const struct cert *signer,
 			       const char *reason)
 {
 	__u8 payload[UPATCH_PAYLOAD_HASH_LEN] = {};
-	char persisted[PATH_MAX];
+	char archive_name[UPATCH_NAME_MAX + 1], persisted[PATH_MAX];
 	int fd, loaded, ret;
 	struct upatch u;
 	__u32 type;
@@ -4090,12 +4096,18 @@ static int upatch_purge_locked(const char *name, const struct cert *signer,
 	close(fd);
 	if (ret)
 		return ret;
-	ret = cms_signed_by(upatch_signature(&u), u.hdr.signature_len, signer);
+	upatch_header_name(&u, archive_name);
+	if (!upatch_name_signed(&u) || strcmp(name, archive_name)) {
+		upatch_close(&u);
+		return -EBADMSG;
+	}
+	ret = cms_archive_signed_by(upatch_signature(&u), u.hdr.signature_len,
+				    signer);
 	memcpy(payload, u.hdr.payload_sha256, sizeof(payload));
 	type = u.hdr.type;
 	upatch_close(&u);
 	if (ret != 1)
-		return ret < 0 ? ret : -ESTALE;
+		return ret < 0 ? ret : UPATCH_PURGE_OTHER_SIGNER;
 
 	/* As for unload: the event first, then the detach it describes. */
 	loaded = purge_is_loaded(name, type);
@@ -4130,9 +4142,8 @@ static int upatch_purge_locked(const char *name, const struct cert *signer,
  * Under the register lock from the archive read to its unlink, as a
  * load and an unload hold it, so that a load of the name that takes the
  * lock after the purge's event is not the one the purge then removes,
- * and with the signer checked on what that read finds: a caller's scan
- * ran before the lock, and an upgrade may have replaced the upatch since
- * with one another key signed.
+ * and with the signer checked on what that read finds. An upgrade may
+ * have replaced the archive since the directory scan.
  */
 int upatch_purge(const char *name, const struct cert *signer,
 		 const char *reason)

@@ -67,13 +67,19 @@ int cert_not_before(const struct cert *cert, char out[11]) __must_check;
 int verify_detached(const __u8 *payload, size_t payload_len,
 		    const __u8 *signature, size_t signature_len,
 		    const struct cert *cert) __must_check;
+/* A complete CMS envelope with a nonempty set of signers. */
+int cms_check_signers(const __u8 *signature, size_t len) __must_check;
 /*
  * Whether a signer of the CMS blob names this certificate, by key id
  * or by issuer and serial: 1 when one does, 0 when none, -EINVAL when
- * the blob does not parse. Says nothing about the signature's validity.
+ * the blob does not parse. Says nothing about signature validity.
  */
 int cms_signed_by(const __u8 *signature, size_t signature_len,
 		  const struct cert *cert) __must_check;
+
+/* Attribute zero-padded signatures admitted by older targets during purge. */
+int cms_archive_signed_by(const __u8 *signature, size_t signature_len,
+			  const struct cert *cert) __must_check;
 
 struct tls_ca {
 	const char *path;

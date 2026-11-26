@@ -852,32 +852,29 @@ static int purge_signed_by(const __u8 *der, size_t der_sz,
 	n = scandir(UPATCHES_DIR, &names, upatch_select,
 		    alphasort);
 	if (n < 0) {
+		ret = errno == ENOENT ? 0 : -errno;
 		cert_free(&cert);
-		return errno == ENOENT ? 0 : -errno;
+		return ret;
 	}
 	for (i = 0; i < n; i++) {
 		char name[UPATCH_NAME_MAX + 1];
-		struct upatch u;
-		char path[PATH_MAX];
-		int signed_by, prc;
+		const char *file = names[i]->d_name;
+		size_t len = strlen(file) - strlen(".upatch");
+		int prc;
 
-		if (strsprintf(path, sizeof(path), "%s/%s", UPATCHES_DIR,
-			       names[i]->d_name) < 0)
-			continue;
-		if (upatch_open(path, &u))
-			continue;
-		signed_by = cms_signed_by(upatch_signature(&u),
-					  u.hdr.signature_len, &cert);
-		upatch_header_name(&u, name);
-		upatch_close(&u);
-		if (signed_by != 1)
-			continue;
-		prc = upatch_purge(name, &cert, "key_revoke");
-		if (prc == -ESTALE) {
-			pr_info("keys revoke: %s was replaced by an upatch the key did not sign; left alone",
-				name);
+		/*
+		 * scandir selected the suffix. Attribute the open archive under
+		 * the lock, even if its previous contents were replaced.
+		 */
+		prc = span_to_str(name, sizeof(name), file, len);
+		if (prc || !upatch_name_valid(name)) {
+			pr_err("keys revoke: invalid archive filename");
+			ret = -EINVAL;
 			continue;
 		}
+		prc = upatch_purge(name, &cert, "key_revoke");
+		if (prc == UPATCH_PURGE_OTHER_SIGNER)
+			continue;
 		if (prc < 0) {
 			pr_err("keys revoke: purge %s: %s", name,
 			       strerror(-prc));

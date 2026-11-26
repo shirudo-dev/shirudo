@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /* Copyright (c) 2026 Authors of shirudo */
 
+#include <errno.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "crypto.h"
@@ -28,7 +30,41 @@ static void sha256_buffer_zeroes_a_failed_digest(void)
 	EXPECT_MEMEQ(out, zero, sizeof(out));
 }
 
+/* The existing corpus entry holds a certificate and its detached CMS. */
+static void archived_signers_remain_identifiable(void)
+{
+	const char *path = "fuzz/corpus/cms/cert-and-signature";
+	static __u8 data[32768];
+	struct cert cert = {};
+	size_t size, der_len, sig_len;
+	__u8 *sig;
+	FILE *f;
+
+	f = fopen(path, "rb");
+	if (!f)
+		f = fopen("testing/fuzz/corpus/cms/cert-and-signature", "rb");
+	ASSERT_TRUE(f);
+	size = fread(data, 1, sizeof(data), f);
+	fclose(f);
+	ASSERT_TRUE(size > 2 && size < sizeof(data));
+	der_len = data[0] | (size_t)data[1] << 8;
+	ASSERT_TRUE(der_len < size - 2);
+	ASSERT_EQ(cert_read_der(data + 2, der_len, &cert), 0);
+	sig = data + 2 + der_len;
+	sig_len = size - 2 - der_len;
+	EXPECT_EQ(cms_check_signers(sig, sig_len), 0);
+	EXPECT_EQ(cms_signed_by(sig, sig_len, &cert), 1);
+	data[size] = 0;
+	EXPECT_EQ(cms_check_signers(sig, sig_len + 1), -EBADMSG);
+	EXPECT_EQ(cms_signed_by(sig, sig_len + 1, &cert), -EINVAL);
+	EXPECT_EQ(cms_archive_signed_by(sig, sig_len + 1, &cert), 1);
+	data[size] = 1;
+	EXPECT_EQ(cms_archive_signed_by(sig, sig_len + 1, &cert), -EINVAL);
+	cert_free(&cert);
+}
+
 static const struct unit_case cases[] = {
+	UNIT_CASE(archived_signers_remain_identifiable),
 	UNIT_CASE(sha256_matches_fips_180_vector),
 	UNIT_CASE(sha256_buffer_zeroes_a_failed_digest),
 	{}

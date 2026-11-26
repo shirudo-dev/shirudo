@@ -245,9 +245,10 @@ struct cert;
 /*
  * Detach, unpin and unarchive without a directive, because the key
  * that signed the upatch was revoked: 1 when the unload was measured,
- * 0 when only the archive went, -ESTALE when the archive under the name
- * is no longer one signer signed and stays, -errno otherwise.
+ * 0 when only the archive went, UPATCH_PURGE_OTHER_SIGNER when the archive
+ * stays because another key signed it, -errno on failure.
  */
+#define UPATCH_PURGE_OTHER_SIGNER	2
 int upatch_purge(const char *name, const struct cert *signer,
 		 const char *reason);
 
