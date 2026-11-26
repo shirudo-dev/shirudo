@@ -1834,8 +1834,14 @@ R13 Revocation reaches a target only through a config
    measures a ``key_revoke`` event and then purges the key's upatches,
    each with an unload event. If that extension fails, the key stays
    unlinked, the revocation is unmeasured and the purge does not run.
-   The archive scan checks each signer under the register lock. A read or
-   signature-format error fails the purge so activation can retry it.
+   The archive scan checks each signer under the register lock. An
+   archive that does not parse, is filed under another name than it
+   signs or carries no signer cannot be purged by key, so an activation
+   with revocation records checks every archive first, before it extends
+   the config PCR and again before it unlinks the first key, and refuses
+   without changing anything while one is there. An error that the check
+   could not foresee still fails the purge part-way, and the activation
+   stays pending.
    BPF loads require a complete CMS envelope, and the purge reads an
    archived signature by the same rule.
    At boot the revoked key is not enrolled, and the init event's

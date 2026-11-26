@@ -453,6 +453,11 @@ Limits
   config makes init refuse that config.
 - Revoking a BPF signer purges upatches it signed. Plan their replacement
   before retiring the signer.
+- A config with revocation records is not activated while
+  ``/var/lib/shirudo/upatches`` holds an archive no signer can be read
+  from. ``shirudo image update`` then prints ``keys revoke:
+  <name>.upatch names no signer: <error>; nothing revoked`` and changes
+  nothing: no key is unlinked and nothing is measured.
 - Vouches are historical authorizations. Revoking A does not
   automatically revoke B merely because A vouched for it. After a
   compromise, the config signer must explicitly revoke any certificate

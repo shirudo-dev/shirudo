@@ -244,10 +244,21 @@ struct cert;
  * Detach, unpin and unarchive without a directive, because the key
  * that signed the upatch was revoked: 1 when the unload was measured,
  * 0 when only the archive went, UPATCH_PURGE_OTHER_SIGNER when the archive
- * stays because another key signed it, -errno on failure.
+ * stays because another key signed it, UPATCH_PURGE_NO_ARCHIVE when the
+ * name has none, -errno on failure. An -ENOENT is a failure like any
+ * other: the register lock or a pin was not there.
  */
 #define UPATCH_PURGE_OTHER_SIGNER	2
+#define UPATCH_PURGE_NO_ARCHIVE		3
 int upatch_purge(const char *name, const struct cert *signer,
 		 const char *reason);
+
+/*
+ * Whether upatch_purge() could tell who signed the archive of name: 0,
+ * UPATCH_PURGE_NO_ARCHIVE without an archive, -errno for one that does
+ * not parse, is filed under another name than it signs or has no
+ * signer, and when the register lock cannot be taken.
+ */
+int upatch_purge_check(const char *name);
 
 #endif /* SHIRUDO_UTIL_UPATCH_H */

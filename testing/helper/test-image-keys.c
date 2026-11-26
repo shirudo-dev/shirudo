@@ -62,6 +62,11 @@ int keys_revoke_image(const __u8 *der, size_t size, bool boot)
 	return -EPERM;
 }
 
+int keys_revoke_check(void)
+{
+	return 0;
+}
+
 static int boot_count(void *opaque, __u32 *reset, __u32 *restart)
 {
 	*reset = 1;

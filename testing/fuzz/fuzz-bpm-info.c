@@ -42,6 +42,11 @@ int keys_revoke_image(const __u8 *der, size_t size, bool boot)
 	abort();
 }
 
+int keys_revoke_check(void)
+{
+	abort();
+}
+
 bool build_available(void)
 {
 	abort();

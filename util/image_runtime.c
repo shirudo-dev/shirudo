@@ -621,6 +621,9 @@ static noinline_for_stack int candidate_keys(int fd, bool enrolled)
 	ret = keys_validate_image_set(RUNTIME_CERT_PATH, fd, &set);
 	if (!ret && enrolled)
 		ret = keys_check_image_set(&set);
+	/* Before the activation PCR is extended, which nothing takes back. */
+	if (!ret && enrolled)
+		ret = keys_check_image_purge(fd);
 	if (ret == -ENOKEY)
 		pr_err("image: BPF signer was not enrolled at boot; "
 		       "reboot with the new trusted key set required");

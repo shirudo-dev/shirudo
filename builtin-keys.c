@@ -833,6 +833,54 @@ static int measure_revoke(const struct trusted_cert *c,
 	return ret;
 }
 
+/* The upatch name an archive is filed under; scandir selected the suffix. */
+static int archive_upatch_name(const char *file, char name[UPATCH_NAME_MAX + 1])
+{
+	size_t len = strlen(file) - strlen(".upatch");
+
+	if (span_to_str(name, UPATCH_NAME_MAX + 1, file, len) ||
+	    !upatch_name_valid(name))
+		return -EINVAL;
+	return 0;
+}
+
+/*
+ * A revocation purges what its key signed, and cannot say what that is
+ * while one archive names no signer. Unlinking a key and measuring it
+ * are not undone, so every archive is checked before the first of them.
+ */
+int keys_revoke_check(void)
+{
+	struct dirent **names = NULL;
+	int n, i, ret = 0;
+
+	n = scandir(UPATCHES_DIR, &names, upatch_select, alphasort);
+	if (n < 0)
+		return errno == ENOENT ? 0 : -errno;
+	for (i = 0; i < n; i++) {
+		char name[UPATCH_NAME_MAX + 1];
+		int err;
+
+		err = archive_upatch_name(names[i]->d_name, name);
+		if (err) {
+			pr_err("keys revoke: invalid archive filename");
+		} else {
+			/* An unload since the scan left nothing to attribute. */
+			err = upatch_purge_check(name);
+			if (err == UPATCH_PURGE_NO_ARCHIVE)
+				err = 0;
+			if (err)
+				pr_err("keys revoke: %s.upatch names no signer: %s; nothing revoked",
+				       name, strerror(-err));
+		}
+		if (err && !ret)
+			ret = err;
+		libc_free(names[i]);
+	}
+	libc_free(names);
+	return ret;
+}
+
 /*
  * Every archived upatch the revoked certificate signed goes: the kernel
  * would refuse to restore it at the next boot, and keeping it loaded
@@ -858,22 +906,21 @@ static int purge_signed_by(const __u8 *der, size_t der_sz,
 	}
 	for (i = 0; i < n; i++) {
 		char name[UPATCH_NAME_MAX + 1];
-		const char *file = names[i]->d_name;
-		size_t len = strlen(file) - strlen(".upatch");
 		int prc;
 
-		/*
-		 * scandir selected the suffix. Attribute the open archive under
-		 * the lock, even if its previous contents were replaced.
-		 */
-		prc = span_to_str(name, sizeof(name), file, len);
-		if (prc || !upatch_name_valid(name)) {
+		if (archive_upatch_name(names[i]->d_name, name)) {
 			pr_err("keys revoke: invalid archive filename");
 			ret = -EINVAL;
 			continue;
 		}
+		/*
+		 * Attribute the open archive under the lock, even if its
+		 * previous contents were replaced. One an unload took since
+		 * the scan has nothing left to purge.
+		 */
 		prc = upatch_purge(name, &cert, "key_revoke");
-		if (prc == UPATCH_PURGE_OTHER_SIGNER)
+		if (prc == UPATCH_PURGE_OTHER_SIGNER ||
+		    prc == UPATCH_PURGE_NO_ARCHIVE)
 			continue;
 		if (prc < 0) {
 			pr_err("keys revoke: purge %s: %s", name,

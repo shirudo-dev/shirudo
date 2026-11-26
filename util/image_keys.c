@@ -22,7 +22,7 @@
 #include "malloc.h"
 #include "paths.h"
 
-static int revocations(int root_fd, bool apply, bool boot)
+static int revocations(int root_fd, bool apply, bool boot, size_t *records)
 {
 	struct dirent *entry;
 	struct stat root, st;
@@ -94,6 +94,8 @@ static int revocations(int root_fd, bool apply, bool boot)
 			ret = -EKEYREJECTED;
 		if (!ret && apply)
 			ret = keys_revoke_image(der, size, boot);
+		if (!ret)
+			(*records)++;
 		xfree(der, size);
 		if (ret)
 			break;
@@ -108,6 +110,7 @@ static int revocations(int root_fd, bool apply, bool boot)
 int keys_validate_image_set(const char *primary, int root_fd,
 			    struct trusted_set *set)
 {
+	size_t records = 0;
 	int ret;
 
 	ret = image_config_validate(root_fd);
@@ -116,7 +119,7 @@ int keys_validate_image_set(const char *primary, int root_fd,
 		       strerror(-ret));
 		return ret;
 	}
-	ret = revocations(root_fd, false, false);
+	ret = revocations(root_fd, false, false, &records);
 	if (ret) {
 		pr_err("image trust set: validate revocations: %s",
 		       strerror(-ret));
@@ -169,10 +172,24 @@ int keys_validate_image(int root_fd)
 	return ret ? ret : keys_check_image_set(&set);
 }
 
+int keys_check_image_purge(int root_fd)
+{
+	size_t records = 0;
+	int ret;
+
+	ret = revocations(root_fd, false, false, &records);
+	if (ret || !records)
+		return ret;
+	return keys_revoke_check();
+}
+
 int keys_apply_image(int root_fd, bool boot)
 {
+	size_t records = 0;
 	int ret;
 
 	ret = keys_validate_image(root_fd);
-	return ret ? ret : revocations(root_fd, true, boot);
+	if (!ret)
+		ret = keys_check_image_purge(root_fd);
+	return ret ? ret : revocations(root_fd, true, boot, &records);
 }

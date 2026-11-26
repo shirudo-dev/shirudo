@@ -4048,31 +4048,73 @@ static int purge_is_loaded(const char *name, __u32 type)
 	return ret ? ret : 1;
 }
 
+/*
+ * The archive of name, open, once it is one a signer can be read from:
+ * it parses and its signed name is the one it is filed under.
+ * UPATCH_PURGE_NO_ARCHIVE when the name has none.
+ */
+static int purge_archive_open(const char *persisted, const char *name,
+			      struct upatch *u)
+{
+	char archive_name[UPATCH_NAME_MAX + 1];
+	int fd, ret;
+
+	fd = seal_open_read(persisted);
+	if (fd == -ENOENT)
+		return UPATCH_PURGE_NO_ARCHIVE;
+	if (fd < 0)
+		return fd;
+	ret = upatch_open_fd(fd, u);
+	close(fd);
+	if (ret)
+		return ret;
+	upatch_header_name(u, archive_name);
+	if (!upatch_name_signed(u) || strcmp(name, archive_name)) {
+		upatch_close(u);
+		return -EBADMSG;
+	}
+	return 0;
+}
+
+int upatch_purge_check(const char *name)
+{
+	char persisted[PATH_MAX];
+	struct upatch u;
+	int lock, ret;
+
+	if (!upatch_name_valid(name))
+		return -EINVAL;
+	if (strsprintf(persisted, sizeof(persisted), "%s/%s.upatch",
+		       UPATCHES_DIR, name) < 0)
+		return -ENAMETOOLONG;
+	lock = eventlog_lock();
+	if (lock < 0)
+		return lock;
+	ret = purge_archive_open(persisted, name, &u);
+	if (!ret) {
+		ret = cms_check_signers(upatch_signature(&u),
+					u.hdr.signature_len);
+		upatch_close(&u);
+	}
+	eventlog_unlock(lock);
+	return ret;
+}
+
 static int upatch_purge_locked(const char *name, const struct cert *signer,
 			       const char *reason)
 {
 	__u8 payload[UPATCH_PAYLOAD_HASH_LEN] = {};
-	char archive_name[UPATCH_NAME_MAX + 1], persisted[PATH_MAX];
-	int fd, loaded, ret;
+	char persisted[PATH_MAX];
+	int loaded, ret;
 	struct upatch u;
 	__u32 type;
 
 	if (strsprintf(persisted, sizeof(persisted), "%s/%s.upatch",
 		       UPATCHES_DIR, name) < 0)
 		return -ENAMETOOLONG;
-	ret = seal_open_read(persisted);
-	if (ret < 0)
-		return ret;
-	fd = ret;
-	ret = upatch_open_fd(fd, &u);
-	close(fd);
+	ret = purge_archive_open(persisted, name, &u);
 	if (ret)
 		return ret;
-	upatch_header_name(&u, archive_name);
-	if (!upatch_name_signed(&u) || strcmp(name, archive_name)) {
-		upatch_close(&u);
-		return -EBADMSG;
-	}
 	ret = cms_signed_by(upatch_signature(&u), u.hdr.signature_len, signer);
 	memcpy(payload, u.hdr.payload_sha256, sizeof(payload));
 	type = u.hdr.type;
