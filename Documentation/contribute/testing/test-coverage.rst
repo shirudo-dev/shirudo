@@ -384,8 +384,9 @@ signed config image.
        ``verify``, ``predict`` and ``challenge``, a TPM reset. Runs in
        the register VM
    * - ``t4004-config-attest``
-     - Config activation in the evidence and its verification. Runs in
-       the register VM
+     - Config activation in the evidence and its verification. Tests both PCR
+       and NvPCR configurations, the qualifying data of the TPM signatures
+       and rejection of an incomplete snapshot. Runs in the register VM
    * - ``t4005-tpm-session``
      - Salted HMAC and policy sessions, ECC and RSA credential
        activation, rejected key pins, forged and replayed extension

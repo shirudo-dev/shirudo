@@ -37,9 +37,10 @@ Description
 
 ``attest`` collects and signs, with the TPM's attestation key:
 
-- a quote over the selected PCRs with the nonce,
-- a certification of the measurement register (NV index ``0x01818E00``)
-  with the nonce,
+- opening certifications of the patch register (NV index ``0x01818E00``)
+  and optional config NvPCR with the verifier's nonce,
+- a quote of the selected PCRs bound to the opening signatures,
+- closing certifications of the same registers bound to the quote signature,
 - this boot's eventlog, the config activation records, and the firmware
   and systemd measurement logs,
 - the public areas and names of the attestation key and the endorsement

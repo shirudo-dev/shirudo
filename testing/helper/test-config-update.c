@@ -109,6 +109,8 @@ static int test_pcr_read(void *opaque, __u32 pcr, __u8 out[32])
 
 	if (getenv("SHIRUDO_TEST_CONFIG_READ_FAIL"))
 		return -EIO;
+	if (ctx->tpm && config_measure_nvpcr(pcr))
+		return tpm_nv_read(ctx->tpm, pcr, out);
 	if (ctx->tpm)
 		return tpm_pcr_read(ctx->tpm, pcr, out);
 	memcpy(out, ctx->sim.value, 32);
@@ -131,10 +133,17 @@ static int test_pcr_extend(void *opaque, __u32 pcr,
 		return -EIO;
 	if (mode && !strcmp(mode, "drift"))
 		event = wrong;
-	if (ctx->tpm)
+	if (ctx->tpm && config_measure_nvpcr(pcr)) {
+		__u8 zero[32] = {}, first[32];
+
+		ret = tpm_policy_nv_written(zero, false, first);
+		if (!ret)
+			ret = tpm_nvpcr_extend(ctx->tpm, pcr, first, event);
+	} else if (ctx->tpm) {
 		ret = tpm_pcr_extend(ctx->tpm, pcr, event);
-	else
+	} else {
 		ret = chain_fold(ctx->sim.value, event);
+	}
 	if (!ret)
 		ret = simulator_save(ctx);
 	if (!ret && mode && !strcmp(mode, "ambiguous"))

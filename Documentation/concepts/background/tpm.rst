@@ -409,9 +409,10 @@ and the nonce proves that it signed after the verifier asked.
 with the index's Name, an offset and the contents.
 
 ``shirudo attest`` collects the selected PCR values and a TPM quote
-containing their digest and the verifier's nonce. Separately,
-it obtains a TPM-signed statement of the measurement register's
-Name and current value, using the same nonce as the PCR quote.
+containing their digest. The TPM certifies the measurement register's
+Name and value before and after the quote. The opening certification
+answers the verifier's nonce, the quote commits to the opening signatures,
+and the closing certifications commit to the signed quote.
 The :term:`evidence`
 document also carries the public areas of the AK and EK, this boot's
 shirudo :term:`eventlog` records, the config history, the firmware

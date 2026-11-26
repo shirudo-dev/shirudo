@@ -452,10 +452,11 @@ only structures the TPM itself produced.
 
 The evidence document carries:
 
-- a ``TPM2_Quote`` over the SHA-256 bank of the selected PCRs, by default
-  0 to 7, 9 and 11 to 15, plus the config PCR, with the verifier's nonce;
-- a ``TPM2_NV_Certify`` of the register's 32 bytes with the same nonce,
-  which names the index and so binds the value to its public area;
+- a TPM quote of the selected SHA-256 PCRs, by default 0 to 7, 9 and
+  11 to 15, plus the config PCR when selected;
+- two certifications of the patch register, one before the PCR quote
+  and one after it. In config NvPCR mode, the TPM certifies that index
+  on both sides of the same quote as well;
 - the attestation key's public area and name, and the endorsement key's
   public area and name;
 - this boot's eventlog records;
@@ -466,6 +467,19 @@ The evidence document carries:
 - the firmware and systemd measurement logs, so that a verifier can
   replay the PCRs it pins;
 - the config history (see below).
+
+The evidence binds the readings in this order. The opening certifications
+carry the verifier's nonce. The quote carries the SHA-256 digest of two
+32-byte values concatenated in order. The first is the SHA-256 digest
+of the patch register's opening signature. The second is the digest of
+the config NvPCR's opening signature, or 32 zero bytes when absent.
+Each closing certification carries the SHA-256 digest of the quote
+signature. All signature digests cover the binary TPMT_SIGNATURE.
+
+For each index the verifier checks the same Name, 32-byte value and TPM
+boot on both sides. The indexes can only extend during that boot, so the
+certified values held when the TPM quoted the PCRs. If a register changes
+during collection, collect again.
 
 Credential activation
 ~~~~~~~~~~~~~~~~~~~~~
@@ -539,11 +553,12 @@ It checks, in this order:
    the pinned name; the endorsement key's template and name, and with
    ``--ek-name`` and ``--expect-credential`` the pinned key and the
    credential;
-#. the quote: signature, signer, nonce, that it covers exactly the listed
-   PCRs, and that the listed values hash to the quoted digest;
-#. the register certification: signature, signer, nonce, the certified
-   name and value equal to the listed ones, and the same TPM reset count
-   and firmware version as the quote;
+#. the quote's signature and signer, its commitment to the opening
+   certifications, the PCR selection and the digest of the listed values;
+#. both register certifications, including the request nonce on the
+   opening reading and the commitment to the signed quote on the closing
+   one. Both must certify the listed name and value and share the quote's
+   reset count, restart count and firmware version;
 #. with ``--expect-config-root`` and ``--expect-config-pcr``, the config
    history;
 #. the binding: this boot has an ``init`` record, the document names the
@@ -613,8 +628,8 @@ expected root as the selection. The restart count the history carries is
 not compared.
 With the config NvPCR (``config.nvpcr``) the evidence includes, instead of
 the config PCR, a ``config_nvpcr`` object: the index's name and an
-AK-signed ``TPM2_NV_Certify`` of its contents under the same nonce.
-``verify`` requires that certification from the quote's TPM boot, a history
+AK-signed certification of its contents on each side of the quote.
+``verify`` requires both certifications from the quote's TPM boot, a history
 that starts at ``SHA256(0^64)``, and a replay that reaches the certified
 contents; ``--expect-config-nvpcr=<name>`` pins the index's name, which the
 platform computes from its PCR public key.

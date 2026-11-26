@@ -425,7 +425,8 @@ int main(int argc, char **argv)
 		struct tpm_key ak = { .handle = 0 }, ek = { .handle = 0 };
 		char hex[2 * TPM_ATTEST_MAX + 1], buf[32 * 1024];
 		struct json_emit e = { .buf = buf, .cap = sizeof(buf) };
-		struct tpm_attestation quote = {}, certify = {};
+		struct tpm_attestation quote = {}, certify = {}, after = {};
+		__u8 hashes[2][32] = {}, quote_nonce[32], after_nonce[32];
 		__u8 values[24][32] = {}, before[64], anchor_digest[32];
 		__u8 branch_written[32], branch_init[32], policy[32];
 		__u32 index, pcr, phase, mask, quoted, reset = 0, i;
@@ -488,12 +489,28 @@ int main(int argc, char **argv)
 			if (quoted & (1u << i))
 				ret = tpm_pcr_read(tpm, i, values[i]);
 		}
-		if (!ret)
-			ret = tpm_quote(tpm, &ak, nonce, nonce_len, quoted,
-					&quote);
+		/*
+		 * As attest collects: the certification answers the nonce,
+		 * the quote commits to its signature and the closing
+		 * certification to the quote's. No config register here.
+		 */
 		if (!ret)
 			ret = tpm_nv_certify(tpm, &ak, index, nonce, nonce_len,
 					     &certify);
+		if (!ret)
+			ret = sha256_buffer(certify.signature,
+					    certify.signature_len, hashes[0]);
+		if (!ret)
+			ret = sha256_buffer(hashes, sizeof(hashes), quote_nonce);
+		if (!ret)
+			ret = tpm_quote(tpm, &ak, quote_nonce,
+					sizeof(quote_nonce), quoted, &quote);
+		if (!ret)
+			ret = sha256_buffer(quote.signature, quote.signature_len,
+					    after_nonce);
+		if (!ret)
+			ret = tpm_nv_certify(tpm, &ak, index, after_nonce,
+					     sizeof(after_nonce), &after);
 		/* Flushing scrubs the key; keep the public parts. */
 		memcpy(&ak_copy, &ak, sizeof(ak_copy));
 		memcpy(&ek_copy, &ek, sizeof(ek_copy));
@@ -559,6 +576,10 @@ int main(int argc, char **argv)
 		json_kv_string(&e, "attest", hex);
 		hex_encode(certify.signature, certify.signature_len, hex);
 		json_kv_string(&e, "signature", hex);
+		hex_encode(after.attest, after.attest_len, hex);
+		json_kv_string(&e, "after_attest", hex);
+		hex_encode(after.signature, after.signature_len, hex);
+		json_kv_string(&e, "after_signature", hex);
 		json_obj_close(&e);
 		json_arr_open(&e, "eventlog");
 		json_obj_open(&e);

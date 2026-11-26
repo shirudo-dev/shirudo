@@ -39,7 +39,8 @@ static int pcr_read(void *ctx, __u32 pcr, __u8 out[32])
 
 	ret = tpm_open(&tpm);
 	if (!ret)
-		ret = tpm_pcr_read(tpm, pcr, out);
+		ret = config_measure_nvpcr(pcr) ? tpm_nv_read(tpm, pcr, out) :
+		      tpm_pcr_read(tpm, pcr, out);
 	tpm_close(tpm);
 	return ret;
 }

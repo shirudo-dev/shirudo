@@ -444,10 +444,10 @@ upatch, because the kernel verifies every loader (T1). What a registry
 can do to indexes, tree publications and the transport is described in
 T7 and U3 to U4.
 
-The evidence boundary runs through the attestation document. Only two
-parts of what ``shirudo attest`` produces are authenticated: the
-``TPM2_Quote`` over the selected PCRs and the ``TPM2_NV_Certify`` of the
-register, both signed by the attestation key over the verifier's nonce.
+The evidence boundary runs through the attestation document. The TPM
+authenticates the PCR quote and the certifications of the patch register
+and optional config NvPCR. The verifier's nonce starts the exchange and
+each subsequent step commits to the preceding TPM signatures.
 Everything else in the document is the target's own account: the
 eventlog records, the config history, the fields of the init record
 (``bound_in``, ``ts``, ``boot_id``, the certificate list and the set),
@@ -1327,8 +1327,10 @@ T9 A target lying about its state
 target's own account, and a compromised target says what root wants.
 ``shirudo attest`` makes the TPM speak instead. It produces a quote
 over the selected PCRs, by default 0 to 7, 9 and 11 to 15, and a
-certification of the register, both signed by the attestation key with
-the verifier's nonce. The attestation key is an ECDSA P-256 primary
+pair of register certifications signed on either side of that quote.
+The opening certification carries the verifier's nonce. The quote commits
+to the opening signatures and the closing certifications commit to the
+quote signature. The attestation key is an ECDSA P-256 primary
 with a fixed template under the endorsement hierarchy. A credential the
 verifier makes under the target's endorsement key (``shirudo attest
 challenge``), and the target activates while attesting, proves that the
@@ -1340,7 +1342,9 @@ attestation key, its name against its public area and, with
 ``--ak-name``, against the pinned name. It checks the quote's PCR
 digest, that the certification names the listed index and value, and
 that both come from one TPM boot, with the same reset and restart
-counts, as a restart clears the register too. It recomputes the index's
+counts, as a restart clears the register too. Both readings of each
+extend-only index must agree. This ties the config and patch measurements
+to the instant of the quote. It recomputes the index's
 public area from the recorded PCR 9 and 11 binding values and the NV
 writer's public key, so a recreated index fails. It replays the eventlog
 to the certified value, checks that every event's digest derives from

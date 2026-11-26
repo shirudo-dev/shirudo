@@ -147,8 +147,8 @@ it.
    evidence
       The JSON document, of kind ``shirudo-attestation``, that ``shirudo
       attest --nonce=<hex>`` writes on a target. It carries a TPM quote
-      over the selected PCRs and a TPM certification of the measurement
-      register, both signed by the attestation key over the nonce,
+      over the selected PCRs and TPM certifications of the measurement
+      register on both sides of the quote, bound to the request nonce,
       together with the attestation and endorsement keys, this boot's
       eventlog records and the boot measurement logs. ``shirudo attest
       verify`` checks it on the operator host. See :doc:`/operate/run/attest`.

@@ -30,10 +30,10 @@
   \draw[flow] (120,172) -- (338,172);
   \draw[flow] (340,244) -- (568,244);
   \draw[flow] (570,282) -- (788,282);
-  \draw[flow] (570,332) -- (788,332);
-  \draw[flow, dash pattern=on 3.75bp off 3bp] (790,348) -- (572,348);
-  \draw[flow] (570,388) -- (788,388);
-  \draw[flow, dash pattern=on 3.75bp off 3bp] (790,404) -- (572,404);
+  \foreach \y in {320,357,394} {
+    \draw[flow] (570,\y) -- (788,\y);
+    \draw[flow, dash pattern=on 3.75bp off 3bp] (790,\y+12) -- (572,\y+12);
+  }
   \draw[flow] (570,436) -- (342,436);
 
   \begin{scope}[note, every node/.append style={anchor=base}]
@@ -54,8 +54,9 @@
     \node at (455,236) {nonce};
     \node at (680,274) {CreatePrimary: AK};
     \node[small] at (680,298) {the name the builder recorded};
-    \node[code] at (680,324) {Quote(PCRs; nonce)};
-    \node[code] at (680,380) {NV\_Certify(register; nonce)};
+    \node[small] at (680,313) {Certify registers with nonce};
+    \node[small] at (680,350) {Quote PCRs over opening signatures};
+    \node[small] at (680,387) {Certify registers over quote signature};
     \node at (455,428) {evidence document};
     \node[code] at (340,475) {verify --ak-name --ek-name};
   \end{scope}

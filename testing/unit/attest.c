@@ -10,7 +10,7 @@
 #include "attest.h"
 #include "unit.h"
 
-#define EVIDENCE "fuzz/corpus/attest/evidence"
+#define EVIDENCE "fuzz/corpus/attest/snapshot"
 
 static void pcrs_are_a_list_up_to_23(void)
 {

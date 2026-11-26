@@ -268,8 +268,8 @@ verify that pins them.
          key and the endorsement key from attest's templates and gives
          their names to the operator's inventory. For every attestation,
          the operator sends a nonce, the target has the TPM create the
-         same attestation key, quote the PCRs and certify the register
-         with the nonce, and returns the evidence document, which the
+         same attestation key, certify the registers on both sides of a
+         PCR quote, and return the evidence document, which the
          operator verifies with the recorded names. There is no
          credential challenge.
 
@@ -483,18 +483,22 @@ verified with ``--ak-name`` and ``--expect-chain`` only:
      OK    endorsement key: TCG default template under the endorsement policy
      OK    quote: ECDSA signature by the attestation key
      OK    quote: signed by the key as an endorsement primary
-     OK    quote: carries the nonce
+     OK    quote: carries the expected challenge
      OK    quote: covers the PCRs the document lists
      OK    quote: PCR digest matches the listed values
      OK    register: ECDSA signature by the attestation key
      OK    register: signed by the key as an endorsement primary
-     OK    register: carries the nonce
+     OK    register: carries the expected challenge
      OK    register: certification names the listed index
      OK    register: certified contents match the listed value
      OK    quote and certification are of one TPM boot
+     OK    register after quote: ECDSA signature by the attestation key
+     OK    register after quote: signed by the key as an endorsement primary
+     OK    register after quote: carries the expected challenge
+     OK    register after quote: same index and value on both sides of the PCR quote
      OK    config: config root history matches the quoted PCR
      NOTE  config root has no operator approval; use --expect-config-root with --expect-config-pcr
-     NOTE  config records a selection; direct TPM writer protection is deferred
+     NOTE  config records a selection; operation completion depends on trusted runtime guards
      OK    eventlog: this boot has an init record
      OK    register: the document names index 0x01818E00 and PCRs 9 and 11
      OK    register: public area is bound to PCRs 9 and 11 as recorded
@@ -513,7 +517,7 @@ Read it in groups:
 - The nonce, attestation key and endorsement key lines say the TPM you
   enrolled signed this evidence for your request.
 - The quote and register lines say the PCR values and the register
-  value are what the TPM certified, in one TPM boot.
+  value were present together when the TPM signed the quote.
 - The config lines replay the config activation history to the quoted
   config PCR. The note says no root was pinned: this run left out
   ``--expect-config-root``.

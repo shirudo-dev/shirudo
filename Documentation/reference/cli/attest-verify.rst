@@ -42,7 +42,9 @@ Description
 note, ``NOTE``, followed by ``verdict: ok`` or ``verdict: fail``. It
 checks:
 
-- the nonce, in the document, the quote and the register certification
+- the request nonce in the opening certifications, the opening signatures
+  bound into the PCR quote, and the quote signature bound into each closing
+  certification
 - the attestation key: restricted, fixed to its TPM, its name matching its
   public area and, with ``--ak-name``, the pinned name
 - the endorsement key: its name and the TCG default template, and with
@@ -50,7 +52,8 @@ checks:
   credential the target recovered
 - the quote and the register certification: signed by the attestation key
   as an endorsement primary, covering the listed PCRs and index, of one
-  TPM boot: the same reset and restart counts
+  TPM boot with the same reset and restart counts, with each register
+  retaining its certified value across the quote
 - the config root history against the quoted config PCR, and with
   ``--expect-config-root`` the approved root
 - the register's public area against the recorded PCR 9 and 11 binding,

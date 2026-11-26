@@ -156,6 +156,66 @@ static bool quote_covers(const struct tpm_attestation *quote,
 	return !memneq_explicit(digest, a.pcr_digest, 32);
 }
 
+/*
+ * Both NV indexes are extend-only within the boot. Certify each on both
+ * sides of one PCR quote. The quote commits to the opening signatures,
+ * and the closing certifications commit to the quote signature. Including
+ * the TPM signatures establishes order even when TPM clock ticks coincide.
+ */
+static int snapshot_quote_nonce(const struct tpm_attestation *reg,
+				const struct tpm_attestation *config,
+				__u8 nonce[32])
+{
+	__u8 hashes[2][32] = {};
+	int ret;
+
+	ret = sha256_buffer(reg->signature, reg->signature_len, hashes[0]);
+	if (!ret && config->signature_len)
+		ret = sha256_buffer(config->signature, config->signature_len,
+				    hashes[1]);
+	return ret ? ret : sha256_buffer(hashes, sizeof(hashes), nonce);
+}
+
+static bool same_nv(const struct tpm_attest *a, const struct tpm_attest *b)
+{
+	return a->type == TPM_ST_ATTEST_NV && b->type == TPM_ST_ATTEST_NV &&
+	       a->reset_count == b->reset_count &&
+	       a->restart_count == b->restart_count &&
+	       a->firmware_version == b->firmware_version &&
+	       a->offset == 0 && b->offset == 0 &&
+	       a->index_name_len == TPM_NAME_LEN && b->index_name_len == TPM_NAME_LEN &&
+	       !memcmp(a->index_name, b->index_name, TPM_NAME_LEN) &&
+	       a->nv_len == 32 && b->nv_len == 32 &&
+	       !memcmp(a->nv_data, b->nv_data, 32);
+}
+
+static int certify_after_quote(struct tpm *tpm, struct tpm_key *ak, __u32 index,
+			       const __u8 nonce[32],
+			       const struct tpm_attestation *before,
+			       struct tpm_attestation *after)
+{
+	struct tpm_attest a, b;
+	int ret;
+
+	ret = tpm_nv_certify(tpm, ak, index, nonce, 32, after);
+	if (ret)
+		return ret;
+	if (tpm_attest_parse(before->attest, before->attest_len, &a) ||
+	    tpm_attest_parse(after->attest, after->attest_len, &b))
+		return -EBADMSG;
+	return same_nv(&a, &b) ? 0 : -EAGAIN;
+}
+
+static void emit_certification(struct json_emit *e,
+			       const struct tpm_attestation *before,
+			       const struct tpm_attestation *after)
+{
+	emit_hex(e, "attest", before->attest, before->attest_len);
+	emit_hex(e, "signature", before->signature, before->signature_len);
+	emit_hex(e, "after_attest", after->attest, after->attest_len);
+	emit_hex(e, "after_signature", after->signature, after->signature_len);
+}
+
 int attest_evidence_config(const __u8 *nonce, size_t nonce_len,
 			   __u32 pcr_mask,
 			   const struct attest_challenge *c,
@@ -166,7 +226,9 @@ int attest_evidence_config(const __u8 *nonce, size_t nonce_len,
 	struct tpm_key ak = { .handle = 0 }, ek = { .handle = 0 };
 	struct tpm_key ak_copy = {}, ek_copy = {};
 	struct tpm_attestation quote = {}, certify = {};
-	struct tpm_attestation config_certify = {};
+	struct tpm_attestation config_certify = {}, config_after = {};
+	struct tpm_attestation reg_after = {};
+	__u8 quote_nonce[32], after_nonce[32];
 	struct config_evidence config = {};
 	struct tpm_attest quoted, certified;
 	struct tpm_nv_info nv, config_nv = {};
@@ -208,10 +270,36 @@ int attest_evidence_config(const __u8 *nonce, size_t nonce_len,
 		ret = -ENODEV;
 		goto out;
 	}
-	ret = tpm_nv_read(tpm, NV_INDEX, reg);
+	ret = tpm_ak_create(tpm, &ak);
 	if (ret)
 		goto out;
-	ret = tpm_ak_create(tpm, &ak);
+	ret = tpm_nv_certify(tpm, &ak, NV_INDEX, nonce, nonce_len, &certify);
+	if (ret)
+		goto out;
+	if (tpm_attest_parse(certify.attest, certify.attest_len, &certified) ||
+	    certified.type != TPM_ST_ATTEST_NV || certified.nv_len != sizeof(reg)) {
+		ret = -EBADMSG;
+		goto out;
+	}
+	memcpy(reg, certified.nv_data, sizeof(reg));
+	if (nvpcr) {
+		ret = tpm_nv_info(tpm, config.pcr, &config_nv);
+		if (!ret)
+			ret = tpm_nv_certify(tpm, &ak, config.pcr, nonce,
+					     nonce_len, &config_certify);
+		if (ret)
+			goto out;
+		if (tpm_attest_parse(config_certify.attest,
+				     config_certify.attest_len, &certified) ||
+		    certified.reset_count != config.reset_count ||
+		    certified.restart_count != config.restart_count ||
+		    certified.offset != 0 || certified.nv_len != 32 ||
+		    memcmp(certified.nv_data, config.value, 32)) {
+			ret = -EUCLEAN;
+			goto out;
+		}
+	}
+	ret = snapshot_quote_nonce(&certify, &config_certify, quote_nonce);
 	if (ret)
 		goto out;
 	for (attempt = 0; attempt < QUOTE_ATTEMPTS; attempt++) {
@@ -222,8 +310,8 @@ int attest_evidence_config(const __u8 *nonce, size_t nonce_len,
 			if (ret)
 				goto out;
 		}
-		ret = tpm_quote(tpm, &ak, nonce, nonce_len, pcr_mask,
-				&quote);
+		ret = tpm_quote(tpm, &ak, quote_nonce, sizeof(quote_nonce),
+				pcr_mask, &quote);
 		if (ret)
 			goto out;
 		if (quote_covers(&quote, pcr_mask, values))
@@ -243,26 +331,13 @@ int attest_evidence_config(const __u8 *nonce, size_t nonce_len,
 		ret = -EUCLEAN;
 		goto out;
 	}
-	/* The quote does not cover an NV index: certify the config NvPCR. */
-	if (nvpcr) {
-		ret = tpm_nv_info(tpm, config.pcr, &config_nv);
-		if (!ret)
-			ret = tpm_nv_certify(tpm, &ak, config.pcr, nonce,
-					     nonce_len, &config_certify);
-		if (ret)
-			goto out;
-		if (tpm_attest_parse(config_certify.attest,
-				     config_certify.attest_len, &certified) ||
-		    certified.reset_count != config.reset_count ||
-		    certified.restart_count != config.restart_count ||
-		    certified.offset != 0 || certified.nv_len != 32 ||
-		    memcmp(certified.nv_data, config.value, 32)) {
-			ret = -EUCLEAN;
-			goto out;
-		}
-	}
-	ret = tpm_nv_certify(tpm, &ak, NV_INDEX, nonce,
-			     nonce_len, &certify);
+	ret = sha256_buffer(quote.signature, quote.signature_len, after_nonce);
+	if (!ret && nvpcr)
+		ret = certify_after_quote(tpm, &ak, config.pcr, after_nonce,
+					  &config_certify, &config_after);
+	if (!ret)
+		ret = certify_after_quote(tpm, &ak, NV_INDEX, after_nonce,
+					  &certify, &reg_after);
 	if (ret)
 		goto out;
 	ek_cert = xmalloc(EK_CERT_MAX);
@@ -382,16 +457,12 @@ int attest_evidence_config(const __u8 *nonce, size_t nonce_len,
 	json_kv_int(&e, "pcr", CHAIN_PCR);
 	emit_hex(&e, "name", nv.name, nv.name_len);
 	emit_hex(&e, "value", reg, sizeof(reg));
-	emit_hex(&e, "attest", certify.attest, certify.attest_len);
-	emit_hex(&e, "signature", certify.signature, certify.signature_len);
+	emit_certification(&e, &certify, &reg_after);
 	json_obj_close(&e);
 	if (nvpcr) {
 		json_obj_open_key(&e, "config_nvpcr");
 		emit_hex(&e, "name", config_nv.name, config_nv.name_len);
-		emit_hex(&e, "attest", config_certify.attest,
-			 config_certify.attest_len);
-		emit_hex(&e, "signature", config_certify.signature,
-			 config_certify.signature_len);
+		emit_certification(&e, &config_certify, &config_after);
 		json_obj_close(&e);
 	}
 	json_arr_open(&e, "eventlog");
@@ -489,17 +560,20 @@ struct init_record {
 	char		anchor[CHAIN_ANCHOR_MAX];
 };
 
+struct signed_fields {
+	char attest_hex[2 * TPM_ATTEST_MAX + 1];
+	char sig_hex[2 * TPM_SIGNATURE_MAX + 1];
+	struct tpm_attestation wire;
+};
+
 struct parse {
+	struct signed_fields quote, reg, reg_after, nvpcr, nvpcr_after;
 	char		writer_public_hex[2 * TPM_NV_RSA_BYTES + 1];
 	char nvpcr_name_hex[69];
-	char nvpcr_attest_hex[2 * TPM_ATTEST_MAX + 1];
-	char nvpcr_sig_hex[2 * TPM_SIGNATURE_MAX + 1];
 	char		nonce_hex[2 * ATTEST_NONCE_MAX + 1];
 	__s64		pcr_mask;
 	char		ak_public_hex[2 * TPM_PUBLIC_MAX + 1];
 	char		ak_name_hex[2 * TPM_NAME_LEN + 1];
-	char		quote_attest_hex[2 * TPM_ATTEST_MAX + 1];
-	char		quote_sig_hex[2 * TPM_SIGNATURE_MAX + 1];
 	char		ek_type[8];
 	char		ek_public_hex[2 * TPM_PUBLIC_MAX + 1];
 	char		ek_name_hex[2 * TPM_NAME_LEN + 1];
@@ -508,8 +582,6 @@ struct parse {
 	__s64		reg_pcr;
 	char		reg_name_hex[2 * TPM_NAME_LEN + 1];
 	char		reg_value_hex[65];
-	char		reg_attest_hex[2 * TPM_ATTEST_MAX + 1];
-	char		reg_sig_hex[2 * TPM_SIGNATURE_MAX + 1];
 	__s64		pcr_index;
 	char		pcr_value_hex[65];
 	__u32		pcr_have;
@@ -763,12 +835,8 @@ struct verify {
 	size_t				nonce_len;
 	struct tpm_ecc_public		ak_pub;
 	__u8				ak_name[TPM_NAME_LEN];
-	/*
-	 * check_signed() decodes each attestation here, the register's
-	 * over the quote's and the config NvPCR's over the register's: the
-	 * pointers of only the last one decoded stay valid.
-	 */
-	__u8				attest[TPM_ATTEST_MAX];
+	__u8				quote_nonce[32];
+	__u8				after_nonce[32];
 	struct tpm_attest		quote;
 	struct tpm_attest		certify;
 	int				qrc;	/* check_signed() of the quote */
@@ -779,25 +847,36 @@ struct verify {
 	size_t				runtime;	/* records after init */
 };
 
+static int decode_signed(struct signed_fields *s)
+{
+	struct tpm_attestation *w = &s->wire;
+
+	if (hex_decode_max(s->attest_hex, w->attest, sizeof(w->attest),
+			   &w->attest_len) || !w->attest_len ||
+	    hex_decode_max(s->sig_hex, w->signature, sizeof(w->signature),
+			   &w->signature_len) || !w->signature_len)
+		return -EINVAL;
+	return 0;
+}
+
+/* A NULL qualifier selects the verifier's original challenge. */
 static int check_signed(struct verify *v, const char *what,
-			const char *attest_hex, const char *sig_hex,
+			const struct signed_fields *s, const __u8 *qualifier,
 			struct tpm_attest *parsed)
 {
+	const struct tpm_attestation *w = &s->wire;
+	const __u8 *nonce = qualifier ? qualifier : v->nonce;
+	size_t nonce_len = qualifier ? 32 : v->nonce_len;
 	struct reporter *rep = &v->rep;
-	__u8 sig[TPM_SIGNATURE_MAX];
-	size_t attest_len, sig_len;
 	bool signer = false;
 	int ret;
 
-	if (hex_decode_max(attest_hex, v->attest, sizeof(v->attest),
-			   &attest_len) ||
-	    hex_decode_max(sig_hex, sig, sizeof(sig), &sig_len))
-		return -EINVAL;
-	if (tpm_attest_parse(v->attest, attest_len, parsed)) {
+	if (tpm_attest_parse(w->attest, w->attest_len, parsed)) {
 		say(rep, false, "%s: attestation structure unparseable", what);
 		return -EKEYREJECTED;
 	}
-	ret = tpm_attest_verify(v->attest, attest_len, sig, sig_len,
+	ret = tpm_attest_verify(w->attest, w->attest_len,
+				w->signature, w->signature_len,
 				v->ak_pub.x, v->ak_pub.y);
 	if (ret == -EBADMSG) {
 		say(rep, false, "%s: signature structure unparseable", what);
@@ -806,10 +885,9 @@ static int check_signed(struct verify *v, const char *what,
 	say(rep, ret == 0, "%s: ECDSA signature by the attestation key", what);
 	say(rep, !tpm_attest_signer(parsed, v->ak_name, &signer) && signer,
 	    "%s: signed by the key as an endorsement primary", what);
-	say(rep, parsed->extra_len == v->nonce_len &&
-	    (v->nonce_len == 0 ||
-	     !memneq_explicit(parsed->extra, v->nonce, v->nonce_len)),
-	    "%s: carries the nonce", what);
+	say(rep, parsed->extra_len == nonce_len &&
+	    (!nonce_len || !memneq_explicit(parsed->extra, nonce, nonce_len)),
+	    "%s: carries the expected challenge", what);
 	return 0;
 }
 
@@ -831,10 +909,10 @@ static int evidence_parse(struct verify *v, const char *evidence, size_t len)
 		  sizeof(p->ak_name_hex), 0, NULL, 0 },
 	};
 	struct json_field quote_sub[] = {
-		{ "attest", JSON_T_STRING, p->quote_attest_hex,
-		  sizeof(p->quote_attest_hex), 0, NULL, 0 },
-		{ "signature", JSON_T_STRING, p->quote_sig_hex,
-		  sizeof(p->quote_sig_hex), 0, NULL, 0 },
+		{ "attest", JSON_T_STRING, p->quote.attest_hex,
+		  sizeof(p->quote.attest_hex), 0, NULL, 0 },
+		{ "signature", JSON_T_STRING, p->quote.sig_hex,
+		  sizeof(p->quote.sig_hex), 0, NULL, 0 },
 	};
 	struct json_field ek_sub[] = {
 		{ "type", JSON_T_STRING, p->ek_type,
@@ -857,18 +935,26 @@ static int evidence_parse(struct verify *v, const char *evidence, size_t len)
 		  sizeof(p->reg_name_hex), 0, NULL, 0 },
 		{ "value", JSON_T_STRING, p->reg_value_hex,
 		  sizeof(p->reg_value_hex), 0, NULL, 0 },
-		{ "attest", JSON_T_STRING, p->reg_attest_hex,
-		  sizeof(p->reg_attest_hex), 0, NULL, 0 },
-		{ "signature", JSON_T_STRING, p->reg_sig_hex,
-		  sizeof(p->reg_sig_hex), 0, NULL, 0 },
+		{ "attest", JSON_T_STRING, p->reg.attest_hex,
+		  sizeof(p->reg.attest_hex), 0, NULL, 0 },
+		{ "signature", JSON_T_STRING, p->reg.sig_hex,
+		  sizeof(p->reg.sig_hex), 0, NULL, 0 },
+		{ "after_attest", JSON_T_STRING, p->reg_after.attest_hex,
+		  sizeof(p->reg_after.attest_hex), 0, NULL, 0 },
+		{ "after_signature", JSON_T_STRING, p->reg_after.sig_hex,
+		  sizeof(p->reg_after.sig_hex), 0, NULL, 0 },
 	};
 	struct json_field nvpcr_sub[] = {
 		{ "name", JSON_T_STRING, p->nvpcr_name_hex,
 		  sizeof(p->nvpcr_name_hex), 0, NULL, 0 },
-		{ "attest", JSON_T_STRING, p->nvpcr_attest_hex,
-		  sizeof(p->nvpcr_attest_hex), 0, NULL, 0 },
-		{ "signature", JSON_T_STRING, p->nvpcr_sig_hex,
-		  sizeof(p->nvpcr_sig_hex), 0, NULL, 0 },
+		{ "attest", JSON_T_STRING, p->nvpcr.attest_hex,
+		  sizeof(p->nvpcr.attest_hex), 0, NULL, 0 },
+		{ "signature", JSON_T_STRING, p->nvpcr.sig_hex,
+		  sizeof(p->nvpcr.sig_hex), 0, NULL, 0 },
+		{ "after_attest", JSON_T_STRING, p->nvpcr_after.attest_hex,
+		  sizeof(p->nvpcr_after.attest_hex), 0, NULL, 0 },
+		{ "after_signature", JSON_T_STRING, p->nvpcr_after.sig_hex,
+		  sizeof(p->nvpcr_after.sig_hex), 0, NULL, 0 },
 	};
 	struct json_field upatch_sub[] = {
 		{ "name", JSON_T_STRING, p->upatch_name,
@@ -968,10 +1054,16 @@ static int evidence_parse(struct verify *v, const char *evidence, size_t len)
 	v->have_ek = ek_sub[0].seen && ek_sub[1].seen && ek_sub[2].seen;
 	v->have_cred = cred_sub[0].seen;
 	v->have_nvpcr = top[ARRAY_SIZE(top) - 1].seen;
-	if (v->have_nvpcr && (!nvpcr_sub[0].seen || !nvpcr_sub[1].seen ||
-			      !nvpcr_sub[2].seen))
+	if (decode_signed(&p->quote) || decode_signed(&p->reg) ||
+	    decode_signed(&p->reg_after) ||
+	    (v->have_nvpcr && (!nvpcr_sub[0].seen || decode_signed(&p->nvpcr) ||
+			       decode_signed(&p->nvpcr_after))))
 		return -EINVAL;
-	return 0;
+	ret = snapshot_quote_nonce(&p->reg.wire, &p->nvpcr.wire, v->quote_nonce);
+	if (ret)
+		return ret;
+	return sha256_buffer(p->quote.wire.signature, p->quote.wire.signature_len,
+			     v->after_nonce);
 }
 
 static int evidence_parse_config(struct verify *v, const char *evidence,
@@ -1110,8 +1202,7 @@ static int verify_quote(struct verify *v)
 	struct parse *p = v->p;
 	int ret;
 
-	ret = check_signed(v, "quote", p->quote_attest_hex, p->quote_sig_hex,
-			   quote);
+	ret = check_signed(v, "quote", &p->quote, v->quote_nonce, quote);
 	if (ret == -EINVAL)
 		return ret;
 	v->qrc = ret;
@@ -1138,6 +1229,21 @@ static int verify_quote(struct verify *v)
 	return 0;
 }
 
+static int verify_after_quote(struct verify *v, const char *what,
+			      const struct tpm_attest *before,
+			      const struct signed_fields *after)
+{
+	struct tpm_attest last = {};
+	int ret;
+
+	ret = check_signed(v, what, after, v->after_nonce, &last);
+	if (ret)
+		return ret;
+	say(&v->rep, same_nv(before, &last),
+	    "%s: same index and value on both sides of the PCR quote", what);
+	return 0;
+}
+
 static int verify_register(struct verify *v)
 {
 	const struct tpm_attest *quote = &v->quote;
@@ -1147,8 +1253,7 @@ static int verify_register(struct verify *v)
 	struct parse *p = v->p;
 	int ret;
 
-	ret = check_signed(v, "register", p->reg_attest_hex, p->reg_sig_hex,
-			   certify);
+	ret = check_signed(v, "register", &p->reg, NULL, certify);
 	if (ret == -EINVAL)
 		return ret;
 	v->crc = ret;
@@ -1177,7 +1282,9 @@ static int verify_register(struct verify *v)
 		    quote->restart_count == certify->restart_count &&
 		    quote->firmware_version == certify->firmware_version,
 		    "quote and certification are of one TPM boot");
-	return 0;
+	if (v->crc)
+		return 0;
+	return verify_after_quote(v, "register after quote", certify, &p->reg_after);
 }
 
 /* The quote does not cover an NV index: the config NvPCR is certified. */
@@ -1199,8 +1306,7 @@ static int verify_config_nvpcr(struct verify *v)
 	}
 	if (hex_decode(p->nvpcr_name_hex, name, sizeof(name)))
 		return -EINVAL;
-	ret = check_signed(v, "config NvPCR", p->nvpcr_attest_hex,
-			   p->nvpcr_sig_hex, &nvpcr);
+	ret = check_signed(v, "config NvPCR", &p->nvpcr, NULL, &nvpcr);
 	if (ret == -EINVAL)
 		return ret;
 	contents = !ret && nvpcr.type == TPM_ST_ATTEST_NV &&
@@ -1224,7 +1330,9 @@ static int verify_config_nvpcr(struct verify *v)
 		memcpy(v->nvpcr_value, nvpcr.nv_data, 32);
 		v->have_nvpcr_value = true;
 	}
-	return 0;
+	if (ret)
+		return 0;
+	return verify_after_quote(v, "config NvPCR after quote", &nvpcr, &p->nvpcr_after);
 }
 
 static void verify_config(struct verify *v)
