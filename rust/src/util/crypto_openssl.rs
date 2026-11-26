@@ -8,7 +8,6 @@
 //! implementation.
 
 use core::ffi::{CStr, c_char, c_int, c_long, c_void};
-use core::mem::ManuallyDrop;
 use core::ptr;
 use std::ffi::CString;
 use std::fs::File;
@@ -53,22 +52,19 @@ pub(crate) const SHA256_LEN: usize = 32;
 /// The largest certificate read.
 const KEYS_DER_MAX: usize = 1024 * 1024;
 
-/// `struct cert`: an X.509 certificate, NULL before one is read.
-#[repr(C)]
+/// An optional X.509 certificate. The owned OpenSSL value frees itself.
 pub struct Cert {
-    imp: *mut ffi::X509,
+    imp: Option<X509>,
 }
 
 impl Cert {
     pub(crate) const fn new() -> Self {
-        Cert {
-            imp: ptr::null_mut(),
-        }
+        Cert { imp: None }
     }
 
-    /// The certificate the cert holds, from here.
+    /// Replace the certificate this value holds.
     fn hold(&mut self, x509: X509) {
-        self.imp = ManuallyDrop::new(x509).as_ptr();
+        self.imp = Some(x509);
     }
 }
 
@@ -78,12 +74,8 @@ impl Cert {
 ///
 /// `cert` is NULL or points to a cert, which outlives what this gives.
 unsafe fn x509_of<'a>(cert: *const Cert) -> Option<&'a X509Ref> {
-    // SAFETY: the caller passes NULL or a cert, whose certificate is NULL
-    // or one it holds.
-    unsafe { cert.as_ref() }
-        .filter(|c| !c.imp.is_null())
-        // SAFETY: the certificate the cert holds, as long as the cert.
-        .map(|c| unsafe { X509Ref::from_ptr(c.imp) })
+    // SAFETY: the caller passes NULL or a cert that outlives the result.
+    unsafe { cert.as_ref() }.and_then(|c| c.imp.as_deref())
 }
 
 /// `struct sha256_ctx`: a digest under way, which sha256_final() or
@@ -395,7 +387,7 @@ pub(crate) unsafe fn cert_read_der(der: *const u8, len: usize, cert: *mut Cert) 
     // SAFETY: the caller's cert.
     let cert = unsafe { &mut *cert };
 
-    cert.imp = ptr::null_mut();
+    cert.imp = None;
     // SAFETY: the caller's DER bytes.
     match X509::from_der(unsafe { slice(der, len) }) {
         Ok(x509) => {
@@ -409,7 +401,7 @@ pub(crate) unsafe fn cert_read_der(der: *const u8, len: usize, cert: *mut Cert) 
 /// A DER or a PEM certificate in `buf`, as cert_read_file() takes one
 /// from a file, into `cert`: 0 or -EINVAL.
 pub(crate) fn cert_read_memory(buf: &[u8], cert: &mut Cert) -> c_int {
-    cert.imp = ptr::null_mut();
+    cert.imp = None;
     if buf.len() > c_int::MAX as usize {
         return -EINVAL;
     }
@@ -432,7 +424,7 @@ pub(crate) unsafe fn cert_read_file(path: *const c_char, cert: *mut Cert) -> c_i
     // SAFETY: the caller's cert.
     let cert = unsafe { &mut *cert };
 
-    cert.imp = ptr::null_mut();
+    cert.imp = None;
     // SAFETY: the caller's C string.
     match read_x509(unsafe { CStr::from_ptr(path) }) {
         Ok(x509) => {
@@ -464,11 +456,7 @@ pub(crate) unsafe fn cert_read_fd(fd: BorrowedFd<'_>, cert: *mut Cert) -> c_int 
 pub(crate) unsafe fn cert_free(cert: *mut Cert) {
     // SAFETY: the caller passes NULL or a cert.
     if let Some(cert) = unsafe { cert.as_mut() } {
-        if !cert.imp.is_null() {
-            // SAFETY: the certificate the cert holds, freed once.
-            drop(unsafe { X509::from_ptr(cert.imp) });
-        }
-        cert.imp = ptr::null_mut();
+        cert.imp = None;
     }
 }
 
