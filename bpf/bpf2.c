@@ -1154,6 +1154,13 @@ static __always_inline int shirudo_propagation(struct mount *target,
 	__u32 zero = 0;
 	int i;
 
+	/*
+	 * The kernel refuses to move a mount whose parent is shared, so a
+	 * request to share only restores what this guard keeps. Tools ask
+	 * for it on directories below the ancestry: ip netns on /run/netns.
+	 */
+	if (type == SHIRUDO_MS_SHARED)
+		return 0;
 	rec = bpf_map_lookup_elem(&shirudo_mnt_rec, &zero);
 	if (!rec)
 		return 0;
@@ -1164,8 +1171,7 @@ static __always_inline int shirudo_propagation(struct mount *target,
 		goto deny;
 	if ((__u64)ns != rec->mount_ns)
 		return 0;
-	if ((__u32)bpf_get_current_pid_tgid() == 1 &&
-	    (type == SHIRUDO_MS_SHARED || shirudo_initrd_pid1(rec)))
+	if (shirudo_initrd_pid1(rec))
 		return 0;
 	bpf_for(i, 0, MOUNT_DEPTH_MAX) {
 		if (m == target)

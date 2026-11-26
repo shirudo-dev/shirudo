@@ -78,6 +78,59 @@ test_expect_success 'the runtime command can check initialization after switch-r
 	[ "$(status_field tpm.bound_in)" = initrd ]
 '
 
+# Any caller may ask for the shared state the guard keeps, and none but
+# PID 1 in the initrd for another. A change the guard let through is
+# undone before the case fails.
+check_propagation_requests()
+{
+	python3 - <<'PY'
+import ctypes as c
+import errno
+
+libc = c.CDLL(None, use_errno=True)
+target = b"/run/shirudo/bpffs"
+private = 1 << 18
+shared = 1 << 20
+
+def legacy(kind):
+    return libc.mount(None, target, None, c.c_ulong(kind), None)
+
+c.set_errno(0)
+result = legacy(shared)
+assert result == 0, (result, c.get_errno())
+c.set_errno(0)
+result = legacy(private)
+err = c.get_errno()
+if result == 0:
+    legacy(shared)
+assert result == -1 and err == errno.EPERM, (result, err)
+PY
+}
+
+# ip netns add shares /run/netns before that is a mount. The request has
+# to reach the kernel, which refuses a path that is no mount root.
+share_plain_directory()
+{
+	python3 - "$1" <<'PY'
+import ctypes as c
+import errno
+import os
+import sys
+
+libc = c.CDLL(None, use_errno=True)
+# MS_SHARED | MS_REC
+result = libc.mount(None, os.fsencode(sys.argv[1]), None, c.c_ulong(1 << 20 | 1 << 14), None)
+assert result == -1 and c.get_errno() == errno.EINVAL, (result, c.get_errno())
+PY
+}
+
+bpffs_mount_refusals()
+{
+	"$SHIRUDO_BIN" status --json 2>/dev/null | python3 -c '
+import json, sys
+print(json.load(sys.stdin)["tamper_attempts"]["counters"]["BpffsMount"])'
+}
+
 # The QEMU TPM suite enables just this syscall exit at boot. A successful
 # service alone could also mean systemd used its move-mount fallback.
 if grep -qw 'trace_event=syscalls:sys_exit_pivot_root' /proc/cmdline; then
@@ -92,6 +145,21 @@ if grep -qw 'trace_event=syscalls:sys_exit_pivot_root' /proc/cmdline; then
 		for path in / /run /run/shirudo /run/shirudo/bpffs; do
 			findmnt -n -o PROPAGATION -T "$path" | grep -qw shared || return 1
 		done
+	'
+
+	test_expect_success 'a non-init caller can share the bpffs again and nothing else through mount(2)' '
+		before=$(bpffs_mount_refusals) &&
+		check_propagation_requests &&
+		[ "$(bpffs_mount_refusals)" -gt "$before" ] &&
+		findmnt -n -o PROPAGATION -T /run/shirudo/bpffs | grep -qw shared
+	'
+
+	test_expect_success 'sharing a plain directory under /run reaches the kernel with no refusal counted' '
+		before=$(bpffs_mount_refusals) &&
+		mkdir /run/t4101-plain &&
+		share_plain_directory /run/t4101-plain &&
+		rmdir /run/t4101-plain &&
+		[ "$(bpffs_mount_refusals)" = "$before" ]
 	'
 fi
 

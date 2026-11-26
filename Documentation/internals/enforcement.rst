@@ -418,8 +418,9 @@ Hooks in bpf2
      - Closed.
    * - ``lsm/sb_mount``
      - A mount onto the bpffs or runtime image. A legacy propagation
-       change on the bpffs or its ancestry, with the host PID 1
-       exceptions for the initrd handoff and restoring shared mounts.
+       change on the bpffs or its ancestry other than to shared, which
+       every caller may request, with the host PID 1 exception for the
+       initrd handoff.
        A mount onto a
        path in ``/run/shirudo`` or on a config image to a task without
        authority. The source of a bind or legacy move is not checked.

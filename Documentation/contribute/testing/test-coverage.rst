@@ -415,7 +415,11 @@ signed config image.
      - The production configuration: ``init`` from the initrd, its
        messages in the journal once, adoption, PCR 11 after the binding,
        pins under ``/run``, a successful PID 1 pivot in the TPM guest,
-       shared propagation and unchanged mount tamper counts
+       shared propagation and unchanged boot mount tamper counts. A
+       task other than PID 1 may share the bpffs again and may not make
+       it private, through ``mount(2)``. Sharing a plain directory
+       under ``/run``, as ``ip netns add`` does, gets the kernel's
+       ``EINVAL`` and no ``BpffsMount`` count
    * - ``t4102-tpm-chain``
      - Replay, measured load and unload, evidence from the VM's TPM,
        challenges with ECC and RSA endorsement keys
