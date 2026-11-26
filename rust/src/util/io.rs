@@ -15,11 +15,11 @@ use crate::ffi;
 use crate::heap::xmalloc;
 use crate::sys::libc::Zeroed;
 use crate::sys::libc::{
-    AT_EMPTY_PATH, AT_SYMLINK_NOFOLLOW, Dir, File, LOCK_EX, O_CLOEXEC, O_DIRECTORY, O_NOFOLLOW,
-    O_NONBLOCK, O_PATH, O_RDONLY, PATH_MAX, S_IFDIR, S_IFLNK, S_IFMT, S_IFREG, S_ISVTX,
-    STATX_ATTR_MOUNT_ROOT, STATX_BASIC_STATS, Statfs, Statx, close, closedir, errno, fdopendir,
-    flock, fstatfs, fsync, ftruncate, geteuid, getline, open, openat, pread, readdir, readlinkat,
-    set_errno, statx, syscall, write,
+    AT_EMPTY_PATH, AT_SYMLINK_NOFOLLOW, Dir, File, LOCK_EX, O_CLOEXEC, O_CREAT, O_DIRECTORY,
+    O_EXCL, O_NOFOLLOW, O_NONBLOCK, O_PATH, O_RDONLY, PATH_MAX, S_IFDIR, S_IFLNK, S_IFMT, S_IFREG,
+    S_ISVTX, STATX_ATTR_MOUNT_ROOT, STATX_BASIC_STATS, Statfs, Statx, close, closedir, errno,
+    fdopendir, flock, fstatfs, fsync, ftruncate, geteuid, getline, open, openat, pread, readdir,
+    readlinkat, set_errno, statx, syscall, write,
 };
 use crate::util::seal;
 use core::ptr::NonNull;
@@ -286,7 +286,7 @@ pub(crate) fn append_line(fd: BorrowedFd<'_>, path: &CStr, line: &[u8]) -> Resul
 /// close-on-exec, through no symlink, no magic link and nothing outside
 /// it: -EINVAL for an empty or absolute `rel`, or -errno.
 pub(crate) fn open_beneath(dirfd: c_int, rel: &CStr, flags: c_int) -> Result<OwnedFd, c_int> {
-    open_resolved(dirfd, rel, flags, 0)
+    open_resolved(dirfd, rel, flags, 0, 0)
 }
 
 /// As open_beneath, also refusing a mount or bind mount below dirfd.
@@ -295,13 +295,30 @@ pub(crate) fn open_beneath_same_mount(
     rel: &CStr,
     flags: c_int,
 ) -> Result<OwnedFd, c_int> {
-    open_resolved(dirfd, rel, flags, RESOLVE_NO_XDEV)
+    open_resolved(dirfd, rel, flags, 0, RESOLVE_NO_XDEV)
 }
 
-fn open_resolved(dirfd: c_int, rel: &CStr, flags: c_int, resolve: u64) -> Result<OwnedFd, c_int> {
+/// A new file under `dirfd`, on its mount and with `mode`. The name must
+/// not already exist.
+pub(crate) fn create_beneath_same_mount(
+    dirfd: c_int,
+    rel: &CStr,
+    flags: c_int,
+    mode: u32,
+) -> Result<OwnedFd, c_int> {
+    open_resolved(dirfd, rel, flags | O_CREAT | O_EXCL, mode, RESOLVE_NO_XDEV)
+}
+
+fn open_resolved(
+    dirfd: c_int,
+    rel: &CStr,
+    flags: c_int,
+    mode: u32,
+    resolve: u64,
+) -> Result<OwnedFd, c_int> {
     let how = OpenHow {
         flags: flags as u64 | O_CLOEXEC as u64,
-        mode: 0,
+        mode: if flags & O_CREAT != 0 { mode.into() } else { 0 },
         resolve: RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS | resolve,
     };
 

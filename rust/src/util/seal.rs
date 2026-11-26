@@ -28,7 +28,8 @@ use crate::sys::libc::{
 };
 use crate::sys::libc::{Statfs, Zeroed};
 use crate::util::io::{
-    append_line, close_checked, lock_exclusive, open_beneath_same_mount, stat_fd, write_complete,
+    append_line, close_checked, create_beneath_same_mount, lock_exclusive, open_beneath_same_mount,
+    stat_fd, write_complete,
 };
 
 /// XATTR_SEAL: the attribute bpf/seal.c reads.
@@ -509,19 +510,74 @@ pub(crate) fn open_child(
     Ok(fd)
 }
 
+/// Make one direct child directory or take the existing one. The opened
+/// directory stays on `parent`'s mount and must carry its seal.
+pub(crate) fn mkdir_child(
+    parent: BorrowedFd<'_>,
+    name: &CStr,
+    mode: u32,
+    exclusive: bool,
+) -> Result<OwnedFd, c_int> {
+    if !child_name_ok(name) {
+        return Err(-EINVAL);
+    }
+    let created = mkdir_at(parent, name, mode)?;
+    if !created && exclusive {
+        return Err(-EEXIST);
+    }
+    let fd = open_beneath_same_mount(parent.as_raw_fd(), name, O_RDONLY | O_DIRECTORY)?;
+    if created {
+        inherit(parent, fd.as_fd())?;
+    } else {
+        same(parent, fd.as_fd())?;
+    }
+    Ok(fd)
+}
+
 /// Create a direct child directory if missing, then open only a sealed
-/// child on this mount. With enforcement active, inode_init_security gives
-/// new children the parent's label.
+/// child on this mount.
 pub(crate) fn open_or_create_child_dir(
     parent: BorrowedFd<'_>,
     name: &CStr,
     mode: u32,
 ) -> Result<OwnedFd, c_int> {
+    mkdir_child(parent, name, mode, false)
+}
+
+/// Open one regular child file, making and labelling it when requested.
+/// An existing file is checked before it can be truncated.
+#[allow(dead_code)] // The package installation port uses this helper next.
+pub(crate) fn create_child(
+    parent: BorrowedFd<'_>,
+    name: &CStr,
+    flags: c_int,
+    mode: u32,
+) -> Result<OwnedFd, c_int> {
     if !child_name_ok(name) {
         return Err(-EINVAL);
     }
-    mkdir_at(parent, name, mode)?;
-    open_child(parent, name, O_RDONLY | O_DIRECTORY)
+    let existing = open_beneath_same_mount(
+        parent.as_raw_fd(),
+        name,
+        O_NONBLOCK | (flags & !(O_CREAT | O_EXCL | O_TRUNC)),
+    );
+    match existing {
+        Ok(_) if flags & O_EXCL != 0 => Err(-EEXIST),
+        Ok(fd) => {
+            regular(fd.as_fd())?;
+            same(parent, fd.as_fd())?;
+            if flags & O_TRUNC != 0 {
+                truncate(fd.as_fd())?;
+            }
+            Ok(fd)
+        }
+        Err(err) if err == -ENOENT && flags & O_CREAT != 0 => {
+            let fd = create_beneath_same_mount(parent.as_raw_fd(), name, flags, mode)?;
+            inherit(parent, fd.as_fd())?;
+            Ok(fd)
+        }
+        Err(err) => Err(err),
+    }
 }
 
 /// The directory that holds `path`, opened as [`open_dir`] does, and the
