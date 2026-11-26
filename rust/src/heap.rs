@@ -71,7 +71,7 @@ static ALLOCATOR: Scrubbing = Scrubbing;
 /// The xmalloc family's allocator, for memory that C code frees or
 /// hands over and that Rust code hands to C: zeroed when it is given out
 /// and scrubbed when it comes back, as every Rust allocation is.
-pub(crate) use capi::{libc_free, xcalloc, xfree, xmalloc, xreallocarray, xstrfree, xstrndup};
+pub(crate) use capi::{libc_free, xcalloc, xfree, xmalloc, xstrfree, xstrndup};
 
 mod capi {
     use core::ffi::{c_char, c_void};
@@ -103,44 +103,6 @@ mod capi {
             Some(bytes) => unsafe { xmalloc(bytes) },
             None => ptr::null_mut(),
         }
-    }
-
-    /// A fresh zeroed block of `new_nmemb * size` bytes holding what fits
-    /// of `ptr`'s `old_nmemb * size`, which it scrubs and frees, so that
-    /// nothing lingers where a realloc would shrink in place or move.
-    /// NULL, leaving `ptr` alone, when a size overflows or the allocation
-    /// fails.
-    ///
-    /// # Safety
-    ///
-    /// `ptr` is NULL or a block of `old_nmemb * size` bytes from this
-    /// allocator, which the caller stops using on success.
-    pub unsafe extern "C" fn xreallocarray(
-        old: *mut c_void,
-        old_nmemb: usize,
-        new_nmemb: usize,
-        size: usize,
-    ) -> *mut c_void {
-        let (Some(old_size), Some(new_size)) =
-            (old_nmemb.checked_mul(size), new_nmemb.checked_mul(size))
-        else {
-            return ptr::null_mut();
-        };
-        // SAFETY: a size alone.
-        let new = unsafe { xmalloc(new_size) };
-        if !new.is_null() && !old.is_null() {
-            // SAFETY: the caller's block and the new one, each holding
-            // the bytes copied; the old one goes.
-            unsafe {
-                ptr::copy_nonoverlapping(
-                    old.cast::<u8>(),
-                    new.cast::<u8>(),
-                    old_size.min(new_size),
-                );
-                xfree(old, old_size);
-            }
-        }
-        new
     }
 
     /// A copy of at most `n` bytes of the C string `s`, NUL-terminated,

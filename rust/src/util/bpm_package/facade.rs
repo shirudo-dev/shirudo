@@ -157,9 +157,7 @@ pub(crate) fn fetch_document(
     if ret != 0 {
         return Err(ret);
     }
-    // SAFETY: the payload's len bytes, copied before it is freed.
-    let document = unsafe { crate::ffi::slice(payload.data, payload.len) }.to_vec();
-    crate::util::bpm_oci::buffer_free(&mut payload);
+    let document = payload.bytes().to_vec();
     Ok((document, crate::text::cstr(&digest).to_vec()))
 }
 

@@ -22,7 +22,6 @@ use crate::errno::{
     E2BIG, EACCES, EFBIG, EHOSTUNREACH, EINVAL, EKEYREJECTED, ENAMETOOLONG, ENOENT, ENOMEM,
 };
 use crate::ffi;
-use crate::heap::{xfree, xreallocarray};
 use crate::sys::curl::{
     CURL_ERROR_SIZE, CURLE_FILESIZE_EXCEEDED, CURLE_OK, CURLOPT_CONNECTTIMEOUT,
     CURLOPT_CUSTOMREQUEST, CURLOPT_FOLLOWLOCATION, CURLOPT_HTTPGET, CURLOPT_LOW_SPEED_LIMIT,
@@ -79,26 +78,21 @@ pub(super) struct FileSink {
 
 /// The bytes a buffer holds, none when it has no allocation.
 pub(super) fn buffer_bytes(b: &BpmBuffer) -> &[u8] {
-    // SAFETY: a buffer holds len bytes at data, or data is NULL.
-    unsafe { ffi::slice(b.data, if b.data.is_null() { 0 } else { b.len }) }
+    b.bytes()
 }
 
 pub(crate) fn buffer_free(b: &mut BpmBuffer) {
-    // SAFETY: data is NULL or the cap bytes the xmalloc family gave.
-    unsafe { xfree(b.data.cast(), b.cap) };
     *b = BpmBuffer::new();
 }
 
 fn buffer_append(b: &mut BpmBuffer, data: &[u8]) -> c_int {
-    let len = data.len();
-
-    if len >= MAX_HTTP_BODY - b.len {
+    let len = b.bytes().len();
+    if data.len() >= MAX_HTTP_BODY - len {
         return -E2BIG;
     }
-    let want = b.len + len;
-    if want + 1 > b.cap {
-        let mut cap = if b.cap != 0 { b.cap } else { 4096 };
-
+    let want = len + data.len();
+    if want + 1 > b.data.capacity() {
+        let mut cap = b.data.capacity().max(4096);
         while cap <= want {
             if cap > MAX_HTTP_BODY / 2 {
                 cap = MAX_HTTP_BODY;
@@ -106,22 +100,13 @@ fn buffer_append(b: &mut BpmBuffer, data: &[u8]) -> c_int {
             }
             cap *= 2;
         }
-        // SAFETY: data is NULL or the cap bytes the xmalloc family gave,
-        // and a failed call leaves it alone.
-        let grown = unsafe { xreallocarray(b.data.cast(), b.cap, cap, 1) };
-        if grown.is_null() {
+        if b.data.try_reserve_exact(cap - b.data.len()).is_err() {
             return -ENOMEM;
         }
-        b.data = grown.cast();
-        b.cap = cap;
     }
-    // SAFETY: the buffer holds cap > want bytes, of which data fills
-    // len from b.len and the NUL the next.
-    unsafe {
-        ptr::copy_nonoverlapping(data.as_ptr(), b.data.add(b.len), len);
-        b.len = want;
-        b.data.add(want).write(0);
-    }
+    b.data.resize(want + 1, 0);
+    b.data[len..want].copy_from_slice(data);
+    b.data[want] = 0;
     0
 }
 
@@ -838,16 +823,15 @@ pub(crate) fn get_signed(
         if ret != 0 {
             return ret;
         }
-        // SAFETY: the buffer the GET filled, len bytes at data.
-        let got = unsafe { crate::ffi::slice(dst.data, dst.len) };
-        if (layer.size >= 0 && dst.len as i64 != layer.size)
+        let got = dst.bytes();
+        if (layer.size >= 0 && got.len() as i64 != layer.size)
             || sha256_hex(got, &mut hex) != 0
             || !digest_matches(cstr(&layer.digest), cstr(&hex))
         {
             return -EKEYREJECTED;
         }
     }
-    if !payload.data.is_null() && !sig.data.is_null() {
+    if payload.has_data() && sig.has_data() {
         0
     } else {
         -EINVAL

@@ -8,7 +8,6 @@ use core::ffi::{CStr, c_int};
 use std::os::fd::BorrowedFd;
 
 use crate::errno::{EBADMSG, EINVAL, ENAMETOOLONG, ENOMEM};
-use crate::ffi;
 use crate::sys::libc::PATH_MAX;
 use crate::text::{contains, cstr, strsprintf};
 use crate::util::bpm_oci::{
@@ -128,13 +127,6 @@ struct Fetch {
     layers: Vec<Descriptor>,
 }
 
-impl Drop for Fetch {
-    fn drop(&mut self) {
-        buffer_free(&mut self.manifest);
-        buffer_free(&mut self.sig);
-    }
-}
-
 /// The signed tree publication at `repository:reference`, a tag or a
 /// manifest digest, its manifest exactly [`tree_manifest`] of its two
 /// layers, every layer checked against its descriptor and the payload
@@ -209,8 +201,7 @@ fn fetch_checked(
     if manifest_digest.len() < 72 {
         return -ENAMETOOLONG;
     }
-    // SAFETY: the fetch filled len bytes at data.
-    let manifest = unsafe { ffi::slice(f.manifest.data, f.manifest.len) };
+    let manifest = f.manifest.bytes();
     if sha256_hex(manifest, &mut hex) != 0 {
         return -EINVAL;
     }
@@ -249,23 +240,16 @@ fn fetch_checked(
         return ret;
     }
     match trusted {
-        // SAFETY: the payload's and the signature's len bytes.
-        Some(set) => unsafe {
-            verify_signature(
-                set,
-                ffi::slice(payload.data, payload.len),
-                ffi::slice(f.sig.data, f.sig.len),
-            )
-        }
-        .err()
-        .unwrap_or(0),
+        Some(set) => verify_signature(set, payload.bytes(), f.sig.bytes())
+            .err()
+            .unwrap_or(0),
         None => match cert_path {
             Some(cert_path) => verify_cms(
                 &Signed {
-                    payload: payload.data,
-                    payload_len: payload.len,
-                    sig: f.sig.data,
-                    sig_len: f.sig.len,
+                    payload: payload.as_ptr(),
+                    payload_len: payload.bytes().len(),
+                    sig: f.sig.as_ptr(),
+                    sig_len: f.sig.bytes().len(),
                 },
                 cert_path,
             ),

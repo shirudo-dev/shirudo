@@ -116,27 +116,17 @@ impl Drop for Client {
     }
 }
 
-/// A body the client fetched, which the xmalloc family holds.
+/// A body the client fetched.
 pub(crate) struct Buffer(BpmBuffer);
 
 impl Buffer {
     /// Whether the fetch allocated a body at all.
     pub(crate) fn has_data(&self) -> bool {
-        !self.0.data.is_null()
+        self.0.has_data()
     }
 
     pub(crate) fn bytes(&self) -> &[u8] {
-        if self.0.data.is_null() {
-            return &[];
-        }
-        // SAFETY: a fetched body holds len bytes at data.
-        unsafe { core::slice::from_raw_parts(self.0.data, self.0.len) }
-    }
-}
-
-impl Drop for Buffer {
-    fn drop(&mut self) {
-        http::buffer_free(&mut self.0);
+        self.0.bytes()
     }
 }
 

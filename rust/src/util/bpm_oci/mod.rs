@@ -45,13 +45,9 @@ const BASIC_ENCODED_SIZE: usize = 4 * BASIC_RAW_SIZE.div_ceil(3) + 1;
 const AUTH_VALUE_SIZE: usize = BASIC_ENCODED_SIZE + "Basic ".len() + 1;
 const BASIC_HEADER_SIZE: usize = AUTH_VALUE_SIZE + "Authorization: ".len();
 
-/// `struct bpm_buffer`: `len` bytes and a NUL in `cap`, which the xmalloc
-/// family allocates and `bpm_buffer_free()` releases.
-#[repr(C)]
+/// A downloaded body. The final byte is NUL when the body was fetched.
 pub struct BpmBuffer {
-    pub(crate) data: *mut u8,
-    pub(crate) len: usize,
-    cap: usize,
+    pub(super) data: Vec<u8>,
 }
 
 struct HttpResponse {
@@ -82,16 +78,31 @@ pub struct Descriptor {
     size: i64,
 }
 
-const _: () = assert!(size_of::<BpmBuffer>() == 24);
 const _: () = assert!(size_of::<OciClient>() == 13568);
 const _: () = assert!(size_of::<Descriptor>() == 4424);
 
 impl BpmBuffer {
     pub(crate) const fn new() -> Self {
-        BpmBuffer {
-            data: core::ptr::null_mut(),
-            len: 0,
-            cap: 0,
+        Self { data: Vec::new() }
+    }
+
+    pub(crate) fn has_data(&self) -> bool {
+        !self.data.is_empty()
+    }
+
+    pub(crate) fn bytes(&self) -> &[u8] {
+        if self.data.is_empty() {
+            &[]
+        } else {
+            &self.data[..self.data.len() - 1]
+        }
+    }
+
+    pub(crate) fn as_ptr(&self) -> *const u8 {
+        if self.has_data() {
+            self.data.as_ptr()
+        } else {
+            core::ptr::null()
         }
     }
 }
