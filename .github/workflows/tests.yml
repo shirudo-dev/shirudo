@@ -5,6 +5,9 @@ on:
     branches:
       - main
   pull_request:
+  # The merge queue runs none of these tests: the pull request ran them on
+  # its changes and the push to main runs them on the result. Its run only
+  # passes the checks the queue requires.
   merge_group:
     types: [checks_requested]
   workflow_dispatch:
@@ -30,6 +33,7 @@ concurrency:
 jobs:
   kernel-plan:
     name: Select the test kernel
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     outputs:
       build: ${{ steps.select.outputs.build }}
@@ -43,7 +47,7 @@ jobs:
       - name: Check whether the kernel inputs changed
         id: select
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           KERNEL_RUN_ID: ${{ inputs.kernel_run_id }}
         run: sh .github/scripts/select-test-kernel.sh
 
@@ -52,6 +56,10 @@ jobs:
     if: needs.kernel-plan.outputs.build == 'true'
     uses: ./.github/workflows/build-kernel-packages.yml
 
+  # A matrix job skipped as a whole reports one check, under none of its
+  # entries' names, and the merge queue waits for each of those. In the
+  # queue the job runs instead with every step skipped; the uploads and
+  # saves that follow the tests find nothing to keep.
   tests:
     needs: [kernel-plan, kernel-build]
     if: ${{ !cancelled() }}
@@ -96,22 +104,24 @@ jobs:
     steps:
       - name: Require successful kernel preparation
         if: >-
-          needs.kernel-plan.result != 'success' ||
-          (needs.kernel-plan.outputs.build == 'true' && needs.kernel-build.result != 'success')
+          github.event_name != 'merge_group' &&
+          (needs.kernel-plan.result != 'success' ||
+           (needs.kernel-plan.outputs.build == 'true' && needs.kernel-build.result != 'success'))
         run: /usr/bin/false
 
       - name: Check out repository
+        if: github.event_name != 'merge_group'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download the kernel built for this run
-        if: needs.kernel-plan.outputs.build == 'true'
+        if: github.event_name != 'merge_group' && needs.kernel-plan.outputs.build == 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: kernel-packages-x86-64-ci
           path: build/kernel-ci-artifact
 
       - name: Download the pinned or selected kernel
-        if: needs.kernel-plan.outputs.build != 'true'
+        if: github.event_name != 'merge_group' && needs.kernel-plan.outputs.build != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           KERNEL_RUN_ID: ${{ inputs.kernel_run_id }}
@@ -119,7 +129,7 @@ jobs:
         run: testing/vm/kernel-artifact.sh download
 
       - name: Restore the static target dependencies
-        if: matrix.vm == '1'
+        if: github.event_name != 'merge_group' && matrix.vm == '1'
         id: target-deps
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -127,6 +137,7 @@ jobs:
           key: target-deps-${{ hashFiles('Makefile.target-deps') }}
 
       - name: Restore the host OpenSSL toolchain
+        if: github.event_name != 'merge_group'
         id: host-openssl
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -134,6 +145,7 @@ jobs:
           key: host-openssl-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/vm-toolchain.sh') }}
 
       - name: Restore the host libtpms toolchain
+        if: github.event_name != 'merge_group'
         id: host-libtpms
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -141,7 +153,7 @@ jobs:
           key: host-libtpms-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/vm-toolchain.sh', '.github/scripts/install-libtpms.sh') }}
 
       - name: Restore the VM images
-        if: matrix.vm == '1'
+        if: github.event_name != 'merge_group' && matrix.vm == '1'
         id: images
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -149,13 +161,14 @@ jobs:
           key: test-vm-runtime-and-operator-${{ hashFiles('testing/vm/runtime-packages', 'testing/vm/operator-packages', 'testing/vm/prepare-runtime.sh', 'testing/vm/build-bundle.sh', 'testing/vm/arch.sh', '.github/scripts/install-clang.sh', '.github/scripts/install-static-libcrypto-deps.sh', 'testing/container/Containerfile', 'testing/container/packages', 'Makefile.target-deps') }}
 
       - name: Prepare the test environment
+        if: github.event_name != 'merge_group'
         id: setup
         env:
           KERNEL_CI_ARTIFACT_DIR: ${{ format('{0}/build/kernel-ci-artifact', github.workspace) }}
         run: .github/scripts/tests.sh setup
 
       - name: Run unit tests
-        if: matrix.suite == 'unit' || matrix.suite == 'host'
+        if: github.event_name != 'merge_group' && (matrix.suite == 'unit' || matrix.suite == 'host')
         env:
           SHIRUDO_SKIP_TREE_CHECKS: >-
             ${{ (github.event_name == 'pull_request' ||
@@ -163,11 +176,11 @@ jobs:
         run: .github/scripts/tests.sh run unit
 
       - name: Run host functional tests
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.suite == 'host' }}
+        if: ${{ github.event_name != 'merge_group' && !cancelled() && steps.setup.outcome == 'success' && matrix.suite == 'host' }}
         run: .github/scripts/tests.sh run functional
 
       - name: Run selected test suite
-        if: matrix.vm == '1'
+        if: github.event_name != 'merge_group' && matrix.vm == '1'
         id: suite
         env:
           TEST_SUITE: ${{ matrix.suite }}
@@ -217,6 +230,7 @@ jobs:
 
   backend:
     name: Backend SQL tests
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
 
     steps:
@@ -228,6 +242,7 @@ jobs:
 
   xtop:
     name: xtop tests
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
 
     steps:

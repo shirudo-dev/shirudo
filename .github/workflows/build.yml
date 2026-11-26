@@ -5,6 +5,9 @@ on:
     branches:
       - main
   pull_request:
+  # The merge queue builds with gcc and clang alone, which is where a
+  # change landing first most often breaks another. The pull request and
+  # the push to main run every job.
   merge_group:
     types: [checks_requested]
 
@@ -67,8 +70,10 @@ jobs:
             sh .github/scripts/check-static-target.sh \
               tools/quote-check/shirudo-quote-check
 
+  # Skipped in the merge queue, and scan-build with it.
   btf:
     name: bpf-next BTF
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -147,9 +152,14 @@ jobs:
           path: build/scan-build
           if-no-files-found: ignore
 
+  # A matrix job skipped as a whole reports one check, under none of its
+  # entries' names, and the merge queue waits for each of those. In the
+  # queue the job runs instead, without the BTF and with every step
+  # skipped.
   arch:
     name: ${{ matrix.arch }}
     needs: btf
+    if: ${{ !cancelled() && (needs.btf.result == 'success' || github.event_name == 'merge_group') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
 
@@ -166,22 +176,25 @@ jobs:
 
     steps:
       - name: Check out repository
+        if: github.event_name != 'merge_group'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download the kernel BTF
+        if: github.event_name != 'merge_group'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: bpf-next-btf
           path: build
 
       - name: Set up QEMU user emulation
-        if: matrix.arch == 'riscv64'
+        if: github.event_name != 'merge_group' && matrix.arch == 'riscv64'
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
           image: tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
           platforms: riscv64
 
       - name: Build and run the unit tests on Debian testing
+        if: github.event_name != 'merge_group'
         env:
           ARCH: ${{ matrix.arch }}
         run: >-
