@@ -12,6 +12,7 @@
 #include "eventlog.h"
 #include "io.h"
 #include "json.h"
+#include "measured.h"
 #include "unit.h"
 
 static char dir[4096], log_path[4200], pending_path[4200];
@@ -314,7 +315,26 @@ static void set_entry_takes_only_its_own_fields(void)
 	EXPECT_STREQ(s.last, "fix");
 }
 
+#define MIXED_DIGEST_HEX "Abababababababababababababababababababababababababababababababab"
+
+static void measured_set_uses_the_decoded_payload(void)
+{
+	static const char log[] =
+		"{\"type\":\"init\"}\n"
+		"{\"type\":\"upatch_load\",\"upatch\":{\"name\":\"fix\","
+		"\"payload_sha256\":\"" MIXED_DIGEST_HEX "\"}}\n";
+	struct measured_set *set;
+
+	use_log();
+	write_log(log, sizeof(log) - 1);
+	ASSERT_EQ(measured_set_log(&set), 0);
+	EXPECT_TRUE(measured_holds(set, "fix", DIGEST_HEX));
+	measured_set_free(set);
+	drop_log();
+}
+
 static const struct unit_case cases[] = {
+	UNIT_CASE(measured_set_uses_the_decoded_payload),
 	UNIT_CASE(unfinished_append_is_no_record),
 	UNIT_CASE(nul_in_the_log_is_refused),
 	UNIT_CASE(tree_op_measured_this_boot),

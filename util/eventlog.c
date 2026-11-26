@@ -634,16 +634,27 @@ struct upatches_set {
 	const struct json_field	*entry;
 };
 
+/* Pin and archive membership use the same bytes as measurement replay. */
+static int upatches_member(struct upatches_ctx *u, enum eventlog_upatch_event event)
+{
+	__u8 payload[UPATCH_PAYLOAD_HASH_LEN];
+
+	if (!upatch_name_valid(u->name) ||
+	    hex_decode(u->payload_hex, payload, sizeof(payload)))
+		return -EINVAL;
+	hex_encode(payload, sizeof(payload), u->payload_hex);
+	return u->cb(event, u->name, u->payload_hex, u->ctx);
+}
+
 /* The buffers are the upatch member's too: an entry names both itself. */
 static int upatches_set_entry(void *arg)
 {
 	struct upatches_set *s = arg;
 	struct upatches_ctx *u = s->u;
 
-	if (!s->entry[0].seen || !s->entry[1].seen ||
-	    !upatch_member_valid(u->name, u->payload_hex))
+	if (!s->entry[0].seen || !s->entry[1].seen)
 		return -EINVAL;
-	u->ret = u->cb(EVENTLOG_UPATCH_LOAD, u->name, u->payload_hex, u->ctx);
+	u->ret = upatches_member(u, EVENTLOG_UPATCH_LOAD);
 	u->name[0] = '\0';
 	u->payload_hex[0] = '\0';
 	return u->ret;
@@ -688,10 +699,9 @@ static int upatches_line(const char *line, size_t len, bool is_init,
 		return 0;
 	if (!eventlog_upatch_record_parse(type, &payload_type, &load))
 		return 0;
-	if (!f[2].seen || !upatch_member_valid(u->name, u->payload_hex))
+	if (!f[2].seen)
 		return -EINVAL;
-	return u->cb(load ? EVENTLOG_UPATCH_LOAD : EVENTLOG_UPATCH_UNLOAD,
-		     u->name, u->payload_hex, u->ctx);
+	return upatches_member(u, load ? EVENTLOG_UPATCH_LOAD : EVENTLOG_UPATCH_UNLOAD);
 }
 
 int eventlog_boot_upatches(int (*cb)(enum eventlog_upatch_event event,

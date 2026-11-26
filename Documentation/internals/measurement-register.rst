@@ -368,6 +368,10 @@ failure or a stop between two of them leaves.
    Figure 3. The steps of a load, an unload and a purge, the span each
    holds the register lock, and what an interruption leaves.
 
+The eventlog reader decodes each payload digest and gives the measured set
+its lowercase spelling. A pin and a log record with the same digest bytes
+therefore agree even when a record uses uppercase hex digits.
+
 A load changes the target before it measures, and an unload or a purge
 measures before it changes it. A load that fails before its event can
 then be undone, so no upatch runs unmeasured, and a stopped unload
