@@ -28,15 +28,46 @@ use crate::sys::curl::{
     CURLOPT_CUSTOMREQUEST, CURLOPT_FOLLOWLOCATION, CURLOPT_HTTPGET, CURLOPT_LOW_SPEED_LIMIT,
     CURLOPT_LOW_SPEED_TIME, CURLOPT_MAXFILESIZE_LARGE, CURLOPT_MAXREDIRS, CURLOPT_NOBODY,
     CURLOPT_NOSIGNAL, CURLOPT_PROTOCOLS_STR, CURLOPT_REDIR_PROTOCOLS_STR, CURLOPT_SSL_VERIFYHOST,
-    CURLOPT_SSL_VERIFYPEER, CURLOPT_TIMEOUT, CURLOPT_UNRESTRICTED_AUTH, CURLOPT_URL, CurlCode,
-    CurlOff,
+    CURLOPT_SSL_VERIFYPEER, CURLOPT_TIMEOUT, CURLOPT_UNRESTRICTED_AUTH, CURLOPT_URL,
+    CURLU_DEFAULT_PORT, CURLUE_NO_ZONEID, CURLUPART_HOST, CURLUPART_PORT, CURLUPART_SCHEME,
+    CURLUPART_ZONEID, CurlCode, CurlOff, CurlUPart,
 };
 use crate::sys::libc::{self, SEEK_SET, scrub};
 use crate::util::crypto_openssl::sha256;
-use crate::util::curl::{Easy, Slist, strerror};
+use crate::util::curl::{Easy, Slist, Url, strerror};
 use crate::util::hex::encode;
 use crate::util::io::write_complete;
 use crate::util::tls_openssl::tls_curl_policy;
+
+/// Whether libcurl gives both URLs the same origin part. A missing
+/// IPv6 zone matches only another missing zone.
+fn origin_part_matches(registry: &Url, peer: &Url, part: CurlUPart) -> bool {
+    let a = registry.part_with_flags(part, CURLU_DEFAULT_PORT);
+    let b = peer.part_with_flags(part, CURLU_DEFAULT_PORT);
+    if part == CURLUPART_ZONEID {
+        return match (a, b) {
+            (Ok(a), Ok(b)) => a == b,
+            (Err(CURLUE_NO_ZONEID), Err(CURLUE_NO_ZONEID)) => true,
+            _ => false,
+        };
+    }
+    matches!((a, b), (Ok(a), Ok(b)) if a.eq_ignore_ascii_case(&b))
+}
+
+/// The configured registry, as the origin of `peer`: scheme, host,
+/// effective port and IPv6 zone must all agree.
+pub(super) fn registry_origin(base: &[u8], peer: Option<&[u8]>) -> bool {
+    let Some(peer) = peer else {
+        return false;
+    };
+    let (Ok(registry), Ok(peer)) = (Url::parse_no_user(base), Url::parse_no_user(peer)) else {
+        return false;
+    };
+    origin_part_matches(&registry, &peer, CURLUPART_SCHEME)
+        && origin_part_matches(&registry, &peer, CURLUPART_HOST)
+        && origin_part_matches(&registry, &peer, CURLUPART_PORT)
+        && origin_part_matches(&registry, &peer, CURLUPART_ZONEID)
+}
 
 /// A download bounded by the size its manifest declares.
 pub(super) struct FileSink {
@@ -172,6 +203,11 @@ fn skip_space(s: &[u8]) -> &[u8] {
 pub(super) fn header_line(r: &mut HttpResponse, line: &[u8]) {
     const HEADER_LINE_MAX: usize = 4096;
 
+    if starts_with_ci(line, b"HTTP/") {
+        r.www_auth[0] = 0;
+        r.location[0] = 0;
+        return;
+    }
     if line.len() >= HEADER_LINE_MAX || line.contains(&0) {
         return;
     }
@@ -328,8 +364,15 @@ fn curl_once(
     }
     let cc = easy.perform();
     let mut status = easy.response_code().unwrap_or(0);
-    drop(easy);
     r.status = status;
+    if r.www_auth[0] != 0
+        && (status != 401
+            || !registry_origin(cstr(&c.base_url), Some(req.url.to_bytes()))
+            || !registry_origin(cstr(&c.base_url), easy.effective_url().map(CStr::to_bytes)))
+    {
+        r.www_auth[0] = 0;
+    }
+    drop(easy);
     if cc != CURLE_OK {
         log_failure(req.url, &errbuf, cc);
         status = -1;

@@ -132,11 +132,16 @@ pub const CURLINFO_RESPONSE_CODE: c_int = 0x200002;
 pub const CURLUE_OK: CurlUCode = 0;
 pub const CURLUE_NO_USER: CurlUCode = 11;
 pub const CURLUE_NO_PASSWORD: CurlUCode = 12;
+pub const CURLUE_NO_ZONEID: CurlUCode = 18;
+pub const CURLU_DEFAULT_PORT: c_uint = 1 << 0;
+pub const CURLU_DISALLOW_USER: c_uint = 1 << 5;
 pub const CURLUPART_URL: CurlUPart = 0;
 pub const CURLUPART_SCHEME: CurlUPart = 1;
 pub const CURLUPART_USER: CurlUPart = 2;
 pub const CURLUPART_PASSWORD: CurlUPart = 3;
 pub const CURLUPART_HOST: CurlUPart = 5;
+pub const CURLUPART_PORT: CurlUPart = 6;
+pub const CURLUPART_ZONEID: CurlUPart = 10;
 
 // The binaries link libcurl themselves; the crate's tests, which rustc
 // links, name it.

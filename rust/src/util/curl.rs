@@ -7,7 +7,7 @@
 //! curl_slist_append() takes, so a Basic or bearer authorization would
 //! outlive the buffer its caller scrubbed, in freed heap memory.
 
-use core::ffi::{CStr, c_char, c_int, c_long, c_void};
+use core::ffi::{CStr, c_char, c_int, c_long, c_uint, c_void};
 use core::marker::PhantomData;
 use core::mem::ManuallyDrop;
 use core::ptr::{self, NonNull};
@@ -336,11 +336,20 @@ impl Url {
     /// `url` as libcurl parses it: -ENOMEM, or -EINVAL for a URL with a
     /// NUL in it or one libcurl refuses.
     pub(crate) fn parse(url: &[u8]) -> Result<Self, c_int> {
+        Self::parse_with_flags(url, 0)
+    }
+
+    /// Parse a URL that cannot carry a username or password.
+    pub(crate) fn parse_no_user(url: &[u8]) -> Result<Self, c_int> {
+        Self::parse_with_flags(url, crate::sys::curl::CURLU_DISALLOW_USER)
+    }
+
+    fn parse_with_flags(url: &[u8], flags: c_uint) -> Result<Self, c_int> {
         // SAFETY: a call that takes nothing.
         let u = Url(NonNull::new(unsafe { curl_url() }).ok_or(-ENOMEM)?);
         let url = CString::new(url).map_err(|_| -EINVAL)?;
         // SAFETY: the handle, and a C string, which libcurl copies.
-        if unsafe { curl_url_set(u.0.as_ptr(), CURLUPART_URL, url.as_ptr(), 0) } != CURLUE_OK {
+        if unsafe { curl_url_set(u.0.as_ptr(), CURLUPART_URL, url.as_ptr(), flags) } != CURLUE_OK {
             return Err(-EINVAL);
         }
         Ok(u)
@@ -348,9 +357,18 @@ impl Url {
 
     /// The part `what` of the URL, or libcurl's exact error.
     pub(crate) fn part(&self, what: CurlUPart) -> Result<Vec<u8>, CurlUCode> {
+        self.part_with_flags(what, 0)
+    }
+
+    /// The part `what` with libcurl URL-get flags, or its exact error.
+    pub(crate) fn part_with_flags(
+        &self,
+        what: CurlUPart,
+        flags: c_uint,
+    ) -> Result<Vec<u8>, CurlUCode> {
         let mut part: *mut c_char = ptr::null_mut();
         // SAFETY: the handle, and room for the C string libcurl allocates.
-        let code = unsafe { curl_url_get(self.0.as_ptr(), what, &mut part, 0) };
+        let code = unsafe { curl_url_get(self.0.as_ptr(), what, &mut part, flags) };
         if part.is_null() {
             return if code == CURLUE_OK {
                 Ok(Vec::new())
