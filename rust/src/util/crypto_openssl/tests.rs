@@ -22,3 +22,42 @@ fn sha256_buffer_zeroes_a_failed_digest() {
     assert_ne!(ret, 0);
     assert_eq!(out, [0; SHA256_LEN]);
 }
+
+#[test]
+fn archived_signers_remain_identifiable() {
+    let corpus = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../testing/fuzz/corpus/cms/cert-and-signature"
+    ))
+    .expect("CMS corpus entry");
+    assert!(corpus.len() > 2);
+    let der_len = usize::from(u16::from_le_bytes([corpus[0], corpus[1]]));
+    assert!(der_len < corpus.len() - 2);
+    let der = &corpus[2..2 + der_len];
+    let mut signature = corpus[2 + der_len..].to_vec();
+    let mut cert = Cert::new();
+
+    // SAFETY: der holds a complete certificate and cert receives it.
+    let read = unsafe { cert_read_der(der.as_ptr(), der.len(), &mut cert) };
+    assert_eq!(read, 0);
+    assert_eq!(cms_check_signers(&signature), 0);
+    // SAFETY: the signature bytes and the live certificate remain valid.
+    let signed_by = unsafe { cms_signed_by(signature.as_ptr(), signature.len(), &cert) };
+    assert_eq!(signed_by, 1);
+
+    signature.push(0);
+    assert_eq!(cms_check_signers(&signature), -EBADMSG);
+    // SAFETY: the signature bytes and the live certificate remain valid.
+    let signed_by = unsafe { cms_signed_by(signature.as_ptr(), signature.len(), &cert) };
+    assert_eq!(signed_by, -EINVAL);
+    // SAFETY: the signature bytes and the live certificate remain valid.
+    let archived = unsafe { cms_archive_signed_by(signature.as_ptr(), signature.len(), &cert) };
+    assert_eq!(archived, 1);
+
+    *signature.last_mut().expect("trailing byte") = 1;
+    // SAFETY: the signature bytes and the live certificate remain valid.
+    let archived = unsafe { cms_archive_signed_by(signature.as_ptr(), signature.len(), &cert) };
+    assert_eq!(archived, -EINVAL);
+    // SAFETY: cert owns the certificate read above.
+    unsafe { cert_free(&mut cert) };
+}
