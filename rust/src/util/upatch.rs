@@ -246,7 +246,7 @@ pub struct ProgSpec {
     pub(crate) uprobe_offsets: Vec<u64>,
     pub(crate) nr_uprobe_offsets: u32,
     /// Holds the bytes named by the pointers in `kprobe_syms`.
-    pub(crate) kprobe_sym_buf: Vec<u8>,
+    kprobe_sym_buf: Vec<u8>,
     pub(crate) kprobe_syms: Vec<*const c_char>,
     pub(crate) nr_kprobe_syms: u32,
     pub(crate) target_fd: c_int,
