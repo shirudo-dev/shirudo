@@ -685,6 +685,40 @@ PY
 		--cert "$FIXTURE_WORK/foreign/cert.der"
 }
 
+# The java-watch upatch of upatches/java-watch and its unload, and a Java
+# upatch of an agent that does nothing, whose jar is also a JVM to watch.
+build_java_watch_fixture()
+{
+	local builder="$REPO_ROOT/tools/shirudo-build/shirudo-build"
+	local trusted="$FIXTURE_WORK/trusted"
+	local out="$TMP_DIR/fixtures"
+	local agent=shirudo-test-java-watch
+	local payload
+
+	(
+		cd "$REPO_ROOT"
+		"$builder" upatches/java-watch/java-watch.bpf.c \
+			-o "$out/java-watch.upatch" --name java-watch \
+			--vmlinux "$REPO_ROOT/vendor/linux/vmlinux.h" \
+			--extra-cflags "-I$REPO_ROOT/vendor/libbpf" \
+			--key "$trusted/signing_key.pem" --cert "$trusted/cert.der"
+	)
+	payload="$("$REPO_ROOT/shirudo" upatch info "$out/java-watch.upatch" --json |
+		python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+	"$builder" --unload java-watch --payload-sha256 "$payload" \
+		-o "$out/java-watch.unload.upatch" \
+		--key "$trusted/signing_key.pem" --cert "$trusted/cert.der"
+
+	python3 -I "$REPO_ROOT/testing/fixtures/idle-agent.py" "$out/idle-agent.jar"
+	"$builder" "$out/idle-agent.jar" -o "$out/$agent.upatch" --name "$agent" \
+		--key "$trusted/signing_key.pem" --cert "$trusted/cert.der"
+	payload="$("$REPO_ROOT/shirudo" upatch info "$out/$agent.upatch" --json |
+		python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+	"$builder" --unload "$agent" --java --payload-sha256 "$payload" \
+		-o "$out/$agent.unload.upatch" \
+		--key "$trusted/signing_key.pem" --cert "$trusted/cert.der"
+}
+
 build_obs_fixture()
 {
 	local keys_dir="$1"
@@ -898,6 +932,7 @@ queue_fixture build_af_alg_block_fixture "$FIXTURE_WORK/trusted"
 queue_fixture build_alg_splice_block_fixture "$FIXTURE_WORK/trusted"
 queue_fixture build_copyfail_detector_fixture "$FIXTURE_WORK/trusted"
 queue_fixture build_java_fixture
+queue_fixture build_java_watch_fixture
 wait_fixture_jobs
 
 basic_payload="$($REPO_ROOT/shirudo upatch info \

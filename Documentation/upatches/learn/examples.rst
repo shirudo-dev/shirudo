@@ -12,8 +12,9 @@ The tree ships packages under :src:`upatches/`: ``kernel-obs``, a
 complete observability package with arena tables, serializers, decoders
 and generated ``.rodata``, in ``kernel-cve`` three small CVE
 detectors exported from a mitigation campaign and one CVE mitigation,
-each a package of its own, and ``app-sandbox``, which enforces with
-policy labels and generated ``.rodata``.
+each a package of its own, ``app-sandbox``, which enforces with
+policy labels and generated ``.rodata``, and ``java-watch``, which keeps
+a table of state rather than of events in its arena.
 
 kernel-obs
 ----------
@@ -186,6 +187,44 @@ fails the build for rules without a policy table. The package's
 cover. ``t9114-app-sandbox`` takes the package from its sources to a
 node and back (:ref:`testing-sandbox`), and :src:`tools/put-shields`
 publishes it with the shields of ``kernel-cve``.
+
+java-watch
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 72
+
+   * - Item
+     - Content
+   * - Package
+     - ``java-watch``, from :src:`upatches/java-watch/Beefile`
+   * - upatch
+     - ``java-watch``, built from ``java-watch.bpf.c``
+   * - Attach kinds
+     - ``lsm/mmap_file`` for a JVM mapping ``libjvm.so``,
+       ``lsm.s/file_open`` for its opens of sealed agent jars,
+       ``lsm/bprm_committed_creds`` and ``tp_btf/sched_process_exit``
+       for its end
+   * - Table
+     - ``jvms``: 512 slots in the arena ``obs_i_arena``, one per running
+       JVM, with a serializer and a log decoder
+   * - Test-run program
+     - ``shirudo_test__java_watch`` allocates the table at load
+   * - Enforces
+     - nothing, every hook observes
+
+``kernel-obs`` tables hold one export interval of events, and an export
+drains them. ``java-watch`` holds the JVMs that run now: a slot is taken
+when a JVM maps ``libjvm.so`` and freed when its process exits or
+executes another program, so every read returns the whole list and
+takes nothing away. A slot's sequence word carries its state and a
+generation, and the serializer reads it as a seqlock reader.
+``t3121-java-watch`` loads it with real JVMs
+(:doc:`/contribute/testing/test-coverage`).
+
+.. include:: ../../../upatches/java-watch/README.md
+   :parser: myst_parser.sphinx_
 
 Related
 -------

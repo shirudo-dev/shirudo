@@ -1990,8 +1990,12 @@ R24 A Java agent reaches only the JVMs its options reach
    ``JAVA_TOOL_OPTIONS`` over shirudo's. An agent is Java code in the JVM it guards, which
    the application can undo. A Java upatch is therefore a mitigation in
    the applications that start with it, not a boundary against root,
-   which only a BPF upatch is. Detection: a JVM's ``-javaagent``
-   arguments, ``jcmd <pid> VM.command_line``; none from shirudo.
+   which only a BPF upatch is. Detection: the ``java-watch`` upatch of
+   :src:`upatches/java-watch` lists the running JVMs with the sealed
+   agent jars each opened. It finds a JVM by the name of its
+   ``libjvm.so``, so a renamed copy runs unlisted, and it lists no JVM
+   that started before it loaded. Without it, a JVM's ``-javaagent``
+   arguments, ``jcmd <pid> VM.command_line``.
 
 Threats to resolve
 ------------------

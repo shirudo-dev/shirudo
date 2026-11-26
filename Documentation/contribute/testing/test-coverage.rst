@@ -364,6 +364,14 @@ signed config image.
        call. The ``fmod_ret.s`` program fails the one call it is written
        for, the caller gets its error, the other two programs see that
        call, another call runs, and the unload detaches all three
+   * - ``t3121-java-watch``
+     - The ``java-watch`` upatch of ``upatches/java-watch``, built from
+       its shipped source, lists real JVMs through its serializer and
+       decoder: one started without options with no agent, one started
+       with the agent a Java upatch installed with that agent, and one
+       started with a copy of that jar outside the sealed directory with
+       none. A read without ``--peek`` takes nothing away, and a JVM
+       that exits leaves the list through ``tp_btf/sched_process_exit``
 
 ``tpm`` (4)
 ~~~~~~~~~~~
@@ -1466,7 +1474,8 @@ several of them are tested, the counter is not.
 Attach kinds
 ~~~~~~~~~~~~
 
-- ``tp_btf`` and ``kretprobe`` have no test, offline or on a target.
+- ``kretprobe`` has no test, offline or on a target. ``tp_btf`` is
+  covered by ``t3121`` alone, on ``sched_process_exit``.
 - kprobe override is checked offline only (``t3008``).
 - ``t3119`` runs its cases for a tagged function only on a kernel whose
   BTF carries the tags. On another kernel it checks the refusal instead.

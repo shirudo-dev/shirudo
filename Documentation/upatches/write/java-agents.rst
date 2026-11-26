@@ -93,6 +93,11 @@ reads it is outside shirudo:
   to what other ``environment.d`` files set, so keep the agents few and
   their names short where Java 8 runs.
 
+The ``java-watch`` package of :src:`upatches/java-watch` lists the
+JVMs that run on a node and, for each, the jars of ``/run/shirudo-java``
+it opened, so that the JVMs these options did not reach show up in the
+map export (see :doc:`/upatches/learn/examples`).
+
 An agent does what Java code in the JVM can do: it is a mitigation
 inside the application, not a boundary the kernel enforces. A BPF upatch
 is the tool for a policy that root must not be able to step around.

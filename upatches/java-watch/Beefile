@@ -1,0 +1,11 @@
+[package]
+name = "java-watch"
+description = "shirudo Java agent coverage: the JVMs running on the host and the Java upatch agents each opened"
+license = "GPL-2.0 OR BSD-2-Clause"
+authors = ["Authors of shirudo"]
+
+[[upatches]]
+source = "java-watch.bpf.c"
+
+[upatches.tree]
+id = "java-watch"
