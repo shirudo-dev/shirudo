@@ -6,6 +6,8 @@ on:
       - main
       - rusting
   pull_request:
+  # The merge queue leaves sparse and Coccinelle to the pull request and
+  # the push to main: a change landing first rarely alters what they find.
   merge_group:
     types: [checks_requested]
 
@@ -60,6 +62,7 @@ jobs:
 
   sparse:
     name: Sparse
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
 
     steps:
@@ -130,6 +133,7 @@ jobs:
 
   coccinelle:
     name: Coccinelle
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
 
     steps:
