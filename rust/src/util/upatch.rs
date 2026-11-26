@@ -14,8 +14,6 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::FileExt;
 
 use crate::errno::{EFBIG, EINVAL, ENOMEM, EOPNOTSUPP, EOVERFLOW};
-use crate::ffi;
-use crate::heap::{xcalloc, xfree, xmalloc, xstrfree, xstrndup};
 use crate::sys::libc::close;
 use crate::text::cstr;
 use crate::util::hex;
@@ -232,13 +230,8 @@ pub(crate) struct PolicyLabels<'a> {
     pub(crate) socket_map_idx: u32,
 }
 
-/// `struct stat` of the C library, which a program's spec carries for
-/// its callers.
-const STAT_SIZE: usize = size_of::<libc::stat>();
-
-/// `struct prog_spec`: a program of the metadata, what attaches it, and
-/// for a uprobe the binary's path, build ID and offsets.
-#[repr(C)]
+/// A parsed program's attach role and target. The path, offsets, and
+/// symbol names own their storage for as long as the loader uses them.
 pub struct ProgSpec {
     pub(crate) role: u32,
     pub(crate) kind: u32,
@@ -247,22 +240,48 @@ pub struct ProgSpec {
     pub(crate) offset: u64,
     pub(crate) target: [u8; ATTACH_TARGET_MAX],
     pub(crate) map: [u8; PROG_MAP_MAX],
-    pub(crate) uprobe_path: *mut c_char,
-    pub(crate) uprobe_path_len: u32,
+    pub(crate) uprobe_path: Vec<u8>,
     pub(crate) build_id: [u8; BUILD_ID_MAX],
     pub(crate) build_id_len: u32,
-    pub(crate) uprobe_offsets: *mut u64,
+    pub(crate) uprobe_offsets: Vec<u64>,
     pub(crate) nr_uprobe_offsets: u32,
-    pub(crate) kprobe_sym_buf: *mut c_char,
-    pub(crate) kprobe_sym_buf_len: usize,
-    pub(crate) kprobe_syms: *mut *const c_char,
+    /// Holds the bytes named by the pointers in `kprobe_syms`.
+    pub(crate) kprobe_sym_buf: Vec<u8>,
+    pub(crate) kprobe_syms: Vec<*const c_char>,
     pub(crate) nr_kprobe_syms: u32,
     pub(crate) target_fd: c_int,
-    pub(crate) target_stat: [u64; STAT_SIZE / 8],
 }
 
-const _: () = assert!(core::mem::offset_of!(ProgSpec, target_stat) == 296);
-const _: () = assert!(size_of::<ProgSpec>() == 296 + STAT_SIZE);
+impl ProgSpec {
+    fn new() -> Self {
+        Self {
+            role: 0,
+            kind: 0,
+            device_classes: 0,
+            offset: 0,
+            target: [0; ATTACH_TARGET_MAX],
+            map: [0; PROG_MAP_MAX],
+            uprobe_path: Vec::new(),
+            build_id: [0; BUILD_ID_MAX],
+            build_id_len: 0,
+            uprobe_offsets: Vec::new(),
+            nr_uprobe_offsets: 0,
+            kprobe_sym_buf: Vec::new(),
+            kprobe_syms: Vec::new(),
+            nr_kprobe_syms: 0,
+            target_fd: -1,
+        }
+    }
+}
+
+impl Drop for ProgSpec {
+    fn drop(&mut self) {
+        if self.target_fd >= 0 {
+            // SAFETY: this spec owns the target descriptor after preparation.
+            unsafe { close(self.target_fd) };
+        }
+    }
+}
 
 /// uprobe.multi and uretprobe.multi: a glob over a binary's functions.
 pub(crate) fn kind_is_uprobe_multi(kind: u32) -> bool {
@@ -922,36 +941,6 @@ pub(crate) fn member_valid(name: &[u8], payload_hex: &[u8]) -> bool {
     name_valid(Some(name)) && hex::decode(payload_hex, &mut payload).is_ok()
 }
 
-/// # Safety
-///
-/// `specs` is NULL or the `nr_progs` specs Specs::parse() took from
-/// xcalloc().
-unsafe fn specs_free(specs: *mut ProgSpec, nr_progs: u32) {
-    if specs.is_null() {
-        return;
-    }
-    // SAFETY: the caller's specs, each with its fd, path and offsets
-    // freed once, then the array.
-    unsafe {
-        for spec in ffi::slice(specs, nr_progs as usize) {
-            if spec.target_fd >= 0 {
-                close(spec.target_fd);
-            }
-            xstrfree(spec.uprobe_path);
-            xfree(
-                spec.uprobe_offsets.cast(),
-                spec.nr_uprobe_offsets as usize * size_of::<u64>(),
-            );
-            xfree(spec.kprobe_sym_buf.cast(), spec.kprobe_sym_buf_len);
-            xfree(
-                spec.kprobe_syms.cast(),
-                spec.nr_kprobe_syms as usize * size_of::<*const c_char>(),
-            );
-        }
-        xfree(specs.cast(), nr_progs as usize * size_of::<ProgSpec>());
-    }
-}
-
 /// The spec of a program an attach role gave: its kind, offset and
 /// target from its entry `e`, or an XDP program's device classes, each
 /// class one program's of the upatch, as `xdp_classes` gathers them: a
@@ -1070,7 +1059,7 @@ fn uprobe_targets(
             return Err(-EINVAL);
         };
         if !kind_has_uprobe_target(spec.kind)
-            || !spec.uprobe_path.is_null()
+            || !spec.uprobe_path.is_empty()
             || path_len == 0
             || path_len >= UPROBE_PATH_MAX
             || build_id_len == 0
@@ -1086,26 +1075,22 @@ fn uprobe_targets(
         if end - cursor < payload_len || m[cursor] != b'/' || has_nul(&m[cursor..][..path_len]) {
             return Err(-EINVAL);
         }
-        // SAFETY: path_len bytes of the metadata, none a NUL.
-        spec.uprobe_path = unsafe { xstrndup(m[cursor..].as_ptr().cast(), path_len) };
-        if spec.uprobe_path.is_null() {
-            return Err(-ENOMEM);
-        }
-        spec.uprobe_path_len = path_len as u32;
+        spec.uprobe_path
+            .try_reserve_exact(path_len + 1)
+            .map_err(|_| -ENOMEM)?;
+        spec.uprobe_path
+            .extend_from_slice(&m[cursor..cursor + path_len]);
+        spec.uprobe_path.push(0);
         cursor += path_len;
         spec.build_id[..build_id_len].copy_from_slice(&m[cursor..][..build_id_len]);
         spec.build_id_len = build_id_len as u32;
         cursor += build_id_len;
-        // SAFETY: a count of offsets.
-        spec.uprobe_offsets =
-            unsafe { xcalloc(nr_offsets as usize, size_of::<u64>()) }.cast::<u64>();
-        if spec.uprobe_offsets.is_null() {
-            return Err(-ENOMEM);
-        }
+        spec.uprobe_offsets
+            .try_reserve_exact(nr_offsets as usize)
+            .map_err(|_| -ENOMEM)?;
+        spec.uprobe_offsets.resize(nr_offsets as usize, 0);
         spec.nr_uprobe_offsets = nr_offsets;
-        // SAFETY: the nr_offsets offsets xcalloc() gave.
-        let offsets =
-            unsafe { core::slice::from_raw_parts_mut(spec.uprobe_offsets, nr_offsets as usize) };
+        let offsets = &mut spec.uprobe_offsets;
         for j in 0..offsets.len() {
             offsets[j] = le64(m, cursor);
             cursor += size_of::<u64>();
@@ -1116,7 +1101,7 @@ fn uprobe_targets(
     }
     if specs
         .iter()
-        .any(|s| kind_has_uprobe_target(s.kind) && s.uprobe_path.is_null())
+        .any(|s| kind_has_uprobe_target(s.kind) && s.uprobe_path.is_empty())
     {
         return Err(-EINVAL);
     }
@@ -1146,31 +1131,26 @@ fn kprobe_syms(syms: &[u8], nr_syms: u32, spec: &mut ProgSpec) -> c_int {
         return -EINVAL;
     }
 
-    // SAFETY: allocations of the signed bytes and one pointer per name.
-    let buf = unsafe { xmalloc(syms.len()) }.cast::<u8>();
-    if buf.is_null() {
+    if spec.kprobe_sym_buf.try_reserve_exact(syms.len()).is_err() {
         return -ENOMEM;
     }
-    spec.kprobe_sym_buf = buf.cast();
-    spec.kprobe_sym_buf_len = syms.len();
-    // SAFETY: `buf` owns `syms.len()` writable bytes.
-    unsafe { ffi::bytes_mut(buf, syms.len()) }.copy_from_slice(syms);
-
-    // SAFETY: a count of pointers, bounded by the format.
-    spec.kprobe_syms =
-        unsafe { xcalloc(nr_syms as usize, size_of::<*const c_char>()) }.cast::<*const c_char>();
-    if spec.kprobe_syms.is_null() {
+    spec.kprobe_sym_buf.extend_from_slice(syms);
+    if spec
+        .kprobe_syms
+        .try_reserve_exact(nr_syms as usize)
+        .is_err()
+    {
         return -ENOMEM;
     }
     spec.nr_kprobe_syms = nr_syms;
-    // SAFETY: the pointer array just allocated, and each offset was
-    // checked in the identical byte string copied above.
-    let ptrs = unsafe { core::slice::from_raw_parts_mut(spec.kprobe_syms, nr_syms as usize) };
     off = 0;
-    for ptr in ptrs {
-        // SAFETY: `off` starts each checked name inside the copied buffer.
-        *ptr = unsafe { spec.kprobe_sym_buf.add(off) };
-        let len = syms[off..].iter().position(|&c| c == 0).unwrap_or(0);
+    for _ in 0..nr_syms {
+        // SAFETY: off is a checked name start in the immutable symbol buffer.
+        spec.kprobe_syms
+            .push(unsafe { spec.kprobe_sym_buf.as_ptr().add(off) }.cast());
+        let Some(len) = syms[off..].iter().position(|&c| c == 0) else {
+            return -EINVAL;
+        };
         off += len + 1;
     }
     0
@@ -1209,7 +1189,7 @@ fn kprobe_targets(
             return Err(-EINVAL);
         };
         if !kind_is_kprobe_multi(spec.kind)
-            || !spec.kprobe_syms.is_null()
+            || !spec.kprobe_syms.is_empty()
             || nr_syms == 0
             || nr_syms > KPROBE_SYMS_MAX
             || syms_len / 2 < nr_syms as usize
@@ -1225,15 +1205,15 @@ fn kprobe_targets(
     }
     if specs
         .iter()
-        .any(|s| kind_is_kprobe_multi(s.kind) && s.kprobe_syms.is_null())
+        .any(|s| kind_is_kprobe_multi(s.kind) && s.kprobe_syms.is_empty())
     {
         return Err(-EINVAL);
     }
     Ok(cursor)
 }
 
-/// The programs' specs from the metadata `m` into `specs`, zeroed with
-/// no fds: 0, or -errno with what was set for specs_free().
+/// Fill the programs from signed metadata, or return -errno. Any
+/// buffers already filled are dropped with the specs on failure.
 fn specs_fill(specs: &mut [ProgSpec], m: &[u8], base_len: usize) -> c_int {
     let (mut nr_uprobes, mut nr_kprobe_multis, mut xdp_classes) = (0u32, 0u32, 0u32);
 
@@ -1286,12 +1266,9 @@ fn specs_fill(specs: &mut [ProgSpec], m: &[u8], base_len: usize) -> c_int {
     if end != m.len() { -EINVAL } else { 0 }
 }
 
-/// The programs' specs of a container's signed attach metadata, freed
-/// with the binary's descriptor, path and offsets each holds when they
-/// go.
+/// The parsed programs and their owned attach targets.
 pub(crate) struct Specs {
-    ptr: *mut ProgSpec,
-    n: u32,
+    entries: Vec<ProgSpec>,
 }
 
 impl Specs {
@@ -1315,15 +1292,12 @@ impl Specs {
         if m.len() < base_len {
             return Err(-EINVAL);
         }
-        // SAFETY: a count of specs.
-        let ptr = unsafe { xcalloc(nr_progs as usize, size_of::<ProgSpec>()) }.cast::<ProgSpec>();
-        if ptr.is_null() {
-            return Err(-ENOMEM);
-        }
-        let mut specs = Specs { ptr, n: nr_progs };
-        for spec in specs.as_mut_slice() {
-            spec.target_fd = -1;
-        }
+        let mut entries = Vec::new();
+        entries
+            .try_reserve_exact(nr_progs as usize)
+            .map_err(|_| -ENOMEM)?;
+        entries.resize_with(nr_progs as usize, ProgSpec::new);
+        let mut specs = Specs { entries };
         match specs_fill(specs.as_mut_slice(), m, base_len) {
             0 => Ok(specs),
             err => Err(err),
@@ -1331,22 +1305,11 @@ impl Specs {
     }
 
     pub(crate) fn as_slice(&self) -> &[ProgSpec] {
-        // SAFETY: the n specs xcalloc() gave, which zeroed bits make
-        // valid and the parse filled.
-        unsafe { ffi::slice(self.ptr, self.n as usize) }
+        &self.entries
     }
 
     pub(crate) fn as_mut_slice(&mut self) -> &mut [ProgSpec] {
-        // SAFETY: as as_slice(), borrowed from the one owner of the specs.
-        unsafe { core::slice::from_raw_parts_mut(self.ptr, self.n as usize) }
-    }
-}
-
-impl Drop for Specs {
-    fn drop(&mut self) {
-        // SAFETY: the specs xcalloc() gave, freed once with what each
-        // holds.
-        unsafe { specs_free(self.ptr, self.n) };
+        &mut self.entries
     }
 }
 

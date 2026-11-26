@@ -436,12 +436,11 @@ fn perf_event_open_probe(
 /// prepare_uprobe_targets() checked: the probe lands in that inode, not
 /// in whatever the spec's path names by now.
 fn perf_event_open_uprobe(spec: &ProgSpec) -> Result<OwnedFd, c_int> {
-    if spec.target_fd < 0 || spec.uprobe_offsets.is_null() || spec.nr_uprobe_offsets != 1 {
+    if spec.target_fd < 0 || spec.uprobe_offsets.is_empty() || spec.nr_uprobe_offsets != 1 {
         return Err(EINVAL);
     }
     let path = format!("/proc/self/fd/{}", spec.target_fd);
-    // SAFETY: the spec's one offset.
-    let offset = unsafe { *spec.uprobe_offsets };
+    let offset = spec.uprobe_offsets[0];
     perf_event_open_probe(
         "uprobe",
         path.as_bytes(),
@@ -456,8 +455,7 @@ fn perf_event_open_uprobe(spec: &ProgSpec) -> Result<OwnedFd, c_int> {
 /// between.
 fn prepare_uprobe_targets(specs: &mut [ProgSpec]) -> Result<(), c_int> {
     for spec in specs.iter_mut().filter(|s| kind_has_uprobe_target(s.kind)) {
-        // SAFETY: the spec's C string.
-        let path = unsafe { CStr::from_ptr(spec.uprobe_path) };
+        let path = CStr::from_bytes_with_nul(&spec.uprobe_path).map_err(|_| EINVAL)?;
         let at = OpenOptions::new()
             .read(true)
             .custom_flags(O_PATH)
@@ -474,9 +472,7 @@ fn prepare_uprobe_targets(specs: &mut [ProgSpec]) -> Result<(), c_int> {
         if opened.dev() != st.dev() || opened.ino() != st.ino() {
             return Err(ESTALE);
         }
-        // SAFETY: the spec's offsets, by their count.
-        let offsets =
-            unsafe { crate::ffi::slice(spec.uprobe_offsets, spec.nr_uprobe_offsets as usize) };
+        let offsets = &spec.uprobe_offsets;
         if offsets.iter().any(|&o| o >= opened.size()) {
             return Err(ERANGE);
         }
@@ -495,8 +491,8 @@ fn prepare_uprobe_targets(specs: &mut [ProgSpec]) -> Result<(), c_int> {
 
 fn attach_uprobe_multi(prog: c_int, spec: &ProgSpec) -> Result<OwnedFd, c_int> {
     if spec.target_fd < 0
-        || spec.uprobe_path.is_null()
-        || spec.uprobe_offsets.is_null()
+        || spec.uprobe_path.is_empty()
+        || spec.uprobe_offsets.is_empty()
         || spec.nr_uprobe_offsets == 0
     {
         return Err(EINVAL);
@@ -506,7 +502,7 @@ fn attach_uprobe_multi(prog: c_int, spec: &ProgSpec) -> Result<OwnedFd, c_int> {
         flags |= F_UPROBE_MULTI_RETURN;
     }
     link_create(prog, 0, TRACE_UPROBE_MULTI, |a| {
-        a.ptr(24, spec.uprobe_offsets)
+        a.ptr(24, spec.uprobe_offsets.as_ptr())
             .u32(48, spec.nr_uprobe_offsets)
             .u32(52, flags)
             .u32(60, spec.target_fd as u32)
@@ -514,7 +510,7 @@ fn attach_uprobe_multi(prog: c_int, spec: &ProgSpec) -> Result<OwnedFd, c_int> {
 }
 
 fn attach_kprobe_multi(prog: c_int, spec: &ProgSpec) -> Result<OwnedFd, c_int> {
-    if spec.kprobe_syms.is_null() || spec.nr_kprobe_syms == 0 {
+    if spec.kprobe_syms.is_empty() || spec.nr_kprobe_syms == 0 {
         return Err(EINVAL);
     }
     let flags = if spec.kind == ATTACH_KRETPROBE_MULTI {
@@ -525,7 +521,7 @@ fn attach_kprobe_multi(prog: c_int, spec: &ProgSpec) -> Result<OwnedFd, c_int> {
     link_create(prog, 0, TRACE_KPROBE_MULTI, |a| {
         a.u32(16, flags)
             .u32(20, spec.nr_kprobe_syms)
-            .ptr(24, spec.kprobe_syms)
+            .ptr(24, spec.kprobe_syms.as_ptr())
     })
 }
 
@@ -652,8 +648,7 @@ fn link_matches_spec(link: c_int, spec: &ProgSpec, ifindex: u32) -> Result<(), c
             spec.nr_uprobe_offsets == 1
                 && ty == LINK_PERF_EVENT
                 && info.u32_at(LINK_U) == want
-                // SAFETY: the spec's one offset.
-                && u64::from(info.u32_at(36)) == unsafe { *spec.uprobe_offsets }
+                && spec.uprobe_offsets.first().copied() == Some(u64::from(info.u32_at(36)))
                 && ref_ctr == 0
         }
         ATTACH_UPROBE_MULTI | ATTACH_URETPROBE_MULTI => {
@@ -1017,8 +1012,7 @@ fn attach_and_pin(cx: &Ctx, name: &[u8], specs: &[ProgSpec]) -> Result<(), Attac
                     let kind = kind_name(spec.kind);
                     let target = till_nul(&spec.target);
                     let site: Vec<u8> = if kind_has_uprobe_target(spec.kind) {
-                        // SAFETY: the spec's C string.
-                        let path = unsafe { CStr::from_ptr(spec.uprobe_path) }.to_bytes();
+                        let path = spec.uprobe_path.strip_suffix(&[0]).unwrap_or_default();
                         [&b" "[..], path, b":", target].concat()
                     } else if kind_is_kprobe_multi(spec.kind) {
                         format!(", {} symbols", spec.nr_kprobe_syms).into_bytes()

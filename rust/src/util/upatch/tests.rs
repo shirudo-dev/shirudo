@@ -85,13 +85,11 @@ fn kprobe_multi_names_are_parsed_in_order() {
     ))
     .unwrap();
     let spec = &specs.as_slice()[0];
-    // SAFETY: the parser's array of its two owned C strings.
-    let syms = unsafe { crate::ffi::slice(spec.kprobe_syms, spec.nr_kprobe_syms as usize) };
-    let names: Vec<Vec<u8>> = syms
+    let names: Vec<Vec<u8>> = spec
+        .kprobe_syms
         .iter()
-        // SAFETY: every parser-produced pointer names a string in its
-        // owned symbol buffer.
-        .map(|&sym| unsafe { crate::ffi::c_str(sym) }.to_vec())
+        // SAFETY: the parser points each entry into its owned NUL-terminated buffer.
+        .map(|&sym| unsafe { CStr::from_ptr(sym) }.to_bytes().to_vec())
         .collect();
 
     assert_eq!(spec.kind, ATTACH_KRETPROBE_MULTI);
@@ -516,8 +514,7 @@ fn name_fits_its_pin_directory() {
 #[test]
 fn xdp_classes_come_from_xdp_programs_alone() {
     let spec = |kind, device_classes| {
-        // SAFETY: a spec of no binary, for which zeros are a value.
-        let mut s: ProgSpec = unsafe { core::mem::zeroed() };
+        let mut s = ProgSpec::new();
         s.kind = kind;
         s.device_classes = device_classes;
         s
