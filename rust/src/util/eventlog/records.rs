@@ -10,9 +10,9 @@ use core::ffi::{CStr, c_int};
 use super::{sha256_into, walk_boot, walk_log};
 use crate::errno::{EINVAL, ENOENT};
 use crate::text::cstr;
-use crate::util::hex::hex_decode;
+use crate::util::hex::{self, hex_decode};
 use crate::util::json::{JsonField, parse_schema};
-use crate::util::upatch::{NAME_MAX, PAYLOAD_HASH_LEN, TYPE_BPF, TYPE_JAVA, member_valid};
+use crate::util::upatch::{NAME_MAX, PAYLOAD_HASH_LEN, TYPE_BPF, TYPE_JAVA, name_valid};
 
 const NAME_LEN: usize = 34;
 const NV_RSA_BYTES: usize = 384;
@@ -314,17 +314,33 @@ struct UpatchSink<'a> {
     ret: c_int,
 }
 
+/// Validate a member and give every reader the same hex spelling as
+/// register replay and the payload stored on disk.
+fn canonical_payload<'a>(name: &[u8], payload_hex: &'a mut [u8]) -> Result<&'a [u8], c_int> {
+    if !name_valid(Some(name)) {
+        return Err(-EINVAL);
+    }
+    let mut payload = [0u8; PAYLOAD_HASH_LEN];
+    hex::decode(cstr(payload_hex), &mut payload)?;
+    payload_hex[..2 * PAYLOAD_HASH_LEN].make_ascii_lowercase();
+    Ok(cstr(payload_hex))
+}
+
 /// The sink's callback on `event` for the upatch its fields name.
 fn notify(u: &mut UpatchSink<'_>, event: c_int) -> c_int {
-    (u.cb)(event, cstr(&u.name), cstr(&u.payload_hex))
+    let name = cstr(&u.name);
+    let payload = match canonical_payload(name, &mut u.payload_hex) {
+        Ok(payload) => payload,
+        Err(err) => return err,
+    };
+    (u.cb)(event, name, payload)
 }
 
 /// An entry of an init record's set: a load boot restore made.
 fn take_set_entry(u: &mut UpatchSink<'_>) -> Result<(), c_int> {
-    if !member_valid(cstr(&u.set_name), cstr(&u.set_payload_hex)) {
-        return Err(-EINVAL);
-    }
-    u.ret = (u.cb)(UPATCH_LOAD, cstr(&u.set_name), cstr(&u.set_payload_hex));
+    let name = cstr(&u.set_name);
+    let payload = canonical_payload(name, &mut u.set_payload_hex)?;
+    u.ret = (u.cb)(UPATCH_LOAD, name, payload);
     u.set_name[0] = 0;
     u.set_payload_hex[0] = 0;
     match u.ret {
@@ -408,7 +424,7 @@ fn upatches_line(u: &mut UpatchSink<'_>, line: &CStr, is_init: bool) -> c_int {
     let Some((_, load)) = upatch_record_parse(cstr(&u.ty)) else {
         return 0;
     };
-    if !f[2].seen() || !member_valid(cstr(&u.name), cstr(&u.payload_hex)) {
+    if !f[2].seen() {
         return -EINVAL;
     }
     let event = if load { UPATCH_LOAD } else { UPATCH_UNLOAD };
