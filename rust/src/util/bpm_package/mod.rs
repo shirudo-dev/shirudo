@@ -80,4 +80,6 @@ impl IndexEntry {
 #[cfg(shirudo_fuzz)]
 mod fuzz;
 #[cfg(test)]
+pub(crate) mod test_archive;
+#[cfg(test)]
 mod tests;

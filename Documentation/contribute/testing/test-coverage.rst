@@ -876,6 +876,11 @@ signed config image.
        of root's, uninstall refuses and the pins, the archive and the
        state stay. Without a bind it detaches the link and retires the
        package tree, archive and state.
+   * - ``t7116-bpm-package-install``
+     - BPM installs a signed upatch from the fixture registry and keeps
+       its archive. A bind over staging or the package store makes install
+       refuse without loading a patch or recording state. Without the bind,
+       install succeeds again.
 
 ``otel`` (8)
 ~~~~~~~~~~~~
@@ -1055,6 +1060,12 @@ The unit tests beside the Rust modules cover 33 modules in
 ``upatch_resolve``, ``upatch_verify`` and ``xdp``. Tests also cover
 :src:`rust/src/text.rs` and the quote checks in
 :src:`rust/src/quote_check.rs`.
+
+The tests in :src:`rust/src/builtin/bpm/install/tests.rs` check extraction,
+load and unload order, rollback, cleanup, invalid names, symbolic links and
+bind mounts. The archive tests in :src:`rust/src/util/bpm_package/tests.rs`
+check extraction below one opened directory, including rejected links and
+multiple top-level trees.
 
 The tests in :src:`rust/src/builtin/bpm/cleanup/tests.rs` check that
 uninstall holds each directive open through detach, removes older package

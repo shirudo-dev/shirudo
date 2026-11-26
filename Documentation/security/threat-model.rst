@@ -1994,8 +1994,8 @@ R22 Labeled inodes are interchangeable
    below that root. Package uninstall opens its directives and removes
    the package tree relative to held directory descriptors. These lookups
    reject mount crossings below the state root, including binds on the
-   same file system and one file bound over another (``t7115``).
-   BPM reads and replaces its package state file relative
+   same file system and one file bound over another (``t7115``,
+   ``t7116``). BPM reads and replaces its package state file relative
    to the verified BPM directory as well. ``bpm tree sync`` still names
    the artifact it checks and loads by its path in the cache.
 

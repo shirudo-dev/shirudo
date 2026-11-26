@@ -332,3 +332,6 @@ fn regular_at(dir: BorrowedFd<'_>, name: &[u8]) -> bool {
     let st = unsafe { st.assume_init() };
     st.st_mode & libc::S_IFMT == libc::S_IFREG
 }
+
+#[cfg(test)]
+mod tests;

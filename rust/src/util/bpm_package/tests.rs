@@ -224,3 +224,85 @@ fn tree_manifest_is_the_publisher_form() {
         .as_bytes()
     );
 }
+
+use crate::testutil::TempDir;
+use std::fs::{self, File};
+use std::os::fd::AsFd;
+use std::os::unix::fs::symlink;
+
+fn extract_members(members: &[test_archive::Member<'_>], dir: &TempDir) -> i32 {
+    fs::write(dir.join("archive.bee"), test_archive::archive(members)).unwrap();
+    fs::create_dir(dir.join("out")).unwrap();
+    let archive = File::open(dir.join("archive.bee")).unwrap();
+    let out = File::open(dir.join("out")).unwrap();
+    extract_fd(archive.as_fd(), out.as_fd())
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "openat2 is unavailable in Miri")]
+fn extract_from_open_archive_stays_below_open_directory() {
+    let dir = TempDir::new();
+    let members: &[test_archive::Member<'_>] = &[
+        ("pkg/", b'5', b""),
+        ("pkg/Beefile", b'0', b"name"),
+        ("pkg/upatches/", b'5', b""),
+        ("pkg/upatches/a.upatch", b'0', b"a"),
+        ("pkg/doc/deep/notes", b'0', b"n"),
+    ];
+    assert_eq!(extract_members(members, &dir), 0);
+    assert_eq!(fs::read(dir.join("out/Beefile")).unwrap(), b"name");
+    assert_eq!(fs::read(dir.join("out/doc/deep/notes")).unwrap(), b"n");
+    assert!(!dir.join("out/pkg").exists());
+    let archive = File::open(dir.join("archive.bee")).unwrap();
+    let out = File::open(dir.join("out")).unwrap();
+    assert_eq!(
+        extract_fd(archive.as_fd(), out.as_fd()),
+        -crate::errno::EEXIST
+    );
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "openat2 is unavailable in Miri")]
+fn extract_rejects_links_and_second_tree() {
+    for (members, expected) in [
+        (
+            &[("pkg/", b'5', &b""[..]), ("pkg/link", b'2', b"")][..],
+            -crate::errno::EPERM,
+        ),
+        (
+            &[("pkg/a", b'0', &b"a"[..]), ("other/b", b'0', b"b")][..],
+            -crate::errno::EINVAL,
+        ),
+        (&[("pkg/../b", b'0', &b"b"[..])][..], -crate::errno::EINVAL),
+    ] {
+        let dir = TempDir::new();
+        assert_eq!(extract_members(members, &dir), expected);
+        assert!(!dir.join("out/b").exists());
+    }
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "openat2 is unavailable in Miri")]
+fn extract_rejects_a_symlink_in_destination() {
+    let dir = TempDir::new();
+    fs::write(
+        dir.join("archive.bee"),
+        test_archive::archive(&[("pkg/upatches/a.upatch", b'0', b"a")]),
+    )
+    .unwrap();
+    fs::create_dir(dir.join("out")).unwrap();
+    fs::create_dir(dir.join("elsewhere")).unwrap();
+    symlink(dir.join("elsewhere"), dir.join("out/upatches")).unwrap();
+    let archive = File::open(dir.join("archive.bee")).unwrap();
+    let out = File::open(dir.join("out")).unwrap();
+    assert_eq!(
+        extract_fd(archive.as_fd(), out.as_fd()),
+        -crate::errno::ELOOP
+    );
+    assert!(
+        fs::read_dir(dir.join("elsewhere"))
+            .unwrap()
+            .next()
+            .is_none()
+    );
+}
