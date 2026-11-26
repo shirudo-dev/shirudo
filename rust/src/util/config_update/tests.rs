@@ -6,8 +6,11 @@ use core::ffi::c_int;
 use std::ffi::CString;
 use std::os::fd::BorrowedFd;
 
-use super::{BootIdentity, Checkpoint, ConfigUpdate, ConfigUpdateOps, ConfigUpdateTarget};
-use crate::errno::{EBUSY, EINPROGRESS, EUCLEAN};
+use super::{
+    BootIdentity, Checkpoint, ConfigUpdate, ConfigUpdateOps, ConfigUpdateRecord,
+    ConfigUpdateTarget, RECORD_MAX, record_decode, record_encode,
+};
+use crate::errno::{EBADMSG, EBUSY, EINPROGRESS, EUCLEAN};
 use crate::testutil::TempDir;
 use crate::util::chain::fold;
 
@@ -230,4 +233,17 @@ fn config_nv_index_roundtrips_through_journal() {
     assert_eq!(journal.read_state().map(|record| record.pcr), Ok(pcr));
     assert_eq!(journal.complete_boot(), Ok(()));
     assert_eq!(journal.check().map(|record| record.pcr), Ok(pcr));
+}
+
+#[test]
+fn saved_record_rejects_disallowed_pcr() {
+    let mut record = ConfigUpdateRecord::zeroed();
+    record.target = JournalCase::target(b'A');
+    record.sequence = 1;
+    record.pcr = 16;
+    record.kind = crate::util::config_measure::EVENT_BOOT;
+    let mut wire = [0u8; RECORD_MAX];
+    let encoded = record_encode(&record, true, &mut wire).unwrap();
+
+    assert!(matches!(record_decode(encoded, true), Err(err) if err == -EBADMSG));
 }
