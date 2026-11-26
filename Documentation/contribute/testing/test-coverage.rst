@@ -667,6 +667,11 @@ signed config image.
    * - ``t6157-kernel-options``
      - The test kernel, which signs its modules, passes the pre-flight
        check of module signatures
+   * - ``t6158-bpffs-move-detach``
+     - A propagation change on the bpffs ancestry, a legacy ``MS_MOVE``
+       of the bpffs and a ``pivot_root`` in its namespace, each refused
+       so the bpffs cannot be detached; the same change in a private
+       mount namespace is harmless
 
 ``bpm`` (7)
 ~~~~~~~~~~~
@@ -1294,7 +1299,7 @@ The threats are those of :doc:`/security/threat-model`.
      - ``t4001``, ``t4003``, ``t4004``, ``t4102``, ``t9105``, ``t9112``
    * - T10 An attempt that leaves no trace
      - ``t6003``, ``t6108``, ``t6118``, ``t6119``, ``t6120``,
-       ``t6121``, ``t6124``, ``t6126``, ``t6135``, ``t6137``
+       ``t6121``, ``t6124``, ``t6126``, ``t6135``, ``t6137``, ``t6158``
    * - T11 Image-mode config and executable substitution
      - ``t5001``, ``t5002``, ``t5003``, ``t5006``, ``t5008``,
        ``t5101``, ``t5102``, ``t5103``, ``t5104``, ``t6112``,
@@ -1319,7 +1324,9 @@ tests assert that a refusal moves its counter:
        ``BpfCommand``, ``PinUnlink``, ``PinRename``, ``BpffsUmount``
      - ``t6108``
    * - ``BpffsUmountAbove``
-     - ``t6120``, ``t6155``
+     - ``t6120``, ``t6155``, ``t6158``
+   * - ``BpffsMount``
+     - ``t6158``
    * - ``PinEntry``
      - ``t6121``
    * - ``PerfAttach``
@@ -1458,7 +1465,7 @@ Tamper counters
 No test asserts that a refusal moves ``LoadUnsigned``,
 ``LoadUnverified``, ``LoadKeyringKind``, ``LoadKeyring``, ``MapCreate``,
 ``MapWrite``, ``MapFdWrite``, ``ProgRun``, ``ExeIdentity``,
-``KeyringWrite``, ``PinXattr``, ``BpffsMount``, ``SealWrite``,
+``KeyringWrite``, ``PinXattr``, ``SealWrite``,
 ``SealUnlink``, ``SealRename``, ``SealSetattr``, ``SealXattr``,
 ``SealLabel``, ``SealPerf`` or ``TpmExtend``. The refusals behind
 several of them are tested, the counter is not.

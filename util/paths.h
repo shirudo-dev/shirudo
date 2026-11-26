@@ -79,6 +79,7 @@
 #define MOVE_MOUNT_LINK_PIN	BPFFS_DIR "/bpf2_move_mount_link"
 #define SB_MOUNT_LINK_PIN	BPFFS_DIR "/bpf2_sb_mount_link"
 #define SB_REMOUNT_LINK_PIN	BPFFS_DIR "/bpf2_sb_remount_link"
+#define SB_PIVOTROOT_LINK_PIN	BPFFS_DIR "/bpf2_sb_pivotroot_link"
 #define INODE_UNLINK_LINK_PIN	BPFFS_DIR "/bpf2_inode_unlink_link"
 #define INODE_RENAME_LINK_PIN	BPFFS_DIR "/bpf2_inode_rename_link"
 #define INODE_SETXATTR_LINK_PIN	BPFFS_DIR "/bpf2_inode_setxattr_link"

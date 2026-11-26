@@ -238,7 +238,8 @@ order:
 #. Attach ``inode_unlink``, ``inode_setxattr``, ``inode_removexattr``,
    ``key_permission`` and ``tpm_command``.
 #. Attach the mount guards ``sb_umount``, ``move_mount``, ``sb_mount``,
-   ``sb_remount`` and the ``file_open`` recorder, open the bpffs root so
+   ``sb_remount``, ``sb_pivotroot`` and the ``file_open`` recorder, open
+   the bpffs root so
    the recorder notes the mount, and freeze that record.
 #. Load ``seal`` on the shared maps, freeze its scratch map, and attach
    its twenty-nine hooks, then ``mmap_file`` and ``file_mprotect``.
@@ -402,9 +403,17 @@ Hooks in bpf2
    * - ``lsm/sb_mount``
      - To every caller: a mount onto the bpffs or the runtime image, and
        a propagation change of the ``/run/shirudo`` mount. A mount onto a
-       path in ``/run/shirudo`` or on a config image to a task without
-       authority. The source of a bind or legacy move is not checked.
+       path in ``/run/shirudo`` or on a config image, or a propagation
+       change of the bpffs mount or an ancestor of it, to a task without
+       authority. The source of a bind or legacy move is not checked, so
+       the ancestry is kept shared to deny a legacy ``MS_MOVE`` of the
+       bpffs.
      - ``EPERM``: ``BpffsMount``; others uncounted
+     - Closed.
+   * - ``lsm/sb_pivotroot``
+     - A ``pivot_root`` by a task without authority in the namespace the
+       bpffs lives in.
+     - ``EPERM``: ``BpffsUmountAbove``
      - Closed.
    * - ``lsm/sb_remount``
      - Remounting the bpffs, ``/run/shirudo`` or a recorded image, to
@@ -628,9 +637,12 @@ The hooks decide only what reaches them. These paths do not:
   ``lsm/file_ioctl`` refuse the ``bpf()`` attach commands and the perf
   ioctl to tasks without authority; other kernel interfaces that take a
   program descriptor are not hooked here.
-- ``mount_setattr(2)`` has no LSM hook, ``pivot_root(2)`` is not hooked,
-  and ``lsm/sb_mount`` does not check the source of a bind or legacy
-  move.
+- ``mount_setattr(2)`` has no LSM hook, and ``lsm/sb_mount`` does not
+  check the source of a bind or legacy move; the propagation guard keeps
+  the bpffs ancestry shared so the kernel refuses a legacy ``MS_MOVE`` of
+  the bpffs or an ancestor, and ``lsm/sb_pivotroot`` refuses a pivot in
+  the bpffs namespace. The kernel detaches a mount internally, with no
+  LSM hook, when a dentry it is mounted on is invalidated (D7).
 - A perf event bound to a task before that task execs the runtime image
   survives the exec, and CPU-wide events and probes on the runtime
   binary are not checked.

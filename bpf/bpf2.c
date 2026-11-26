@@ -647,6 +647,10 @@ char _license[] SEC("license") = "Dual BSD/GPL";
 #define MOUNT_DEPTH_MAX		32
 #define MOUNT_MASTERS_MAX	4
 
+/* The propagation-flag bits of mount(2): unbindable, private, slave, shared. */
+#define MS_PROPAGATION		((1UL << 17) | (1UL << 18) | \
+				 (1UL << 19) | (1UL << 20))
+
 static __always_inline struct mount *shirudo_mount_of(struct vfsmount *mnt)
 {
 	return (struct mount *)((__u64)mnt -
@@ -892,6 +896,40 @@ static __always_inline int shirudo_image_mount(struct super_block *sb,
 	return -EPERM;
 }
 
+/*
+ * Whether a propagation change or a pivot on `target` could unshare the
+ * recorded bpffs mount's parent. The kernel refuses an MS_MOVE of a mount
+ * whose parent is shared (do_move_mount, IS_MNT_SHARED), so while every
+ * ancestor of the bpffs stays shared a task cannot relocate it onto a
+ * dentry the kernel later invalidates with no hook (threat model D7, D8).
+ * True when `target` is the recorded mount or one of its ancestors up to
+ * the namespace root; a chain that cannot be walked within the bound is
+ * refused, as the unmount walk is.
+ */
+static __always_inline bool shirudo_mount_above_bpffs(struct mount *target)
+{
+	struct mount_record *rec;
+	struct mount *m, *parent;
+	__u32 zero = 0;
+	int i;
+
+	if (!target)
+		return false;
+	rec = bpf_map_lookup_elem(&shirudo_mnt_rec, &zero);
+	if (!rec || !rec->mount)
+		return false;
+	m = (struct mount *)rec->mount;
+	for (i = 0; i < MOUNT_DEPTH_MAX; i++) {
+		if (m == target)
+			return true;
+		parent = BPF_CORE_READ(m, mnt_parent);
+		if (!parent || parent == m)
+			return false;
+		m = parent;
+	}
+	return true;
+}
+
 SEC("lsm/sb_umount")
 int BPF_PROG(shirudo_lsm_sb_umount, struct vfsmount *mnt, int flags,
 	     int ret)
@@ -943,9 +981,22 @@ int BPF_PROG(shirudo_lsm_sb_mount, const char *dev_name,
 
 	if (ret)
 		return ret;
-	if ((flags & ((1UL << 17) | (1UL << 18) | (1UL << 19) |
-		      (1UL << 20))) && shirudo_parent_mount(sb, false))
-		return -EPERM;
+	if (flags & MS_PROPAGATION) {
+		struct sb_id *id = shirudo_policy();
+
+		if (shirudo_parent_mount(sb, false))
+			return -EPERM;
+		/*
+		 * A recursive make-private from a mount above the tmpfs,
+		 * which the sb check above does not see, unshares the
+		 * bpffs parent and opens the MS_MOVE the sb_mount hook
+		 * cannot refuse by source. Keep the ancestry shared.
+		 */
+		if ((!id || !shirudo_task_is_self(id)) &&
+		    shirudo_mount_above_bpffs(shirudo_mount_of(
+			    BPF_CORE_READ(path, mnt))))
+			return shirudo_tamper_deny(TAMPER_BPFFS_MOUNT, -EPERM);
+	}
 	ret = shirudo_parent_mount(sb, true);
 	if (ret)
 		return ret;
@@ -966,6 +1017,35 @@ int BPF_PROG(shirudo_lsm_sb_remount, struct super_block *sb,
 	ret = shirudo_deny_bpffs_mount(BPF_CORE_READ(sb, s_dev),
 				       TAMPER_BPFFS_MOUNT);
 	return ret ? ret : shirudo_image_mount(sb, false);
+}
+
+/*
+ * pivot_root relocates the root of a mount namespace, moving the tree
+ * that holds the private bpffs; its old root is not passed to the hook,
+ * so refuse it to a task without authority in the namespace the bpffs
+ * lives in. A pivot in another namespace cannot reach it.
+ */
+SEC("lsm/sb_pivotroot")
+int BPF_PROG(shirudo_lsm_sb_pivotroot, const struct path *old_path,
+	     const struct path *new_path, int ret)
+{
+	struct sb_id *id = shirudo_policy();
+	struct mount_record *rec;
+	__u32 zero = 0;
+	void *ns;
+
+	if (ret)
+		return ret;
+	if (!id || shirudo_task_is_self(id))
+		return 0;
+	rec = bpf_map_lookup_elem(&shirudo_mnt_rec, &zero);
+	if (!rec || !rec->mount)
+		return 0;
+	ns = BPF_CORE_READ(shirudo_mount_of(BPF_CORE_READ(new_path, mnt)),
+			   mnt_ns);
+	if (ns == BPF_CORE_READ((struct mount *)rec->mount, mnt_ns))
+		return shirudo_tamper_deny(TAMPER_BPFFS_UMOUNT_ABOVE, -EPERM);
+	return 0;
 }
 
 struct dm_verity_digest___shirudo {

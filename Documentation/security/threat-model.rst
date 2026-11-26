@@ -707,7 +707,7 @@ and the returned link's ifindex around attachment.
    ``PinXattr``, ``BpffsUmount``, ``BpffsUmountAbove``, ``BpffsMount``
 :Tests: ``t6105``, ``t6106``, ``t6107``, ``t6108``, ``t6109``,
    ``t6116``, ``t6119``, ``t6120``, ``t6121``, ``t6138``, ``t6155``,
-   ``t3111``
+   ``t6158``, ``t3111``
 :Residual: R1, R2, R3, U17
 
 .. _tm-t3:
@@ -1657,9 +1657,11 @@ R3 Pins depend on the mount tree
    namespace. A private copy of the tree in another namespace is any
    process's to drop, which releases nothing. Legacy ``mount(2)`` with
    ``MS_MOVE`` reaches ``lsm/sb_mount`` with the target only, so the
-   source mount is not checked (D8). ``pivot_root(2)`` is not hooked,
-   and ``mount_setattr(2)`` has no LSM hook at all, so root can change
-   mount attributes and propagation, making the bpffs read-only for
+   source mount is not checked (D8); the propagation guard keeps the
+   bpffs ancestry shared, so the kernel itself refuses the move.
+   ``pivot_root(2)`` is refused to a task without authority in the
+   bpffs namespace. ``mount_setattr(2)`` has no LSM hook at all, so
+   root can change mount attributes, making the bpffs read-only for
    instance. A mount over ``/run`` or an ancestor hides the pins without
    releasing them: enforcement continues, ``shirudo status`` reports the
    LSM as not attached, and ``upatch load`` and ``upatch unload`` refuse
@@ -2217,7 +2219,9 @@ D7 Pins without the mount tree
    <https://github.com/shirudo-dev/shirudo/issues/22>`__.
 
 D8 Legacy mount moves
-   Check the source of a legacy ``MS_MOVE`` (R3), tracked in `issue 12
+   Check the source of a legacy ``MS_MOVE`` directly (R3), rather than
+   relying on the propagation guard that keeps the bpffs ancestry
+   shared, tracked in `issue 12
    <https://github.com/shirudo-dev/shirudo/issues/12>`__.
 
 D9 Perf events across exec
