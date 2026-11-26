@@ -16,9 +16,7 @@ use crate::errno::{EEXIST, EKEYREJECTED, ENOENT, EPERM};
 use crate::sys::libc::{O_CREAT, O_EXCL, O_WRONLY, close};
 use crate::text::name_has_suffix;
 use crate::util::bpm_package::read_member_fd;
-use crate::util::crypto_openssl::{
-    Cert, cert_free, cert_pubkey_digest, cert_read_file, cert_read_memory,
-};
+use crate::util::crypto_openssl::{Cert, cert_pubkey_digest, cert_read_file, cert_read_memory};
 use crate::util::json::JsonEmit;
 use crate::util::keys::{DER_MAX, read_der, read_der_fd};
 use crate::util::seal;
@@ -37,8 +35,6 @@ fn pubkey_digest(der: &[u8]) -> Result<[u8; 32]> {
         // SAFETY: the certificate read and room for the digest.
         ret = unsafe { cert_pubkey_digest(&cert, digest.as_mut_ptr()) };
     }
-    // SAFETY: the certificate, read or not.
-    unsafe { cert_free(&mut cert) };
     status(ret).map(|()| digest)
 }
 
@@ -47,14 +43,12 @@ fn active_digest() -> Result<[u8; 32]> {
     let mut cert = Cert::new();
     let mut digest = [0; 32];
 
-    // SAFETY: a C string and a certificate to fill, freed below.
+    // SAFETY: a C string and a certificate to fill.
     let mut ret = unsafe { cert_read_file(CERT_PATH.as_ptr(), &mut cert) };
     if ret == 0 {
         // SAFETY: the certificate read and room for the digest.
         ret = unsafe { cert_pubkey_digest(&cert, digest.as_mut_ptr()) };
     }
-    // SAFETY: the certificate, read or not.
-    unsafe { cert_free(&mut cert) };
     status(ret).map(|()| digest)
 }
 

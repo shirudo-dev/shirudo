@@ -19,7 +19,7 @@ use crate::text::{contains, cstr, name_has_suffix, strscpy, strsprintf};
 use crate::util::bpm_oci::{Client, MAX_DIGEST, MAX_ENDPOINT, MAX_NAME, name_ok};
 use crate::util::bpm_package::{verify_cms, verify_cms_fd};
 use crate::util::bpm_source_config::{parse_source_line, parse_tree_line};
-use crate::util::crypto_openssl::{Cert, cert_free, cert_read_file};
+use crate::util::crypto_openssl::{Cert, cert_read_file};
 use crate::util::image_config::{self, REGISTRIES, TREE_CONF};
 use crate::util::io::open_trusted;
 use crate::util::json::JsonEmit;
@@ -307,10 +307,8 @@ pub(super) fn register(
     }
     let key = super::message(&[cert]);
     let mut read = Cert::new();
-    // SAFETY: a C string and a certificate to fill, freed after.
+    // SAFETY: a C string and a certificate to fill.
     let cert_ok = unsafe { cert_read_file(key.as_ptr(), &mut read) } == 0;
-    // SAFETY: the certificate, read or not.
-    unsafe { cert_free(&mut read) };
     let valid = cert_ok
         && name_ok(cstr(&s.name))
         && Client::new().parse_endpoint(s.endpoint()).is_ok()

@@ -29,8 +29,8 @@ use crate::util::config_attest::{self, Evidence, Quote};
 use crate::util::config_measure::nvpcr;
 use crate::util::config_update::ConfigUpdate;
 use crate::util::crypto_openssl::{
-    Cert, CertPubkey, base64, base64_decode, cert_free, cert_pubkey, cert_read_der,
-    cert_verify_chain, ecdh_p256_ephemeral, rsa_oaep_encrypt, sha256, sha256_into,
+    Cert, CertPubkey, base64, base64_decode, cert_pubkey, cert_read_der, cert_verify_chain,
+    ecdh_p256_ephemeral, rsa_oaep_encrypt, sha256, sha256_into,
 };
 use crate::util::eventlog::{self, NV_INDEX};
 use crate::util::hex::{decode, decode_max, encode};
@@ -2130,15 +2130,8 @@ fn challenge_keys(evidence: &[u8]) -> Result<ChallengeKeys, c_int> {
     })
 }
 
-/// A certificate cert_read_der() reads into, freed when it goes.
+/// A certificate cert_read_der() reads into, owned until this value drops.
 struct HeldCert(Cert);
-
-impl Drop for HeldCert {
-    fn drop(&mut self) {
-        // SAFETY: the certificate the guard holds, or none, freed once.
-        unsafe { cert_free(&mut self.0) };
-    }
-}
 
 /// The certificate in the base64 `b64` and its key: none when it does
 /// not decode, parse or hold a key of the kinds a TPM's endorsement key

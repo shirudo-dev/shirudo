@@ -14,7 +14,7 @@ use super::{
 use crate::errno::{EINVAL, ENAMETOOLONG, EPERM};
 use crate::sys::libc::Zeroed;
 use crate::sys::libc::{self, AT_FDCWD, S_IFMT, S_IFREG, STATX_SIZE, STATX_TYPE, Statx};
-use crate::util::crypto_openssl::{Cert, cert_free, cert_read_file};
+use crate::util::crypto_openssl::{Cert, cert_read_file};
 
 /// `oci://host[:port]` into the client, with the transport
 /// BPM_OCI_SCHEME picks, the CA file BPM_OCI_CA_FILE names and the
@@ -54,8 +54,6 @@ pub(super) fn parse_endpoint(endpoint: &[u8], c: &mut OciClient) -> c_int {
             crate::log::err(b"bpm OCI: BPM_OCI_CA_FILE is not a readable certificate");
             return -EINVAL;
         }
-        // SAFETY: the cert cert_read_file() filled.
-        unsafe { cert_free(&mut ca) };
     }
     if c.ca_file[0] != 0 && !regular_nonempty(&c.ca_file) {
         crate::log::err(b"bpm OCI: BPM_OCI_CA_FILE must name a non-empty regular PEM file");

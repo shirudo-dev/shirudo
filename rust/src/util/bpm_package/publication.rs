@@ -15,7 +15,7 @@ use crate::util::bpm_oci::{
     TREE_ARTIFACT, TREE_MEDIA, TREE_SIG_MEDIA, buffer_free, emit_descriptor, get_memory,
     get_signed, parse_manifest, sha256_hex, url,
 };
-use crate::util::crypto_openssl::{Cert, cert_free, cert_read_fd, cert_read_file, verify_detached};
+use crate::util::crypto_openssl::{Cert, cert_read_fd, cert_read_file, verify_detached};
 use crate::util::json::JsonEmit;
 use crate::util::keys::{TrustedSet, verify_signature};
 
@@ -39,8 +39,6 @@ fn verify_with(s: &Signed, read: impl FnOnce(&mut Cert) -> c_int) -> c_int {
         // and the cert just read.
         ret = unsafe { verify_detached(s.payload, s.payload_len, s.sig, s.sig_len, &cert) };
     }
-    // SAFETY: a cert read or left empty, freed once.
-    unsafe { cert_free(&mut cert) };
     ret
 }
 

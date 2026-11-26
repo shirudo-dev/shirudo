@@ -30,8 +30,8 @@ use crate::sys::openssl::{EVP_PKEY_get_base_id, X509_NAME_oneline};
 use crate::text::{cstr, name_has_suffix};
 use crate::util::chain;
 use crate::util::crypto_openssl::{
-    Cert, cert_free, cert_key_algorithm, cert_read_der, complain_stack, key_type_name,
-    openssl_complain, sha256, utc, x509_from_der_bio,
+    Cert, cert_key_algorithm, cert_read_der, complain_stack, key_type_name, openssl_complain,
+    sha256, utc, x509_from_der_bio,
 };
 use crate::util::eventlog;
 use crate::util::format::fputs_sanitized;
@@ -708,8 +708,6 @@ fn check_cert_algorithm(der: &[u8], what: &[u8]) -> c_int {
     }
     // SAFETY: the certificate and room for its algorithm's name.
     let ret = unsafe { cert_key_algorithm(&cert, name.as_mut_ptr().cast(), name.len()) };
-    // SAFETY: the certificate read above.
-    unsafe { cert_free(&mut cert) };
     if ret != 0 || cstr(&name) != b"ML-DSA-87" {
         let what_alg: &[u8] = if ret != 0 {
             b"of an unknown algorithm"
@@ -1062,8 +1060,6 @@ fn purge_signed_by(der: &[u8], boot: bool) -> c_int {
     let files = match dir_names(UPATCHES_DIR.as_bytes(), |n| name_has_suffix(n, b".upatch")) {
         Ok(files) => files,
         Err(err) => {
-            // SAFETY: the certificate read above.
-            unsafe { cert_free(&mut cert) };
             return if err == -ENOENT { 0 } else { err };
         }
     };
@@ -1107,8 +1103,6 @@ fn purge_signed_by(der: &[u8], boot: bool) -> c_int {
         info(&[b"keys revoke: ", name, b" ", what]);
         purged += 1;
     }
-    // SAFETY: the certificate read above.
-    unsafe { cert_free(&mut cert) };
     if ret != 0 { ret } else { purged }
 }
 

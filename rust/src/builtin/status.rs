@@ -30,7 +30,7 @@ use crate::util::chain::{self, ChainStatus};
 use crate::util::conditions::{self, CONDITIONS_MAX, Condition, ConditionsInput};
 use crate::util::config::{self, Config};
 use crate::util::crypto_openssl::{
-    Cert, cert_free, cert_key_algorithm, cert_not_before, cert_read_der, cert_subject,
+    Cert, cert_key_algorithm, cert_not_before, cert_read_der, cert_subject,
 };
 use crate::util::eventlog;
 use crate::util::format::{fputs_sanitized, human_size};
@@ -950,18 +950,16 @@ fn cert_info(der: &[u8]) -> Result<CertInfo, c_int> {
     if rc != 0 {
         return Err(rc);
     }
-    // SAFETY: the cert read above and each field's room, then freed.
-    let rc = unsafe {
-        let mut rc = cert_subject(&cert, subject.as_mut_ptr().cast(), subject.len());
-        if rc == 0 {
-            rc = cert_key_algorithm(&cert, algorithm.as_mut_ptr().cast(), algorithm.len());
-        }
-        if rc == 0 {
-            rc = cert_not_before(&cert, not_before.as_mut_ptr().cast());
-        }
-        cert_free(&mut cert);
-        rc
-    };
+    // SAFETY: the certificate read above and room for the subject.
+    let mut rc = unsafe { cert_subject(&cert, subject.as_mut_ptr().cast(), subject.len()) };
+    if rc == 0 {
+        // SAFETY: the certificate and room for its algorithm name.
+        rc = unsafe { cert_key_algorithm(&cert, algorithm.as_mut_ptr().cast(), algorithm.len()) };
+    }
+    if rc == 0 {
+        // SAFETY: the certificate and room for its date.
+        rc = unsafe { cert_not_before(&cert, not_before.as_mut_ptr().cast()) };
+    }
     if rc != 0 {
         return Err(rc);
     }
