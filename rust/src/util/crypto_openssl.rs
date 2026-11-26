@@ -450,16 +450,6 @@ pub(crate) unsafe fn cert_read_fd(fd: BorrowedFd<'_>, cert: *mut Cert) -> c_int 
     unsafe { cert_read_der(der.as_ptr(), der.len(), cert) }
 }
 
-/// # Safety
-///
-/// `cert` is NULL or points to a cert.
-pub(crate) unsafe fn cert_free(cert: *mut Cert) {
-    // SAFETY: the caller passes NULL or a cert.
-    if let Some(cert) = unsafe { cert.as_mut() } {
-        cert.imp = None;
-    }
-}
-
 /// The DER SubjectPublicKeyInfo of the certificate as it holds it.
 fn spki_der(x509: &X509Ref) -> Option<Vec<u8>> {
     // SAFETY: the certificate's own key, encoded twice, first for its

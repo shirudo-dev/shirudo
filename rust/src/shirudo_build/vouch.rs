@@ -14,7 +14,7 @@ use std::os::unix::io::IntoRawFd;
 use super::{KeyFiles, error, hex, info, last_err, print, strerr};
 use crate::errno::{EINVAL, EIO, EKEYREJECTED};
 use crate::sys::libc::close;
-use crate::util::crypto_openssl::{Cert, cert_free, cert_key_algorithm, cert_read_der};
+use crate::util::crypto_openssl::{Cert, cert_key_algorithm, cert_read_der};
 use crate::util::help::{Help, HelpSection};
 use crate::util::keys::{digest_der, read_der, vouch_payload};
 use crate::util::options::{EXIT_USAGE, OPT_ARG, OPT_DONE, OPT_END, OptParser, OptSpec};
@@ -35,12 +35,8 @@ fn algorithm_ok(der: &[u8], what: &CStr) -> c_int {
         error(&[what.to_bytes(), b" is not a certificate"].concat());
         return ret;
     }
-    // SAFETY: the cert read above and room for the name; then freed.
-    let ret = unsafe {
-        let ret = cert_key_algorithm(&cert, name.as_mut_ptr().cast(), name.len());
-        cert_free(&mut cert);
-        ret
-    };
+    // SAFETY: the certificate read above and room for the name.
+    let ret = unsafe { cert_key_algorithm(&cert, name.as_mut_ptr().cast(), name.len()) };
     let name = crate::text::cstr(&name);
     if ret != 0 || name != b"ML-DSA-87" {
         let alg: &[u8] = if ret != 0 {

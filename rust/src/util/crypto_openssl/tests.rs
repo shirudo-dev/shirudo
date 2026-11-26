@@ -50,6 +50,4 @@ fn signers_need_a_complete_envelope() {
     // SAFETY: the signature bytes and the live certificate remain valid.
     let signed_by = unsafe { cms_signed_by(signature.as_ptr(), signature.len(), &cert) };
     assert_eq!(signed_by, -EINVAL);
-    // SAFETY: cert owns the certificate read above.
-    unsafe { cert_free(&mut cert) };
 }

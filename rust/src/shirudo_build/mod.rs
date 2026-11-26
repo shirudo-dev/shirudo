@@ -363,13 +363,6 @@ impl Certificate {
     }
 }
 
-impl Drop for Certificate {
-    fn drop(&mut self) {
-        // SAFETY: the reader left either an empty certificate or one we own.
-        unsafe { crate::util::crypto_openssl::cert_free(&mut self.0) };
-    }
-}
-
 fn hex(bytes: &[u8]) -> Vec<u8> {
     const HEX: &[u8; 16] = b"0123456789abcdef";
 

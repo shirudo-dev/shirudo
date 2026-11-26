@@ -9,8 +9,7 @@
 //! certificate, then the signature.
 
 use super::{
-    Cert, CertPubkey, base64_decode, cert_free, cert_pubkey, cert_read_der, cms_signed_by,
-    verify_detached,
+    Cert, CertPubkey, base64_decode, cert_pubkey, cert_read_der, cms_signed_by, verify_detached,
 };
 use crate::fuzzing::fuzz_target;
 use crate::util::keys::digest_der;
@@ -39,7 +38,6 @@ fuzz_target!(shirudo_fuzz_cms, shirudo_fuzz_cms_init, |data| {
             if cert_pubkey(&cert, &mut public) == 0 && public.n_len > public.n.len() {
                 std::process::abort();
             }
-            cert_free(&mut cert);
         }
     }
     let mut raw = vec![0u8; sig.len() + 1];

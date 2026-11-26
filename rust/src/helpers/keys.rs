@@ -18,7 +18,7 @@ use std::os::unix::fs::OpenOptionsExt;
 
 use super::{err, helper_main, out};
 use crate::errno::{EFBIG, EINVAL, EIO};
-use crate::util::crypto_openssl::{Cert, cert_free, cert_read_file, cms_signed_by};
+use crate::util::crypto_openssl::{Cert, cert_read_file, cms_signed_by};
 use crate::util::hex::encode;
 use crate::util::keys::{TrustedSet, cert_path, load, load_image_at, members, verify_signature};
 use crate::util::upatch::Upatch;
@@ -87,12 +87,8 @@ fn signer(upatch: &CStr, cert_file: &CStr) -> c_int {
         return 2;
     }
     let sig = u.signature();
-    // SAFETY: the upatch's signature and the certificate, freed after.
-    let ret = unsafe {
-        let ret = cms_signed_by(sig.as_ptr().cast(), sig.len(), &cert);
-        cert_free(&mut cert);
-        ret
-    };
+    // SAFETY: the upatch's signature and the certificate remain live.
+    let ret = unsafe { cms_signed_by(sig.as_ptr().cast(), sig.len(), &cert) };
     out(match ret {
         1 => "yes\n",
         0 => "no\n",
