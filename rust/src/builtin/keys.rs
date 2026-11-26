@@ -19,7 +19,8 @@ use openssl::hash::MessageDigest;
 use openssl::pkey::{HasPublic, PKey, PKeyRef, Private};
 use openssl::x509::{X509, X509NameRef};
 
-use crate::errno::{EACCES, EINVAL, EIO, EKEYREJECTED, ENODEV, ENOENT, ENOKEY, ESTALE};
+use crate::builtin::upatch::UPATCH_PURGE_OTHER_SIGNER;
+use crate::errno::{EACCES, EINVAL, EIO, EKEYREJECTED, ENODEV, ENOENT, ENOKEY};
 use crate::ffi;
 use crate::sys::identity::Identity;
 use crate::sys::libc::{O_CLOEXEC, O_RDONLY, PATH_MAX, errno, fwrite, open, stdout, strerror};
@@ -27,8 +28,8 @@ use crate::sys::openssl::{EVP_PKEY_get_base_id, X509_NAME_oneline};
 use crate::text::{cstr, name_has_suffix};
 use crate::util::chain;
 use crate::util::crypto_openssl::{
-    Cert, cert_free, cert_key_algorithm, cert_read_der, cms_signed_by, complain_stack,
-    key_type_name, openssl_complain, sha256, utc, x509_from_der_bio,
+    Cert, cert_free, cert_key_algorithm, cert_read_der, complain_stack, key_type_name,
+    openssl_complain, sha256, utc, x509_from_der_bio,
 };
 use crate::util::eventlog;
 use crate::util::format::fputs_sanitized;
@@ -46,7 +47,7 @@ use crate::util::keys::{
 };
 use crate::util::options::{EXIT_USAGE, OPT_ARG, OPT_DONE, OPT_END, OptParser, OptSpec};
 use crate::util::paths::{key_files, keys_dir, path_exists};
-use crate::util::upatch::Upatch;
+use crate::util::upatch::name_valid;
 
 const KEYS_DIR: &CStr = c"/var/lib/shirudo/keys";
 const RUNTIME_KEYS_DIR: &CStr = c"/run/shirudo/runtime/keys";
@@ -1027,28 +1028,17 @@ fn purge_signed_by(der: &[u8]) -> c_int {
         }
     };
     for file in &files {
-        let path = [UPATCHES_DIR.as_bytes(), b"/", file].concat();
-        if path.len() >= PATH_MAX {
-            continue;
-        }
-        let path = message(&[&path]);
-        let Ok(u) = Upatch::open(&path) else {
+        let Some(name) = file.strip_suffix(b".upatch") else {
             continue;
         };
-        let sig = u.signature();
-        // SAFETY: the open container's signature and the certificate.
-        if unsafe { cms_signed_by(sig.as_ptr().cast(), sig.len(), &cert) } != 1 {
+        if !name_valid(Some(name)) {
+            error(&[b"keys revoke: invalid archive filename"]);
+            ret = -EINVAL;
             continue;
         }
-        let name = u.name();
         let name_c = message(&[name]);
         let prc = crate::builtin::upatch::purge(&name_c, (&raw const cert).cast(), c"key_revoke");
-        if prc == -ESTALE {
-            info(&[
-                b"keys revoke: ",
-                name,
-                b" was replaced by an upatch the key did not sign; left alone",
-            ]);
+        if prc == UPATCH_PURGE_OTHER_SIGNER {
             continue;
         }
         if prc < 0 {

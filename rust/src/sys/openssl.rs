@@ -8,8 +8,8 @@
 use core::ffi::{c_char, c_int, c_uint, c_ulong, c_void};
 
 use openssl_sys::{
-    BIO, CMS_ContentInfo, EVP_MD, EVP_PKEY, EVP_PKEY_CTX, OPENSSL_STACK, SSL, SSL_CTX, X509,
-    X509_NAME, X509_STORE,
+    ASN1_INTEGER, ASN1_OCTET_STRING, BIO, CMS_ContentInfo, EVP_MD, EVP_PKEY, EVP_PKEY_CTX,
+    OPENSSL_STACK, SSL, SSL_CTX, X509, X509_NAME, X509_STORE,
 };
 
 /// An `X509_PUBKEY`.
@@ -56,6 +56,12 @@ unsafe extern "C" {
 
     pub fn CMS_get0_SignerInfos(cms: *mut CMS_ContentInfo) -> *mut OPENSSL_STACK;
     pub fn CMS_SignerInfo_cert_cmp(si: *mut CmsSignerInfo, cert: *mut X509) -> c_int;
+    pub fn CMS_SignerInfo_get0_signer_id(
+        si: *mut CmsSignerInfo,
+        key: *mut *mut ASN1_OCTET_STRING,
+        issuer: *mut *mut X509_NAME,
+        serial: *mut *mut ASN1_INTEGER,
+    ) -> c_int;
     pub fn CMS_add1_signer(
         cms: *mut CMS_ContentInfo,
         signer: *mut X509,

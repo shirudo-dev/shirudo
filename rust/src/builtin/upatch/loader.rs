@@ -40,7 +40,7 @@ use crate::util::bpf_sys::{
     BPF_RAW_TRACEPOINT_OPEN, bpf_obj_get, link_create, prog_test_run,
 };
 use crate::util::chain::{memneq_explicit, sha256_parts};
-use crate::util::crypto_openssl::sha256_into;
+use crate::util::crypto_openssl::{cms_check_signers, sha256_into};
 use crate::util::elf_target;
 use crate::util::identity;
 use crate::util::io::dir_names_at;
@@ -1691,6 +1691,17 @@ pub(crate) fn apply(
             return Err(());
         }
         specs = Some(parsed);
+    }
+
+    if cms_check_signers(sig) != 0 {
+        log_err(b"upatch: unreadable CMS signer information");
+        rep.fail(
+            c"signed_loader_load",
+            c"parser_rejected",
+            EBADMSG,
+            b"invalid CMS signature envelope",
+        );
+        return Err(());
     }
 
     // The metadata map is exclusive to the loader by the digest of its

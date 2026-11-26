@@ -36,7 +36,7 @@ use crate::text::cstr;
 use crate::util::bpf_sys::bpf_obj_get;
 use crate::util::chain::{self, memneq_explicit};
 use crate::util::config::{self, Scrubbed};
-use crate::util::crypto_openssl::{Cert, cms_signed_by};
+use crate::util::crypto_openssl::{Cert, cms_archive_signed_by};
 use crate::util::eventlog;
 use crate::util::help::{Help, HelpSection};
 use crate::util::hex::hex_decode;
@@ -57,6 +57,7 @@ use crate::util::upatch_verify::{archive_verify, loaded_payload};
 /// .upatch file holds.
 const UPATCHES_DIR_C: &CStr = c"/var/lib/shirudo/upatches";
 pub(super) const LSM_LINK_PIN: &CStr = c"/run/shirudo/bpffs/lsm_link";
+pub(crate) const UPATCH_PURGE_OTHER_SIGNER: c_int = 2;
 const UPATCH_FILE_MAX: usize = 16 * 1024 * 1024;
 const DIGEST_LEN: usize = 32;
 const KERNEL_ABI_DETAIL_MAX: usize = 256;
@@ -1718,7 +1719,7 @@ pub(crate) fn member_active_fd(fd: BorrowedFd<'_>) -> c_int {
 /// and checks the signer on what that read finds: an upgrade may have
 /// replaced the upatch since the caller's scan with one another key
 /// signed. 1 when the unload was measured, 0 when only the archive went,
-/// -ESTALE when the archive is no longer `signer`'s and stays, -errno
+/// UPATCH_PURGE_OTHER_SIGNER when another key signed the archive, -errno
 /// otherwise.
 pub(crate) fn purge(name: &CStr, signer: *const Cert, reason: &CStr) -> c_int {
     if !name_valid(Some(name.to_bytes())) {
@@ -1765,14 +1766,21 @@ fn purge_locked(name: &[u8], signer: *const Cert, reason: &[u8]) -> c_int {
         Ok(u) => u,
         Err(err) => return err,
     };
+    if !u.name_signed() || u.name() != name {
+        return -EBADMSG;
+    }
     let sig = u.signature();
-    // SAFETY: the container's signature and the caller's certificate.
-    let ret = unsafe { cms_signed_by(sig.as_ptr().cast(), sig.len(), signer) };
+    // SAFETY: the archive's signature and the caller's certificate.
+    let ret = unsafe { cms_archive_signed_by(sig.as_ptr(), sig.len(), signer) };
     let payload = u.hdr.payload_sha256;
     let payload_type = u.hdr.ty;
     drop(u);
     if ret != 1 {
-        return if ret < 0 { ret } else { -ESTALE };
+        return if ret < 0 {
+            ret
+        } else {
+            UPATCH_PURGE_OTHER_SIGNER
+        };
     }
 
     // As for unload: the event first, then the detach it describes.

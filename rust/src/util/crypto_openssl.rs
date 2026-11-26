@@ -39,7 +39,9 @@ use openssl::x509::verify::X509VerifyFlags;
 use openssl::x509::{X509, X509Ref, X509StoreContext};
 use openssl_sys as ffi;
 
-use crate::errno::{EINVAL, EIO, EKEYREJECTED, ENAMETOOLONG, ENOMEM, ENOPKG, EPROTONOSUPPORT};
+use crate::errno::{
+    EBADMSG, EINVAL, EIO, EKEYREJECTED, ENAMETOOLONG, ENOMEM, ENOPKG, EPROTONOSUPPORT,
+};
 use crate::ffi::slice;
 use crate::sys::libc::O_RDONLY;
 use crate::sys::openssl as more;
@@ -684,22 +686,77 @@ pub(crate) unsafe fn cert_not_before(cert: *const Cert, out: *mut c_char) -> c_i
     0
 }
 
-/// The CMS blob in `signature`, all of it and nothing more, or none.
-fn read_cms(signature: &[u8]) -> Option<CmsContentInfo> {
+/// A CMS signature needs at least one signer, and every signer needs an
+/// identifier that can be attributed to a certificate.
+fn cms_has_signers(cms: &CmsContentInfo) -> bool {
+    // SAFETY: cms owns its signer info stack.
+    let signers = unsafe { more::CMS_get0_SignerInfos(cms.as_ptr()) };
+    if signers.is_null() {
+        return false;
+    }
+    // SAFETY: the stack belongs to cms.
+    let count = unsafe { ffi::OPENSSL_sk_num(signers) };
+    if count <= 0 {
+        return false;
+    }
+    for i in 0..count {
+        // SAFETY: i is within the stack.
+        let si = unsafe { ffi::OPENSSL_sk_value(signers, i) }.cast::<more::CmsSignerInfo>();
+        if si.is_null() {
+            return false;
+        }
+        let (mut key, mut issuer, mut serial) = (ptr::null_mut(), ptr::null_mut(), ptr::null_mut());
+        // SAFETY: si belongs to cms; the pointers borrow its signer identifier.
+        let ok =
+            unsafe { more::CMS_SignerInfo_get0_signer_id(si, &mut key, &mut issuer, &mut serial) };
+        if ok == 0 {
+            return false;
+        }
+        if !key.is_null() {
+            // SAFETY: key borrows an ASN.1 string from si.
+            if unsafe { ffi::ASN1_STRING_length(key.cast()) } <= 0 {
+                return false;
+            }
+        } else if issuer.is_null() || serial.is_null() {
+            return false;
+        }
+    }
+    true
+}
+
+/// Parse a complete CMS envelope. Older archived signatures may have
+/// trailing zero padding; only signer attribution uses that form.
+fn read_cms(signature: &[u8], archive: bool) -> Option<CmsContentInfo> {
     let len = c_long::try_from(signature.len())
         .ok()
         .filter(|&n| n > 0 && n <= c_int::MAX.into())?;
     let mut next = signature.as_ptr();
-    // SAFETY: the slice's bytes, and room for where the parse stopped in
-    // them.
+    // SAFETY: the slice holds len bytes and next receives the parse end.
     let cms = unsafe { ffi::d2i_CMS_ContentInfo(ptr::null_mut(), &mut next, len) };
     if cms.is_null() {
         return None;
     }
     // SAFETY: the structure d2i made, owned from here.
     let cms = unsafe { CmsContentInfo::from_ptr(cms) };
+    // SAFETY: d2i leaves next within the input slice after success.
+    let consumed = usize::try_from(unsafe { next.offset_from(signature.as_ptr()) }).ok()?;
+    let suffix = signature.get(consumed..)?;
+    if (!suffix.is_empty() && (!archive || suffix.iter().any(|&byte| byte != 0)))
+        || !cms_has_signers(&cms)
+    {
+        return None;
+    }
+    Some(cms)
+}
 
-    (next == signature.as_ptr_range().end).then_some(cms)
+/// Check a new artifact before handing its signature to the kernel.
+pub(crate) fn cms_check_signers(signature: &[u8]) -> c_int {
+    if read_cms(signature, false).is_some() {
+        0
+    } else {
+        clear_errors();
+        -EBADMSG
+    }
 }
 
 /// Whether `signature` is a detached CMS signature of `payload` by the
@@ -748,7 +805,7 @@ pub(crate) fn verify_detached_x509(payload: &[u8], signature: &[u8], x509: &X509
         let store = store.build();
         let mut signers = Stack::new()?;
         signers.push(x509.to_owned())?;
-        let Some(mut cms) = read_cms(signature) else {
+        let Some(mut cms) = read_cms(signature, false) else {
             return Err(ErrorStack::get());
         };
         cms.verify(
@@ -768,14 +825,32 @@ pub(crate) fn verify_detached_x509(payload: &[u8], signature: &[u8], x509: &X509
     }
 }
 
-/// Whether a signer of the CMS blob names the cert, by key id or by
-/// issuer and serial: 1 when one does, 0 when none, -EINVAL when the blob
-/// does not parse. Says nothing about the signature's validity.
+/// Match a parsed signer identifier to this certificate without verifying
+/// the signature itself.
+fn signer_matches(signature: &[u8], x509: &X509Ref, archive: bool) -> c_int {
+    let Some(cms) = read_cms(signature, archive) else {
+        clear_errors();
+        return -EINVAL;
+    };
+    // SAFETY: cms owns the signer stack until this function returns.
+    let sis = unsafe { more::CMS_get0_SignerInfos(cms.as_ptr()) };
+    // cms_has_signers already checked the nonempty stack.
+    // SAFETY: sis belongs to cms.
+    let named = (0..unsafe { ffi::OPENSSL_sk_num(sis) }).any(|i| {
+        // SAFETY: i is within the stack.
+        let si = unsafe { ffi::OPENSSL_sk_value(sis, i) };
+        // SAFETY: si belongs to cms and x509 is a live certificate.
+        unsafe { more::CMS_SignerInfo_cert_cmp(si.cast(), x509.as_ptr()) == 0 }
+    });
+    c_int::from(named)
+}
+
+/// Attribute a complete, new CMS signature to a certificate.
 ///
 /// # Safety
 ///
-/// `signature` holds `signature_len` bytes, and `cert` is NULL or points
-/// to a cert.
+/// `signature` holds `signature_len` bytes, and `cert` is NULL or
+/// points to a certificate.
 pub(crate) unsafe fn cms_signed_by(
     signature: *const u8,
     signature_len: usize,
@@ -789,23 +864,29 @@ pub(crate) unsafe fn cms_signed_by(
         return -EINVAL;
     }
     // SAFETY: the caller's signature_len bytes.
-    let Some(cms) = read_cms(unsafe { slice(signature, signature_len) }) else {
-        clear_errors();
+    signer_matches(unsafe { slice(signature, signature_len) }, x509, false)
+}
+
+/// Attribute an already archived signature, including old zero padding.
+///
+/// # Safety
+///
+/// `signature` holds `signature_len` bytes, and `cert` is NULL or
+/// points to a certificate.
+pub(crate) unsafe fn cms_archive_signed_by(
+    signature: *const u8,
+    signature_len: usize,
+    cert: *const Cert,
+) -> c_int {
+    // SAFETY: the caller passes NULL or a cert.
+    let Some(x509) = (unsafe { x509_of(cert) }) else {
         return -EINVAL;
     };
-    // SAFETY: the structure's signer infos, each compared with the
-    // certificate.
-    unsafe {
-        let sis = more::CMS_get0_SignerInfos(cms.as_ptr());
-        if sis.is_null() {
-            clear_errors();
-            return -EINVAL;
-        }
-        let named = (0..ffi::OPENSSL_sk_num(sis)).any(|i| {
-            more::CMS_SignerInfo_cert_cmp(ffi::OPENSSL_sk_value(sis, i).cast(), x509.as_ptr()) == 0
-        });
-        c_int::from(named)
+    if signature.is_null() {
+        return -EINVAL;
     }
+    // SAFETY: the caller's signature_len bytes.
+    signer_matches(unsafe { slice(signature, signature_len) }, x509, true)
 }
 
 /// HMAC-SHA-256 of `data` under `key`.
