@@ -654,8 +654,10 @@ from the bpffs takes it along.
 Bootstrap in the initrd records the unique mount IDs of its root and the
 target root. In the protected namespace, only host PID 1 can pivot from
 the first to the second. It may change propagation on the bpffs ancestry
-while it is on the initrd root and restore shared propagation after the
-switch. Before allowing the old root to detach, the unmount guard checks
+while it is on the initrd root. Any caller may make a mount shared at any
+time. The kernel refuses to move a mount whose parent is shared, so shared
+is the state these guards keep: systemd asks for it after the switch and
+``ip netns add`` asks for it on ``/run/netns``. Before allowing the old root to detach, the unmount guard checks
 that the new root has a copy of the same bpffs subtree outside the reach
 of the unmount and transfers its protection to that copy.
 
