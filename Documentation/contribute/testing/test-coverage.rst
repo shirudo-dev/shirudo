@@ -490,6 +490,13 @@ signed config image.
        next boot from the initrd: the signer is not enrolled, the archive
        of the upatch it signed is purged and not restored, and a load it
        signed is refused
+   * - ``t5107-verity-revocation-archive``
+     - In ``functional/image-reboot/``, with ``t5106``. An archive cut
+       short, which no signer can be read from: a live update with
+       revocation records refuses and changes nothing, before the boot
+       and after it; the boot that revokes completes ``init`` and leaves
+       the file, its upatch is not restored, and ``status`` and the
+       keepalive show the smaller loaded set without a condition for it
 
 ``tamperproof`` (6)
 ~~~~~~~~~~~~~~~~~~~
@@ -1215,7 +1222,8 @@ Coverage by area
        ``t6134``, ``t6135``, ``t6136``, ``t6137``
    * - Keyrings
      - ``t2101``, ``t2102``, ``t2103``, ``t5101``, ``t5104``,
-       ``t5106``, ``t6004``, ``t6104``, ``t6112``, ``t6129``, ``t6140``
+       ``t5106``, ``t5107``, ``t6004``, ``t6104``, ``t6112``, ``t6129``,
+       ``t6140``
    * - Signing keys and the trusted set
      - ``t2001``, ``t2002``, ``t2003``, ``t2004``, ``t2005``,
        ``t5003``. Unit: ``io``

@@ -3,6 +3,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <linux/fs.h>
 #include <stdio.h>
 #include <string.h>
@@ -193,14 +194,41 @@ done:
 	return ret ? 1 : 0;
 }
 
+/* Shorter than a .upatch header, as a torn write leaves an archive. */
+#define ARCHIVE_TORN_SIZE	16
+
+/*
+ * The seal lets only a task of the runtime image change an archive, which
+ * this helper is.
+ */
+static int archive_truncate(const char *name)
+{
+	char path[PATH_MAX];
+	int len;
+
+	len = snprintf(path, sizeof(path), "%s/%s.upatch", UPATCHES_DIR, name);
+	if (strchr(name, '/') || len < 0 || (size_t)len >= sizeof(path))
+		return 2;
+	if (truncate(path, ARCHIVE_TORN_SIZE)) {
+		fprintf(stderr, "archive truncate: %s: %s\n", path,
+			strerror(errno));
+		return 1;
+	}
+	return 0;
+}
+
 int __wrap_main(int argc, const char **argv)
 {
 	if (argc == 4 && !strcmp(argv[1], "config-root"))
 		return config_root_test(argv[2], argv[3]);
+	if (argc == 3 && !strcmp(argv[1], "archive-truncate"))
+		return archive_truncate(argv[2]);
 	if (argc != 4 || strcmp(argv[1], "image") ||
 	    strcmp(argv[2], "update")) {
 		fprintf(stderr, "usage: shirudo-image-fault "
-			"image update <prefix>\n");
+			"image update <prefix>\n"
+			"       shirudo-image-fault "
+			"archive-truncate <upatch>\n");
 		return 2;
 	}
 	return __real_main(argc, argv);
