@@ -20,8 +20,8 @@ make -C testing unit/<suite>                # one unit suite
 make -C testing functional/<family>         # one family, its VM tests too
 make tests VM=0                             # without the target tests
 make tests BACKEND=0                        # without the backend SQL tests
-make tests VM=0 BACKEND=0 SANITIZE=address,undefined  # CI: gcc and clang
-make tests VM=0 BACKEND=0 SANITIZE=thread CC=clang    # CI: TSan
+make tests VM=0 BACKEND=0 SANITIZE=address,undefined  # CI: gcc on PR; clang too on main
+make tests VM=0 BACKEND=0 SANITIZE=thread CC=clang    # CI on main: TSan
 make -C testing valgrind                    # memcheck: unit tests and fuzz corpora
 make -C testing miri                        # Miri: suites that call no C
 make -C testing fuzz [FUZZ_SECONDS=60] [FUZZERS=<target>...]
