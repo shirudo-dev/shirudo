@@ -1676,43 +1676,6 @@ pub(crate) fn remove_fd(path: &CStr, fd: BorrowedFd<'_>) -> c_int {
     run_unload_fd(&[c"unload", c"--no-precheck", path], Some(fd))
 }
 
-/// Check whether an old load member without an unload directive is active.
-/// Only the header is parsed here; this does not authorize loading it.
-pub(crate) fn member_active_fd(fd: BorrowedFd<'_>) -> c_int {
-    let file = match fd.try_clone_to_owned() {
-        Ok(fd) => fs::File::from(fd),
-        Err(e) => return -e.raw_os_error().unwrap_or(EINVAL),
-    };
-    let u = match Upatch::read(&file) {
-        Ok(u) => u,
-        Err(err) => return err,
-    };
-    let name = u.name();
-    if u.is_unload() || !u.name_signed() || !name_valid(Some(name)) {
-        return -EINVAL;
-    }
-    if u.hdr.ty == TYPE_JAVA {
-        return match purge_is_loaded(name, TYPE_JAVA) {
-            Ok(active) => i32::from(active),
-            Err(err) => err,
-        };
-    }
-    let root = match identity::bpffs_root_open() {
-        Ok(fd) => fd,
-        Err(err) if err == -ENOENT => return -ENODEV,
-        Err(err) => return err,
-    };
-    let rel = match CString::new([b"upatches/".as_slice(), &pin_name(name)].concat()) {
-        Ok(rel) => rel,
-        Err(_) => return -EINVAL,
-    };
-    match open_beneath_same_mount(root.as_raw_fd(), &rel, O_RDONLY | O_DIRECTORY) {
-        Ok(_) => 1,
-        Err(err) if err == -ENOENT => 0,
-        Err(err) => err,
-    }
-}
-
 /// Detaches, unpins and unarchives upatch `name` without a directive,
 /// because the key that signed it was revoked. It holds the register
 /// lock from the archive read to its unlink, as a load and an unload do,

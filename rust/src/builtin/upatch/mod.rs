@@ -27,9 +27,7 @@ use crate::util::map_read::{self, MapSummary};
 /// The most a JSON document grows to.
 const JSON_MAX: usize = 8 * 1024 * 1024;
 
-pub(crate) use ops::{
-    UPATCH_PURGE_OTHER_SIGNER, install, member_active_fd, purge, remove, remove_fd,
-};
+pub(crate) use ops::{UPATCH_PURGE_OTHER_SIGNER, install, purge, remove, remove_fd};
 
 static SUBCMDS: [HelpItem; 7] = [
     HelpItem::new(

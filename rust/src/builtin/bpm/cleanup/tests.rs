@@ -36,10 +36,6 @@ impl Package {
     }
 }
 
-fn inactive(_: BorrowedFd<'_>) -> c_int {
-    0
-}
-
 fn removed(_: &CStr, _: BorrowedFd<'_>) -> c_int {
     0
 }
@@ -67,24 +63,15 @@ fn uninstall_detaches_before_removing_all_versions() {
         i32::from(refuse.get())
     };
 
-    assert_eq!(
-        uninstall_at(p.store.as_fd(), &p.state, &inactive, &remove),
-        Err(-EIO)
-    );
+    assert_eq!(uninstall_at(p.store.as_fd(), &p.state, &remove), Err(-EIO));
     assert!(p.tmp.join("sample/1/upatches/a.unload.upatch").exists());
     assert!(p.tmp.join("sample/sample-1.bee").exists());
     refuse.set(false);
     order.borrow_mut().clear();
-    assert_eq!(
-        uninstall_at(p.store.as_fd(), &p.state, &inactive, &remove),
-        Ok(())
-    );
+    assert_eq!(uninstall_at(p.store.as_fd(), &p.state, &remove), Ok(()));
     assert_eq!(*order.borrow(), b"za");
     p.gone();
-    assert_eq!(
-        uninstall_at(p.store.as_fd(), &p.state, &inactive, &remove),
-        Ok(())
-    );
+    assert_eq!(uninstall_at(p.store.as_fd(), &p.state, &remove), Ok(()));
     assert_eq!(*order.borrow(), b"za");
 }
 
@@ -102,41 +89,35 @@ fn unload_uses_the_file_opened_before_a_path_replacement() {
         0
     };
 
-    assert_eq!(
-        uninstall_at(p.store.as_fd(), &p.state, &inactive, &remove),
-        Ok(())
-    );
+    assert_eq!(uninstall_at(p.store.as_fd(), &p.state, &remove), Ok(()));
     assert_eq!(seen.get(), b'a');
     p.gone();
 }
 
 #[test]
 #[cfg_attr(miri, ignore = "openat2 is unavailable in Miri")]
-fn unpaired_load_must_be_inactive() {
+fn load_without_directive_stops_uninstall() {
     let p = Package::new();
-    p.put("sample/1/upatches/load.upatch", b'l');
-    let state = Cell::new(1);
-    let active = |fd: BorrowedFd<'_>| {
-        assert_eq!(first(fd), b'l');
-        state.get()
+    p.put("sample/1/upatches/a.upatch", b'l');
+    p.put("sample/1/upatches/a.unload.upatch", b'a');
+    p.put("sample/1/upatches/b.upatch", b'l');
+    let order = RefCell::new(Vec::new());
+    let remove = |_: &CStr, fd: BorrowedFd<'_>| {
+        order.borrow_mut().push(first(fd));
+        0
     };
-    let remove = |_: &CStr, _: BorrowedFd<'_>| panic!("no unload directive");
 
     assert_eq!(
-        uninstall_at(p.store.as_fd(), &p.state, &active, &remove),
+        uninstall_at(p.store.as_fd(), &p.state, &remove),
         Err(-ENODATA)
     );
-    state.set(-EIO);
-    assert_eq!(
-        uninstall_at(p.store.as_fd(), &p.state, &active, &remove),
-        Err(-EIO)
-    );
-    assert!(p.tmp.join("sample/1/upatches/load.upatch").exists());
-    state.set(0);
-    assert_eq!(
-        uninstall_at(p.store.as_fd(), &p.state, &active, &remove),
-        Ok(())
-    );
+    assert!(order.borrow().is_empty());
+    assert!(p.tmp.join("sample/1/upatches/a.upatch").exists());
+    assert!(p.tmp.join("sample/1/upatches/b.upatch").exists());
+
+    p.put("sample/1/upatches/b.unload.upatch", b'b');
+    assert_eq!(uninstall_at(p.store.as_fd(), &p.state, &remove), Ok(()));
+    assert_eq!(*order.borrow(), b"ba");
     p.gone();
 }
 
@@ -150,19 +131,13 @@ fn retry_finishes_partly_removed_package() {
         calls.set(calls.get() + 1);
         0
     };
-    assert_eq!(
-        uninstall_at(p.store.as_fd(), &p.state, &inactive, &remove),
-        Ok(())
-    );
+    assert_eq!(uninstall_at(p.store.as_fd(), &p.state, &remove), Ok(()));
     assert_eq!(calls.get(), 0);
     p.gone();
 
     let p = Package::new();
     fs::remove_dir(p.tmp.join("sample/1/upatches")).unwrap();
-    assert_eq!(
-        uninstall_at(p.store.as_fd(), &p.state, &inactive, &removed),
-        Ok(())
-    );
+    assert_eq!(uninstall_at(p.store.as_fd(), &p.state, &removed), Ok(()));
     p.gone();
 }
 
@@ -180,10 +155,7 @@ fn world_writable_held_directive_keeps_the_package() {
             .unwrap_or_else(|err| err)
     };
 
-    assert_eq!(
-        uninstall_at(p.store.as_fd(), &p.state, &inactive, &remove),
-        Err(-EIO)
-    );
+    assert_eq!(uninstall_at(p.store.as_fd(), &p.state, &remove), Err(-EIO));
     assert!(p.tmp.join(directive).exists());
     assert!(p.tmp.join("sample/1").exists());
 }

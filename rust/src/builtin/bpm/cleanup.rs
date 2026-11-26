@@ -80,11 +80,8 @@ fn package_store_open() -> Result<OwnedFd> {
     seal::open_child(bpm.as_fd(), c"packages", O_RDONLY | O_DIRECTORY)
 }
 
-fn check_unpaired_load(
-    dir: BorrowedFd<'_>,
-    name: &CStr,
-    active: &impl Fn(BorrowedFd<'_>) -> c_int,
-) -> Result {
+// A package ships each load member with the directive that undoes it.
+fn check_load_directive(dir: BorrowedFd<'_>, name: &CStr) -> Result {
     let mut pair = [0u8; 256];
     let ret = upatch_pair(name.to_bytes(), &mut pair);
     if ret != 0 {
@@ -92,22 +89,18 @@ fn check_unpaired_load(
     }
     let pair = child_name(cstr(&pair))?;
     match seal::open_child(dir, &pair, O_RDONLY | O_NONBLOCK) {
-        Ok(_) => return Ok(()),
-        Err(err) if err == -ENOENT => {}
-        Err(err) => return Err(err),
+        Ok(_) => Ok(()),
+        Err(err) if err == -ENOENT => {
+            error(&[
+                b"bpm uninstall: ",
+                name.to_bytes(),
+                b" is missing ",
+                pair.to_bytes(),
+            ]);
+            Err(-ENODATA)
+        }
+        Err(err) => Err(err),
     }
-    let load = seal::open_child(dir, name, O_RDONLY | O_NONBLOCK)?;
-    let result = active(load.as_fd());
-    if result > 0 {
-        error(&[
-            b"bpm uninstall: active ",
-            name.to_bytes(),
-            b" is missing ",
-            pair.to_bytes(),
-        ]);
-        return Err(-ENODATA);
-    }
-    if result < 0 { Err(result) } else { Ok(()) }
 }
 
 struct Directive {
@@ -115,11 +108,7 @@ struct Directive {
     file: OwnedFd,
 }
 
-fn open_directives(
-    dir: BorrowedFd<'_>,
-    version_path: &[u8],
-    active: &impl Fn(BorrowedFd<'_>) -> c_int,
-) -> Result<Vec<Directive>> {
+fn open_directives(dir: BorrowedFd<'_>, version_path: &[u8]) -> Result<Vec<Directive>> {
     let mut unloads = Vec::new();
     for bytes in io::dir_names_at(dir, |_| true)? {
         let kind = upatch_member(&bytes);
@@ -128,7 +117,7 @@ fn open_directives(
         }
         let name = child_name(&bytes)?;
         if kind == UpatchMember::Load {
-            check_unpaired_load(dir, &name, active)?;
+            check_load_directive(dir, &name)?;
             continue;
         }
         if unloads.len() == MAX_UPATCHES {
@@ -152,7 +141,6 @@ fn open_directives(
 fn unload_version(
     version: BorrowedFd<'_>,
     version_path: &[u8],
-    active: &impl Fn(BorrowedFd<'_>) -> c_int,
     remove: &impl Fn(&CStr, BorrowedFd<'_>) -> c_int,
 ) -> Result {
     let dir = match seal::open_child(version, c"upatches", O_RDONLY | O_DIRECTORY) {
@@ -160,7 +148,7 @@ fn unload_version(
         Err(err) if err == -ENOENT => return Ok(()),
         Err(err) => return Err(err),
     };
-    let unloads = open_directives(dir.as_fd(), version_path, active)?;
+    let unloads = open_directives(dir.as_fd(), version_path)?;
     for directive in &unloads {
         if remove(&directive.path, directive.file.as_fd()) != 0 {
             error(&[
@@ -177,18 +165,12 @@ fn unload_version(
 /// Detach the current version, then remove every version of this package.
 pub(super) fn uninstall(st: &BpmStateEntry) -> Result {
     let store = package_store_open()?;
-    uninstall_at(
-        store.as_fd(),
-        st,
-        &crate::builtin::upatch::member_active_fd,
-        &crate::builtin::upatch::remove_fd,
-    )
+    uninstall_at(store.as_fd(), st, &crate::builtin::upatch::remove_fd)
 }
 
 fn uninstall_at(
     store: BorrowedFd<'_>,
     st: &BpmStateEntry,
-    active: &impl Fn(BorrowedFd<'_>) -> c_int,
     remove: &impl Fn(&CStr, BorrowedFd<'_>) -> c_int,
 ) -> Result {
     let name = cstr(&st.name);
@@ -207,7 +189,7 @@ fn uninstall_at(
         &child_name(version)?,
         O_RDONLY | O_DIRECTORY,
     ) {
-        Ok(current) => unload_version(current.as_fd(), cstr(&st.path), active, remove)?,
+        Ok(current) => unload_version(current.as_fd(), cstr(&st.path), remove)?,
         Err(err) if err == -ENOENT => {}
         Err(err) => return Err(err),
     }
