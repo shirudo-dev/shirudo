@@ -695,6 +695,12 @@ signed config image.
        refused; a legacy move of an unrelated mount is refused
        where ``move_mount(2)`` is not; the same changes in a private
        mount namespace are harmless
+   * - ``t6159-bpffs-second-mount``
+     - A legacy ``MS_BIND`` gives the private bpffs a second mount point
+       in a mount namespace of root's. Through it a pin is not unlinked,
+       renamed or opened, and the second mount is not unmounted,
+       remounted or mounted over; each refusal is counted, and nothing
+       reaches the namespace of ``init``
 
 ``bpm`` (7)
 ~~~~~~~~~~~
@@ -1316,7 +1322,7 @@ The threats are those of :doc:`/security/threat-model`.
    * - T2 Detaching or replacing enforcement
      - ``t6101``, ``t6105``, ``t6106``, ``t6107``, ``t6108``,
        ``t6109``, ``t6116``, ``t6119``, ``t6120``, ``t6121``,
-       ``t6138``
+       ``t6138``, ``t6159``
    * - T3 Tampering with shirudo's files and process
      - ``t6001``, ``t6006``, ``t6007``, ``t6110``, ``t6111``,
        ``t6112``, ``t6114``, ``t6115``, ``t6118``, ``t6123``,
@@ -1361,13 +1367,14 @@ tests assert that a refusal moves its counter:
 
    * - Counter
      - Test
-   * - ``LoadNotLoader``, ``ProgAttach``, ``ObjPin``, ``ObjGet``,
-       ``BpfCommand``, ``PinUnlink``, ``PinRename``, ``BpffsUmount``
+   * - ``LoadNotLoader``, ``ProgAttach``, ``ObjPin``, ``BpfCommand``
      - ``t6108``
+   * - ``ObjGet``, ``PinUnlink``, ``PinRename``, ``BpffsUmount``
+     - ``t6108``, ``t6159``
    * - ``BpffsUmountAbove``
      - ``t6120``, ``t6155``, ``t6158``
    * - ``BpffsMount``
-     - ``t6158``
+     - ``t6158``, ``t6159``
    * - ``PinEntry``
      - ``t6121``
    * - ``PerfAttach``

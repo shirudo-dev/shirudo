@@ -648,8 +648,14 @@ The pins live as long as the bpffs superblock, which goes with its last
 mount. ``lsm/sb_umount``, ``lsm/move_mount``, ``lsm/sb_mount`` and
 ``lsm/sb_remount`` refuse every caller, shirudo included, an unmount, a
 move, a mount over or a remount of the private bpffs (``BpffsUmount``,
-``BpffsMount``). Figure 2 shows the two ways an operation on a mount far
-from the bpffs takes it along.
+``BpffsMount``). They go by the superblock, as the guards on the pins
+do, and not by the path. A legacy ``mount(2)`` with ``MS_BIND`` names
+its source in a string that ``lsm/sb_mount`` cannot resolve, so root can
+bind the bpffs at a second path. That is a second name for the same pins
+and no other way to them: through it a pin is no more unlinked, renamed
+or opened, and the second mount is no more unmounted, remounted or
+mounted over than the first (``t6159``, R3). Figure 2 shows the two ways
+an operation on a mount far from the bpffs takes it along.
 
 Bootstrap in the initrd records the unique mount IDs of its root and the
 target root. In the protected namespace, only host PID 1 can pivot from
@@ -1700,6 +1706,10 @@ R3 Pins depend on the mount tree
    releasing them: enforcement continues, ``shirudo status`` reports the
    LSM as not attached, and ``upatch load`` and ``upatch unload`` refuse
    ``tampered`` with the message ``lsm_detached`` in their pre-flight.
+   A second mount of the bpffs, which root binds with the legacy
+   ``mount(2)``, holds the same pins under the same guards, the one on
+   its unmount included: an unmount of it is refused as one of the first
+   is, so it stays for as long as the mount it sits on.
    The walk's bounds refuse every unmount of a tree they cannot cover.
    Mitigations: D7, D11.
 
