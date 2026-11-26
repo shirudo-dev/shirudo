@@ -325,6 +325,27 @@ int seal_open_child(int parent, const char *name, int flags)
 	return fd;
 }
 
+int seal_mkdir_child(int parent, const char *name, mode_t mode, bool exclusive)
+{
+	bool created;
+	int fd, ret;
+
+	if (!is_child_name(name))
+		return -EINVAL;
+	created = !mkdirat(parent, name, mode);
+	if (!created && (errno != EEXIST || exclusive))
+		return -errno;
+	fd = open_beneath_same_mount(parent, name, O_RDONLY | O_DIRECTORY);
+	if (fd < 0)
+		return fd;
+	ret = created ? seal_inherit(parent, fd) : seal_same(parent, fd);
+	if (ret) {
+		close(fd);
+		return ret;
+	}
+	return fd;
+}
+
 static int seal_open_parent(const char *path, const char **name)
 {
 	const char *slash = strrchr(path, '/');
@@ -579,6 +600,34 @@ int seal_open(const char *path, int flags, mode_t mode)
 			       "sealed state); refusing", path);
 	}
 	close(dfd);
+	if (ret) {
+		if (fd >= 0)
+			close(fd);
+		return ret;
+	}
+	return fd;
+}
+
+int seal_create_child(int parent, const char *name, int flags, mode_t mode)
+{
+	int fd, ret;
+
+	if (!is_child_name(name))
+		return -EINVAL;
+	fd = open_beneath_same_mount(parent, name, O_NONBLOCK |
+				     (flags & ~(O_CREAT | O_EXCL | O_TRUNC)));
+	if (fd >= 0) {
+		ret = flags & O_EXCL ? -EEXIST : seal_regular(fd);
+		if (!ret)
+			ret = seal_same(parent, fd);
+		if (!ret && (flags & O_TRUNC) && ftruncate(fd, 0))
+			ret = -errno;
+	} else if (fd == -ENOENT && (flags & O_CREAT)) {
+		fd = create_beneath_same_mount(parent, name, flags, mode);
+		ret = fd < 0 ? fd : seal_inherit(parent, fd);
+	} else {
+		ret = fd;
+	}
 	if (ret) {
 		if (fd >= 0)
 			close(fd);

@@ -66,6 +66,17 @@ int seal_open_read(const char *path);
 int seal_open_state_root(void);
 /* One child of parent, on its mount and carrying its label. */
 int seal_open_child(int parent, const char *name, int flags);
+/*
+ * The same for what an operation makes below a directory it holds open,
+ * so that a mount root places there meanwhile is refused, not followed.
+ * seal_mkdir_child() makes the directory name, or with exclusive unset
+ * takes the one there, and opens it. seal_create_child() opens the
+ * regular file name as seal_open() opens a path: made with O_CREAT when
+ * it is not there, -EEXIST with O_EXCL when it is, truncated with
+ * O_TRUNC once it is known to be shirudo's own.
+ */
+int seal_mkdir_child(int parent, const char *name, mode_t mode, bool exclusive);
+int seal_create_child(int parent, const char *name, int flags, mode_t mode);
 
 /*
  * seal_open_read() of an entry whose directory must carry the label:
