@@ -243,6 +243,7 @@ fn config_nvpcr_evidence_requires_all_certification_fields() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "OpenSSL hashing is foreign code")]
 fn quote_nonce_commits_to_both_opening_signatures() {
     let first = b"register signature";
     let second = b"config signature";
@@ -297,6 +298,7 @@ fn evidence_requires_the_closing_register_certification() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "OpenSSL hashing is foreign code")]
 fn malformed_closing_certification_stops_after_its_failure_line() {
     let evidence = snapshot();
     let key = b"\"after_attest\":\"";
@@ -327,6 +329,7 @@ fn malformed_closing_certification_stops_after_its_failure_line() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "OpenSSL hashing is foreign code")]
 fn genuine_snapshot_verifies_and_report_lines_end_cleanly() {
     let evidence = snapshot();
     let expect = AttestExpect {
