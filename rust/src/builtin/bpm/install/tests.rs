@@ -7,7 +7,7 @@ use crate::util::bpm_package::test_archive;
 use std::fs::{self, File};
 use std::io::Write;
 use std::os::fd::AsFd;
-use std::os::unix::fs::{FileExt, symlink};
+use std::os::unix::fs::{FileExt, PermissionsExt, symlink};
 
 const NEW: &[test_archive::Member<'_>] = &[
     ("sample-2/", b'5', b""),
@@ -21,7 +21,9 @@ const NEW: &[test_archive::Member<'_>] = &[
 
 fn open(dir: &TempDir) -> Install {
     let root = File::open(dir.join("")).unwrap();
-    Install::open_at(root.as_fd(), b"sample", b"2").unwrap()
+    let install = Install::open_at(root.as_fd(), b"sample", b"2").unwrap();
+    assert!(dir.join("bpm/staging/sample-2.bee").exists());
+    install
 }
 
 fn fill(install: &Install) {
@@ -67,10 +69,14 @@ fn install_loads_in_name_order_and_keeps_the_archive() {
         fs::read(dir.join("bpm/packages/sample/2/doc/notes/readme")).unwrap(),
         b"n"
     );
+    let note = fs::metadata(dir.join("bpm/packages/sample/2/doc/notes/readme")).unwrap();
+    assert_eq!(note.permissions().mode() & 0o7777, 0o644);
+    assert_eq!(note.len(), 1);
     assert_eq!(
         fs::read(dir.join("bpm/packages/sample/2/cert.der")).unwrap(),
         b"C"
     );
+    assert_eq!(install.cert_matches_active(), Ok(false));
     let mut order = String::new();
     assert_eq!(
         install.load_with(None, &mut |_, fd, load| record(&mut order, 0, fd, load)),
@@ -115,6 +121,10 @@ fn invalid_names_do_not_create_state() {
         Install::open_at(root.as_fd(), b"sample", b"../2"),
         Err(err) if err == -EINVAL
     ));
+    assert!(matches!(
+        Install::open_at(root.as_fd(), b"sample/name", b"2"),
+        Err(err) if err == -EINVAL
+    ));
     assert!(!dir.join("bpm").exists());
 }
 
@@ -132,6 +142,43 @@ fn refused_load_is_undone_and_version_removed() {
     assert_eq!(install.finish(Err(-EIO)), Err(-EIO));
     assert!(!dir.join("bpm/packages/sample/2").exists());
     assert!(!dir.join("bpm/staging/sample-2.bee").exists());
+    assert!(dir.join("bpm/packages/sample").exists());
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "openat2 is unavailable in Miri")]
+fn missing_certificate_rejects_key_and_removes_version() {
+    let dir = TempDir::new();
+    let install = prepared(&dir);
+    fs::remove_file(dir.join("bpm/packages/sample/2/cert.der")).unwrap();
+    assert_eq!(install.cert_matches_active(), Err(-ENOENT));
+    assert_eq!(install.check_cert(), Err(-crate::errno::EKEYREJECTED));
+    assert_eq!(
+        install.finish(Err(-crate::errno::EKEYREJECTED)),
+        Err(-crate::errno::EKEYREJECTED)
+    );
+    assert!(!dir.join("bpm/packages/sample/2").exists());
+    assert!(!dir.join("bpm/staging/sample-2.bee").exists());
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "openat2 is unavailable in Miri")]
+fn successful_upgrade_keeps_old_version_and_new_archive() {
+    let dir = TempDir::new();
+    old_version(&dir);
+    let install = prepared(&dir);
+    let mut order = String::new();
+    assert_eq!(
+        install.load_with(Some(b"1"), &mut |_, fd, load| record(
+            &mut order, 0, fd, load
+        )),
+        Ok(())
+    );
+    assert_eq!(order, "-Q-P+a+b");
+    assert_eq!(install.finish(Ok(())), Ok(()));
+    assert!(dir.join("bpm/packages/sample/1/upatches/a.upatch").exists());
+    assert!(dir.join("bpm/packages/sample/2/upatches/a.upatch").exists());
+    assert!(dir.join("bpm/packages/sample/sample-2.bee").exists());
 }
 
 #[test]
@@ -200,6 +247,12 @@ fn symbolic_links_are_not_followed() {
         matches!(Install::open_at(root.as_fd(), b"sample", b"2"), Err(err) if err == -crate::errno::ELOOP)
     );
     assert_eq!(fs::read(dir.join("elsewhere/archive")).unwrap(), b"x");
+    assert!(
+        fs::symlink_metadata(dir.join("bpm/staging/sample-2.bee"))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
 }
 
 #[test]

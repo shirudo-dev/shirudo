@@ -7,6 +7,7 @@
 //! identity read and its files extracted.
 
 use std::os::fd::AsFd;
+use std::os::unix::fs::DirBuilderExt;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -78,7 +79,7 @@ fuzz_target!(
             // SAFETY: the certificate the read gave, freed once.
             unsafe { xfree(info.cert.cast(), info.cert_len + 1) };
         }
-        if std::fs::create_dir(&dest).is_ok()
+        if std::fs::DirBuilder::new().mode(0o700).create(&dest).is_ok()
             && let Ok(dir) = std::fs::File::open(&dest)
         {
             extract_fd(input.fd.as_fd(), dir.as_fd());

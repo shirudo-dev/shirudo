@@ -228,7 +228,7 @@ fn tree_manifest_is_the_publisher_form() {
 use crate::testutil::TempDir;
 use std::fs::{self, File};
 use std::os::fd::AsFd;
-use std::os::unix::fs::symlink;
+use std::os::unix::fs::{PermissionsExt, symlink};
 
 fn extract_members(members: &[test_archive::Member<'_>], dir: &TempDir) -> i32 {
     fs::write(dir.join("archive.bee"), test_archive::archive(members)).unwrap();
@@ -247,11 +247,26 @@ fn extract_from_open_archive_stays_below_open_directory() {
         ("pkg/Beefile", b'0', b"name"),
         ("pkg/upatches/", b'5', b""),
         ("pkg/upatches/a.upatch", b'0', b"a"),
-        ("pkg/doc/deep/notes", b'0', b"n"),
+        ("pkg/doc/deep/er/notes", b'0', b"n"),
+        ("pkg/empty", b'5', b""),
     ];
     assert_eq!(extract_members(members, &dir), 0);
+    let beefile = fs::metadata(dir.join("out/Beefile")).unwrap();
+    assert_eq!(beefile.len(), 4);
+    assert_eq!(beefile.permissions().mode() & 0o7777, 0o644);
     assert_eq!(fs::read(dir.join("out/Beefile")).unwrap(), b"name");
-    assert_eq!(fs::read(dir.join("out/doc/deep/notes")).unwrap(), b"n");
+    assert!(
+        fs::metadata(dir.join("out/upatches/a.upatch"))
+            .unwrap()
+            .is_file()
+    );
+    assert!(
+        fs::metadata(dir.join("out/doc/deep/er/notes"))
+            .unwrap()
+            .is_file()
+    );
+    assert_eq!(fs::read(dir.join("out/doc/deep/er/notes")).unwrap(), b"n");
+    assert!(fs::metadata(dir.join("out/empty")).unwrap().is_dir());
     assert!(!dir.join("out/pkg").exists());
     let archive = File::open(dir.join("archive.bee")).unwrap();
     let out = File::open(dir.join("out")).unwrap();
@@ -278,6 +293,7 @@ fn extract_rejects_links_and_second_tree() {
         let dir = TempDir::new();
         assert_eq!(extract_members(members, &dir), expected);
         assert!(!dir.join("out/b").exists());
+        assert!(!dir.join("out/link").exists());
     }
 }
 
