@@ -9,6 +9,7 @@ mod cleanup;
 mod cli;
 mod fetch;
 mod info;
+mod install;
 mod key;
 mod package;
 mod source;

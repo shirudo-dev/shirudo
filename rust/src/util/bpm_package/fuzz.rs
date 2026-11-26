@@ -6,11 +6,12 @@
 //! install can pick the newest by; fuzz-bpm-package: a package's
 //! identity read and its files extracted.
 
+use std::os::fd::AsFd;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use super::info::load_info;
-use super::{PackageInfo, extract, index_parse, read_member_in, semver_compare};
+use super::{PackageInfo, extract_fd, index_parse, read_member_in, semver_compare};
 use crate::fuzzing::{fuzz_target, input_gzip_file};
 use crate::heap::xfree;
 use crate::text::cstr;
@@ -70,16 +71,18 @@ fuzz_target!(
         let (Some(base), Some(input)) = (BASE.get(), input_gzip_file(data)) else {
             return;
         };
-        let Ok(dest) = std::ffi::CString::new(format!("{}/pkg", base.display())) else {
-            return;
-        };
+        let dest = base.join("pkg");
         // SAFETY: an identity of nothing, for which zeros are the value.
         let mut info: PackageInfo = unsafe { core::mem::zeroed() };
         if load_info(&input.path, &mut info) == 0 {
             // SAFETY: the certificate the read gave, freed once.
             unsafe { xfree(info.cert.cast(), info.cert_len + 1) };
         }
-        extract(&input.path, &dest);
+        if std::fs::create_dir(&dest).is_ok()
+            && let Ok(dir) = std::fs::File::open(&dest)
+        {
+            extract_fd(input.fd.as_fd(), dir.as_fd());
+        }
         if let Ok(entries) = std::fs::read_dir(base) {
             for e in entries.flatten() {
                 let _ =

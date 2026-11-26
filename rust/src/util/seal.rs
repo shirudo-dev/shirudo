@@ -512,7 +512,6 @@ pub(crate) fn open_child(
 
 /// Make one direct child directory or take the existing one. The opened
 /// directory stays on `parent`'s mount and must carry its seal.
-#[allow(dead_code)] // The package installer uses this helper in M027.
 pub(crate) fn mkdir_child(
     parent: BorrowedFd<'_>,
     name: &CStr,
@@ -552,7 +551,6 @@ pub(crate) fn open_or_create_child_dir(
 
 /// Open one regular child file, making and labelling it when requested.
 /// An existing file is checked before it can be truncated.
-#[allow(dead_code)] // The package installation port uses this helper next.
 pub(crate) fn create_child(
     parent: BorrowedFd<'_>,
     name: &CStr,

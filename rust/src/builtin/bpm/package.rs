@@ -6,36 +6,32 @@
 //! listing them.
 
 use core::ffi::{CStr, c_int};
-use std::ffi::{CString, OsStr, OsString};
+use std::ffi::{CString, OsStr};
 use std::fs;
 use std::io::{Read, Write};
 use std::os::fd::AsRawFd;
-use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
 
 use super::cleanup;
-use super::fetch::{self, sha256_file};
+use super::fetch;
 use super::source::{self, Source};
 use super::{
-    PACKAGE_MEDIA, PACKAGES_DIR, Result, STAGING_DIR, curl_ready, error, fail, finish, lock,
-    needs_enforcement, os_err, path, print, remove, status, warn,
+    PACKAGE_MEDIA, PACKAGES_DIR, Result, curl_ready, error, fail, finish, lock, needs_enforcement,
+    os_err, path, print, remove, status,
 };
 use crate::errno::{E2BIG, EEXIST, EINVAL, EIO, EKEYREJECTED, ENAMETOOLONG, ENOENT};
-use crate::sys::libc::{F_OK, O_CREAT, O_EXCL, O_NOFOLLOW, O_TRUNC, O_WRONLY, access};
+use crate::sys::libc::{O_CREAT, O_EXCL, O_TRUNC, O_WRONLY};
 use crate::text::{cstr, strscpy, strsprintf};
 use crate::util::bpm_oci::{
     Client, MAX_NAME, digest_matches, manifest_layers, name_ok, version_ok,
 };
-use crate::util::bpm_package::{
-    IndexEntry, UpatchMember, extract, semver_compare, upatch_member, upatch_pair,
-};
+use crate::util::bpm_package::{IndexEntry, semver_compare};
 use crate::util::bpm_state::{self, BpmStateEntry};
 use crate::util::format::name_column_width;
 use crate::util::json::JsonEmit;
 use crate::util::seal;
 
-/// The most upatches of one kind a package loads or unloads.
-const PATHS_MAX: usize = 128;
 /// `BPM_MAX_STATE`: the most packages the state records.
 const MAX_STATE: usize = 256;
 
@@ -86,157 +82,12 @@ pub(super) fn copy_file(src: &CStr, dst: &CStr, mode: u32, exclusive: bool) -> R
     ret
 }
 
-fn member_names(entries: fs::ReadDir, kind: UpatchMember) -> impl Iterator<Item = OsString> {
-    entries
-        .map_while(core::result::Result::ok)
-        .map(|entry| entry.file_name())
-        .filter(move |name| upatch_member(name.as_bytes()) == kind)
-}
-
-/// The paths and names of the upatches of one kind in the directory.
-fn members(dir: &CStr, kind: UpatchMember) -> Result<Vec<(CString, Vec<u8>)>> {
-    let entries = fs::read_dir(os(dir)).map_err(os_err)?;
-
-    member_names(entries, kind)
-        .map(|name| {
-            let path = path(&[dir.to_bytes(), b"/", name.as_bytes()])?;
-            Ok((path, name.into_vec()))
-        })
-        .collect()
-}
-
-/// The upatches a package loads: regular files, in name order.
-fn loads(package_dir: &CStr) -> Result<Vec<CString>> {
-    let updir = path(&[package_dir.to_bytes(), b"/upatches"])?;
-    let mut loads = Vec::new();
-
-    for (member, _) in members(&updir, UpatchMember::Load)? {
-        if !fs::metadata(os(&member)).is_ok_and(|m| m.is_file()) {
-            continue;
-        }
-        if loads.len() >= PATHS_MAX {
-            return Err(-E2BIG);
-        }
-        loads.push(member);
-    }
-    // Measured in name order, not in the file system's.
-    loads.sort();
-    if loads.is_empty() {
-        return Err(-EINVAL);
-    }
-    Ok(loads)
-}
-
-/// The unload directives of the version installed at `old`, each with
-/// the load it undoes, in reverse name order, as uninstall runs them.
-fn old_pairs(old: &[u8]) -> Result<Vec<(CString, CString)>> {
-    let olddir = path(&[old, b"/upatches"])?;
-    let Ok(entries) = fs::read_dir(os(&olddir)) else {
-        return Ok(Vec::new());
-    };
-    collect_old_pairs(&olddir, member_names(entries, UpatchMember::Unload))
-}
-
-fn collect_old_pairs(
-    olddir: &CStr,
-    names: impl Iterator<Item = OsString>,
-) -> Result<Vec<(CString, CString)>> {
-    let mut pairs = Vec::new();
-
-    for name in names.take(PATHS_MAX) {
-        let name = name.as_bytes();
-        let mut load = [0u8; 256];
-
-        if upatch_pair(name, &mut load) != 0 {
-            return Err(-ENAMETOOLONG);
-        }
-        let unload = path(&[olddir.to_bytes(), b"/", name])?;
-        let load = path(&[olddir.to_bytes(), b"/", cstr(&load)])?;
-        pairs.push((unload, load));
-    }
-    pairs.sort_by(|a, b| b.0.cmp(&a.0));
-    Ok(pairs)
-}
-
-fn install_one(load: &CStr) -> bool {
-    crate::builtin::upatch::install(load) == 0
-}
-
-fn remove_one(unload: &CStr) -> bool {
-    crate::builtin::upatch::remove(unload) == 0
-}
-
-/// Unloads what loaded, newest first, and loads the old version again.
-fn rollback(loaded: &[CString], old: &[(CString, CString)]) {
-    for load in loaded.iter().rev() {
-        let load = load.to_bytes();
-        let Some(slash) = load.iter().rposition(|&c| c == b'/') else {
-            continue;
-        };
-        let mut name = [0u8; 256];
-
-        if upatch_pair(&load[slash + 1..], &mut name) != 0 {
-            continue;
-        }
-        if let Ok(unload) = path(&[&load[..slash], b"/", cstr(&name)]) {
-            remove_one(&unload);
-        }
-    }
-    for (_, load) in old.iter().rev() {
-        install_one(load);
-    }
-}
-
-/// What an install leaves to clean up should it fail: the staged
-/// archive, and the package tree once extraction began, so that it does
-/// not block the next attempt.
-struct Staging {
-    archive: Option<CString>,
-    package_dir: Option<CString>,
-    extracted: bool,
-}
-
-/// Installs the package `entry` names from source `s`: fetched and
-/// checked against the index, extracted, and its upatches loaded in
-/// name order, after the unload directives of the version at `old` when
-/// upgrading. A load that fails rolls back.
-pub(super) fn package_install(s: &Source, entry: &IndexEntry, old: Option<&[u8]>) -> Result {
-    let mut staging = Staging {
-        archive: None,
-        package_dir: None,
-        extracted: false,
-    };
-    let ret = stage_and_load(&mut staging, s, entry, old);
-
-    if ret.is_err() {
-        if let Some(archive) = &staging.archive {
-            remove(archive);
-        }
-        if staging.extracted {
-            let err = cleanup::remove_partial_version(cstr(&entry.name), cstr(&entry.version));
-            if let Err(err) = err
-                && err != -ENOENT
-            {
-                warn(&[
-                    b"bpm install: could not clean up ",
-                    staging
-                        .package_dir
-                        .as_ref()
-                        .map_or(&b"?"[..], |p| p.to_bytes()),
-                    b": ",
-                    super::strerr(-err),
-                ]);
-            }
-        }
-    }
-    ret
-}
-
-fn stage_and_load(
-    staging: &mut Staging,
+/// Fetch and install the package version through one opened archive and
+/// directories beneath this boot's checked state root.
+pub(super) fn package_install(
     s: &Source,
     entry: &IndexEntry,
-    old: Option<&[u8]>,
+    old_version: Option<&[u8]>,
 ) -> Result {
     let mut c = Client::new();
     let name = cstr(&entry.name);
@@ -250,8 +101,6 @@ fn stage_and_load(
 
     c.parse_endpoint(s.endpoint())?;
     let body = fetch::manifest(&mut c, repository, reference)?;
-    // Repository indexes carry a sha256 manifest digest; direct OCI
-    // references carry the tag here and cannot be digest-checked.
     if reference.starts_with(b"sha256:")
         && !fetch::sha256_of(body.bytes()).is_ok_and(|hex| digest_matches(reference, &hex))
     {
@@ -271,60 +120,26 @@ fn stage_and_load(
         return Err(-EKEYREJECTED);
     }
     let url = c.url(repository, b"blobs", layer.digest())?;
-    let dir = path(&[PACKAGES_DIR.as_bytes(), b"/", name])?;
-    seal::mkdir_p(dir.to_bytes(), 0o700)?;
-    let package_dir = path(&[dir.to_bytes(), b"/", version])?;
-    seal::mkdir_p(STAGING_DIR.as_bytes(), 0o700)?;
-    let archive = path(&[STAGING_DIR.as_bytes(), b"/", name, b"-", version, b".bee"])?;
-    staging.archive = Some(archive.clone());
-    staging.package_dir = Some(package_dir.clone());
-    let file = seal::open(
-        archive.to_bytes(),
-        O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW,
-        0o600,
-    )?;
-    let got = c.get_file(&url, PACKAGE_MEDIA, file.as_raw_fd(), layer.size());
-    drop(file);
-    got?;
-    if !sha256_file(&archive).is_ok_and(|hex| digest_matches(layer.digest(), &hex)) {
-        return Err(-EKEYREJECTED);
-    }
-    // SAFETY: a C string.
-    if unsafe { access(package_dir.as_ptr(), F_OK) } == 0 {
-        return Err(-EEXIST);
-    }
-    staging.extracted = true;
-    status(extract(&archive, &package_dir))?;
-    let cert = path(&[package_dir.to_bytes(), b"/cert.der"])?;
-    if !super::key::file_matches_active(&cert) {
-        return Err(-EKEYREJECTED);
-    }
-    let loads = loads(&package_dir)?;
-    let old = match old {
-        Some(old) if !old.is_empty() => old_pairs(old)?,
-        _ => Vec::new(),
-    };
-    for (removed, (unload, _)) in old.iter().enumerate() {
-        if !remove_one(unload) {
-            for (_, load) in old[..removed].iter().rev() {
-                install_one(load);
-            }
-            return Err(-EIO);
+    let mut install = super::install::Install::open(name, version)?;
+    let result = (|| {
+        c.get_file(
+            &url,
+            PACKAGE_MEDIA,
+            install.archive().as_raw_fd(),
+            layer.size(),
+        )?;
+        if !fetch::sha256_fd(install.archive())
+            .is_ok_and(|hex| digest_matches(layer.digest(), &hex))
+        {
+            return Err(-EKEYREJECTED);
         }
-    }
-    for (active, load) in loads.iter().enumerate() {
-        if !install_one(load) {
-            rollback(&loads[..active], &old);
-            return Err(-EIO);
+        install.extract()?;
+        if !install.cert_matches_active()? {
+            return Err(-EKEYREJECTED);
         }
-    }
-    let kept = path(&[dir.to_bytes(), b"/", name, b"-", version, b".bee"])
-        .is_ok_and(|saved| fs::rename(os(&archive), os(&saved)).is_ok());
-    if !kept {
-        warn(&[b"bpm: cannot keep ", archive.to_bytes(), b"; dropping it"]);
-        remove(&archive);
-    }
-    Ok(())
+        install.load(old_version)
+    })();
+    install.finish(result)
 }
 
 /// Detach the current version and remove its package through the state
@@ -492,7 +307,7 @@ pub(super) fn upgrade() -> c_int {
         if semver_compare(cstr(&entry.version), cstr(&st.version)) <= 0 {
             continue;
         }
-        if let Err(err) = package_install(&s, &entry, Some(cstr(&st.path))) {
+        if let Err(err) = package_install(&s, &entry, Some(cstr(&st.version))) {
             ret = Err(err);
             break;
         }
@@ -605,6 +420,3 @@ pub(super) fn uninstall(name: &[u8]) -> c_int {
     });
     finish(Some(held), ret, b"uninstall")
 }
-
-#[cfg(test)]
-mod tests;

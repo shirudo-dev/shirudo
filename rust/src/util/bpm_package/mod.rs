@@ -15,7 +15,7 @@ mod semver;
 mod tar;
 
 pub(crate) use facade::{
-    Member, extract, fetch_document, fetch_publication, index_parse, read_member_fd,
+    Member, extract_fd, fetch_document, fetch_publication, index_parse, read_member_fd,
     read_member_in, verify_cms, verify_cms_fd, visit_members_fd,
 };
 pub(crate) use info::load_info;

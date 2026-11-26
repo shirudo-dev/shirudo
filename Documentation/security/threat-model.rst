@@ -1988,11 +1988,16 @@ R22 Labeled inodes are interchangeable
    root directory itself. Init records its device and inode in the frozen
    identity map before enforcement starts. BPM verifies both on the open
    directory, which also has to carry the seal and reside outside bpffs.
-   Package uninstall opens its directives and removes the package tree
-   relative to held directory descriptors. Those lookups and failed-install
-   cleanup reject mount crossings below the state root, including binds on
-   the same file system. BPM reads and replaces its package state file
-   relative to the verified BPM directory as well.
+   Package install and upgrade write the archive, check its digest and
+   extract it through one open descriptor. They read its certificate,
+   upatches and old-version directives relative to directories opened
+   below that root. Package uninstall opens its directives and removes
+   the package tree relative to held directory descriptors. These lookups
+   reject mount crossings below the state root, including binds on the
+   same file system and one file bound over another (``t7115``).
+   BPM reads and replaces its package state file relative
+   to the verified BPM directory as well. ``bpm tree sync`` still names
+   the artifact it checks and loads by its path in the cache.
 
 R23 Policy labels follow the inode
    A policy label is an xattr of the executable's inode, applied at

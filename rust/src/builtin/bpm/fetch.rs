@@ -79,13 +79,6 @@ pub(super) fn sha256_fd(fd: BorrowedFd<'_>) -> Result<[u8; 64]> {
     Ok(out)
 }
 
-/// The hex SHA-256 of what is at `path`.
-pub(super) fn sha256_file(path: &CStr) -> Result<[u8; 64]> {
-    let file = fs::File::open(OsStr::from_bytes(path.to_bytes())).map_err(os_err)?;
-
-    sha256_fd(file.as_fd())
-}
-
 /// The lowercase hex of `digest`, NUL-terminated.
 fn sha256_hex_of(digest: &[u8; 32], hex: &mut [u8; 65]) {
     const HEX: &[u8; 16] = b"0123456789abcdef";

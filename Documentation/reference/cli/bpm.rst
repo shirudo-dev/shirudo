@@ -551,6 +551,13 @@ For each package ``install`` and ``upgrade``:
    --no-precheck`` does, each load measured.
 #. Record the package in ``/var/lib/shirudo/bpm/state.json``.
 
+Install and upgrade open the package and staging directories below the
+state directory that init recorded. The download, digest check and
+extraction use the same open archive. The certificate, upatches and old
+version are read relative to those open directories. A symbolic link,
+unsealed entry or bind mount in this path stops the install. A failed
+install removes the version it extracted.
+
 ``upgrade`` takes no argument. For every package not installed ``direct``
 it installs the greatest version in the cached index when that version is
 greater than the installed one: it unloads the old version with its
@@ -566,7 +573,7 @@ and reads each from the descriptor it checked. A load member without its
 directive stops uninstall. Cleanup removes load members before their
 directives, so an interrupted uninstall can finish on a retry. Successful
 uninstall removes the whole package directory, including archives and
-older versions left by upgrades. Uninstall and failed-install cleanup
+older versions left by upgrades. Install, upgrade and uninstall
 refuse to cross mounts below the state root.
 
 ``list`` prints the installed packages under the heading ``Installed

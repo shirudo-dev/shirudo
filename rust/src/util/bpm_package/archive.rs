@@ -5,7 +5,9 @@
 //! one member, the names of all, or all of it unpacked.
 
 use core::ffi::{CStr, c_char, c_int};
+use std::ffi::CString;
 use std::io::Write;
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
 
@@ -13,11 +15,11 @@ use super::tar::{
     BLOCK, NAME, PREFIX, SIZE, TYPEFLAG, archive_rel_ok, header_ok, octal, package_member_name_ok,
     padding,
 };
-use crate::errno::{E2BIG, EFBIG, EINVAL, EIO, ENAMETOOLONG, ENOENT, ENOMEM, EPERM};
+use crate::errno::{E2BIG, EFBIG, EINVAL, EIO, ENOENT, ENOMEM, EPERM};
 use crate::ffi;
 use crate::heap::{xfree, xmalloc};
-use crate::sys::libc::{O_CREAT, O_EXCL, O_WRONLY, PATH_MAX, errno};
-use crate::text::{at, cstr, strsprintf};
+use crate::sys::libc::{O_CREAT, O_EXCL, O_WRONLY, errno};
+use crate::text::{at, cstr};
 use crate::util::bpm_oci::{MAX_PACKAGE_BYTES, MAX_PACKAGE_ENTRIES};
 use crate::util::gzip::{GzRead, Z_OK};
 use crate::util::seal;
@@ -367,18 +369,13 @@ fn walk_members(gz: &mut Gz, package_dir: Option<&[u8]>, mut visit: Option<Visit
     if root_len == 0 { -EINVAL } else { ret }
 }
 
-/// Unpack the regular files and directories under the single top-level
-/// directory of a `.bee` into `dest`; anything else fails the archive.
-pub(super) fn extract(archive: &CStr, dest: &CStr) -> c_int {
-    let Some(mut gz) = Gz::open(archive) else {
+/// Unpack the regular files and directories under one top-level directory
+/// from the archive already open as `archive` into the opened `dest`.
+pub(super) fn extract_fd(archive: BorrowedFd<'_>, dest: BorrowedFd<'_>) -> c_int {
+    let Some(mut gz) = Gz::open_fd(archive) else {
         return -EINVAL;
     };
-    if let Err(ret) = seal::mkdir_p(dest.to_bytes(), 0o700) {
-        gz.close();
-        return ret;
-    }
-    let (ret, rooted) = unpack(&mut gz, dest.to_bytes());
-
+    let (ret, rooted) = unpack(&mut gz, dest);
     if gz.close() != Z_OK && ret == 0 {
         return -EINVAL;
     }
@@ -388,16 +385,28 @@ pub(super) fn extract(archive: &CStr, dest: &CStr) -> c_int {
     if rooted { 0 } else { -EINVAL }
 }
 
+/// Make each directory in `rel` below an opened directory, without
+/// following a mount or a link placed in the way.
+fn extract_dir(dest: BorrowedFd<'_>, rel: &[u8]) -> Result<OwnedFd, c_int> {
+    let mut dir = dest
+        .try_clone_to_owned()
+        .map_err(|e| crate::util::io::errno_of(&e))?;
+    for comp in rel.split(|&b| b == b'/').filter(|comp| !comp.is_empty()) {
+        let name = CString::new(comp).map_err(|_| -EINVAL)?;
+        dir = seal::mkdir_child(dir.as_fd(), &name, 0o700, false)?;
+    }
+    Ok(dir)
+}
+
 /// The members of `gz` under `dest`, and whether there was a top-level
 /// directory.
-fn unpack(gz: &mut Gz, dest: &[u8]) -> (c_int, bool) {
+fn unpack(gz: &mut Gz, dest: BorrowedFd<'_>) -> (c_int, bool) {
     let mut h = [0u8; BLOCK];
     let mut buf = [0u8; CHUNK];
     let mut root = [0u8; ROOT_MAX];
     let mut root_len = 0;
     let mut total = 0u64;
     let mut entries = 0u32;
-    let mut path = [0u8; PATH_MAX];
 
     let ret = loop {
         match next_header(gz, &mut h) {
@@ -438,12 +447,9 @@ fn unpack(gz: &mut Gz, dest: &[u8]) -> (c_int, bool) {
         if (rel.is_empty() && ty != b'5') || (!rel.is_empty() && !archive_rel_ok(rel)) {
             break -EINVAL;
         }
-        if strsprintf(&mut path, &[dest, b"/", rel]).is_err() {
-            break -ENAMETOOLONG;
-        }
         let ret = match ty {
-            b'5' => make_dir(gz, &path, size, &mut buf),
-            b'0' => write_file(gz, &path, size, &mut buf),
+            b'5' => make_dir(gz, dest, rel, size, &mut buf),
+            b'0' => write_file(gz, dest, rel, size, &mut buf),
             _ => -EPERM,
         };
         if ret != 0 {
@@ -456,10 +462,10 @@ fn unpack(gz: &mut Gz, dest: &[u8]) -> (c_int, bool) {
     (ret, root_len != 0)
 }
 
-/// A directory member at `path`, its data read as the other walkers do,
-/// whatever a directory carries.
-fn make_dir(gz: &mut Gz, path: &[u8; PATH_MAX], size: u64, buf: &mut [u8]) -> c_int {
-    if let Err(ret) = seal::mkdir_p(cstr(path), 0o700) {
+/// A directory member, its data read as the other walkers do, whatever
+/// the directory carries.
+fn make_dir(gz: &mut Gz, dest: BorrowedFd<'_>, rel: &[u8], size: u64, buf: &mut [u8]) -> c_int {
+    if let Err(ret) = extract_dir(dest, rel) {
         return ret;
     }
     if !skip(gz, size, buf) {
@@ -468,16 +474,21 @@ fn make_dir(gz: &mut Gz, path: &[u8; PATH_MAX], size: u64, buf: &mut [u8]) -> c_
     0
 }
 
-/// A regular member at `path`, under the directories it needs.
-fn write_file(gz: &mut Gz, path: &[u8; PATH_MAX], size: u64, buf: &mut [u8]) -> c_int {
-    let file = cstr(path);
-
-    if let Some(slash) = file.iter().rposition(|&c| c == b'/')
-        && let Err(ret) = seal::mkdir_p(&file[..slash], 0o700)
-    {
-        return ret;
-    }
-    let mut out = match seal::open(file, O_WRONLY | O_CREAT | O_EXCL, 0o644) {
+/// A regular member under the directories it needs.
+fn write_file(gz: &mut Gz, dest: BorrowedFd<'_>, rel: &[u8], size: u64, buf: &mut [u8]) -> c_int {
+    let (parent, name) = match rel.iter().rposition(|&b| b == b'/') {
+        Some(slash) => (&rel[..slash], &rel[slash + 1..]),
+        None => (&b""[..], rel),
+    };
+    let dir = match extract_dir(dest, parent) {
+        Ok(dir) => dir,
+        Err(err) => return err,
+    };
+    let name = match CString::new(name) {
+        Ok(name) => name,
+        Err(_) => return -EINVAL,
+    };
+    let mut out = match seal::create_child(dir.as_fd(), &name, O_WRONLY | O_CREAT | O_EXCL, 0o644) {
         Ok(fd) => std::fs::File::from(fd),
         Err(err) => return err,
     };

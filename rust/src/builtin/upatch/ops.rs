@@ -1056,12 +1056,12 @@ pub(super) fn finish(rep: &mut OpReport, report: Option<&CStr>) {
 
 /// A load, after its arguments: 0, 1, or UPATCH_INSTALL_TARGET_MISSING
 /// for a kprobe target whose module is not loaded.
-fn load(a: &OpArgs) -> c_int {
+fn load(a: &OpArgs, fd: Option<BorrowedFd<'_>>) -> c_int {
     let file = a.file.unwrap_or(c"");
     let mut rep = OpReport::new(c"upatch_load");
     rep.path = Some(file.to_owned());
     let mut name = CString::default();
-    let mut ret = load_steps(a, file, &mut rep, &mut name);
+    let mut ret = load_steps(a, file, fd, &mut rep, &mut name);
     if ret == 1 && category_is(&rep, b"attach_target_missing") {
         ret = UPATCH_INSTALL_TARGET_MISSING;
     }
@@ -1069,11 +1069,17 @@ fn load(a: &OpArgs) -> c_int {
     ret
 }
 
-fn load_steps(a: &OpArgs, file: &CStr, rep: &mut OpReport, name_out: &mut CString) -> c_int {
+fn load_steps(
+    a: &OpArgs,
+    file: &CStr,
+    fd: Option<BorrowedFd<'_>>,
+    rep: &mut OpReport,
+    name_out: &mut CString,
+) -> c_int {
     if version_gate(a, rep, b"load").is_err() {
         return 1;
     }
-    let Ok(u) = read_artifact(file, None, rep, b"load") else {
+    let Ok(u) = read_artifact(file, fd, rep, b"load") else {
         return 1;
     };
     let name = u.name().to_vec();
@@ -1219,7 +1225,7 @@ fn load_steps(a: &OpArgs, file: &CStr, rep: &mut OpReport, name_out: &mut CStrin
 /// `upatch load`, from `load` on.
 pub(super) fn run_load(args: &[&CStr]) -> c_int {
     match parse(args, false) {
-        Ok(a) => load(&a),
+        Ok(a) => load(&a, None),
         Err(code) => code,
     }
 }
@@ -1660,12 +1666,24 @@ fn fail_message(rep: &mut OpReport, message: &[u8]) {
 /// An install from a package: a load without the prechecks, done when
 /// the payload is already the one loaded.
 pub(crate) fn install(path: &CStr) -> c_int {
-    load(&OpArgs {
-        file: Some(path),
-        no_precheck: true,
-        loaded_is_done: true,
-        ..OpArgs::default()
-    })
+    install_from(path, None)
+}
+
+/// Install a package member through the file already checked and held open.
+pub(crate) fn install_fd(path: &CStr, fd: BorrowedFd<'_>) -> c_int {
+    install_from(path, Some(fd))
+}
+
+fn install_from(path: &CStr, fd: Option<BorrowedFd<'_>>) -> c_int {
+    load(
+        &OpArgs {
+            file: Some(path),
+            no_precheck: true,
+            loaded_is_done: true,
+            ..OpArgs::default()
+        },
+        fd,
+    )
 }
 
 /// A removal from a package: the unload directive at `path`.

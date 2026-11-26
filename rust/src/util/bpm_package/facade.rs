@@ -112,8 +112,8 @@ pub(crate) fn visit_members_fd(
     archive::visit_members_fd(fd, package_dir, Some(visit))
 }
 
-pub(crate) fn extract(archive: &CStr, dest: &CStr) -> c_int {
-    archive::extract(archive, dest)
+pub(crate) fn extract_fd(archive: BorrowedFd<'_>, dest: BorrowedFd<'_>) -> c_int {
+    archive::extract_fd(archive, dest)
 }
 
 fn signed(payload: &[u8], sig: &[u8]) -> Signed {

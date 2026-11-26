@@ -8,7 +8,7 @@ use core::ffi::CStr;
 use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
-use std::os::fd::{AsFd, IntoRawFd};
+use std::os::fd::{AsFd, BorrowedFd, IntoRawFd};
 use std::os::unix::ffi::OsStrExt;
 
 use super::{CERT_PATH, KEYS_DIR, Result, last_err, message, os_err, path, print, remove, status};
@@ -20,7 +20,7 @@ use crate::util::crypto_openssl::{
     Cert, cert_free, cert_pubkey_digest, cert_read_file, cert_read_memory,
 };
 use crate::util::json::JsonEmit;
-use crate::util::keys::{DER_MAX, read_der};
+use crate::util::keys::{DER_MAX, read_der, read_der_fd};
 use crate::util::seal;
 
 fn os(path: &CStr) -> &OsStr {
@@ -64,10 +64,10 @@ fn matches_active(der: &[u8]) -> bool {
     matches!((pubkey_digest(der), active_digest()), (Ok(a), Ok(b)) if a == b)
 }
 
-/// [`matches_active`] of the certificate file at `path`, read as a key
-/// file is.
-pub(super) fn file_matches_active(path: &CStr) -> bool {
-    read_der(path).is_ok_and(|der| matches_active(&der))
+/// Whether the certificate already open in an extracted package has
+/// the key of the node's active certificate.
+pub(super) fn fd_matches_active(fd: BorrowedFd<'_>) -> bool {
+    read_der_fd(fd).is_ok_and(|der| matches_active(&der))
 }
 
 /// The lowercase hex fingerprint of the certificate `der`.

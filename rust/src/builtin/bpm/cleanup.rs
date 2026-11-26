@@ -68,10 +68,10 @@ fn remove_dir(parent: BorrowedFd<'_>, name: &CStr, dir: OwnedFd, depth: u32) -> 
     unlink(parent, name, AT_REMOVEDIR)
 }
 
-pub(super) fn remove_partial_version(name: &[u8], version: &[u8]) -> Result {
-    let store = package_store_open()?;
-    let package = seal::open_child(store.as_fd(), &child_name(name)?, O_RDONLY | O_DIRECTORY)?;
-    remove_entry(package.as_fd(), &child_name(version)?, 0)
+/// Remove a failed install's version below the package directory held
+/// throughout that install.
+pub(super) fn remove_partial_version_at(package: BorrowedFd<'_>, version: &CStr) -> Result {
+    remove_entry(package, version, 0)
 }
 
 fn package_store_open() -> Result<OwnedFd> {
