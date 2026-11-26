@@ -206,13 +206,11 @@ readers take one input differently: `status` listed the eventlog up to
 a NUL where the replay refused the whole log, and the registry client
 took a token from the first bytes of an answer that was no text.
 
-- Bytes become a string in one step that takes their length, refuses a
-  NUL among them and terminates them. `span_to_str()` is that step for
-  a file read whole, in place, as `read_file()` leaves room for the
-  terminator, for a reply, a counted field and a line cut out of a
-  text. `read_text_line()` is it for the lines of a settings file, and
-  `json_parse()` and `json_walk()` for a document, whose strings they
-  hand out decoded and terminated.
+- Bytes become a C string only after a check for embedded NUL and a
+  terminator is added. `io::read()` and `read_whole()` return owned
+  bytes; a caller that needs a C string checks and terminates them.
+  Source settings use `BufRead::read_until()` with an explicit length
+  and NUL check. JSON strings are decoded before a caller uses them.
 - A buffer `read()`, `pread()`, `recv()`, `readlink()` or `getxattr()`
   filled has no terminator until the code writes one.
 - A fixed-size field of a format is a string only once its parser found
@@ -407,9 +405,9 @@ has it already, or should. The basics:
 | A file name's extension | `name_has_suffix()` (`rust/src/text.rs`), and `dir_names()` (`rust/src/util/io.rs`) with it for the files of a directory that have one |
 | Text from outside on a terminal | `sanitize()`; UTF-8 with `utf8_width()` (`rust/src/text.rs`); `rust/src/log.rs` escapes what it logs |
 | Sizes and lengths | `checked_add()`, `checked_mul()` and kin, `div_ceil()` |
-| Memory | `Vec` and `Box`, from the global allocator of `rust/src/heap.rs`; for a raw buffer, its `xmalloc()`, `xcalloc()`, `xreallocarray()`, `xstrndup()` and `xfree(p, size)`, and `libc_free()` for what the C library allocated |
+| Memory | `Vec` and `Box`, from the scrubbing global allocator of `rust/src/heap.rs`; wrap a buffer returned by a C library in an owning type with `Drop` |
 | Secrets | `explicit_bzero()` (`rust/src/sys/libc.rs`), `memneq_explicit()` (`rust/src/util/chain.rs`) |
-| Files | `read_file()`, `read_whole()`, `write_complete()`, `append_line()`, `read_text_line()`, `dir_names()`, `dir_names_at()`, `open_beneath()`, `lock_exclusive()` (`rust/src/util/io.rs`) |
+| Files | `read()`, `read_whole()`, `write_complete()`, `append_line()`, `dir_names()`, `dir_names_at()`, `open_beneath()`, `lock_exclusive()` (`rust/src/util/io.rs`) |
 | Sealed state and paths root names | `open()`, `open_read()`, `open_sealed()`, `lock()`, `append()`, `mkdir_p()`, `write_file()`; `Output::create()` and `Output::commit()` for a report or export, `output_open()` for one appended to (`rust/src/util/seal.rs`) |
 | Bytes on the wire | `from_le_bytes()`, `to_be_bytes()` and kin; `encode()` and `decode()` for hex, and `hex_encode()`, `hex_decode()`, `hex_decode_max()` over C strings (`rust/src/util/hex.rs`) |
 | SHA-256 | `sha256()` or `sha256_into()` of a slice, or a `Sha256Ctx` through `sha256_init()`, `sha256_update()` and `sha256_final()` over pieces (`rust/src/util/crypto_openssl.rs`); `sha256_digest_encode()` and `sha256_digest_decode()` for the `sha256:<hex>` form (`rust/src/util/hex.rs`), `sha256_hex()` for its bare hex (`rust/src/util/bpm_oci/http.rs`) |
@@ -588,10 +586,9 @@ and the C-shaped one goes.
   out-parameter beside a status. A bare `c_int` status stays only where
   C calls the function, as a callback of libcurl or LuaJIT does.
 - What is acquired is released by `Drop`: a descriptor as an `OwnedFd`
-  or a `File`, an allocation of C in a type whose `Drop` frees it, as
-  `Publication` and `Member` do, a lock in a guard. A `close()`, an
-  `xfree()` or a `libc_free()` on a return path is a leak on the path
-  that forgets it.
+  or a `File`, owned bytes as a `Vec`, a C allocation in a wrapper whose
+  `Drop` frees it, and a lock in a guard. A manual `close()` or `free()`
+  on a return path risks a leak on another path.
 - Nothing from outside panics: data read from a file, the network, the
   kernel or the command line is taken with `get()`, `split_at_checked()`
   and their kin, never indexed past a length the code has not checked,
@@ -653,11 +650,9 @@ and the C-shaped one goes.
   pinned in `rust/Cargo.lock` so that cargo builds offline.
 - Every Rust allocation goes through the global allocator of
   `rust/src/heap.rs`, which hands out zeroed memory and scrubs a block
-  before it frees it, the old block of one that grows included. A raw
-  buffer comes from its `xmalloc()` family, which zeroes and scrubs the
-  same way, and goes back through `xfree(p, size)`; what the C library
-  allocates, as `getline()` and `realpath()` do, goes back through
-  `libc_free()`.
+  before it frees it, the old block of one that grows included. Use
+  owned Rust buffers. A buffer returned by a C library belongs to an
+  owning wrapper whose `Drop` frees it exactly once.
 - A panic is a bug: `rust/src/panic.rs` reports it through `log::err()`
   and aborts. The crate unwinds only so that a Lua error can cross a
   `"C-unwind"` callback, and a Rust frame such an unwind may cross holds
