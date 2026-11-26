@@ -425,6 +425,18 @@ static int attach_guard_group(struct bpf_object *obj,
 	return 0;
 }
 
+static int mount_id_unique(const char *path, __u64 *id)
+{
+	struct statx stx;
+
+	if (statx(AT_FDCWD, path, 0, STATX_MNT_ID_UNIQUE, &stx))
+		return -errno;
+	if (!(stx.stx_mask & STATX_MNT_ID_UNIQUE) || !stx.stx_mnt_id)
+		return -EOPNOTSUPP;
+	*id = stx.stx_mnt_id;
+	return 0;
+}
+
 /*
  * The recorder in the mount guards sees the bootstrap task open the
  * bpffs root; the record is read back, since a guard with none to keep
@@ -435,7 +447,7 @@ static int record_bpffs_mount(struct bpf_object *obj)
 	struct mount_record rec = {};
 	struct bpf_map *map;
 	__u32 zero = 0;
-	int fd;
+	int fd, ret;
 
 	fd = open(BPFFS_DIR, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
 	if (fd < 0)
@@ -446,8 +458,19 @@ static int record_bpffs_mount(struct bpf_object *obj)
 		return -ENOENT;
 	if (bpf_map_lookup_elem(bpf_map__fd(map), &zero, &rec))
 		return -errno;
-	if (!rec.mount)
+	if (!rec.mount || !rec.mount_ns)
 		return -ENOENT;
+	if (initrd_mode) {
+		ret = mount_id_unique("/", &rec.initrd_root_id);
+		if (!ret)
+			ret = mount_id_unique(sysroot(), &rec.sysroot_id);
+		if (ret)
+			return ret;
+		if (rec.initrd_root_id == rec.sysroot_id)
+			return -EINVAL;
+		if (bpf_map_update_elem(bpf_map__fd(map), &zero, &rec, BPF_EXIST))
+			return -errno;
+	}
 	return bpf_map_freeze(bpf_map__fd(map)) ? -errno : 0;
 }
 

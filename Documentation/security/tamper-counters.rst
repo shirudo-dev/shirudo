@@ -119,17 +119,20 @@ counter.
      - ``lsm/sb_umount``: the bpffs superblock, every caller
      - ``EPERM``
    * - ``BpffsUmountAbove``
-     - unmount of a mount above the private bpffs
+     - unmount of a mount above the private bpffs or a refused host pivot
      - ``lsm/sb_umount``: an unmount whose subtree or propagation
        reaches the recorded bpffs mount, or a tree the walk cannot
-       finish, every caller; ``lsm/inode_rmdir``,
+       finish, with the checked initrd handoff exception.
+       ``lsm/sb_pivotroot`` counts a refused pivot in the protected
+       namespace. ``lsm/inode_rmdir``,
        ``lsm/inode_unlink``, ``lsm/inode_rename``: the removal or rename
        of the mount point of that mount or of one above it, which
        detaches or moves the mounts on it in every namespace, to a task
        without authority
      - ``EPERM``
    * - ``BpffsMount``
-     - move, mount over or remount of the private bpffs
+     - move, mount over or remount of the private bpffs, or a refused
+       legacy propagation change on its mount ancestry
      - ``lsm/move_mount``, ``lsm/sb_mount``, ``lsm/sb_remount``, every
        caller
      - ``EPERM``

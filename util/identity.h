@@ -83,9 +83,12 @@ BUILD_BUG_ON(sizeof(struct task_policy) != 16);
 /* The bpffs mount init made, which the unmount guard keeps mounted. */
 struct mount_record {
 	__u64	mount;
+	__u64	mount_ns;
+	__u64	initrd_root_id;
+	__u64	sysroot_id;
 };
 
-BUILD_BUG_ON(sizeof(struct mount_record) != 8);
+BUILD_BUG_ON(sizeof(struct mount_record) != 32);
 
 enum guard_map_index {
 	GUARD_IDENTITY,

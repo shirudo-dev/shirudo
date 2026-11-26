@@ -414,7 +414,8 @@ signed config image.
    * - ``t4101-initrd``
      - The production configuration: ``init`` from the initrd, its
        messages in the journal once, adoption, PCR 11 after the binding,
-       pins under ``/run``
+       pins under ``/run``, a successful PID 1 pivot in the TPM guest,
+       shared propagation and unchanged mount tamper counts
    * - ``t4102-tpm-chain``
      - Replay, measured load and unload, evidence from the VM's TPM,
        challenges with ECC and RSA endorsement keys

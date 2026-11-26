@@ -651,6 +651,14 @@ move, a mount over or a remount of the private bpffs (``BpffsUmount``,
 ``BpffsMount``). Figure 2 shows the two ways an operation on a mount far
 from the bpffs takes it along.
 
+Bootstrap in the initrd records the unique mount IDs of its root and the
+target root. In the protected namespace, only host PID 1 can pivot from
+the first to the second. It may change propagation on the bpffs ancestry
+while it is on the initrd root and restore shared propagation after the
+switch. Before allowing the old root to detach, the unmount guard checks
+that the new root has a copy of the same bpffs subtree outside the reach
+of the unmount and transfers its protection to that copy.
+
 .. figure:: /images/security-bpffs-mounts.svg
    :alt: Three mount namespaces. In init's, the root, /run, the
          /run/shirudo tmpfs and the recorded bpffs nest in that order;
@@ -709,7 +717,7 @@ and the returned link's ifindex around attachment.
    ``lsm/inode_rename``, ``lsm/inode_mkdir``, ``lsm/inode_symlink``,
    ``lsm/inode_link``, ``lsm/inode_rmdir``, ``lsm/inode_setxattr``,
    ``lsm/inode_removexattr``, ``lsm/sb_umount``, ``lsm/move_mount``,
-   ``lsm/sb_mount``, ``lsm/sb_remount``
+   ``lsm/sb_mount``, ``lsm/sb_remount``, ``lsm/sb_pivotroot``
 :Refusal: ``EACCES`` from ``bpf()``, from opening a pin and from the
    perf ioctl; ``EPERM`` from the inode and mount guards;
    ``attach_scope_mismatch`` from ``shirudo upatch load``
@@ -1672,8 +1680,8 @@ R3 Pins depend on the mount tree
    namespace. A private copy of the tree in another namespace is any
    process's to drop, which releases nothing. Legacy ``mount(2)`` with
    ``MS_MOVE`` reaches ``lsm/sb_mount`` with the target only, so the
-   source mount is not checked (D8). ``pivot_root(2)`` is not hooked,
-   and ``mount_setattr(2)`` has no LSM hook at all, so root can change
+   source mount is not checked (D8). On the pinned kernel,
+   ``mount_setattr(2)`` has no propagation hook, so root can change
    mount attributes and propagation, making the bpffs read-only for
    instance. A mount over ``/run`` or an ancestor hides the pins without
    releasing them: enforcement continues, ``shirudo status`` reports the
@@ -2256,26 +2264,12 @@ D10 A payload type in the signed message
    can describe, and the reverse, without resting on the signed
    sections that follow (T15).
 
-D11 Protect the bpffs mount through systemd switch-root
-   Guard pivots and propagation changes in the mount namespace that
-   holds the recorded bpffs (R3). Allow host PID 1 to change propagation
-   and pivot during the initrd handoff. End this exception once PID 1
-   has unmounted the recorded old root. Allow PID 1 to make the mounts
-   shared again after the handoff.
-
-   In the proposed BPF hook, split nested CO-RE reads and read the
-   stored pointer directly from the map value before using CO-RE to
-   read the kernel mount's namespace. Check that the hook builds and
-   loads. Boot a systemd initrd that switches root and verify that it
-   attests, the protected mounts are shared and the mount tamper counter
-   stays unchanged. See the `switch-root review on PR 213
-   <https://github.com/shirudo-dev/shirudo/pull/213#issuecomment-7111239313>`__.
-
-   Cover propagation changes through both ``mount(2)`` and
-   ``mount_setattr(2)``. The latter needs a kernel hook. Test each
-   interface directly. Check that other host tasks cannot make the
-   protected tree private and that unrelated mounts stay usable. See
-   the `propagation test review
+D11 Propagation changes through the new mount API
+   The pivot and legacy propagation guards cover the initrd handoff (T2).
+   The pinned kernel still needs an LSM hook for propagation changes
+   through ``mount_setattr(2)``, including recursive changes. Compare
+   both interfaces when testing a kernel with that hook. See the
+   `propagation review on PR 213
    <https://github.com/shirudo-dev/shirudo/pull/213#issuecomment-7111496290>`__.
 
 Out of scope

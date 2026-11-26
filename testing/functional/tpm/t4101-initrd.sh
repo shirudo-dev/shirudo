@@ -78,4 +78,21 @@ test_expect_success 'the runtime command can check initialization after switch-r
 	[ "$(status_field tpm.bound_in)" = initrd ]
 '
 
+# The QEMU TPM suite enables just this syscall exit at boot. A successful
+# service alone could also mean systemd used its move-mount fallback.
+if grep -qw 'trace_event=syscalls:sys_exit_pivot_root' /proc/cmdline; then
+	test_expect_success 'host PID 1 completed a native pivot_root' '
+		grep -E -- "-1[[:space:]]+\[.*(sys_exit_pivot_root:|sys_pivot_root ->) (0x)?0+([[:space:]]|$)" /sys/kernel/tracing/trace ||
+		{ grep -i pivot /sys/kernel/tracing/trace; false; }
+	'
+
+	test_expect_success 'systemd restored shared propagation with no mount refusal' '
+		[ "$(status_field tamper_attempts.counters.BpffsMount)" = 0 ] &&
+		[ "$(status_field tamper_attempts.counters.BpffsUmountAbove)" = 0 ] &&
+		for path in / /run /run/shirudo /run/shirudo/bpffs; do
+			findmnt -n -o PROPAGATION -T "$path" | grep -qw shared || return 1
+		done
+	'
+fi
+
 test_done
