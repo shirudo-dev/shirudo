@@ -41,8 +41,8 @@ What init does
        config image at ``/run/shirudo/config``, and writes its init record
        to ``/run/shirudo/eventlog.pending``.
    * - Root file system
-     - ``shirudo.service``, with the runtime image's binary through the
-       drop-in
+     - ``shirudo.service``, running the runtime image's binary directly
+       (or through its drop-in for a dynamically linked binary)
      - Checks that the keyring and the runtime image are the ones the
        initrd recorded, appends the pending init record to
        ``/var/lib/shirudo/eventlog``, and checks the LSM link, the config

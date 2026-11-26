@@ -295,82 +295,28 @@ writes the activation record there before it extends the config PCR.
 Install the unit drop-ins
 -------------------------
 
-The shipped units start the installed binary, ``/usr/bin/shirudo`` from
-the package. On an enforcing target that binary has no runtime authority, and shirudo refuses it before it does
-anything. Every target service needs a drop-in that runs the runtime
-image's binary instead. ``shirudo-initrd.service`` needs none: it runs in
-the initrd, from the binary the UKI authenticates.
+The shipped target units already invoke
+``/run/shirudo/runtime/usr/bin/shirudo`` directly and gate on
+``ConditionPathIsMountPoint=/run/shirudo/runtime``. For the static PIE
+target package, all six root-filesystem services work without drop-ins;
+installing the ``shirudo.service`` drop-in from ``--unit-output`` is
+only needed to clear ``EnvironmentFile=`` and drop
+``$SHIRUDO_INIT_ARGS`` on ``shirudo.service``:
 
-1. Install the drop-in that ``shirudo-gen-runtime`` wrote:
+.. code-block:: console
 
-   .. code-block:: console
+   target# install -D -m 0644 runtime-service.conf \
+       /etc/systemd/system/shirudo.service.d/runtime.conf
+   target# systemctl daemon-reload
 
-      target# install -D -m 0644 runtime-service.conf \
-          /etc/systemd/system/shirudo.service.d/runtime.conf
-
-   For the static binary its directives are:
-
-   .. code-block:: ini
-
-      [Service]
-      EnvironmentFile=
-      ExecStart=
-      ExecStart=/run/shirudo/runtime/usr/bin/shirudo init
-
-2. Write ``/etc/systemd/system/shirudo-keepalive.service.d/runtime.conf``:
-
-   .. code-block:: ini
-
-      [Service]
-      ExecStart=
-      ExecStart=/run/shirudo/runtime/usr/bin/shirudo status --otel
-
-3. Write ``/etc/systemd/system/shirudo-map-export.service.d/runtime.conf``:
-
-   .. code-block:: ini
-
-      [Service]
-      ExecStart=
-      ExecStart=/run/shirudo/runtime/usr/bin/shirudo upatch map --all
-
-4. Write ``/etc/systemd/system/shirudo-bpm-repo-update.service.d/runtime.conf``:
-
-   .. code-block:: ini
-
-      [Service]
-      ExecStart=
-      ExecStart=-/run/shirudo/runtime/usr/bin/shirudo bpm repo update
-      ExecStart=/run/shirudo/runtime/usr/bin/shirudo bpm upgrade
-
-   The leading ``-`` keeps the upgrade running when one registry cannot
-   be reached, as in the shipped unit.
-
-5. Write ``/etc/systemd/system/shirudo-bpm-tree-sync.service.d/runtime.conf``:
-
-   .. code-block:: ini
-
-      [Service]
-      ExecStart=
-      ExecStart=/run/shirudo/runtime/usr/bin/shirudo bpm tree sync
-
-6. Write ``/etc/systemd/system/shirudo-xdp-reconcile.service.d/runtime.conf``:
-
-   .. code-block:: ini
-
-      [Service]
-      ExecStart=
-      ExecStart=/run/shirudo/runtime/usr/bin/shirudo upatch reconcile
-
-7. Reload systemd:
-
-   .. code-block:: console
-
-      target# systemctl daemon-reload
-
-For a dynamically linked binary, use the invocation that
-``shirudo-gen-runtime`` printed, which runs the binary through the
-image's own loader and libraries, in place of
-``/run/shirudo/runtime/usr/bin/shirudo``.
+For a dynamically linked binary, pass ``--unit-dir <dir>`` to
+``shirudo-gen-runtime`` to generate ``<unit>.d/runtime.conf`` for all
+six target services (``shirudo``, ``shirudo-keepalive``,
+``shirudo-map-export``, ``shirudo-xdp-reconcile``,
+``shirudo-bpm-repo-update`` and ``shirudo-bpm-tree-sync``), copy the
+generated ``*.service.d`` directories into ``/etc/systemd/system/`` and
+run ``systemctl daemon-reload``. ``shirudo-initrd.service`` needs no
+drop-in: it runs in the initrd, from the binary the UKI authenticates.
 :doc:`/reference/systemd-units` lists the units and their schedules.
 
 The deb and rpm packages enable ``shirudo.service`` and the five timers

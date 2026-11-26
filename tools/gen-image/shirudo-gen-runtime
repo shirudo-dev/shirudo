@@ -13,7 +13,8 @@ usage: shirudo-gen-runtime --binary <shirudo-target> --bootstrap-conf <file>
        --cert <initial-BPF-cert.der> --config-cert <config-cert.der>
        --output <prefix> --keys-dir <operator-key-directory>
        [--size <MiB>] [--builder <shirudo-build>] [--unit-output <file>]
-       [--extra-binary <trusted-ELF>] [--config-cert <additional-cert.der>]
+       [--unit-dir <dir>] [--extra-binary <trusted-ELF>]
+       [--config-cert <additional-cert.der>]
 
 Package the trusted executable without its symbols, bootstrap settings and
 public certificates. Static targets run directly. Dynamic executables bring
@@ -35,6 +36,7 @@ parse_args()
 		--size) size=${2:?}; shift 2 ;;
 		--builder) builder=${2:?}; shift 2 ;;
 		--unit-output) unit_output=${2:?}; shift 2 ;;
+		--unit-dir) unit_dir=${2:?}; shift 2 ;;
 		--extra-binary) extra_binaries+=("${2:?}"); shift 2 ;;
 		-h|--help) usage; exit 0 ;;
 		*) usage >&2; die "unknown option: $1" ;;
@@ -65,6 +67,26 @@ check_inputs()
 			! cmp -s "$file" "${config_certs[j]}" || die 'duplicate config certificate'
 		done
 	done
+	if [ -n "$unit_output" ]; then
+		require_new_output "$unit_output" 'unit output'
+	fi
+	if [ -n "$unit_dir" ]; then
+		while [ "$unit_dir" != / ] && [ "${unit_dir%/}" != "$unit_dir" ]; do
+			unit_dir=${unit_dir%/}
+		done
+		[ ! -e "$unit_dir" ] && [ ! -L "$unit_dir" ] || [ -d "$unit_dir" ] ||
+			die "--unit-dir is not a directory: $unit_dir"
+		for file in shirudo.service shirudo-keepalive.service \
+			shirudo-map-export.service shirudo-xdp-reconcile.service \
+			shirudo-bpm-repo-update.service shirudo-bpm-tree-sync.service; do
+			[ ! -e "$unit_dir/$file.d" ] && [ ! -L "$unit_dir/$file.d" ] ||
+				[ -d "$unit_dir/$file.d" ] ||
+				die "unit drop-in directory is not a directory: $unit_dir/$file.d"
+			require_new_output "$unit_dir/$file.d/runtime.conf" 'unit drop-in'
+			[ "$unit_output" != "$unit_dir/$file.d/runtime.conf" ] ||
+				die '--unit-output collides with --unit-dir'
+		done
+	fi
 	check_image_options "$output" "$keys_dir" "$size"
 	require_command readelf 'install binutils (readelf)'
 	require_command ldd 'ldd is required on the operator'
@@ -165,13 +187,21 @@ build_runtime_image()
 	fi
 }
 
+check_runtime_paths()
+{
+	[ -n "$unit_output" ] || [ -n "$unit_dir" ] || return 0
+	case "$interpreter$library_path" in
+	*[[:space:]\\\"%\$\']*)
+		die 'runtime paths cannot be encoded in a systemd ExecStart'
+		;;
+	esac
+}
+
 write_service()
 {
 	local interpreter_escaped library_path_escaped
 
 	[ -n "$unit_output" ] || return 0
-	require_new_output "$unit_output" 'unit output'
-	case "$interpreter$library_path" in *[[:space:]\\\"%]*) die 'runtime paths cannot be encoded in a systemd ExecStart' ;; esac
 	interpreter_escaped=$(escape_sed_replacement "$interpreter")
 	library_path_escaped=$(escape_sed_replacement "$library_path")
 	if [ -z "$interpreter" ]; then
@@ -186,6 +216,50 @@ write_service()
 	)
 }
 
+write_unit_dropin()
+{
+	local unit=$1 clear_env=$2 dest="$unit_dir/$1.d/runtime.conf"
+	shift 2
+
+	mkdir -p "$unit_dir/$unit.d"
+	(
+		set -o noclobber
+		{
+			printf '# SPDX-License-Identifier: BSD-2-Clause\n'
+			printf '# Copyright (c) 2026 Authors of shirudo\n'
+			printf '[Service]\n'
+			[ "$clear_env" -eq 0 ] || printf 'EnvironmentFile=\n'
+			printf 'ExecStart=\n'
+			while [ $# -gt 0 ]; do
+				printf 'ExecStart=%s\n' "$1"
+				shift
+			done
+		} >"$dest"
+	)
+}
+
+# Each drop-in repeats the ExecStart= lines of its unit in systemd/, with
+# the binary run through the image's loader: the two must stay in step,
+# and t5001 compares them.
+write_unit_dir()
+{
+	local cmd
+
+	[ -n "$unit_dir" ] || return 0
+	if [ -z "$interpreter" ]; then
+		cmd='/run/shirudo/runtime/usr/bin/shirudo'
+	else
+		cmd="/run/shirudo/runtime$interpreter --inhibit-cache --library-path $library_path /run/shirudo/runtime/usr/bin/shirudo"
+	fi
+	write_unit_dropin shirudo.service 1 "$cmd init"
+	write_unit_dropin shirudo-keepalive.service 0 "$cmd status --otel"
+	write_unit_dropin shirudo-map-export.service 0 "$cmd upatch map --all"
+	write_unit_dropin shirudo-xdp-reconcile.service 0 "$cmd upatch reconcile"
+	write_unit_dropin shirudo-bpm-repo-update.service 0 \
+		"-$cmd bpm repo update" "$cmd bpm upgrade"
+	write_unit_dropin shirudo-bpm-tree-sync.service 0 "$cmd bpm tree sync"
+}
+
 main()
 {
 	parse_args "$@"
@@ -195,8 +269,10 @@ main()
 	stage_files
 	stage_extra_binaries
 	stage_libraries
+	check_runtime_paths
 	build_runtime_image
 	write_service
+	write_unit_dir
 }
 
 binary=
@@ -210,6 +286,7 @@ keys_dir=
 size=15
 builder=${SHIRUDO_BUILD:-shirudo-build}
 unit_output=
+unit_dir=
 library_path=
 extra_binaries=()
 main "$@"

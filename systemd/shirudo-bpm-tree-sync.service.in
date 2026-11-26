@@ -6,6 +6,7 @@ Description=shirudo: synchronize the signed BPM upatch tree
 Wants=network-online.target
 After=network-online.target shirudo.service
 RequiresMountsFor=/etc/shirudo/bpm /var/lib/shirudo
+ConditionPathIsMountPoint=/run/shirudo/runtime
 
 [Service]
 Type=oneshot
@@ -13,4 +14,4 @@ SyslogIdentifier=shirudo
 LimitMEMLOCK=infinity
 TimeoutStartSec=30min
 EnvironmentFile=-/etc/shirudo/bpm/environment
-ExecStart=@bindir@/shirudo bpm tree sync
+ExecStart=/run/shirudo/runtime/usr/bin/shirudo bpm tree sync

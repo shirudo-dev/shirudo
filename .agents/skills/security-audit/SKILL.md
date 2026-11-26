@@ -249,7 +249,7 @@ classes below (`openssl_ret`, `errno_clobber`, `alloc_unchecked`,
   line, `status` output, an error message or an export.
 - **Environment and exec.** The target runs no subprocess. Look for
   variables, search paths and libraries a process with runtime authority
-  takes from root (U3, U7), and at what else an exec keeps for it: open
+  takes from root (U3), and at what else an exec keeps for it: open
   descriptors, the working and root directory, resource limits, signal
   state, namespaces.
 - **Linked code.** The target links OpenSSL, libcurl, tpm2-tss, libelf,

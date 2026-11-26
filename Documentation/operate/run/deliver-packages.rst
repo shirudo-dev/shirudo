@@ -433,9 +433,9 @@ Timers and locks
      - ``bpm tree sync``
      - 60 s after boot, then every 60 s
 
-Both services run the host's ``shirudo`` unless you installed the
-runtime drop-ins (:ref:`unit-drop-ins`). An enforcing target refuses
-that binary, so without the drop-ins nothing is delivered.
+Both services invoke ``/run/shirudo/runtime/usr/bin/shirudo`` directly
+on static target packages. For a dynamically linked binary, install the
+drop-ins from ``shirudo-gen-runtime --unit-dir`` (:ref:`unit-drop-ins`).
 
 ``bpm install``, ``upgrade``, ``uninstall``, ``repo update`` and
 ``tree sync`` lock the verified state root on an enforcing target and wait for it

@@ -445,7 +445,8 @@ signed config image.
    * - ``t5001-config-image``
      - Image builder and ``veritysetup`` format, superblock and size
        checks, the ML-DSA-87 root signature, runtime acceptance by the
-       exact root, the generator scripts and multiple config certificates
+       exact root, the generator scripts (including ``--unit-dir``), and
+       multiple config certificates
    * - ``t5002-image-config``
      - Settings a config may set, symbolic links and special files
    * - ``t5003-image-keys``
@@ -701,6 +702,10 @@ signed config image.
        renamed or opened, and the second mount is not unmounted,
        remounted or mounted over; each refusal is counted, and nothing
        reaches the namespace of ``init``
+   * - ``t6160-shipped-units``
+     - The timer and reconcile services as a target package ships them,
+       with no drop-in, start the runtime image's binary: no run is
+       refused the identity pin or counts as ``ObjGet``
 
 ``bpm`` (7)
 ~~~~~~~~~~~
@@ -903,7 +908,8 @@ signed config image.
    * - ``t8002-map-export-config``
      - Map export settings
    * - ``t8003-systemd-map-export``
-     - Exporter units and timers and their package scriptlets, as text
+     - Exporter units and timers, runtime image paths across all six
+       shipped rootfs services, and package scriptlets, as text
    * - ``t8004-status-otel``
      - ``status --keepalive``, ``status --otel`` without a TPM or an
        endpoint, and the keepalive log record: its string body, its one
@@ -1298,7 +1304,7 @@ Coverage by area
        ``t7001``, ``t8001``. Unit: ``log``
    * - Build and packaging
      - ``t0005``, ``t0007``, ``t1003``, ``t1004``, ``t1005``,
-       ``t7004``, ``t8003``
+       ``t6160``, ``t7004``, ``t8003``
    * - CI scripts
      - ``t0001`` to ``t0008``
    * - Parsers

@@ -559,26 +559,19 @@ if ! mountpoint -q /run/shirudo/runtime ||
 fi
 install -m 0755 "$BUNDLE/verity/shirudo-runtime" /usr/local/bin/shirudo-runtime
 SHIRUDO_BIN=/usr/local/bin/shirudo-runtime
+# The tests run the shipped services as a target ships them, with no
+# drop-in: one that starts any binary but the runtime image's would fail
+# its every run on an enforcing target, so stop on it here.
 for unit in "${TARGET_UNITS[@]}"; do
 	case "$unit" in *.service) ;; *) continue ;; esac
 	unit_file="/usr/lib/systemd/system/$unit"
-	exec_starts=$(sed -nE \
-		's#^ExecStart=(-?)[^[:space:]]*/shirudo([[:space:]]|$)#ExecStart=\1/usr/local/bin/shirudo-runtime\2#p' \
-		"$unit_file")
-	exec_count=$(awk '/^ExecStart=/ { count++ } END { print count + 0 }' \
-		"$unit_file")
-	replacement_count=$(printf '%s\n' "$exec_starts" |
-		awk '/^ExecStart=/ { count++ } END { print count + 0 }')
-	if [[ "$exec_count" -eq 0 || "$replacement_count" -ne "$exec_count" ]]; then
-		log "could not rewrite every ExecStart in $unit_file ($replacement_count/$exec_count)"
+	if ! grep -q '^ExecStart=' "$unit_file" ||
+	   grep '^ExecStart=' "$unit_file" |
+	   grep -vqE '^ExecStart=-?/run/shirudo/runtime/usr/bin/shirudo( |$)'; then
+		log "$unit_file does not start the runtime image's binary"
 		exit 1
 	fi
-	mkdir -p "/etc/systemd/system/$unit.d"
-	{
-		printf '[Service]\nExecStart=\n%s\n' "$exec_starts"
-	} >"/etc/systemd/system/$unit.d/runtime.conf"
 done
-systemctl daemon-reload
 "$SHIRUDO_BIN" init
 test -e /run/shirudo/bpffs/lsm_link
 if [[ "$VM_INITRD" == 1 ]]; then

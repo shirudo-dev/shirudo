@@ -178,9 +178,12 @@ command runs:
    target# /usr/local/bin/shirudo status
    shirudo: image state: Permission denied
 
-The drop-in that ``shirudo-gen-runtime --unit-output`` writes changes
-``shirudo.service`` only. The other shipped services run the
-``shirudo`` installed in ``bindir`` (see :doc:`/reference/systemd-units`).
+All six shipped root-filesystem services invoke
+``/run/shirudo/runtime/usr/bin/shirudo`` directly (see
+:doc:`/reference/systemd-units`). For a dynamically linked binary,
+``shirudo-gen-runtime --unit-dir`` generates drop-ins for all six
+services; ``--unit-output`` writes the ``shirudo.service`` drop-in
+alone.
 
 Image gate
 ~~~~~~~~~~

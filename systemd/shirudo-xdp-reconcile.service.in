@@ -4,6 +4,7 @@
 [Unit]
 Description=shirudo: attach XDP upatches to new network devices
 After=shirudo.service
+ConditionPathIsMountPoint=/run/shirudo/runtime
 ConditionPathExists=/run/shirudo/bpffs/lsm_link
 StartLimitIntervalSec=0
 
@@ -12,4 +13,4 @@ Type=oneshot
 SyslogIdentifier=shirudo
 LimitMEMLOCK=infinity
 TimeoutStartSec=2min
-ExecStart=@bindir@/shirudo upatch reconcile
+ExecStart=/run/shirudo/runtime/usr/bin/shirudo upatch reconcile

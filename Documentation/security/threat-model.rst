@@ -2139,22 +2139,6 @@ U6 The eventlog becomes unreadable at 8 MiB
       reading, not reproduced.
    :Meanwhile: Watch the size of ``/var/lib/shirudo/eventlog``.
 
-U7 The shipped timer units run the host binary
-   :Affects: ``shirudo-keepalive.service``,
-      ``shirudo-map-export.service``,
-      ``shirudo-bpm-repo-update.service`` and
-      ``shirudo-bpm-tree-sync.service``.
-   :Consequence: Only ``shirudo.service`` receives the drop-in that
-      ``shirudo-gen-runtime --unit-output`` generates. The others start
-      ``shirudo`` from the root file system, which has no runtime
-      authority: it cannot open the identity pin, so the command fails
-      once enforcement is live and moves ``ObjGet`` at every run.
-   :Status: Confirmed in code; the failure of each unit is a code-path
-      reading, not reproduced.
-   :Meanwhile: Install a drop-in for each of these services that
-      starts its commands from the runtime image, as the test VM does
-      in :src:`testing/vm/guest.sh`.
-
 U9 init can rebind the register after hiding this boot's record
    :Affects: The one-binding-per-reset rule (T5).
    :Consequence: ``init`` decides whether it bound the register this
@@ -2346,8 +2330,7 @@ The deployer:
   ``dm_verity.keyring_unsealed=1``, and whose command line, kernel and
   initrd name no resume device (A6, A9, A11)
 - Keeps generic tools off the runtime image (A14)
-- Keeps the environment files of the units absent or empty (U3) and
-  starts every shirudo unit from the runtime image (U7)
+- Keeps the environment files of the units absent or empty (U3)
 - Uses only ML-DSA-87 certificates from ``shirudo genkey``, repository
   certificates included (U4)
 - Treats the TPM owner password as known to root (R20)

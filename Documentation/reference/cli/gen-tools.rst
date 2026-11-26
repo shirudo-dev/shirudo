@@ -25,7 +25,7 @@ target.
      - Build a signed image from a directory.
    * - ``shirudo-gen-runtime``
      - operator package, ``$(libexecdir)/shirudo/gen-image/``
-     - Build the signed runtime image and its ``shirudo.service`` drop-in.
+     - Build the signed runtime image and its systemd drop-ins.
    * - ``shirudo-gen-verity``
      - operator package, ``$(libexecdir)/shirudo/gen-image/``
      - Sign an existing ext4 image. ``shirudo image build`` runs it.
@@ -97,7 +97,8 @@ shirudo-gen-runtime
                        --cert <certificate> --config-cert <certificate>
                        --output <prefix> --keys-dir <dir>
                        [--size <mib>] [--builder <helper>]
-                       [--unit-output <file>] [--extra-binary <file>]...
+                       [--unit-output <file>] [--unit-dir <dir>]
+                       [--extra-binary <file>]...
                        [--config-cert <additional-certificate>]...
 
 Builds the runtime image, the image whose root hash the bootstrap
@@ -118,7 +119,11 @@ It prints the runtime invocation on standard error, for example
 ``/run/shirudo/runtime/usr/bin/shirudo init`` for a static binary. With
 ``--unit-output`` it writes a systemd drop-in for ``shirudo.service``
 that clears ``EnvironmentFile=`` and ``ExecStart=`` and runs the runtime
-binary with ``init``. No drop-in is written for the other units.
+binary with ``init``. With ``--unit-dir`` it writes
+``<unit>.d/runtime.conf`` for all six target services (``shirudo``,
+``shirudo-keepalive``, ``shirudo-map-export``,
+``shirudo-xdp-reconcile``, ``shirudo-bpm-repo-update`` and
+``shirudo-bpm-tree-sync``).
 
 ``ldd`` runs the inputs' dynamic loader on the operator host: pass only
 trusted binaries. Requires ``readelf``, ``ldd`` and ``llvm-strip``.
@@ -163,6 +168,10 @@ trusted binaries. Requires ``readelf``, ``ldd`` and ``llvm-strip``.
    * - ``--unit-output``
      - none
      - Write the ``shirudo.service`` drop-in to this new file.
+   * - ``--unit-dir``
+     - none
+     - Write ``<unit>.d/runtime.conf`` for all six target services under
+       this directory, refusing to overwrite existing drop-ins.
    * - ``--extra-binary``
      - none
      - A further trusted executable for the image. Repeatable.

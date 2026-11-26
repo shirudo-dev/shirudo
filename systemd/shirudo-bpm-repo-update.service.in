@@ -6,6 +6,7 @@ Description=shirudo: refresh BPM OCI repositories and upgrade packages
 Wants=network-online.target
 After=network-online.target shirudo.service
 RequiresMountsFor=/etc/shirudo/bpm /var/lib/shirudo
+ConditionPathIsMountPoint=/run/shirudo/runtime
 
 [Service]
 Type=oneshot
@@ -15,5 +16,5 @@ TimeoutStartSec=30min
 EnvironmentFile=-/etc/shirudo/bpm/environment
 # One unreachable registry fails the update; the upgrade still runs
 # from what the others refreshed.
-ExecStart=-@bindir@/shirudo bpm repo update
-ExecStart=@bindir@/shirudo bpm upgrade
+ExecStart=-/run/shirudo/runtime/usr/bin/shirudo bpm repo update
+ExecStart=/run/shirudo/runtime/usr/bin/shirudo bpm upgrade

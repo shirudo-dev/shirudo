@@ -157,9 +157,10 @@ Root file system run
 ``sysinit.target``, after ``local-fs.target``,
 ``systemd-tpm2-setup-early.service`` and
 ``systemd-pcrnvdone.service``, and only when ``/run/shirudo/runtime`` is
-a mount point. The drop-in that ``shirudo-gen-runtime --unit-output``
-writes replaces its ``ExecStart`` with the binary on the runtime image,
-so this ``init`` earns runtime authority by its exec.
+a mount point. Its ``ExecStart`` invokes
+``/run/shirudo/runtime/usr/bin/shirudo`` directly (or through the
+drop-in that ``shirudo-gen-runtime`` writes for a dynamically linked
+binary), so this ``init`` earns runtime authority by its exec.
 
 This run reads the runtime root hash from the frozen identity map rather
 than from a file, checks that every pinned enforcement link is an LSM

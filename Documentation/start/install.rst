@@ -240,11 +240,10 @@ enforces once it boots through the shirudo initrd with everything that
   configuration that names them.
 - An initrd built with ``shirudo-gen-initrd``, booted from an
   authenticated unified kernel image.
-- A drop-in that makes ``shirudo.service`` run the binary on the runtime
-  image instead of ``/usr/bin/shirudo``, which ``shirudo-gen-runtime``
-  writes. On a protected target shirudo runs only from the runtime image,
-  so the timer services need the same change to work. The generator does
-  not write drop-ins for them.
+- For a static PIE target package, the shipped root-filesystem units
+  already invoke ``/run/shirudo/runtime/usr/bin/shirudo``. For a
+  dynamically linked binary, install the drop-ins that
+  ``shirudo-gen-runtime --unit-dir`` writes for all six target services.
 
 :doc:`/operate/deploy/boot-integration` sets these up. After the reboot,
 ``shirudo status`` on the target shows ``Status: ok`` with every

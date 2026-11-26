@@ -4,6 +4,7 @@
 [Unit]
 Description=shirudo: export loaded upatch maps
 After=shirudo.service
+ConditionPathIsMountPoint=/run/shirudo/runtime
 ConditionPathExists=/run/shirudo/bpffs/lsm_link
 
 [Service]
@@ -12,4 +13,4 @@ SyslogIdentifier=shirudo
 LimitMEMLOCK=infinity
 TimeoutStartSec=5min
 EnvironmentFile=-/etc/shirudo/map-export.env
-ExecStart=@bindir@/shirudo upatch map --all
+ExecStart=/run/shirudo/runtime/usr/bin/shirudo upatch map --all

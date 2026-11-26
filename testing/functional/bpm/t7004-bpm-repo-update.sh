@@ -16,6 +16,8 @@ test_expect_success 'BPM repository refresh service runs update before upgrade' 
 		../systemd/shirudo-bpm-repo-update.service.in &&
 	grep -q "^RequiresMountsFor=/etc/shirudo/bpm /var/lib/shirudo$" \
 		../systemd/shirudo-bpm-repo-update.service.in &&
+	grep -q "^ConditionPathIsMountPoint=/run/shirudo/runtime$" \
+		../systemd/shirudo-bpm-repo-update.service.in &&
 	grep -q "^EnvironmentFile=-/etc/shirudo/bpm/environment$" \
 		../systemd/shirudo-bpm-repo-update.service.in &&
 	grep -n "bpm repo update" \
@@ -48,7 +50,7 @@ test_expect_success 'BPM repository refresh timer runs at boot and every minute'
 		../systemd/shirudo-bpm-repo-update.timer
 '
 
-test_expect_success 'target install resolves and stages the BPM refresh unit' '
+test_expect_success 'target install stages BPM refresh units using the runtime image' '
 	sed "s|@bindir@|/opt/shirudo/bin|g" \
 		../systemd/shirudo-bpm-repo-update.service.in >"$GENERATED_BPM" &&
 	(
@@ -58,10 +60,14 @@ test_expect_success 'target install resolves and stages the BPM refresh unit' '
 			systemdunitdir=/usr/lib/systemd/system install-target \
 			>"$WORK/target.plan"
 	) &&
-	grep -q "^ExecStart=-/opt/shirudo/bin/shirudo bpm repo update$" \
+	grep -q "^ExecStart=-/run/shirudo/runtime/usr/bin/shirudo bpm repo update$" \
 		"$GENERATED_BPM" &&
-	grep -q "^ExecStart=/opt/shirudo/bin/shirudo bpm upgrade$" \
+	grep -q "^ExecStart=/run/shirudo/runtime/usr/bin/shirudo bpm upgrade$" \
 		"$GENERATED_BPM" &&
+	grep -q "^ExecStart=/run/shirudo/runtime/usr/bin/shirudo bpm tree sync$" \
+		../systemd/shirudo-bpm-tree-sync.service.in &&
+	grep -q "^ConditionPathIsMountPoint=/run/shirudo/runtime$" \
+		../systemd/shirudo-bpm-tree-sync.service.in &&
 	grep -q "systemd/shirudo.service" "$WORK/target.plan" &&
 	grep -q "systemd/shirudo-bpm-repo-update.service" "$WORK/target.plan" &&
 	grep -q "systemd/shirudo-bpm-repo-update.timer" "$WORK/target.plan"

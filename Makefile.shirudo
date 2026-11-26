@@ -635,13 +635,13 @@ systemd/shirudo-initrd.service: systemd/shirudo-initrd.service.in
 	@printf '  GEN     $@\n'
 	$(Q)sed 's|@bindir@|$(bindir)|g' $< > $@
 
-# The periodic map exporter is target-only and uses the same installed binary.
+# The periodic map exporter is target-only and runs from the runtime image.
 systemd/shirudo-map-export.service: systemd/shirudo-map-export.service.in
 	@printf '  GEN     $@\n'
 	$(Q)sed 's|@bindir@|$(bindir)|g' $< > $@
 
-# The periodic status keepalive is target-only and uses the same installed
-# binary and OTLP environment as the map exporter.
+# The periodic status keepalive is target-only and runs from the runtime image
+# with the optional OTLP environment file.
 systemd/shirudo-keepalive.service: systemd/shirudo-keepalive.service.in
 	@printf '  GEN     $@\n'
 	$(Q)sed 's|@bindir@|$(bindir)|g' $< > $@
@@ -650,8 +650,8 @@ systemd/shirudo-xdp-reconcile.service: systemd/shirudo-xdp-reconcile.service.in
 	@printf '  GEN     $@\n'
 	$(Q)sed 's|@bindir@|$(bindir)|g' $< > $@
 
-# The BPM repository refresh is target-only and uses the same installed
-# binary plus the optional BPM OCI environment file.
+# The BPM repository refresh is target-only and runs from the runtime image
+# with the optional BPM OCI environment file.
 systemd/shirudo-bpm-repo-update.service: systemd/shirudo-bpm-repo-update.service.in
 	@printf '  GEN     $@\n'
 	$(Q)sed 's|@bindir@|$(bindir)|g' $< > $@

@@ -287,9 +287,21 @@ if command -v mkfs.ext4 >/dev/null 2>&1 && command -v debugfs >/dev/null 2>&1; t
 			--config-cert "$W/other/cert.der" --keys-dir "$W/keys" --builder "$B" \
 			--extra-binary /bin/true --extra-binary "$W/static-probe" \
 			--unit-output "$W/runtime-service.conf" \
+			--unit-dir "$W/dyn-units" \
 			--output "$W/generated-runtime" --size 128 &&
 		verify "$W/generated-runtime" "$W/keys/cert.der" &&
 		grep -q -- "--inhibit-cache --library-path /run/shirudo/runtime/" "$W/runtime-service.conf" &&
+		cmp "$W/runtime-service.conf" "$W/dyn-units/shirudo.service.d/runtime.conf" &&
+		for unit in shirudo-keepalive shirudo-map-export \
+			shirudo-xdp-reconcile shirudo-bpm-repo-update \
+			shirudo-bpm-tree-sync; do
+			grep -q -- "--inhibit-cache --library-path /run/shirudo/runtime/" \
+				"$W/dyn-units/$unit.service.d/runtime.conf" || return 1
+		done &&
+		grep -qE "^ExecStart=-/run/shirudo/runtime/.* bpm repo update$" \
+			"$W/dyn-units/shirudo-bpm-repo-update.service.d/runtime.conf" &&
+		grep -qE "^ExecStart=/run/shirudo/runtime/.* bpm upgrade$" \
+			"$W/dyn-units/shirudo-bpm-repo-update.service.d/runtime.conf" &&
 		debugfs -R "stat /usr/bin/true" "$W/generated-runtime.img" 2>/dev/null |
 			grep -q "Type: regular" &&
 		debugfs -R "stat /usr/bin/static-probe" "$W/generated-runtime.img" 2>/dev/null |
@@ -351,16 +363,75 @@ if command -v mkfs.ext4 >/dev/null 2>&1 && command -v debugfs >/dev/null 2>&1; t
 			--bootstrap-conf "$W/bootstrap.conf" --cert "$W/keys/cert.der" \
 			--config-cert "$W/other/cert.der" --keys-dir "$W/keys" --builder "$B" \
 			--unit-output "$W/static-runtime.service" \
+			--unit-dir "$W/static-units" \
 			--output "$W/static-runtime" --size 8 &&
 		verify "$W/static-runtime" "$W/keys/cert.der" &&
 		grep -qx "ExecStart=/run/shirudo/runtime/usr/bin/shirudo init" \
 			"$W/static-runtime.service" &&
+		cmp "$W/static-runtime.service" \
+			"$W/static-units/shirudo.service.d/runtime.conf" &&
+		grep -qx "ExecStart=/run/shirudo/runtime/usr/bin/shirudo status --otel" \
+			"$W/static-units/shirudo-keepalive.service.d/runtime.conf" &&
+		grep -qx "ExecStart=/run/shirudo/runtime/usr/bin/shirudo upatch map --all" \
+			"$W/static-units/shirudo-map-export.service.d/runtime.conf" &&
+		grep -qx "ExecStart=/run/shirudo/runtime/usr/bin/shirudo upatch reconcile" \
+			"$W/static-units/shirudo-xdp-reconcile.service.d/runtime.conf" &&
+		grep -qx "ExecStart=-/run/shirudo/runtime/usr/bin/shirudo bpm repo update" \
+			"$W/static-units/shirudo-bpm-repo-update.service.d/runtime.conf" &&
+		grep -qx "ExecStart=/run/shirudo/runtime/usr/bin/shirudo bpm upgrade" \
+			"$W/static-units/shirudo-bpm-repo-update.service.d/runtime.conf" &&
+		grep -qx "ExecStart=/run/shirudo/runtime/usr/bin/shirudo bpm tree sync" \
+			"$W/static-units/shirudo-bpm-tree-sync.service.d/runtime.conf" &&
+		grep -qx "EnvironmentFile=" \
+			"$W/static-units/shirudo.service.d/runtime.conf" &&
+		for unit in shirudo-keepalive shirudo-map-export \
+			shirudo-xdp-reconcile shirudo-bpm-repo-update \
+			shirudo-bpm-tree-sync; do
+			! grep -q "^EnvironmentFile=" \
+				"$W/static-units/$unit.service.d/runtime.conf" || return 1
+		done &&
+		! ../tools/gen-image/shirudo-gen-runtime --binary "$W/static-probe" \
+			--bootstrap-conf "$W/bootstrap.conf" --cert "$W/keys/cert.der" \
+			--config-cert "$W/other/cert.der" --keys-dir "$W/keys" --builder "$B" \
+			--unit-dir "$W/static-units" \
+			--output "$W/static-runtime-dup" --size 8 &&
+		! test -e "$W/static-runtime-dup.img" &&
+		: >"$W/not-a-dir" &&
+		! ../tools/gen-image/shirudo-gen-runtime --binary "$W/static-probe" \
+			--bootstrap-conf "$W/bootstrap.conf" --cert "$W/keys/cert.der" \
+			--config-cert "$W/other/cert.der" --keys-dir "$W/keys" --builder "$B" \
+			--unit-dir "$W/not-a-dir" \
+			--output "$W/static-runtime-nodir" --size 8 &&
+		! test -e "$W/static-runtime-nodir.img" &&
 		debugfs -R "dump /usr/bin/shirudo $W/extracted-static" \
 			"$W/static-runtime.img" >/dev/null 2>&1 &&
 		llvm-strip -o "$W/static-probe.stripped" "$W/static-probe" &&
 		cmp "$W/static-probe.stripped" "$W/extracted-static" &&
 		debugfs -R "ls /" "$W/static-runtime.img" >"$W/static-root" 2>/dev/null &&
 		! grep -Eq "(lib|lib64)" "$W/static-root"
+	'
+	# The generator keeps its own copy of each unit's commands; a unit
+	# added or changed without it must fail here, not on a target.
+	test_expect_success 'the generated drop-ins start what the shipped units start' '
+		for f in ../systemd/*.service.in; do
+			if grep -q "^ExecStart=-\{0,1\}/run/shirudo/runtime/usr/bin/shirudo " "$f"; then
+				basename "$f" .in
+			fi
+		done | sort >"$W/units.runtime" &&
+		(cd "$W/static-units" && ls -d *.service.d) | sed "s/\.d$//" |
+			sort >"$W/units.generated" &&
+		cmp "$W/units.runtime" "$W/units.generated" &&
+		for u in $(cat "$W/units.runtime"); do
+			grep "^ExecStart=." "../systemd/$u.in" |
+				sed "s/ \$SHIRUDO_INIT_ARGS$//" >"$W/$u.want" &&
+			grep "^ExecStart=." "$W/static-units/$u.d/runtime.conf" \
+				>"$W/$u.static" &&
+			cmp "$W/$u.want" "$W/$u.static" &&
+			grep "^ExecStart=." "$W/dyn-units/$u.d/runtime.conf" |
+				sed -E "s#^(ExecStart=-?)/run/shirudo/runtime/[^ ]* --inhibit-cache --library-path [^ ]* #\1#" \
+				>"$W/$u.dyn" &&
+			cmp "$W/$u.want" "$W/$u.dyn" || return 1
+		done
 	'
 	test_expect_success 'the runtime image holds the binary without its symbols' '
 		LC_ALL=C readelf -S "$W/static-probe" | grep -q "\.symtab" &&

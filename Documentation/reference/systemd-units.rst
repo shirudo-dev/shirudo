@@ -30,29 +30,31 @@ Units
      - ``@bindir@/shirudo init`` in the initrd
      - ``initrd.target``, once per boot
    * - ``shirudo.service``
-     - ``@bindir@/shirudo init $SHIRUDO_INIT_ARGS``, replaced by the
-       runtime drop-in
+     - ``/run/shirudo/runtime/usr/bin/shirudo init $SHIRUDO_INIT_ARGS``
      - ``sysinit.target``, once per boot
    * - ``shirudo-keepalive.service``
-     - ``@bindir@/shirudo status --otel``
+     - ``/run/shirudo/runtime/usr/bin/shirudo status --otel``
      - ``shirudo-keepalive.timer``
    * - ``shirudo-xdp-reconcile.service``
-     - ``@bindir@/shirudo upatch reconcile``
+     - ``/run/shirudo/runtime/usr/bin/shirudo upatch reconcile``
      - ``shirudo-xdp-reconcile.timer`` and the udev rule below
    * - ``shirudo-map-export.service``
-     - ``@bindir@/shirudo upatch map --all``
+     - ``/run/shirudo/runtime/usr/bin/shirudo upatch map --all``
      - ``shirudo-map-export.timer``
    * - ``shirudo-bpm-repo-update.service``
-     - ``@bindir@/shirudo bpm repo update``, then
-       ``@bindir@/shirudo bpm upgrade``
+     - ``/run/shirudo/runtime/usr/bin/shirudo bpm repo update``, then
+       ``/run/shirudo/runtime/usr/bin/shirudo bpm upgrade``
      - ``shirudo-bpm-repo-update.timer``
    * - ``shirudo-bpm-tree-sync.service``
-     - ``@bindir@/shirudo bpm tree sync``
+     - ``/run/shirudo/runtime/usr/bin/shirudo bpm tree sync``
      - ``shirudo-bpm-tree-sync.timer``
 
-``@bindir@`` is replaced at build time. It is ``/usr/bin`` in the
-packages that ``make -C packaging`` builds and ``$(prefix)/bin``
-otherwise, ``/usr/local/bin`` with the default prefix.
+``@bindir@`` in ``shirudo-initrd.service`` is replaced at build time.
+It is ``/usr/bin`` in the packages that ``make -C packaging`` builds
+and ``$(prefix)/bin`` otherwise, ``/usr/local/bin`` with the default
+prefix. All six root-filesystem services run directly from the mounted
+runtime image at ``/run/shirudo/runtime/usr/bin/shirudo`` and require
+``ConditionPathIsMountPoint=/run/shirudo/runtime``.
 
 shirudo-initrd.service
 ----------------------
@@ -108,7 +110,7 @@ shirudo.service
    * - Setting
      - Value
    * - ``ExecStart``
-     - ``@bindir@/shirudo init $SHIRUDO_INIT_ARGS``
+     - ``/run/shirudo/runtime/usr/bin/shirudo init $SHIRUDO_INIT_ARGS``
    * - ``EnvironmentFile``
      - ``-/etc/shirudo/init.env`` (optional)
    * - ``Type``
@@ -164,12 +166,15 @@ For a dynamic binary the drop-in starts the image's own ELF interpreter:
 installed, ``/etc/shirudo/init.env`` and ``SHIRUDO_INIT_ARGS`` have no
 effect.
 
-The generator writes this drop-in for ``shirudo.service`` only. The
-keepalive, reconcile, map-export, repository-update and tree-sync services run
-``@bindir@/shirudo``. On a target that enforces, a shirudo binary outside
-the runtime image is refused with ``shirudo: image state: Permission
-denied`` and exit status 1, so each of these services needs its own
-drop-in whose ``ExecStart=`` runs the runtime image's binary. See
+The shipped units already run ``/run/shirudo/runtime/usr/bin/shirudo``
+directly, so a static target package needs no drop-ins unless an
+operator wants to clear ``EnvironmentFile=`` and drop
+``$SHIRUDO_INIT_ARGS`` on ``shirudo.service``.
+For a dynamically linked binary, pass ``--unit-dir <dir>`` to
+``shirudo-gen-runtime`` to generate ``<unit>.d/runtime.conf`` for all
+six target services (``shirudo``, ``shirudo-keepalive``,
+``shirudo-map-export``, ``shirudo-xdp-reconcile``,
+``shirudo-bpm-repo-update`` and ``shirudo-bpm-tree-sync``). See
 :doc:`/operate/deploy/boot-integration`.
 
 shirudo-keepalive.service
@@ -182,9 +187,11 @@ shirudo-keepalive.service
    * - Setting
      - Value
    * - ``ExecStart``
-     - ``@bindir@/shirudo status --otel``
+     - ``/run/shirudo/runtime/usr/bin/shirudo status --otel``
    * - ``EnvironmentFile``
      - ``-/etc/shirudo/map-export.env`` (optional)
+   * - ``ConditionPathIsMountPoint``
+     - ``/run/shirudo/runtime``
    * - ``After``
      - ``shirudo.service``
    * - ``TimeoutStartSec``
@@ -218,9 +225,11 @@ shirudo-xdp-reconcile.service
    * - Setting
      - Value
    * - ``ExecStart``
-     - ``@bindir@/shirudo upatch reconcile``
+     - ``/run/shirudo/runtime/usr/bin/shirudo upatch reconcile``
    * - ``After``
      - ``shirudo.service``
+   * - ``ConditionPathIsMountPoint``
+     - ``/run/shirudo/runtime``
    * - ``ConditionPathExists``
      - ``/run/shirudo/bpffs/lsm_link``
    * - ``StartLimitIntervalSec``
@@ -250,9 +259,11 @@ shirudo-map-export.service
    * - Setting
      - Value
    * - ``ExecStart``
-     - ``@bindir@/shirudo upatch map --all``
+     - ``/run/shirudo/runtime/usr/bin/shirudo upatch map --all``
    * - ``EnvironmentFile``
      - ``-/etc/shirudo/map-export.env`` (optional)
+   * - ``ConditionPathIsMountPoint``
+     - ``/run/shirudo/runtime``
    * - ``ConditionPathExists``
      - ``/run/shirudo/bpffs/lsm_link``
    * - ``After``
@@ -275,8 +286,8 @@ shirudo-bpm-repo-update.service
    * - Setting
      - Value
    * - ``ExecStart``
-     - ``-@bindir@/shirudo bpm repo update`` (a failure is ignored), then
-       ``@bindir@/shirudo bpm upgrade``
+     - ``-/run/shirudo/runtime/usr/bin/shirudo bpm repo update`` (a failure is ignored), then
+       ``/run/shirudo/runtime/usr/bin/shirudo bpm upgrade``
    * - ``EnvironmentFile``
      - ``-/etc/shirudo/bpm/environment`` (optional)
    * - ``Wants``
@@ -285,6 +296,8 @@ shirudo-bpm-repo-update.service
      - ``network-online.target``, ``shirudo.service``
    * - ``RequiresMountsFor``
      - ``/etc/shirudo/bpm``, ``/var/lib/shirudo``
+   * - ``ConditionPathIsMountPoint``
+     - ``/run/shirudo/runtime``
    * - ``TimeoutStartSec``
      - ``30min``
    * - ``LimitMEMLOCK``
@@ -307,7 +320,7 @@ shirudo-bpm-tree-sync.service
    * - Setting
      - Value
    * - ``ExecStart``
-     - ``@bindir@/shirudo bpm tree sync``
+     - ``/run/shirudo/runtime/usr/bin/shirudo bpm tree sync``
    * - ``EnvironmentFile``
      - ``-/etc/shirudo/bpm/environment`` (optional)
    * - ``Wants``
@@ -316,6 +329,8 @@ shirudo-bpm-tree-sync.service
      - ``network-online.target``, ``shirudo.service``
    * - ``RequiresMountsFor``
      - ``/etc/shirudo/bpm``, ``/var/lib/shirudo``
+   * - ``ConditionPathIsMountPoint``
+     - ``/run/shirudo/runtime``
    * - ``TimeoutStartSec``
      - ``30min``
    * - ``LimitMEMLOCK``

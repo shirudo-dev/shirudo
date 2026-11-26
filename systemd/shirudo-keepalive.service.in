@@ -4,6 +4,7 @@
 [Unit]
 Description=shirudo: export target status keepalive
 After=shirudo.service
+ConditionPathIsMountPoint=/run/shirudo/runtime
 
 [Service]
 Type=oneshot
@@ -11,4 +12,4 @@ SyslogIdentifier=shirudo
 LimitMEMLOCK=infinity
 TimeoutStartSec=2min
 EnvironmentFile=-/etc/shirudo/map-export.env
-ExecStart=@bindir@/shirudo status --otel
+ExecStart=/run/shirudo/runtime/usr/bin/shirudo status --otel

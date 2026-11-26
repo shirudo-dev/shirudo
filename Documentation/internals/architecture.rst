@@ -137,8 +137,9 @@ the root file system.
 
 The systemd units run the commands. ``shirudo-initrd.service`` runs
 ``shirudo init`` in the initrd. ``shirudo.service`` runs it again in the
-root file system through a drop-in that starts the binary from the
-runtime image. Timers start ``shirudo bpm repo update`` and ``shirudo bpm
+root file system from ``/run/shirudo/runtime/usr/bin/shirudo`` (or
+through a drop-in for dynamically linked binaries). Timers start
+``shirudo bpm repo update`` and ``shirudo bpm
 upgrade``, ``shirudo bpm tree sync``, the status keepalive and the map
 export. A udev rule for every new network device, and a timer after
 boot, start ``shirudo upatch reconcile``, which attaches XDP upatches to

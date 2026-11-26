@@ -13,11 +13,13 @@ trap 'rm -rf "$WORK"' EXIT
 test_expect_success 'map export service runs the configured batch exporter' '
 	grep -q "^After=shirudo.service$" \
 		../systemd/shirudo-map-export.service.in &&
+	grep -q "^ConditionPathIsMountPoint=/run/shirudo/runtime$" \
+		../systemd/shirudo-map-export.service.in &&
 	grep -q "^ConditionPathExists=/run/shirudo/bpffs/lsm_link$" \
 		../systemd/shirudo-map-export.service.in &&
 	grep -q "^EnvironmentFile=-/etc/shirudo/map-export.env$" \
 		../systemd/shirudo-map-export.service.in &&
-	grep -q "^ExecStart=@bindir@/shirudo upatch map --all$" \
+	grep -q "^ExecStart=/run/shirudo/runtime/usr/bin/shirudo upatch map --all$" \
 		../systemd/shirudo-map-export.service.in
 '
 
@@ -41,9 +43,11 @@ test_expect_success 'map export timer waits five seconds between runs' '
 test_expect_success 'keepalive service sends the quoted keepalive' '
 	grep -q "^After=shirudo.service$" \
 		../systemd/shirudo-keepalive.service.in &&
+	grep -q "^ConditionPathIsMountPoint=/run/shirudo/runtime$" \
+		../systemd/shirudo-keepalive.service.in &&
 	grep -q "^EnvironmentFile=-/etc/shirudo/map-export.env$" \
 		../systemd/shirudo-keepalive.service.in &&
-	grep -q "^ExecStart=@bindir@/shirudo status --otel$" \
+	grep -q "^ExecStart=/run/shirudo/runtime/usr/bin/shirudo status --otel$" \
 		../systemd/shirudo-keepalive.service.in
 '
 
@@ -57,7 +61,7 @@ test_expect_success 'keepalive timer waits a minute between runs' '
 		../systemd/shirudo-keepalive.timer
 '
 
-test_expect_success 'target install resolves and stages exporter units' '
+test_expect_success 'target install stages exporter units using the runtime image' '
 	sed "s|@bindir@|/opt/shirudo/bin|g" \
 		../systemd/shirudo-map-export.service.in >"$GENERATED" &&
 	sed "s|@bindir@|/opt/shirudo/bin|g" \
@@ -69,14 +73,27 @@ test_expect_success 'target install resolves and stages exporter units' '
 			systemdunitdir=/usr/lib/systemd/system install-target \
 			>"$WORK/target.plan"
 	) &&
-	grep -q "^ExecStart=/opt/shirudo/bin/shirudo upatch map --all$" \
+	grep -q "^ExecStart=/run/shirudo/runtime/usr/bin/shirudo upatch map --all$" \
 		"$GENERATED" &&
-	grep -q "^ExecStart=/opt/shirudo/bin/shirudo status --otel$" \
+	grep -q "^ExecStart=/run/shirudo/runtime/usr/bin/shirudo status --otel$" \
 		"$GENERATED_KEEPALIVE" &&
 	grep -q "systemd/shirudo-map-export.service" "$WORK/target.plan" &&
 	grep -q "systemd/shirudo-map-export.timer" "$WORK/target.plan" &&
 	grep -q "systemd/shirudo-keepalive.service" "$WORK/target.plan" &&
 	grep -q "systemd/shirudo-keepalive.timer" "$WORK/target.plan"
+'
+
+test_expect_success 'every shipped rootfs service runs from the runtime image' '
+	for unit in shirudo shirudo-keepalive shirudo-map-export \
+		shirudo-xdp-reconcile shirudo-bpm-repo-update \
+		shirudo-bpm-tree-sync; do
+		f="../systemd/$unit.service.in"
+		grep -q "^ConditionPathIsMountPoint=/run/shirudo/runtime$" "$f" ||
+			return 1
+		grep -qE "^ExecStart=-?/run/shirudo/runtime/usr/bin/shirudo " "$f" ||
+			return 1
+		! grep -q "@bindir@/shirudo" "$f" || return 1
+	done
 '
 
 test_expect_success 'operator install excludes exporter units' '

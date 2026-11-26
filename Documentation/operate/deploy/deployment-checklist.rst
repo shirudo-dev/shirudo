@@ -96,11 +96,10 @@ Prepare the target
        before the first boot with enforcement.
      - :doc:`/operate/deploy/boot-integration`
    * - 14
-     - Drop-ins installed for ``shirudo.service``,
-       ``shirudo-keepalive.service``, ``shirudo-map-export.service``,
-       ``shirudo-bpm-repo-update.service``,
-       ``shirudo-bpm-tree-sync.service`` and
-       ``shirudo-xdp-reconcile.service``.
+     - For a dynamically linked binary, drop-ins from
+       ``shirudo-gen-runtime --unit-dir`` installed for all six target
+       services (optional for a static PIE target package, except when
+       clearing ``EnvironmentFile=`` on ``shirudo.service``).
      - :ref:`unit-drop-ins`
    * - 15
      - Environment files ``/etc/shirudo/map-export.env`` and

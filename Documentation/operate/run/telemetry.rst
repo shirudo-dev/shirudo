@@ -93,9 +93,9 @@ Before you begin
 
 - On the target, ``shirudo`` stands for the runtime image's binary,
   ``/run/shirudo/runtime/usr/bin/shirudo`` (:ref:`runtime-invocation`).
-- The keepalive and map-export services run that binary through their
-  drop-ins (:ref:`unit-drop-ins`). Without them both services fail on an
-  enforcing target and nothing is sent.
+- The keepalive and map-export services invoke that binary directly on
+  static target packages; for a dynamically linked binary, install the
+  drop-ins from ``shirudo-gen-runtime --unit-dir`` (:ref:`unit-drop-ins`).
 - A collector that accepts OTLP over HTTP with JSON bodies, reachable
   from the target over TLS 1.3.
 - On the operator host, the source directory of the target's config

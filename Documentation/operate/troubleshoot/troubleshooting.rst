@@ -89,8 +89,8 @@ Causes
    - You ran a copy of the binary other than the runtime image's, for
      example the one a package installed under ``/usr/bin``. The LSM
      refuses it the identity pin, which also counts as ``ObjGet``.
-   - A shipped unit runs the host's installed binary because its
-     drop-in is missing.
+   - A drop-in or override of your own runs a binary outside the
+     runtime image.
    - The message follows ``tpm: not the TPM init bound (attestation key
      name differs)``: the TPM that answers is not the TPM ``init`` bound
      this boot.
@@ -98,7 +98,8 @@ Causes
 Action
    - Run ``/run/shirudo/runtime/usr/bin/shirudo``, see
      :ref:`runtime-invocation`.
-   - Install the drop-ins for every unit, see :ref:`unit-drop-ins`.
+   - Point every ``ExecStart=`` at the runtime image's binary, see
+     :ref:`unit-drop-ins`.
    - A different TPM is an incident, see
      :doc:`/operate/troubleshoot/incident-tampered`.
 
