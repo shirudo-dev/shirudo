@@ -9,12 +9,14 @@
 //!
 //!   shirudo-image-fault image update <prefix>
 //!   shirudo-image-fault config-root missing|wrong|match <prefix>
+//!   shirudo-image-fault archive-truncate <upatch>
 //!
 //! make links shirudo's main object with --wrap=main, --wrap=Esys_PCR_Extend
 //! and --wrap=syscall.
 
 use core::ffi::{CStr, c_char, c_int, c_long};
 use core::sync::atomic::{AtomicI32, AtomicU8, AtomicU32, Ordering};
+use std::io::Write;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::OpenOptionsExt;
@@ -22,6 +24,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use super::{err, out, real_syscall, set_syscall_hook, strerror};
 use crate::skel::bpf2::ExpectedRoot;
 use crate::sys::identity::{DEVICE_CONFIG, DeviceAuthority};
+use crate::sys::libc::PATH_MAX;
 use crate::util::bpf_sys::Attr;
 use crate::util::config_image::ConfigImageOpen;
 use crate::util::dm_verity::{self, DmVerity};
@@ -319,6 +322,33 @@ fn config_root_test(mode: &[u8], prefix: &CStr) -> c_int {
     c_int::from(ret != 0)
 }
 
+/// Cut an archived upatch short, as a torn write could leave it.
+fn archive_truncate(name: &CStr) -> c_int {
+    let name = name.to_bytes();
+    let bytes = [b"/var/lib/shirudo/upatches/".as_slice(), name, b".upatch"].concat();
+    if name.contains(&b'/') || bytes.len() >= PATH_MAX {
+        return 2;
+    }
+    let path = match std::ffi::CString::new(bytes) {
+        Ok(path) => path,
+        Err(_) => return 2,
+    };
+    // SAFETY: the path is a NUL-terminated string and the size is fixed.
+    if unsafe { libc::truncate(path.as_ptr(), 16) } != 0 {
+        let errno = std::io::Error::last_os_error()
+            .raw_os_error()
+            .unwrap_or(libc::EIO);
+        let mut message = b"archive truncate: ".to_vec();
+        message.extend_from_slice(path.to_bytes());
+        message.extend_from_slice(b": ");
+        message.extend_from_slice(strerror(errno).as_bytes());
+        message.push(b'\n');
+        let _ = std::io::stderr().write_all(&message);
+        return 1;
+    }
+    0
+}
+
 unsafe extern "C" {
     fn __real_main(argc: c_int, argv: *const *const c_char) -> c_int;
     fn __real_Esys_PCR_Extend(
@@ -343,8 +373,13 @@ pub unsafe extern "C" fn __wrap_main(argc: c_int, argv: *const *const c_char) ->
     if args.len() == 4 && word(1) == Some(b"config-root") {
         return config_root_test(args[2].to_bytes(), args[3]);
     }
+    if args.len() == 3 && word(1) == Some(b"archive-truncate") {
+        return archive_truncate(args[2]);
+    }
     if args.len() != 4 || word(1) != Some(b"image") || word(2) != Some(b"update") {
-        err("usage: shirudo-image-fault image update <prefix>\n");
+        err(
+            "usage: shirudo-image-fault image update <prefix>\n       shirudo-image-fault archive-truncate <upatch>\n",
+        );
         return 2;
     }
     // SAFETY: shirudo's main, with main()'s arguments.
