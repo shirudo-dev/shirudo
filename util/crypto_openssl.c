@@ -372,8 +372,7 @@ static bool cms_has_signers(CMS_ContentInfo *cms)
 	return count > 0;
 }
 
-static CMS_ContentInfo *read_cms(const __u8 *signature, size_t len,
-				 bool archive)
+static CMS_ContentInfo *read_cms(const __u8 *signature, size_t len)
 {
 	const __u8 *next = signature;
 	CMS_ContentInfo *cms;
@@ -381,12 +380,6 @@ static CMS_ContentInfo *read_cms(const __u8 *signature, size_t len,
 	if (!signature || !len || len > INT_MAX)
 		return NULL;
 	cms = d2i_CMS_ContentInfo(NULL, &next, (long)len);
-	/*
-	 * Older targets admitted a zero-padded envelope. Only attribution
-	 * of an already archived signature accepts that representation.
-	 */
-	while (cms && archive && next < signature + len && !*next)
-		next++;
 	if (cms && (next != signature + len || !cms_has_signers(cms))) {
 		CMS_ContentInfo_free(cms);
 		cms = NULL;
@@ -422,7 +415,7 @@ int verify_detached(const __u8 *payload, size_t payload_len,
 	signers = sk_X509_new_null();
 	if (!signers || !sk_X509_push(signers, cert->impl))
 		goto done;
-	cms = read_cms(signature, signature_len, false);
+	cms = read_cms(signature, signature_len);
 	if (cms && CMS_verify(cms, signers, store, data, out,
 			      CMS_BINARY | CMS_DETACHED | CMS_NOINTERN) == 1)
 		ret = 0;
@@ -439,7 +432,7 @@ done:
 
 int cms_check_signers(const __u8 *signature, size_t len)
 {
-	CMS_ContentInfo *cms = read_cms(signature, len, false);
+	CMS_ContentInfo *cms = read_cms(signature, len);
 
 	if (!cms) {
 		ERR_clear_error();
@@ -449,8 +442,8 @@ int cms_check_signers(const __u8 *signature, size_t len)
 	return 0;
 }
 
-static int signer_matches(const __u8 *signature, size_t signature_len,
-			  const struct cert *cert, bool archive)
+int cms_signed_by(const __u8 *signature, size_t signature_len,
+		  const struct cert *cert)
 {
 	STACK_OF(CMS_SignerInfo) *sis;
 	CMS_ContentInfo *cms = NULL;
@@ -458,7 +451,7 @@ static int signer_matches(const __u8 *signature, size_t signature_len,
 
 	if (!signature || !cert || !cert->impl || signature_len > INT_MAX)
 		return -EINVAL;
-	cms = read_cms(signature, signature_len, archive);
+	cms = read_cms(signature, signature_len);
 	if (!cms)
 		goto done;
 	sis = CMS_get0_SignerInfos(cms);
@@ -475,18 +468,6 @@ done:
 		ERR_clear_error();
 	CMS_ContentInfo_free(cms);
 	return ret;
-}
-
-int cms_signed_by(const __u8 *signature, size_t signature_len,
-		  const struct cert *cert)
-{
-	return signer_matches(signature, signature_len, cert, false);
-}
-
-int cms_archive_signed_by(const __u8 *signature, size_t signature_len,
-			  const struct cert *cert)
-{
-	return signer_matches(signature, signature_len, cert, true);
 }
 
 int hmac_sha256(const __u8 *key, size_t key_len,

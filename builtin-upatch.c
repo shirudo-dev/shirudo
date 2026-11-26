@@ -4101,8 +4101,7 @@ static int upatch_purge_locked(const char *name, const struct cert *signer,
 		upatch_close(&u);
 		return -EBADMSG;
 	}
-	ret = cms_archive_signed_by(upatch_signature(&u), u.hdr.signature_len,
-				    signer);
+	ret = cms_signed_by(upatch_signature(&u), u.hdr.signature_len, signer);
 	memcpy(payload, u.hdr.payload_sha256, sizeof(payload));
 	type = u.hdr.type;
 	upatch_close(&u);

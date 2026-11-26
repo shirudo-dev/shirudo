@@ -77,10 +77,6 @@ int cms_check_signers(const __u8 *signature, size_t len) __must_check;
 int cms_signed_by(const __u8 *signature, size_t signature_len,
 		  const struct cert *cert) __must_check;
 
-/* Attribute zero-padded signatures admitted by older targets during purge. */
-int cms_archive_signed_by(const __u8 *signature, size_t signature_len,
-			  const struct cert *cert) __must_check;
-
 struct tls_ca {
 	const char *path;
 	void *impl;

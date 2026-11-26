@@ -31,7 +31,7 @@ static void sha256_buffer_zeroes_a_failed_digest(void)
 }
 
 /* The existing corpus entry holds a certificate and its detached CMS. */
-static void archived_signers_remain_identifiable(void)
+static void signers_need_a_complete_envelope(void)
 {
 	const char *path = "fuzz/corpus/cms/cert-and-signature";
 	static __u8 data[32768];
@@ -57,14 +57,11 @@ static void archived_signers_remain_identifiable(void)
 	data[size] = 0;
 	EXPECT_EQ(cms_check_signers(sig, sig_len + 1), -EBADMSG);
 	EXPECT_EQ(cms_signed_by(sig, sig_len + 1, &cert), -EINVAL);
-	EXPECT_EQ(cms_archive_signed_by(sig, sig_len + 1, &cert), 1);
-	data[size] = 1;
-	EXPECT_EQ(cms_archive_signed_by(sig, sig_len + 1, &cert), -EINVAL);
 	cert_free(&cert);
 }
 
 static const struct unit_case cases[] = {
-	UNIT_CASE(archived_signers_remain_identifiable),
+	UNIT_CASE(signers_need_a_complete_envelope),
 	UNIT_CASE(sha256_matches_fips_180_vector),
 	UNIT_CASE(sha256_buffer_zeroes_a_failed_digest),
 	{}

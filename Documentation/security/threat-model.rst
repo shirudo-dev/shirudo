@@ -1825,8 +1825,8 @@ R13 Revocation reaches a target only through a config
    unlinked, the revocation is unmeasured and the purge does not run.
    The archive scan checks each signer under the register lock. A read or
    signature-format error fails the purge so activation can retry it.
-   New BPF loads require a complete CMS envelope. Revocation also reads
-   older archived signatures with zero padding.
+   BPF loads require a complete CMS envelope, and the purge reads an
+   archived signature by the same rule.
    At boot the revoked key is not enrolled, and the init event's
    certificate list shows it. A target that has not activated the
    config still trusts the key. Historical vouches are U13.
