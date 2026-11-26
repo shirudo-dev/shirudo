@@ -412,18 +412,22 @@ Hooks in bpf2
    * - ``lsm/move_mount``
      - To every caller: moving the bpffs, the ``/run/shirudo`` mount or
        the runtime image, or moving a mount onto the bpffs or the runtime
-       image. Moving a mount onto a path in ``/run/shirudo``, and moving
-       a config image or onto one, to a task without authority.
+       image. Moving a mount above the bpffs, which takes the bpffs
+       along, to every caller but host PID 1 on the initrd root. Moving
+       a mount onto a path in ``/run/shirudo``, and moving a config
+       image or onto one, to a task without authority.
      - ``EPERM``: ``BpffsMount``; others uncounted
      - Closed.
    * - ``lsm/sb_mount``
      - A mount onto the bpffs or runtime image. A legacy propagation
        change on the bpffs or its ancestry other than to shared, which
        every caller may request, with the host PID 1 exception for the
-       initrd handoff.
-       A mount onto a
+       initrd handoff. A legacy ``MS_MOVE`` onto any mount of the
+       recorded bpffs's mount namespace, which reaches the hook without
+       its source, with the same PID 1 exception; ``move_mount(2)``
+       moves a mount there. A mount onto a
        path in ``/run/shirudo`` or on a config image to a task without
-       authority. The source of a bind or legacy move is not checked.
+       authority. The source of a bind is not checked.
      - ``EPERM``: ``BpffsMount``; others uncounted
      - Closed.
    * - ``lsm/sb_remount``
@@ -650,7 +654,7 @@ The hooks decide only what reaches them. These paths do not:
   program descriptor are not hooked here.
 - On the pinned kernel, propagation changes through ``mount_setattr(2)``
   have no LSM hook. The source of a bind or legacy move is absent from
-  ``lsm/sb_mount``.
+  ``lsm/sb_mount``, which refuses the legacy move for that reason.
 - A perf event bound to a task before that task execs the runtime image
   survives the exec, and CPU-wide events and probes on the runtime
   binary are not checked.
