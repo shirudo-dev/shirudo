@@ -270,9 +270,10 @@ A shell test is named ``t<F><K><NN>-<what>.sh``:
      - TPM structures, the measurement register, the eventlog,
        attestation, the initrd binding and the register guard
    * - 5
-     - ``functional/image/``
+     - ``functional/image/``, ``functional/image-reboot/``
      - Runtime and config images, settings, keys, activation,
-       revocation and interruption
+       revocation and interruption; ``image-reboot`` boots a VM of its
+       own twice, for what only the next boot does with a config
    * - 6
      - ``functional/tamperproof/``, ``functional/labels/``
      - Attacks on the admission and BPF command policy, bpffs, the
@@ -550,7 +551,12 @@ Ubuntu cloud image and a software TPM, and runs ``init`` from a dracut
 initrd with the dm-verity runtime image and a signed config image. The
 family runs, the end-to-end run and the interactive VM all boot it.
 
-A family's VM runs its target tests itself and powers off. The
+A family's VM runs its target tests itself and powers off. The VM of
+``image-reboot`` runs its tests, reboots and runs them again before it
+powers off: the reboot keeps the disk and resets the TPM, and a test
+reads which boot it is in from ``SHIRUDO_TEST_BOOT``, ``1`` or ``2``, and
+keeps what it carries across in ``SHIRUDO_TEST_RESULTS``. The second
+boot's output follows the first in ``result/guest.log``. The
 end-to-end VM prepares itself the same way and waits while the host runs
 its target tests over SSH, then powers off. The operator VM of the
 end-to-end test has no TPM and no shirudo kernel arguments; it builds

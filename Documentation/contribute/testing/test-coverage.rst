@@ -484,6 +484,12 @@ signed config image.
        tracing and XDP upatches and their archives
    * - ``t5105-verity-interruption``
      - An interruption after measurement blocks changes and attestation
+   * - ``t5106-verity-revocation-boot``
+     - In ``functional/image-reboot/``, a VM of its own that boots
+       twice. A staged config that revokes a signer is activated by the
+       next boot from the initrd: the signer is not enrolled, the archive
+       of the upatch it signed is purged and not restored, and a load it
+       signed is refused
 
 ``tamperproof`` (6)
 ~~~~~~~~~~~~~~~~~~~
@@ -1209,7 +1215,7 @@ Coverage by area
        ``t6134``, ``t6135``, ``t6136``, ``t6137``
    * - Keyrings
      - ``t2101``, ``t2102``, ``t2103``, ``t5101``, ``t5104``,
-       ``t6004``, ``t6104``, ``t6112``, ``t6129``, ``t6140``
+       ``t5106``, ``t6004``, ``t6104``, ``t6112``, ``t6129``, ``t6140``
    * - Signing keys and the trusted set
      - ``t2001``, ``t2002``, ``t2003``, ``t2004``, ``t2005``,
        ``t5003``. Unit: ``io``

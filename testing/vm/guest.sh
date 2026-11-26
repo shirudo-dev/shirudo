@@ -380,6 +380,52 @@ prepare_operator()
 	shirudo version
 }
 
+# The second boot of a family that reboots. The first boot prepared the
+# guest and the initrd has run init again; only what a boot loses is redone.
+second_boot()
+{
+	log "second boot of the $TEST_VM_SUITE suite"
+	mount -t overlay overlay \
+		-o "lowerdir=${LOWER},upperdir=${UPPER},workdir=${OVERLAY_WORK}" \
+		"$WORKSPACE" || test -d "$WORKSPACE/testing"
+	cd "$WORKSPACE"
+	log "initrd shirudo journal"
+	journalctl -b -u shirudo-initrd.service --no-pager | tail -40 || true
+	/usr/local/bin/shirudo-runtime init
+	log "running target tests: $TEST_VM_SUITE, second boot"
+	(
+		cd testing
+		. /etc/shirudo-test-vm.env
+		SHIRUDO_TEST_BOOT=2 ./run-target-tests.sh "$TEST_VM_SUITE"
+	)
+	log "integration suite passed"
+}
+
+# cloud-init runs the bootstrap script once per instance; this unit runs
+# it on the boot that follows, where the mark tells it which boot it is.
+request_second_boot()
+{
+	cat >/etc/systemd/system/shirudo-test-vm-second-boot.service <<'EOF'
+[Unit]
+Description=shirudo test VM: the target tests of the second boot
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/shirudo-test-vm-bootstrap
+TimeoutStartSec=infinity
+
+[Install]
+WantedBy=multi-user.target
+EOF
+	systemctl enable shirudo-test-vm-second-boot.service
+	: >/etc/shirudo-test-vm-second-boot
+}
+
+if [[ "${TEST_VM_BOOT:-1}" == 2 ]]; then
+	second_boot
+	exit 0
+fi
+
 configure_oci_ca
 configure_bpm_oci_repository
 configure_map_export
@@ -634,4 +680,9 @@ log "running target tests: $TEST_VM_SUITE"
 	. /etc/shirudo-test-vm.env
 	./run-target-tests.sh "$TEST_VM_SUITE"
 )
+if [[ "${TEST_VM_BOOTS:-1}" == 2 ]]; then
+	request_second_boot
+	log "first boot passed; rebooting for the second"
+	exit 75
+fi
 log "integration suite passed"

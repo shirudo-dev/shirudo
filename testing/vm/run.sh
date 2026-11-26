@@ -1802,6 +1802,11 @@ ethernets:
     optional: false
 EOF
 
+# The image-reboot family runs its target tests over two boots of one VM:
+# the guest reboots between them, which keeps the disk and resets the TPM.
+VM_BOOTS=1
+[[ "$VM_MODE" != test || "$VM_SUITE" != image-reboot ]] || VM_BOOTS=2
+
 cat >"$USER_DATA" <<'EOF'
 #cloud-config
 growpart:
@@ -1815,6 +1820,12 @@ write_files:
     content: |
       #!/usr/bin/env bash
       set -uo pipefail
+      # A two-boot family runs this again on its second boot, from the
+      # unit guest.sh installs, and cloud-init may too, as the reboot cut
+      # its first run short: one of them runs, and the mark says which boot.
+      exec 9>/run/shirudo-test-vm-bootstrap.lock
+      flock -n 9 || exit 0
+      [ ! -e /etc/shirudo-test-vm-second-boot ] || export TEST_VM_BOOT=2
       mkdir -p /mnt/shirudo-src /mnt/shirudo-bundle /mnt/shirudo-out /mnt/shirudo-kernel /mnt/shirudo-package-cert /mnt/shirudo-bpm-tree
       if ! mount -t 9p -o trans=virtio,version=9p2000.L,msize=104857600 shirudo-out /mnt/shirudo-out; then
         echo "test-vm: could not mount result share" >/dev/console
@@ -1855,6 +1866,7 @@ printf '      export TEST_VM_LOCAL_STACK=%q\n' "${TEST_VM_LOCAL_STACK:-0}" >>"$U
 printf '      export VM_MODE=%q\n' "$VM_MODE" >>"$USER_DATA"
 printf '      export TEST_VM_MODE=%q\n' "$TEST_MODE" >>"$USER_DATA"
 printf '      export TEST_VM_SUITE=%q\n' "$VM_SUITE" >>"$USER_DATA"
+printf '      export TEST_VM_BOOTS=%q\n' "$VM_BOOTS" >>"$USER_DATA"
 printf '      export TEST_FILTER=%q\n' "${TEST_FILTER:-}" >>"$USER_DATA"
 printf '      export TEST_VM_NODE_ROLE=%q\n' "$NODE_ROLE" >>"$USER_DATA"
 printf '      export TEST_VM_SKIP_SEAL=%q\n' "$SKIP_SEAL" >>"$USER_DATA"
@@ -1919,6 +1931,14 @@ cat >>"$USER_DATA" <<'EOF'
       mount -t 9p -o trans=virtio,version=9p2000.L,msize=104857600,ro shirudo-src /mnt/shirudo-src || rc=$?
       if [ "$rc" -eq 0 ]; then
         bash /mnt/shirudo-src/testing/vm/guest.sh || rc=$?
+      fi
+      if [ "$rc" -eq 75 ]; then
+        # guest.sh asks for the family's second boot, which publishes the
+        # status; a reboot that does not come fails the run.
+        sync
+        systemctl reboot
+        sleep 300
+        rc=1
       fi
       printf '%s\n' "$rc" >/mnt/shirudo-out/status
       sync
@@ -2001,9 +2021,10 @@ QEMU_ARGS=(
 	-chardev "socket,id=console,path=console.sock,server=on,wait=off,logfile=${RUN_DIR}/console.log,logappend=on" \
 	-serial chardev:console \
 	-display none \
-	-monitor none \
-	-no-reboot
+	-monitor none
 )
+# Any reboot but the one a two-boot family asks for ends the run.
+[[ "$VM_BOOTS" == 2 ]] || QEMU_ARGS+=(-no-reboot)
 
 if [[ -n "$KERNEL_ARTIFACT_DIR" ]]; then
 	QEMU_ARGS+=(
