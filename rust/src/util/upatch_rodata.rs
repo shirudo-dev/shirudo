@@ -18,7 +18,6 @@ use crate::bpf::btf::{
 use crate::bpf::btf_dump::Dump;
 use crate::errno::{E2BIG, EEXIST, EINVAL, ENODATA, ENOENT, ENOMEM, ENOSPC, EOPNOTSUPP};
 use crate::ffi;
-use crate::heap::{xfree, xmalloc};
 use crate::sys::libc::{fwrite, printf, putchar, stdout};
 use crate::text::strsprintf;
 use crate::util::format::fputs_sanitized;
@@ -659,27 +658,19 @@ fn json_hex(e: &mut JsonEmit, bytes: &[u8]) {
         e.set_err(-E2BIG);
         return;
     }
-    // SAFETY: a size.
-    let text = unsafe { xmalloc(cap) }.cast::<u8>();
-    if text.is_null() {
+    let mut text = Vec::new();
+    if text.try_reserve_exact(cap).is_err() {
         e.set_err(-ENOMEM);
         return;
     }
-    // SAFETY: the cap bytes xmalloc() gave, written whole, then freed
-    // once.
-    unsafe {
-        let out = ffi::bytes_mut(text, cap);
-
-        out[0] = b'0';
-        out[1] = b'x';
-        for (i, &b) in bytes.iter().enumerate() {
-            out[2 + i * 2] = HEX[usize::from(b >> 4)];
-            out[3 + i * 2] = HEX[usize::from(b & 0xf)];
-        }
-        out[2 + bytes.len() * 2] = 0;
-        e.str_value(&out[..2 + bytes.len() * 2]);
-        xfree(text.cast(), cap);
+    text.resize(cap, 0);
+    text[0] = b'0';
+    text[1] = b'x';
+    for (i, &b) in bytes.iter().enumerate() {
+        text[2 + i * 2] = HEX[usize::from(b >> 4)];
+        text[3 + i * 2] = HEX[usize::from(b & 0xf)];
     }
+    e.str_value(&text[..2 + bytes.len() * 2]);
 }
 
 /// The value of type `type_id` in `bytes` as JSON.
