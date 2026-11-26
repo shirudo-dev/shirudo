@@ -5,6 +5,8 @@
 # testing/run-target-tests.sh [-t <regex>] <family> -- the target tests (t?1??) of one
 # family in number order, in the test VM that family booted for itself.
 # A test that skips as a whole fails the family: every one is required.
+# The image-reboot family runs twice, before and after a reboot of its VM,
+# and its tests read which from SHIRUDO_TEST_BOOT, 1 or 2.
 
 set -eu
 cd "$(dirname "$0")"
@@ -47,6 +49,7 @@ export SHIRUDO_TEST_SIGNER_RESULTS="$SHIRUDO_TEST_RESULTS/signers"
 export SHIRUDO_TEST_INTERRUPTION_RESULTS="$SHIRUDO_TEST_RESULTS/interruption"
 export SHIRUDO_TEST_CLI_RESULTS="$SHIRUDO_TEST_RESULTS/cli"
 export SHIRUDO_TEST_REVOKE_RESULTS="$SHIRUDO_TEST_RESULTS/revocation"
+export SHIRUDO_TEST_BOOT="${SHIRUDO_TEST_BOOT:-1}"
 fail=0
 found=0
 # Keep post-test log handling in this shell; an end-to-end policy test may
@@ -88,6 +91,7 @@ for t in "$dir"/t[0-9]1[0-9][0-9]-*.sh; do
 		fi ;;
 	esac
 	log="$SHIRUDO_TEST_RESULTS/$(basename "$t").log"
+	[ "$SHIRUDO_TEST_BOOT" = 1 ] || log="${log%.log}.boot$SHIRUDO_TEST_BOOT.log"
 	rc=0
 	sh "$t" >"$log" 2>&1 || rc=$?
 	print_test_log "$log"
