@@ -721,6 +721,7 @@ char _license[] SEC("license") = "Dual BSD/GPL";
 #define MOUNT_CHILDREN_MAX	64
 #define MOUNT_CHAIN_MAX		8
 #define SHIRUDO_MNT_DETACH	2
+#define SHIRUDO_MS_MOVE		(1UL << 13)
 #define SHIRUDO_MS_REC		(1UL << 14)
 #define SHIRUDO_MS_SILENT	(1UL << 15)
 #define SHIRUDO_MS_SHARED	(1UL << 20)
@@ -1127,9 +1128,12 @@ static __always_inline bool shirudo_initrd_pid1(const struct mount_record *rec)
 /*
  * Refuse a change to the recorded bpffs mount or to a mount above it,
  * in the namespace bootstrap recorded, to every caller but PID 1 on the
- * initrd root.
+ * initrd root. A legacy move names only the mount it moves onto, so
+ * whole_ns refuses it on any mount of that namespace: the kernel moves a
+ * mount of a namespace only onto a mount of the same one.
  */
-static __always_inline int shirudo_bpffs_tree_change(struct mount *target)
+static __always_inline int shirudo_bpffs_tree_change(struct mount *target,
+						     bool whole_ns)
 {
 	struct mnt_namespace *ns;
 	struct mount_record *rec;
@@ -1149,6 +1153,8 @@ static __always_inline int shirudo_bpffs_tree_change(struct mount *target)
 		return 0;
 	if (shirudo_initrd_pid1(rec))
 		return 0;
+	if (whole_ns)
+		goto deny;
 	bpf_for(i, 0, MOUNT_DEPTH_MAX) {
 		if (m == target)
 			break;
@@ -1173,7 +1179,7 @@ static __always_inline int shirudo_propagation(struct mount *target,
 	 */
 	if (type == SHIRUDO_MS_SHARED)
 		return 0;
-	return shirudo_bpffs_tree_change(target);
+	return shirudo_bpffs_tree_change(target, false);
 }
 
 SEC("lsm/move_mount")
@@ -1182,6 +1188,7 @@ int BPF_PROG(shirudo_lsm_move_mount, const struct path *from_path,
 {
 	struct super_block *from = BPF_CORE_READ(from_path, mnt, mnt_sb);
 	struct super_block *to = BPF_CORE_READ(to_path, mnt, mnt_sb);
+	struct vfsmount *vfsmnt;
 
 	if (ret)
 		return ret;
@@ -1193,6 +1200,11 @@ int BPF_PROG(shirudo_lsm_move_mount, const struct path *from_path,
 	    shirudo_deny_bpffs_mount(BPF_CORE_READ(to, s_dev),
 				     TAMPER_BPFFS_MOUNT))
 		return -EPERM;
+	/* A mount above the bpffs takes it along wherever it goes. */
+	vfsmnt = BPF_CORE_READ(from_path, mnt);
+	ret = shirudo_bpffs_tree_change(shirudo_mount_of(vfsmnt), false);
+	if (ret)
+		return ret;
 	ret = shirudo_image_mount(from, true);
 	return ret ? ret : shirudo_image_mount(to, true);
 }
@@ -1234,6 +1246,13 @@ int BPF_PROG(shirudo_lsm_sb_mount, const char *dev_name,
 
 	if (ret)
 		return ret;
+	if (flags & SHIRUDO_MS_MOVE) {
+		struct vfsmount *vfsmnt = BPF_CORE_READ(path, mnt);
+
+		ret = shirudo_bpffs_tree_change(shirudo_mount_of(vfsmnt), true);
+		if (ret)
+			return ret;
+	}
 	if ((flags & PROPAGATION_TYPES) &&
 	    !(flags & ~(PROPAGATION_TYPES | SHIRUDO_MS_REC | SHIRUDO_MS_SILENT))) {
 		struct vfsmount *vfsmnt = BPF_CORE_READ(path, mnt);

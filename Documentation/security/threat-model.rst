@@ -657,7 +657,17 @@ the first to the second. It may change propagation on the bpffs ancestry
 while it is on the initrd root. Any caller may make a mount shared at any
 time. The kernel refuses to move a mount whose parent is shared, so shared
 is the state these guards keep: systemd asks for it after the switch and
-``ip netns add`` asks for it on ``/run/netns``. Before allowing the old root to detach, the unmount guard checks
+``ip netns add`` asks for it on ``/run/netns``. That refusal does not
+hold on its own, since ``mount_setattr(2)`` changes propagation without
+a hook on the pinned kernel (R3), and a legacy ``MS_MOVE`` reaches
+``lsm/sb_mount`` with its target alone. The hook therefore refuses
+every legacy move onto a mount of the protected namespace
+(``BpffsMount``), whatever it moves, to every caller but host PID 1 on
+the initrd root. A move there goes through ``move_mount(2)``, where
+``lsm/move_mount`` sees both paths and refuses, with the same exception,
+a move of the bpffs or of a mount above it, which would take the bpffs
+along. A program that knows only the legacy call no longer moves a
+mount in that namespace. Before allowing the old root to detach, the unmount guard checks
 that the new root has a copy of the same bpffs subtree outside the reach
 of the unmount and transfers its protection to that copy.
 
@@ -1680,17 +1690,18 @@ R3 Pins depend on the mount tree
    The pins hold the links through the bpffs superblock. The guards of
    T2 cover unmounts of the bpffs and of mounts above it in ``init``'s
    namespace. A private copy of the tree in another namespace is any
-   process's to drop, which releases nothing. Legacy ``mount(2)`` with
-   ``MS_MOVE`` reaches ``lsm/sb_mount`` with the target only, so the
-   source mount is not checked (D8). On the pinned kernel,
+   process's to drop, which releases nothing. On the pinned kernel,
    ``mount_setattr(2)`` has no propagation hook, so root can change
-   mount attributes and propagation, making the bpffs read-only for
-   instance. A mount over ``/run`` or an ancestor hides the pins without
+   mount attributes and propagation, making the bpffs read-only or the
+   mounts above it private for instance. A private parent no longer
+   lets the bpffs move: ``lsm/sb_mount`` refuses every legacy move in
+   that namespace and ``lsm/move_mount`` a move of the bpffs or of a
+   mount above it. A mount over ``/run`` or an ancestor hides the pins without
    releasing them: enforcement continues, ``shirudo status`` reports the
    LSM as not attached, and ``upatch load`` and ``upatch unload`` refuse
    ``tampered`` with the message ``lsm_detached`` in their pre-flight.
    The walk's bounds refuse every unmount of a tree they cannot cover.
-   Mitigations: D7, D8, D11.
+   Mitigations: D7, D11.
 
 R4 Config PCR writers are not authenticated
    The config PCR, one of 0 to 15 other than 9 and 11 chosen in the
@@ -2250,10 +2261,6 @@ D7 Pins without the mount tree
    Keep the enforcement links alive without depending on the bpffs
    mount (R3), tracked in `issue 22
    <https://github.com/shirudo-dev/shirudo/issues/22>`__.
-
-D8 Legacy mount moves
-   Check the source of a legacy ``MS_MOVE`` (R3), tracked in `issue 12
-   <https://github.com/shirudo-dev/shirudo/issues/12>`__.
 
 D9 Perf events across exec
    Refuse task-bound perf events that a task opened before the exec
