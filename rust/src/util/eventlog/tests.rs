@@ -154,6 +154,58 @@ fn set_record(ty: &[u8], name: &[u8]) -> Vec<u8> {
     })
 }
 
+/// A mixed-case log digest denotes the same payload that a pin reports
+/// in lowercase hex.
+#[test]
+#[cfg_attr(
+    miri,
+    ignore = "eventlog file reads use open flags Miri does not support"
+)]
+fn measured_set_uses_decoded_payload() {
+    let dir = TempDir::new();
+    use_log(&dir);
+    let mixed = std::str::from_utf8(DIGEST_HEX)
+        .unwrap()
+        .to_ascii_uppercase();
+    let init = format!(r#"{{"type":"init","set":[{{"name":"boot","payload_sha256":"{mixed}"}}]}}"#);
+    let load =
+        format!(r#"{{"type":"upatch_load","upatch":{{"name":"fix","payload_sha256":"{mixed}"}}}}"#);
+    write_log(&lines(&[init.as_bytes(), load.as_bytes()]));
+
+    let set = crate::util::measured::MeasuredSet::log().unwrap();
+    assert!(set.holds(b"boot", DIGEST_HEX));
+    assert!(set.holds(b"fix", DIGEST_HEX));
+}
+
+/// The record reader gives both init set members and later loads the
+/// lowercase spelling, without needing to open the eventlog.
+#[test]
+fn upatch_records_canonicalize_payload_hex() {
+    let mixed = std::str::from_utf8(DIGEST_HEX)
+        .unwrap()
+        .to_ascii_uppercase();
+    let init = format!(r#"{{"type":"init","set":[{{"name":"boot","payload_sha256":"{mixed}"}}]}}"#);
+    let load =
+        format!(r#"{{"type":"upatch_load","upatch":{{"name":"fix","payload_sha256":"{mixed}"}}}}"#);
+    for (record, is_init, name) in [
+        (init.as_str(), true, &b"boot"[..]),
+        (load.as_str(), false, &b"fix"[..]),
+    ] {
+        let line = std::ffi::CString::new(record).unwrap();
+        let mut got = Vec::new();
+        assert_eq!(
+            records::upatches_record(&line, is_init, &mut |event, member, payload| {
+                if event == records::UPATCH_LOAD {
+                    got.push((member.to_vec(), payload.to_vec()));
+                }
+                0
+            }),
+            0
+        );
+        assert_eq!(got, [(name.to_vec(), DIGEST_HEX.to_vec())]);
+    }
+}
+
 /// Only an init record's set says what boot restore loaded.
 #[test]
 #[cfg_attr(miri, ignore = "gmtime_r is a foreign call")]
