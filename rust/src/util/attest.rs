@@ -347,7 +347,7 @@ fn snapshot_quote_nonce(register: &[u8], config: Option<&[u8]>) -> Result<[u8; 3
         return Err(ret);
     }
     hashes[..32].copy_from_slice(&digest);
-    if let Some(config) = config {
+    if let Some(config) = config.filter(|signature| !signature.is_empty()) {
         let ret = sha256_into(config, &mut digest);
         if ret != 0 {
             return Err(ret);
@@ -391,8 +391,9 @@ fn certify_after_quote(
 }
 
 /// What the TPM gave the evidence: the PCRs quoted and their values, the
-/// register's value and name, the quote and the certification, the keys'
-/// public parts, and the credential a challenge carried.
+/// register's value and name, the quote, the register's opening and
+/// closing certifications, the keys' public parts, and the credential
+/// a challenge carried.
 struct Measured {
     pcr_mask: u32,
     values: [[u8; 32]; 24],
@@ -493,8 +494,9 @@ fn nvpcr_matches_config(config: &Evidence, certified: &TpmAttest, bytes: &[u8]) 
 }
 
 /// What the TPM gives the evidence, the TPM let go of before the file
-/// work: -ENXIO without a TPM, -ENODEV without a register bound, and
-/// -EUCLEAN for a quote or certification not of the active config value.
+/// work: -ENXIO without a TPM, -ENODEV without a register bound,
+/// -EBADMSG for a malformed certification, -EAGAIN for PCRs that keep
+/// changing, and -EUCLEAN for data not of the active config value.
 fn measure(
     config: &Evidence,
     nonce: &[u8],
@@ -1020,7 +1022,7 @@ impl Report {
 }
 
 /// The attestation key that signs the evidence's attestations, its name,
-/// and the nonce they must carry.
+/// and the default challenge for an opening certification.
 struct Signer<'a> {
     key: &'a TpmEccPublic,
     name: &'a [u8; NAME_LEN],
@@ -1258,16 +1260,17 @@ fn check_after_quote(
         return Ok(());
     }
     let after = check_signed(rep, signer, what, attest_hex, sig_hex, Some(nonce))?;
-    if after.checked {
-        rep.check(
-            same_nv(&before.attest, &before.bytes, &after.attest, &after.bytes),
-            &[
-                what,
-                b": same index and value on both sides of the PCR quote",
-            ]
-            .concat(),
-        );
+    if !after.checked {
+        return Err(-EKEYREJECTED);
     }
+    rep.check(
+        same_nv(&before.attest, &before.bytes, &after.attest, &after.bytes),
+        &[
+            what,
+            b": same index and value on both sides of the PCR quote",
+        ]
+        .concat(),
+    );
     Ok(())
 }
 
