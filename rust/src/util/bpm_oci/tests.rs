@@ -135,6 +135,42 @@ fn authentication_scheme_is_a_whole_token() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "libcurl URL parsing is a foreign call")]
+fn registry_owns_the_auth_challenge() {
+    let base = b"https://Registry.example";
+
+    assert!(http::registry_origin(
+        base,
+        Some(b"https://registry.example:443/blob")
+    ));
+    for other in [
+        &b"https://cdn.example/blob"[..],
+        b"https://registry.example:444/blob",
+        b"http://registry.example/blob",
+        b"https://user@registry.example/blob",
+    ] {
+        assert!(!http::registry_origin(base, Some(other)));
+    }
+    assert!(!http::registry_origin(base, None));
+    assert!(!http::registry_origin(
+        b"https://[fe80::1%25eth0]",
+        Some(b"https://[fe80::1%25eth1]/blob")
+    ));
+}
+
+#[test]
+fn new_response_clears_saved_headers() {
+    let mut response = HttpResponse::new();
+    http::header_line(&mut response, b"WWW-Authenticate: Basic realm=registry\r\n");
+    http::header_line(&mut response, b"Location: /uploads/one\r\n");
+    assert!(!cstr(&response.www_auth).is_empty());
+    assert!(!cstr(&response.location).is_empty());
+    http::header_line(&mut response, b"HTTP/2 401\r\n");
+    assert!(cstr(&response.www_auth).is_empty());
+    assert!(cstr(&response.location).is_empty());
+}
+
+#[test]
 fn registry_headers_are_bounded_and_counted() {
     let mut response = HttpResponse::new();
     http::header_line(&mut response, b"Location: /uploads/one\r\n");
