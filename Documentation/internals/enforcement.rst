@@ -400,8 +400,15 @@ Hooks in bpf2
        config image to a task without authority.
      - ``EPERM``: ``BpffsUmount``, ``BpffsUmountAbove``; image
        and ``/run/shirudo`` refusals uncounted
-     - Closed: a walk beyond 1024 mounts, 32 levels or 4 masters is
-       refused.
+     - Host PID 1 may detach the recorded initrd root once a matching
+       bpffs mount survives on the target root. A walk beyond 1024
+       mounts, 32 levels or 4 masters is refused.
+   * - ``lsm/sb_pivotroot``
+     - A pivot in the namespace containing the recorded bpffs. Host
+       PID 1 may pivot from the recorded initrd root to the recorded
+       target root.
+     - ``EPERM`` and ``BpffsUmountAbove``.
+     - A pivot in another mount namespace proceeds.
    * - ``lsm/move_mount``
      - To every caller: moving the bpffs, the ``/run/shirudo`` mount or
        the runtime image, or moving a mount onto the bpffs or the runtime
@@ -410,8 +417,10 @@ Hooks in bpf2
      - ``EPERM``: ``BpffsMount``; others uncounted
      - Closed.
    * - ``lsm/sb_mount``
-     - To every caller: a mount onto the bpffs or the runtime image, and
-       a propagation change of the ``/run/shirudo`` mount. A mount onto a
+     - A mount onto the bpffs or runtime image. A legacy propagation
+       change on the bpffs or its ancestry, with the host PID 1
+       exceptions for the initrd handoff and restoring shared mounts.
+       A mount onto a
        path in ``/run/shirudo`` or on a config image to a task without
        authority. The source of a bind or legacy move is not checked.
      - ``EPERM``: ``BpffsMount``; others uncounted
@@ -638,9 +647,9 @@ The hooks decide only what reaches them. These paths do not:
   ``lsm/file_ioctl`` refuse the ``bpf()`` attach commands and the perf
   ioctl to tasks without authority; other kernel interfaces that take a
   program descriptor are not hooked here.
-- ``mount_setattr(2)`` has no LSM hook, ``pivot_root(2)`` is not hooked,
-  and ``lsm/sb_mount`` does not check the source of a bind or legacy
-  move.
+- On the pinned kernel, propagation changes through ``mount_setattr(2)``
+  have no LSM hook. The source of a bind or legacy move is absent from
+  ``lsm/sb_mount``.
 - A perf event bound to a task before that task execs the runtime image
   survives the exec, and CPU-wide events and probes on the runtime
   binary are not checked.

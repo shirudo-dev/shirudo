@@ -13,15 +13,16 @@
 //! maps it shares with bpf2 from bpf2.
 
 use core::ffi::{CStr, c_int};
-use std::os::fd::{AsRawFd, OwnedFd};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
 use super::{NV_INDEX, SIG_KEYRING_BPF, cat, error, info, last_err, strerr};
-use crate::errno::{E2BIG, EACCES, EKEYREJECTED, ENOENT, ENOKEY};
-use crate::skel::bpf2::{self, MountRecord, TaskAuthority};
+use crate::errno::{E2BIG, EACCES, EINVAL, EKEYREJECTED, ENOENT, ENOKEY, EOPNOTSUPP};
+use crate::skel::bpf2::{self, TaskAuthority};
 use crate::skel::seal;
 use crate::sys::identity::Identity;
 use crate::sys::libc::{
-    O_CLOEXEC, O_DIRECTORY, O_RDONLY, SYS_PIDFD_OPEN, access, close, open, syscall, unlink,
+    AT_FDCWD, O_CLOEXEC, O_DIRECTORY, O_RDONLY, STATX_MNT_ID_UNIQUE, SYS_PIDFD_OPEN, Statx, Zeroed,
+    access, close, open, statx, syscall, unlink,
 };
 use crate::util::bpf_sys::bpf_map_freeze;
 use crate::util::identity;
@@ -231,24 +232,45 @@ fn freeze_task_maps(obj: &Skeleton) -> c_int {
     ret.err().unwrap_or(0)
 }
 
+fn mount_id_unique(path: &CStr) -> Result<u64, c_int> {
+    let mut stx = Statx::zeroed();
+    // SAFETY: path is a C string and stx has room for the result.
+    if unsafe { statx(AT_FDCWD, path.as_ptr(), 0, STATX_MNT_ID_UNIQUE, &mut stx) } != 0 {
+        return Err(last_err());
+    }
+    if stx.stx_mask & STATX_MNT_ID_UNIQUE == 0 || stx.stx_mnt_id == 0 {
+        return Err(-EOPNOTSUPP);
+    }
+    Ok(stx.stx_mnt_id)
+}
+
 /// The recorder in the mount guards sees the bootstrap task open the
 /// bpffs root; the record is read back, since a guard with none to keep
 /// would let an unmount above the bpffs through.
-fn record_bpffs_mount(obj: &Skeleton) -> c_int {
+fn record_bpffs_mount(obj: &Skeleton) -> Result<(), c_int> {
     // SAFETY: a C string.
     let fd = unsafe { open(BPFFS_DIR.as_ptr(), O_RDONLY | O_DIRECTORY | O_CLOEXEC) };
-
     if fd < 0 {
-        return last_err();
+        return Err(last_err());
     }
-    // SAFETY: the descriptor opened above.
-    unsafe { close(fd) };
-    let m = bpf2::maps(obj).shirudo_mnt_rec;
-    match m.lookup(&0) {
-        Ok(MountRecord { mount: 0 }) => -ENOENT,
-        Ok(_) => m.freeze().err().unwrap_or(0),
-        Err(err) => err,
+    // SAFETY: open returned this owned descriptor.
+    let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+    drop(fd);
+
+    let map = bpf2::maps(obj).shirudo_mnt_rec;
+    let mut rec = map.lookup(&0)?;
+    if rec.mount == 0 || rec.mount_ns == 0 {
+        return Err(-ENOENT);
     }
+    if super::initrd::in_initrd() {
+        rec.initrd_root_id = mount_id_unique(c"/")?;
+        rec.sysroot_id = mount_id_unique(super::initrd::sysroot())?;
+        if rec.initrd_root_id == rec.sysroot_id {
+            return Err(-EINVAL);
+        }
+        map.update(&0, &rec)?;
+    }
+    map.freeze()
 }
 
 /// The objects and links of one run, in the order a failed run undoes
@@ -489,8 +511,7 @@ impl Attached {
         if err != 0 {
             return err;
         }
-        let err = record_bpffs_mount(obj);
-        if err != 0 {
+        if let Err(err) = record_bpffs_mount(obj) {
             error(&cat!("record the bpffs mount: ", strerr(-err)));
             return err;
         }

@@ -39,7 +39,7 @@ pub(crate) struct GuardMap {
 
 pub(crate) const SEAL_HOOK_COUNT: usize = 29;
 pub(crate) const IMAGE_SEAL_HOOK_COUNT: usize = 2;
-pub(crate) const MOUNT_HOOK_COUNT: usize = 5;
+pub(crate) const MOUNT_HOOK_COUNT: usize = 6;
 pub(crate) const OBSERVER_HOOK_COUNT: usize = 10;
 pub(crate) const IMAGE_OBSERVER_HOOK_COUNT: usize = 4;
 /// `enum gate_guard`.
@@ -165,6 +165,10 @@ pub(crate) static MOUNT_GUARDS: [ImageGuard; MOUNT_HOOK_COUNT] = [
     guard(
         c"shirudo_lsm_sb_remount",
         c"/run/shirudo/bpffs/bpf2_sb_remount_link",
+    ),
+    guard(
+        c"shirudo_lsm_sb_pivotroot",
+        c"/run/shirudo/bpffs/bpf2_sb_pivotroot_link",
     ),
     guard(
         c"shirudo_lsm_file_open",

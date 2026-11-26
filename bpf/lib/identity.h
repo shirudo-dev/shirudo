@@ -40,6 +40,9 @@ struct {
 /* The bpffs mount of init's namespace, as the unmount guard keeps it. */
 struct mount_record {
 	__u64	mount;
+	__u64	mount_ns;
+	__u64	initrd_root_id;
+	__u64	sysroot_id;
 };
 
 struct {

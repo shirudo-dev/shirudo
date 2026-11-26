@@ -718,6 +718,14 @@ char _license[] SEC("license") = "Dual BSD/GPL";
 #define MOUNT_WALK_MAX		1024
 #define MOUNT_DEPTH_MAX		32
 #define MOUNT_MASTERS_MAX	4
+#define MOUNT_CHILDREN_MAX	64
+#define MOUNT_CHAIN_MAX		8
+#define SHIRUDO_MNT_DETACH	2
+#define SHIRUDO_MS_REC		(1UL << 14)
+#define SHIRUDO_MS_SILENT	(1UL << 15)
+#define SHIRUDO_MS_SHARED	(1UL << 20)
+/* MS_UNBINDABLE, MS_PRIVATE, MS_SLAVE and MS_SHARED from linux/mount.h. */
+#define PROPAGATION_TYPES	((1UL << 17) | (1UL << 18) | (1UL << 19) | SHIRUDO_MS_SHARED)
 
 static __always_inline struct mount *shirudo_mount_of(struct vfsmount *mnt)
 {
@@ -840,37 +848,146 @@ static __always_inline int shirudo_mount_next_sibling(struct mount *t,
  * it. The namespace lock is not held here, so a tree that cannot be
  * walked within the bounds is refused rather than taken for safe.
  */
-static __always_inline int shirudo_umount_above(struct vfsmount *mnt)
+static __always_inline bool shirudo_umount_takes(struct mount *t,
+						 struct mount *bpffs)
 {
-	struct mount *t, *m, *bpffs;
-	struct mount_record *rec;
-	__u32 zero = 0;
+	struct mount *m = t;
 	__u64 next;
 	int i, ret;
 
-	rec = bpf_map_lookup_elem(&shirudo_mnt_rec, &zero);
-	if (!rec || !rec->mount)
-		return 0;
-	bpffs = (struct mount *)rec->mount;
-	t = shirudo_mount_of(mnt);
-	m = t;
 	bpf_for(i, 0, MOUNT_WALK_MAX) {
 		if (shirudo_umount_takes_bpffs(m, bpffs))
-			goto deny;
+			return true;
 		next = (__u64)BPF_CORE_READ(m, mnt_mounts.next);
 		if (!next)
-			goto deny;
+			return true;
 		if (next != shirudo_mount_children(m)) {
 			m = shirudo_mount_child(next);
 			continue;
 		}
 		ret = shirudo_mount_next_sibling(t, &m);
 		if (!ret)
-			return 0;
+			return false;
 		if (ret < 0)
-			goto deny;
+			return true;
 	}
-deny:
+	return true;
+}
+
+/* A recursive bind preserves the mounted subtree root and its child mountpoints. */
+static __always_inline struct mount *
+shirudo_mount_find_child(struct mount *parent, struct mount *skip,
+			 struct mount *original, bool same_mountpoint)
+{
+	__u64 head = shirudo_mount_children(parent), next;
+	struct super_block *sb = BPF_CORE_READ(original, mnt.mnt_sb);
+	struct dentry *root = BPF_CORE_READ(original, mnt.mnt_root);
+	struct mountpoint *mp = BPF_CORE_READ(original, mnt_mp);
+	struct mount *child;
+	int i;
+
+	if (!sb || !root || (same_mountpoint && !mp))
+		return NULL;
+
+	next = (__u64)BPF_CORE_READ(parent, mnt_mounts.next);
+	bpf_for(i, 0, MOUNT_CHILDREN_MAX) {
+		if (!next || next == head)
+			return NULL;
+		child = shirudo_mount_child(next);
+		if (child != skip &&
+		    BPF_CORE_READ(child, mnt.mnt_sb) == sb &&
+		    BPF_CORE_READ(child, mnt.mnt_root) == root &&
+		    (!same_mountpoint || BPF_CORE_READ(child, mnt_mp) == mp))
+			return child;
+		next = (__u64)BPF_CORE_READ(child, mnt_child.next);
+	}
+	return NULL;
+}
+
+/*
+ * PID 1 leaves the initrd by binding /run recursively into the new
+ * root, pivot_root(".", ".") and a lazy unmount of the old root, now
+ * stacked on the new root's own root. The recorded bpffs mount goes
+ * with the old root while the recursive copy of it keeps the superblock
+ * mounted. That one unmount, once per boot, may hand the record over
+ * to the copy: return the copy when the caller is PID 1, the unmount is
+ * lazy, t is stacked on PID 1's root and the record lies below t, as
+ * the bpffs on the /run/shirudo tmpfs on systemd's /run. The copy is
+ * found by following the same chain down from the new root: a child of
+ * it on the superblock of the chain's top below t, then at each level a
+ * child on the next superblock at the same mountpoint, which a
+ * recursive bind reuses. A soft reboot binds /run alone and finds none.
+ */
+static __always_inline struct mount *
+shirudo_root_switch_copy(struct mount *t, int flags,
+			 const struct mount_record *rec, struct mount *bpffs)
+{
+	struct task_struct *task = bpf_get_current_task_btf();
+	__u64 chain[MOUNT_CHAIN_MAX] = {};
+	struct mount *root, *a, *orig, *copy;
+	int i, level, depth = 0;
+
+	if (!(flags & SHIRUDO_MNT_DETACH) ||
+	    (__u32)bpf_get_current_pid_tgid() != 1 || !rec->initrd_root_id ||
+	    BPF_CORE_READ(t, mnt_id_unique) != rec->initrd_root_id)
+		return NULL;
+	root = shirudo_mount_of(BPF_CORE_READ(task, fs, root.mnt));
+	if (BPF_CORE_READ(root, mnt_id_unique) != rec->sysroot_id ||
+	    BPF_CORE_READ(t, mnt_parent) != root ||
+	    BPF_CORE_READ(t, mnt_mp, m_dentry) !=
+	    BPF_CORE_READ(task, fs, root.dentry))
+		return NULL;
+	a = bpffs;
+	bpf_for(i, 0, MOUNT_CHAIN_MAX) {
+		if (!a || a == t || a == root)
+			break;
+		chain[i] = (__u64)a;
+		depth = i + 1;
+		a = BPF_CORE_READ(a, mnt_parent);
+	}
+	if (a != t || !depth)
+		return NULL;
+	copy = root;
+	bpf_for(i, 0, MOUNT_CHAIN_MAX) {
+		level = depth - 1 - i;
+		if (level < 0 || level >= MOUNT_CHAIN_MAX)
+			break;
+		orig = (struct mount *)chain[level];
+		copy = shirudo_mount_find_child(copy, i ? NULL : t, orig, i != 0);
+		if (!copy)
+			return NULL;
+	}
+	return copy == root ? NULL : copy;
+}
+
+/*
+ * Refuse an unmount that takes the recorded bpffs mount or one above
+ * it, except PID 1's switch from the initrd, which keeps a copy of it
+ * mounted and records that copy in its place.
+ */
+static __always_inline int shirudo_umount_above(struct vfsmount *mnt,
+						int flags)
+{
+	struct mount_record *rec;
+	struct mount *t, *copy, *bpffs;
+	__u32 zero = 0;
+
+	rec = bpf_map_lookup_elem(&shirudo_mnt_rec, &zero);
+	if (!rec)
+		return 0;
+	bpffs = (struct mount *)rec->mount;
+	if (!bpffs)
+		return 0;
+	t = shirudo_mount_of(mnt);
+	if (!shirudo_umount_takes(t, bpffs))
+		return 0;
+	copy = shirudo_root_switch_copy(t, flags, rec, bpffs);
+	if (copy && !shirudo_umount_takes(t, copy) &&
+	    __sync_val_compare_and_swap(&rec->mount, (__u64)bpffs,
+					(__u64)copy) == (__u64)bpffs) {
+		rec->initrd_root_id = 0;
+		return 0;
+	}
 	return shirudo_tamper_deny(TAMPER_BPFFS_UMOUNT_ABOVE, -EPERM);
 }
 
@@ -927,8 +1044,13 @@ int BPF_PROG(shirudo_lsm_file_open, struct file *file, int ret)
 	if (!shirudo_bootstrap_task())
 		return 0;
 	rec = bpf_map_lookup_elem(&shirudo_mnt_rec, &zero);
-	if (rec && !rec->mount)
-		rec->mount = (__u64)shirudo_mount_of(mnt);
+	if (rec && !rec->mount) {
+		struct mount *mount = shirudo_mount_of(mnt);
+
+		rec->mount_ns = (__u64)BPF_CORE_READ(mount, mnt_ns);
+		if (rec->mount_ns)
+			rec->mount = (__u64)mount;
+	}
 	return 0;
 }
 
@@ -981,7 +1103,7 @@ int BPF_PROG(shirudo_lsm_sb_umount, struct vfsmount *mnt, int flags,
 					   -EPERM);
 	ret = shirudo_deny_bpffs_mount(dev, TAMPER_BPFFS_UMOUNT);
 	if (!ret)
-		ret = shirudo_umount_above(mnt);
+		ret = shirudo_umount_above(mnt, flags);
 	return ret ? ret : shirudo_image_mount(sb, true);
 }
 
@@ -1006,6 +1128,87 @@ int BPF_PROG(shirudo_lsm_move_mount, const struct path *from_path,
 	return ret ? ret : shirudo_image_mount(to, true);
 }
 
+/* Only the host's PID 1 can cross between the two roots recorded by bootstrap. */
+static __always_inline bool shirudo_initrd_pid1(const struct mount_record *rec)
+{
+	struct task_struct *task;
+	struct vfsmount *vfsmnt;
+	struct mount *root;
+
+	if ((__u32)bpf_get_current_pid_tgid() != 1 || !rec->initrd_root_id)
+		return false;
+	task = bpf_get_current_task_btf();
+	vfsmnt = BPF_CORE_READ(task, fs, root.mnt);
+	if (!vfsmnt)
+		return false;
+	root = shirudo_mount_of(vfsmnt);
+	return BPF_CORE_READ(root, mnt_id_unique) == rec->initrd_root_id;
+}
+
+static __always_inline int shirudo_propagation(struct mount *target,
+					       unsigned long type)
+{
+	struct mnt_namespace *ns;
+	struct mount_record *rec;
+	struct mount *m, *parent;
+	__u32 zero = 0;
+	int i;
+
+	rec = bpf_map_lookup_elem(&shirudo_mnt_rec, &zero);
+	if (!rec)
+		return 0;
+	m = (struct mount *)rec->mount;
+	if (!m)
+		return 0;
+	if (BPF_CORE_READ_INTO(&ns, target, mnt_ns))
+		goto deny;
+	if ((__u64)ns != rec->mount_ns)
+		return 0;
+	if ((__u32)bpf_get_current_pid_tgid() == 1 &&
+	    (type == SHIRUDO_MS_SHARED || shirudo_initrd_pid1(rec)))
+		return 0;
+	bpf_for(i, 0, MOUNT_DEPTH_MAX) {
+		if (m == target)
+			break;
+		parent = BPF_CORE_READ(m, mnt_parent);
+		if (parent == m)
+			return 0;
+		if (!parent)
+			break;
+		m = parent;
+	}
+deny:
+	return shirudo_tamper_deny(TAMPER_BPFFS_MOUNT, -EPERM);
+}
+
+SEC("lsm/sb_pivotroot")
+int BPF_PROG(shirudo_lsm_sb_pivotroot, const struct path *put_old,
+	     const struct path *new_root, int ret)
+{
+	struct mnt_namespace *ns;
+	struct mount_record *rec;
+	struct mount *target;
+	struct vfsmount *vfsmnt;
+	__u32 zero = 0;
+
+	if (ret)
+		return ret;
+	rec = bpf_map_lookup_elem(&shirudo_mnt_rec, &zero);
+	if (!rec || !rec->mount_ns)
+		return 0;
+	vfsmnt = BPF_CORE_READ(new_root, mnt);
+	target = shirudo_mount_of(vfsmnt);
+	if (BPF_CORE_READ_INTO(&ns, target, mnt_ns))
+		goto deny;
+	if ((__u64)ns != rec->mount_ns)
+		return 0;
+	if (shirudo_initrd_pid1(rec) &&
+	    BPF_CORE_READ(target, mnt_id_unique) == rec->sysroot_id)
+		return 0;
+deny:
+	return shirudo_tamper_deny(TAMPER_BPFFS_UMOUNT_ABOVE, -EPERM);
+}
+
 SEC("lsm/sb_mount")
 int BPF_PROG(shirudo_lsm_sb_mount, const char *dev_name,
 	     const struct path *path, const char *type,
@@ -1015,8 +1218,15 @@ int BPF_PROG(shirudo_lsm_sb_mount, const char *dev_name,
 
 	if (ret)
 		return ret;
-	if ((flags & ((1UL << 17) | (1UL << 18) | (1UL << 19) |
-		      (1UL << 20))) && shirudo_parent_mount(sb, false))
+	if ((flags & PROPAGATION_TYPES) &&
+	    !(flags & ~(PROPAGATION_TYPES | SHIRUDO_MS_REC | SHIRUDO_MS_SILENT))) {
+		struct vfsmount *vfsmnt = BPF_CORE_READ(path, mnt);
+		unsigned long propagation = flags & PROPAGATION_TYPES;
+
+		ret = shirudo_propagation(shirudo_mount_of(vfsmnt), propagation);
+		return ret ? ret : shirudo_image_mount(sb, true);
+	}
+	if ((flags & PROPAGATION_TYPES) && shirudo_parent_mount(sb, false))
 		return -EPERM;
 	ret = shirudo_parent_mount(sb, true);
 	if (ret)
