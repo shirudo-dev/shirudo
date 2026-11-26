@@ -512,6 +512,7 @@ pub(crate) fn open_child(
 
 /// Make one direct child directory or take the existing one. The opened
 /// directory stays on `parent`'s mount and must carry its seal.
+#[allow(dead_code)] // The package installer uses this helper in M027.
 pub(crate) fn mkdir_child(
     parent: BorrowedFd<'_>,
     name: &CStr,
@@ -535,13 +536,18 @@ pub(crate) fn mkdir_child(
 }
 
 /// Create a direct child directory if missing, then open only a sealed
-/// child on this mount.
+/// child on this mount. With enforcement active, inode_init_security gives
+/// new children the parent's label.
 pub(crate) fn open_or_create_child_dir(
     parent: BorrowedFd<'_>,
     name: &CStr,
     mode: u32,
 ) -> Result<OwnedFd, c_int> {
-    mkdir_child(parent, name, mode, false)
+    if !child_name_ok(name) {
+        return Err(-EINVAL);
+    }
+    mkdir_at(parent, name, mode)?;
+    open_child(parent, name, O_RDONLY | O_DIRECTORY)
 }
 
 /// Open one regular child file, making and labelling it when requested.
