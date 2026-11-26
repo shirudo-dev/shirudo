@@ -1693,17 +1693,6 @@ pub(crate) fn apply(
         specs = Some(parsed);
     }
 
-    if cms_check_signers(sig) != 0 {
-        log_err(b"upatch: unreadable CMS signer information");
-        rep.fail(
-            c"signed_loader_load",
-            c"parser_rejected",
-            EBADMSG,
-            b"invalid CMS signature envelope",
-        );
-        return Err(());
-    }
-
     // The metadata map is exclusive to the loader by the digest of its
     // instructions alone, which the verifier enforces, and frozen: the
     // kernel refuses a signed load whose bound map is not.
@@ -1779,6 +1768,17 @@ pub(crate) fn apply(
             load_category(e),
             e,
             b"__loader.map freeze failed",
+        );
+        return Err(());
+    }
+
+    if cms_check_signers(sig) != 0 {
+        log_err(b"upatch: unreadable CMS signer information");
+        rep.fail(
+            c"signed_loader_load",
+            c"parser_rejected",
+            EBADMSG,
+            b"invalid CMS signature envelope",
         );
         return Err(());
     }
