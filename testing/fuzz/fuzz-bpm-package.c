@@ -8,9 +8,11 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "bpm_package.h"
 #include "fuzz.h"
@@ -70,14 +72,19 @@ int LLVMFuzzerTestOneInput(const __u8 *data, size_t size)
 {
 	struct bpm_package_info info = {};
 	char path[64];
-	int fd;
+	int fd, dir;
 
 	fd = fuzz_gzip_file(data, size, path, sizeof(path));
 	if (fd < 0)
 		return 0;
 	if (!bpm_pkg_load_info(path, &info))
 		xfree(info.cert, info.cert_len + 1);
-	bpm_pkg_extract(path, dest);
+	dir = mkdir(dest, 0700) ? -1 :
+	      open(dest, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	if (dir >= 0) {
+		bpm_pkg_extract(fd, dir);
+		close(dir);
+	}
 	empty_base();
 	close(fd);
 	return 0;

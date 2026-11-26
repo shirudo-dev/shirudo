@@ -233,6 +233,11 @@ __u32 prog_specs_xdp_classes(const struct prog_spec *specs, __u32 nr_progs);
 int upatch_restore(const char *path);
 int upatch_install(const char *path);
 int upatch_remove(const char *path);
+/*
+ * The same from a file the caller holds open: fd is read, and path only
+ * names it in messages and reports.
+ */
+int upatch_install_fd(const char *path, int fd);
 int upatch_remove_fd(const char *path, int fd);
 
 /* A missing optional kprobe module permits tree projection advancement. */

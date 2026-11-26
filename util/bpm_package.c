@@ -716,9 +716,47 @@ static X509 *read_x509_memory(const __u8 *body, size_t len)
 	return x;
 }
 
-int bpm_pkg_extract(const char *archive, const char *dest)
+/*
+ * The directory rel names below dest, each component made when it is
+ * not there. With base set it is the directory of rel's last component,
+ * which *base then points at.
+ */
+static int extract_dir(int dest, const char *rel, const char **base)
 {
-	gzFile gz = gzopen(archive, "rb");
+	char name[NAME_MAX + 1];
+	const char *slash;
+	int dir, next;
+	size_t len;
+
+	dir = fcntl(dest, F_DUPFD_CLOEXEC, 0);
+	if (dir < 0)
+		return -errno;
+	while (*rel) {
+		slash = strchr(rel, '/');
+		if (!slash && base)
+			break;
+		len = slash ? (size_t)(slash - rel) : strlen(rel);
+		if (len >= sizeof(name)) {
+			close(dir);
+			return -ENAMETOOLONG;
+		}
+		memcpy(name, rel, len);
+		name[len] = '\0';
+		next = seal_mkdir_child(dir, name, 0700, false);
+		close(dir);
+		if (next < 0)
+			return next;
+		dir = next;
+		rel += len + (slash ? 1 : 0);
+	}
+	if (base)
+		*base = rel;
+	return dir;
+}
+
+int bpm_pkg_extract(int archive, int dest)
+{
+	gzFile gz = package_gzdopen(archive);
 	char root[256] = {};
 	__u64 total = 0;
 	__u32 entries = 0;
@@ -727,18 +765,13 @@ int bpm_pkg_extract(const char *archive, const char *dest)
 
 	if (!gz)
 		return -EINVAL;
-	ret = seal_mkdir_p(dest, 0700);
-	if (ret) {
-		gzclose(gz);
-		return ret;
-	}
 	for (;;) {
-		char name[PATH_MAX], rel[PATH_MAX], path[PATH_MAX], *slash;
+		char name[PATH_MAX], rel[PATH_MAX], *slash;
 		int n = gzread(gz, h, sizeof(h));
 		__u64 size, remain, pad;
 		const char *below;
 		bool zero = true;
-		int type;
+		int type, dir;
 
 		if (n == 0)
 			break;
@@ -795,14 +828,13 @@ int bpm_pkg_extract(const char *archive, const char *dest)
 			ret = -EINVAL;
 			break;
 		}
-		if (strsprintf(path, sizeof(path), "%s/%s", dest, rel) < 0) {
-			ret = -ENAMETOOLONG;
-			break;
-		}
 		if (type == '5') {
-			ret = seal_mkdir_p(path, 0700);
-			if (ret)
+			dir = extract_dir(dest, rel, NULL);
+			if (dir < 0) {
+				ret = dir;
 				break;
+			}
+			close(dir);
 			/* Read as the other walkers do, whatever a directory carries. */
 			remain = size;
 			while (remain) {
@@ -819,21 +851,17 @@ int bpm_pkg_extract(const char *archive, const char *dest)
 			if (ret)
 				break;
 		} else if (type == '0') {
-			char parent[PATH_MAX];
+			const char *base = NULL;
 			int fd;
 
-			if (strscpy(parent, path, sizeof(parent)) < 0) {
-				ret = -ENAMETOOLONG;
+			dir = extract_dir(dest, rel, &base);
+			if (dir < 0) {
+				ret = dir;
 				break;
 			}
-			slash = strrchr(parent, '/');
-			if (slash) {
-				*slash = 0;
-				ret = seal_mkdir_p(parent, 0700);
-				if (ret)
-					break;
-			}
-			fd = seal_open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
+			fd = seal_create_child(dir, base,
+					       O_WRONLY | O_CREAT | O_EXCL, 0644);
+			close(dir);
 			if (fd < 0) {
 				ret = fd;
 				break;

@@ -99,9 +99,12 @@ int bpm_pkg_read_member(const char *archive, const char *member,
 			__u8 **out, size_t *out_len, size_t max);
 /*
  * Unpack the regular files and directories under the single top-level
- * directory of a .bee into dest; anything else fails the archive.
+ * directory of the .bee open on archive, read from its start, into the
+ * open directory dest; anything else fails the archive. Each member is
+ * made below dest on its mount, a directory under a name already there
+ * taken only when it is shirudo's own.
  */
-int bpm_pkg_extract(const char *archive, const char *dest);
+int bpm_pkg_extract(int archive, int dest);
 int bpm_pkg_load_info(const char *archive, struct bpm_package_info *info);
 
 /* Room for the manifest of a tree publication, in bytes. */

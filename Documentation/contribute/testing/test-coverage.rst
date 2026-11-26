@@ -873,6 +873,14 @@ signed config image.
        of root's, uninstall refuses and the pins, the archive and the
        state stay. Without a bind it detaches the link and retires the
        package tree, archive and state.
+   * - ``t7116-bpm-package-install``
+     - BPM installs a signed upatch from the fixture registry and keeps
+       the archive beside the version. With a sealed directory bound
+       over the staging directory or the package store, or the private
+       bpffs bound over the store, in a mount namespace of root's,
+       install refuses: neither the archive nor the version lands in
+       what the bind shows, nothing is loaded and no state is written.
+       Without a bind it installs again.
 
 ``otel`` (8)
 ~~~~~~~~~~~~
@@ -1041,8 +1049,9 @@ OCI registry. The macOS workflow checks the Lima template with
 Unit suites and fuzz targets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The unit suites in :src:`testing/unit/` cover 44 of the modules in
-:src:`util/`: ``attest``, ``bpm_cleanup``, ``bpm_oci``, ``bpm_package``, ``bpm_state``,
+The unit suites in :src:`testing/unit/` cover 45 of the modules in
+:src:`util/`: ``attest``, ``bpm_cleanup``, ``bpm_install``, ``bpm_oci``,
+``bpm_package``, ``bpm_state``,
 ``bpm_tree``, ``bpm_tree_overlap``, ``bpm_tree_state``, ``chain``,
 ``chain_history``, ``conditions``, ``config_update``, ``crypto_openssl``,
 ``curl``, ``eventlog``, ``format``, ``hex``, ``identity``, ``io``,

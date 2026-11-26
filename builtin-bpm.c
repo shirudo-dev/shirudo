@@ -34,6 +34,7 @@
 
 #include "builtin.h"
 #include "util/bpm_cleanup.h"
+#include "util/bpm_install.h"
 #include "util/bpm_oci.h"
 #include "util/bpm_package.h"
 #include "util/bpm_state.h"
@@ -69,7 +70,6 @@ struct bpm_source {
 	char key_file[BPM_MAX_KEY];
 };
 
-static int sha256_file_hex(const char *path, char *hex, size_t hex_sz);
 static int sha256_fd_hex(int fd, char *hex, size_t hex_sz);
 /*
  * -ENODEV, not -ENOENT, without the identity init pins: callers take
@@ -89,22 +89,6 @@ static int package_store_open(void)
 	packages = seal_open_child(bpm, "packages", O_RDONLY | O_DIRECTORY);
 	close(bpm);
 	return packages;
-}
-
-static int remove_partial_version(const char *name, const char *version)
-{
-	int store, package, ret;
-
-	store = package_store_open();
-	if (store < 0)
-		return store;
-	package = seal_open_child(store, name, O_RDONLY | O_DIRECTORY);
-	close(store);
-	if (package < 0)
-		return package;
-	ret = bpm_pkg_remove_at(package, version);
-	close(package);
-	return ret;
 }
 
 static int prepare_direct_install(const char *raw, struct bpm_source *source,
@@ -553,18 +537,6 @@ done:
 	return ret;
 }
 
-static int sha256_file_hex(const char *path, char *hex, size_t hex_sz)
-{
-	int fd, ret;
-
-	fd = open(path, O_RDONLY | O_CLOEXEC);
-	if (fd < 0)
-		return -errno;
-	ret = sha256_fd_hex(fd, hex, hex_sz);
-	close(fd);
-	return ret;
-}
-
 /*
  * A package the operator names, open for reading: the local file, or
  * the download in memory. Never a file of /tmp, which root can bind to a
@@ -776,20 +748,6 @@ static int cert_matches_active(const __u8 *der, size_t len)
 		ret = 0;
 	cert_free(&a);
 	cert_free(&b);
-	return ret;
-}
-
-static int cert_file_matches_active(const char *path)
-{
-	size_t len = 0;
-	__u8 *der;
-	int ret;
-
-	ret = keys_read_der(path, &der, &len);
-	if (ret)
-		return ret;
-	ret = cert_matches_active(der, len);
-	xfree(der, len);
 	return ret;
 }
 
@@ -1156,55 +1114,69 @@ static int find_entry(const struct bpm_index_entry *e, int n, const char *name,
 	return 0;
 }
 
-static int path_compare(const void *left, const void *right)
+/* 0 when the certificate the extracted version ships is the active one. */
+static int install_cert_matches_active(const struct bpm_install *in)
 {
-	return strcmp(left, right);
+	size_t len = 0;
+	__u8 *der;
+	int fd, ret;
+
+	fd = bpm_install_member(in, "cert.der");
+	if (fd < 0)
+		return fd;
+	ret = keys_read_der_fd(fd, &der, &len);
+	close(fd);
+	if (ret)
+		return ret;
+	ret = cert_matches_active(der, len);
+	xfree(der, len + 1);
+	return ret;
 }
 
 /*
- * The old version's unload directives in reverse name order, as
- * uninstall runs them, each kept beside the load it undoes.
+ * One package layer: staged, checked against its digest, extracted,
+ * loaded and kept, through directories opened once below the state root
+ * init recorded. The digest is of the bytes the extraction then reads,
+ * taken from the descriptor that wrote them.
  */
-static void sort_old_pairs(char (*unloads)[PATH_MAX], char (*loads)[PATH_MAX],
-			   int n)
+static int install_layer(struct bpm_oci_client *c, const char *url,
+			 const struct bpm_descriptor *layer,
+			 const struct bpm_index_entry *entry,
+			 const char *old_version)
 {
-	char tmp[PATH_MAX];
+	struct bpm_install in;
+	char digest[65];
+	int root, ret;
 
-	for (int i = 1; i < n; i++) {
-		for (int j = i; j > 0 && strcmp(unloads[j - 1], unloads[j]) < 0;
-		     j--) {
-			memcpy(tmp, unloads[j], PATH_MAX);
-			memcpy(unloads[j], unloads[j - 1], PATH_MAX);
-			memcpy(unloads[j - 1], tmp, PATH_MAX);
-			memcpy(tmp, loads[j], PATH_MAX);
-			memcpy(loads[j], loads[j - 1], PATH_MAX);
-			memcpy(loads[j - 1], tmp, PATH_MAX);
-		}
-	}
+	root = state_root_open();
+	if (root < 0)
+		return root == -ENOENT ? -ENODEV : root;
+	ret = bpm_install_open(&in, root, entry->name, entry->version);
+	close(root);
+	if (!ret)
+		ret = bpm_oci_get_file(c, url, BPM_PACKAGE_MEDIA, in.archive,
+				       layer->size);
+	if (!ret && (sha256_fd_hex(in.archive, digest, sizeof(digest)) ||
+		     !bpm_digest_matches(layer->digest, digest)))
+		ret = -EKEYREJECTED;
+	if (!ret)
+		ret = bpm_install_extract(&in);
+	if (!ret && install_cert_matches_active(&in))
+		ret = -EKEYREJECTED;
+	if (!ret)
+		ret = bpm_install_load(&in, old_version);
+	return bpm_install_close(&in, ret);
 }
 
 static int package_install(const struct bpm_source *s, const struct bpm_index_entry *entry,
-			   const char *old_path, const char *old_version)
+			   const char *old_version)
 {
 	struct bpm_oci_client c __cleanup(bpm_oci_client_clear) = {};
 	struct bpm_descriptor layers[8];
-	int nl = 0;
 	struct bpm_buffer manifest = {};
-	char url[PATH_MAX], archive[PATH_MAX] = {}, dir[PATH_MAX], package_dir[PATH_MAX];
-	char digest[65];
-	int fd, ret;
-	DIR *d;
-	struct dirent *de;
-	bool found_package = false, extracted = false;
-	char (*loaded)[PATH_MAX], (*old_loads)[PATH_MAX], (*old_unloads)[PATH_MAX];
-	int nloaded = 0, nactive = 0, nold = 0, nold_removed = 0;
+	char url[PATH_MAX];
+	int nl = 0, ret;
 
-	/* 1.5 MiB of paths, which a stack frame should not carry. */
-	loaded = xcalloc(3 * BPM_MAX_UPATCHES, PATH_MAX);
-	if (!loaded)
-		return -ENOMEM;
-	old_loads = loaded + BPM_MAX_UPATCHES;
-	old_unloads = old_loads + BPM_MAX_UPATCHES;
 	ret = bpm_oci_parse_endpoint(s->endpoint, &c);
 	if (ret)
 		goto out;
@@ -1236,7 +1208,6 @@ static int package_install(const struct bpm_source *s, const struct bpm_index_en
 	for (int i = 0; i < nl; i++) {
 		if (strcmp(layers[i].media, BPM_PACKAGE_MEDIA))
 			continue;
-		found_package = true;
 		if (entry->package_digest[0] && strcmp(entry->package_digest, layers[i].digest)) {
 			ret = -EKEYREJECTED;
 			goto out;
@@ -1247,214 +1218,14 @@ static int package_install(const struct bpm_source *s, const struct bpm_index_en
 		}
 		ret = bpm_oci_url(&c, entry->repository[0] ? entry->repository : entry->name,
 				  "blobs", layers[i].digest, url, sizeof(url));
-		if (ret)
-			goto out;
-		if (strsprintf(dir, sizeof(dir), "%s/%s", BPM_PACKAGES_DIR,
-			       entry->name) < 0) {
-			ret = -ENAMETOOLONG;
-			goto out;
-		}
-		ret = seal_mkdir_p(dir, 0700);
-		if (ret)
-			goto out;
-		if (strsprintf(package_dir, sizeof(package_dir), "%s/%s", dir,
-			       entry->version) < 0) {
-			ret = -ENAMETOOLONG;
-			goto out;
-		}
-		ret = seal_mkdir_p(BPM_STAGING_DIR, 0700);
-		if (ret)
-			goto out;
-		if (strsprintf(archive, sizeof(archive), "%s/%s-%s.bee",
-			       BPM_STAGING_DIR, entry->name,
-			       entry->version) < 0) {
-			ret = -ENAMETOOLONG;
-			goto out;
-		}
-		fd = seal_open(archive, O_WRONLY | O_CREAT | O_TRUNC |
-			       O_NOFOLLOW, 0600);
-		if (fd < 0) {
-			ret = fd;
-			goto out;
-		}
-		ret = bpm_oci_get_file(&c, url, BPM_PACKAGE_MEDIA, fd,
-				       layers[i].size);
-		close(fd);
-		if (ret) {
-			unlink(archive);
-			goto out;
-		}
-		if (sha256_file_hex(archive, digest, sizeof(digest)) ||
-		    !bpm_digest_matches(layers[i].digest, digest)) {
-			ret = -EKEYREJECTED;
-			goto out;
-		}
-		if (access(package_dir, F_OK) == 0) {
-			ret = -EEXIST;
-			goto out;
-		}
-		extracted = true;
-		ret = bpm_pkg_extract(archive, package_dir);
-		if (ret)
-			goto out;
-		{
-			char cert[PATH_MAX];
-
-			if (strsprintf(cert, sizeof(cert), "%s/cert.der",
-				       package_dir) < 0) {
-				ret = -ENAMETOOLONG;
-				goto out;
-			}
-			if (cert_file_matches_active(cert)) {
-				ret = -EKEYREJECTED;
-				goto out;
-			}
-		}
-		{
-			char updir[PATH_MAX];
-
-			if (strsprintf(updir, sizeof(updir), "%s/upatches",
-				       package_dir) < 0) {
-				ret = -ENAMETOOLONG;
-				goto out;
-			}
-			d = opendir(updir);
-			if (!d) {
-				ret = -errno;
-				goto out;
-			}
-		}
-		while ((de = readdir(d))) {
-			char up[PATH_MAX];
-			struct stat st;
-
-			if (bpm_upatch_member(de->d_name, strlen(de->d_name)) !=
-			    BPM_UPATCH_LOAD)
-				continue;
-			if (strsprintf(up, sizeof(up), "%s/upatches/%s", package_dir,
-				       de->d_name) < 0) {
-				ret = -ENAMETOOLONG;
-				break;
-			}
-			if (stat(up, &st) || !S_ISREG(st.st_mode))
-				continue;
-			if (nloaded >= BPM_MAX_UPATCHES) {
-				ret = -E2BIG;
-				break;
-			}
-			if (strscpy(loaded[nloaded], up,
-				    sizeof(loaded[nloaded])) < 0) {
-				ret = -ENAMETOOLONG;
-				break;
-			}
-			nloaded++;
-		}
-		closedir(d);
-		if (ret || !nloaded) {
-			if (!ret)
-				ret = -EINVAL;
-			goto out;
-		}
-		/* Measured in name order, not in the file system's. */
-		qsort(loaded, (size_t)nloaded, sizeof(loaded[0]), path_compare);
-		if (old_path && old_path[0]) {
-			char olddir[PATH_MAX];
-
-			if (strsprintf(olddir, sizeof(olddir), "%s/upatches",
-				       old_path) < 0) {
-				ret = -ENAMETOOLONG;
-				goto out;
-			}
-			d = opendir(olddir);
-			if (d) {
-				while ((de = readdir(d))) {
-					size_t len = strlen(de->d_name);
-					char load[NAME_MAX + 1];
-
-					if (bpm_upatch_member(de->d_name, len) !=
-					    BPM_UPATCH_UNLOAD || nold >= BPM_MAX_UPATCHES)
-						continue;
-					if (bpm_upatch_pair(de->d_name, len, load,
-							    sizeof(load)) ||
-					    strsprintf(old_unloads[nold],
-						       sizeof(old_unloads[nold]), "%s/%s",
-						       olddir, de->d_name) < 0 ||
-					    strsprintf(old_loads[nold],
-						       sizeof(old_loads[nold]), "%s/%s",
-						       olddir, load) < 0) {
-						ret = -ENAMETOOLONG;
-						break;
-					}
-					nold++;
-				}
-				closedir(d);
-			}
-			if (ret)
-				goto out;
-			sort_old_pairs(old_unloads, old_loads, nold);
-			for (int old_i = 0; old_i < nold; old_i++) {
-				if (upatch_remove(old_unloads[old_i])) {
-					ret = -EIO;
-					for (int restore_i = nold_removed - 1;
-					     restore_i >= 0; restore_i--)
-						upatch_install(old_loads[restore_i]);
-					goto out;
-				}
-				nold_removed++;
-			}
-		}
-		for (int loaded_i = 0; loaded_i < nloaded; loaded_i++) {
-			if (upatch_install(loaded[loaded_i])) {
-				ret = -EIO;
-				goto rollback;
-			}
-			nactive++;
-		}
-		{
-			char saved[PATH_MAX];
-
-			if (strsprintf(saved, sizeof(saved), "%s/%s-%s.bee", dir,
-				       entry->name, entry->version) < 0 ||
-			    rename(archive, saved)) {
-				pr_warn("bpm: cannot keep %s; dropping it",
-					archive);
-				unlink(archive);
-			}
-		}
-		break;
+		if (!ret)
+			ret = install_layer(&c, url, &layers[i], entry,
+					    old_version);
+		goto out;
 	}
-	if (!ret && !found_package)
-		ret = -EINVAL;
-	goto out;
-rollback:
-	for (int active_i = nactive - 1; active_i >= 0; active_i--) {
-		const char *base = strrchr(loaded[active_i], '/');
-		char unload[PATH_MAX], name[NAME_MAX + 1];
-
-		if (!base ||
-		    bpm_upatch_pair(base + 1, strlen(base + 1), name,
-				    sizeof(name)) ||
-		    strsprintf(unload, sizeof(unload), "%.*s/%s",
-			       (int)(base - loaded[active_i]), loaded[active_i],
-			       name) < 0)
-			continue;
-		upatch_remove(unload);
-	}
-	for (int restore_i = nold - 1; restore_i >= 0; restore_i--)
-		upatch_install(old_loads[restore_i]);
+	ret = -EINVAL;
 out:
 	bpm_buffer_free(&manifest);
-	if (ret && archive[0])
-		unlink(archive);
-	/* What failed to install must not block the next attempt. */
-	if (ret && extracted) {
-		int err = remove_partial_version(entry->name, entry->version);
-
-		if (err && err != -ENOENT)
-			pr_warn("bpm install: could not clean up %s: %s",
-				package_dir, strerror(-err));
-	}
-	xfree(loaded, 3 * BPM_MAX_UPATCHES * PATH_MAX);
 	return ret;
 }
 
@@ -3038,7 +2809,7 @@ static int bpm_install(const char *ref, struct bpm_tables *t)
 		return bpm_finish(lock, ret, "install");
 	if (n_state >= BPM_MAX_STATE)
 		return bpm_finish(lock, -E2BIG, "install");
-	ret = package_install(&source_cfg, &selected, NULL, NULL);
+	ret = package_install(&source_cfg, &selected, NULL);
 	if (ret)
 		return bpm_finish(lock, ret, "install");
 	bpm_copy_string(state[n_state].name, sizeof(state[n_state].name),
@@ -3104,7 +2875,7 @@ static int bpm_upgrade(const char *unused, struct bpm_tables *t)
 			break;
 		if (bpm_semver_compare(selected.version, state[i].version) <= 0)
 			continue;
-		ret = package_install(&source_cfg, &selected, state[i].path,
+		ret = package_install(&source_cfg, &selected,
 				      state[i].version);
 		if (ret)
 			break;

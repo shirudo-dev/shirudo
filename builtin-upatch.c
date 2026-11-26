@@ -3574,7 +3574,8 @@ struct load_args {
 	bool		loaded_is_done;
 };
 
-static int upatch_load(const struct load_args *args)
+/* fd, when it is one, is the file to read; args->file then only names it. */
+static int upatch_load(const struct load_args *args, int fd)
 {
 	const char *file = args->file, *report = args->report;
 	char name[UPATCH_NAME_MAX + 1] = {};
@@ -3592,7 +3593,7 @@ static int upatch_load(const struct load_args *args)
 			 "load") != 0)
 		goto done;
 
-	err = read_upatch(file, -1, &buf, &len, &u);
+	err = read_upatch(file, fd, &buf, &len, &u);
 	if (err) {
 		pr_err("upatch load: read %s: %s", file, strerror(-err));
 		rep_fail(&rep, "parse", "parser_rejected", -err,
@@ -3731,7 +3732,7 @@ static int cmd_upatch_load(int argc, const char **argv)
 			    &args.no_version_check, &args.report);
 	if (err)
 		return err == OPT_DONE ? 0 : err;
-	return upatch_load(&args);
+	return upatch_load(&args, -1);
 }
 
 /*
@@ -4223,7 +4224,7 @@ int upatch_purge(const char *name, const struct cert *signer,
  * Package installs take the same path as the upatch commands, and take
  * the payload already loaded under the name for one done.
  */
-int upatch_install(const char *path)
+int upatch_install_fd(const char *path, int fd)
 {
 	const struct load_args args = {
 		.file		= path,
@@ -4231,7 +4232,12 @@ int upatch_install(const char *path)
 		.loaded_is_done	= true,
 	};
 
-	return upatch_load(&args);
+	return upatch_load(&args, fd);
+}
+
+int upatch_install(const char *path)
+{
+	return upatch_install_fd(path, -1);
 }
 
 int upatch_remove_fd(const char *path, int fd)

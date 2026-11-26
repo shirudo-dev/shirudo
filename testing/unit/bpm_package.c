@@ -2,10 +2,19 @@
 /* Copyright (c) 2026 Authors of shirudo */
 
 #include <errno.h>
+#include <fcntl.h>
+#include <ftw.h>
+#include <limits.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
+#include <shirudo/misc.h>
 #include <shirudo/string.h>
 
+#include "archive_test.h"
 #include "bpm_oci.h"
 #include "bpm_package.h"
 #include "malloc.h"
@@ -223,7 +232,112 @@ static void tree_manifest_is_the_publisher_form(void)
 	EXPECT_EQ(len, 0);
 }
 
+/* An archive in memory and an empty directory to extract it into. */
+static char dest_dir[PATH_MAX];
+static int archive = -1, dest = -1;
+
+static void new_extract(const struct archive_member *m, int n)
+{
+	archive = memfd_create("shirudo-unit-bee", MFD_CLOEXEC);
+	ASSERT_TRUE(archive >= 0);
+	archive_write(archive, m, n);
+	strscpy_literal(dest_dir, "/tmp/shirudo-bpm-package-XXXXXX");
+	ASSERT_TRUE(mkdtemp(dest_dir));
+	dest = open(dest_dir, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	ASSERT_TRUE(dest >= 0);
+}
+
+static int remove_entry(const char *path, const struct stat *st, int type,
+			struct FTW *ftw)
+{
+	return remove(path);
+}
+
+static void end_extract(void)
+{
+	close(archive);
+	close(dest);
+	ASSERT_EQ(nftw(dest_dir, remove_entry, 16, FTW_DEPTH | FTW_PHYS), 0);
+}
+
+static void extract_makes_the_members_below_the_open_directory(void)
+{
+	static const struct archive_member m[] = {
+		{ "pkg/", '5', NULL },
+		{ "pkg/Beefile", '0', "name" },
+		{ "pkg/upatches/", '5', NULL },
+		{ "pkg/upatches/a.upatch", '0', "a" },
+		{ "pkg/doc/deep/er/notes", '0', "n" },
+		{ "pkg/empty", '5', NULL },
+	};
+	struct stat st;
+
+	new_extract(m, ARRAY_SIZE(m));
+	ASSERT_EQ(bpm_pkg_extract(archive, dest), 0);
+	ASSERT_EQ(fstatat(dest, "Beefile", &st, 0), 0);
+	EXPECT_EQ(st.st_size, 4);
+	EXPECT_EQ(st.st_mode & 07777, 0644);
+	ASSERT_EQ(fstatat(dest, "upatches/a.upatch", &st, 0), 0);
+	EXPECT_TRUE(S_ISREG(st.st_mode));
+	ASSERT_EQ(fstatat(dest, "doc/deep/er/notes", &st, 0), 0);
+	EXPECT_TRUE(S_ISREG(st.st_mode));
+	ASSERT_EQ(fstatat(dest, "empty", &st, 0), 0);
+	EXPECT_TRUE(S_ISDIR(st.st_mode));
+	/* The archive's top-level directory is dest itself. */
+	EXPECT_EQ(faccessat(dest, "pkg", F_OK, 0), -1);
+	/* A second run finds the files of the first in its way. */
+	EXPECT_EQ(bpm_pkg_extract(archive, dest), -EEXIST);
+	end_extract();
+}
+
+static void extract_takes_files_and_directories_of_one_tree_alone(void)
+{
+	static const struct archive_member link[] = {
+		{ "pkg/", '5', NULL },
+		{ "pkg/link", '2', NULL },
+	};
+	static const struct archive_member two_trees[] = {
+		{ "pkg/a", '0', "a" },
+		{ "other/b", '0', "b" },
+	};
+	static const struct archive_member above[] = {
+		{ "pkg/../b", '0', "b" },
+	};
+
+	new_extract(link, ARRAY_SIZE(link));
+	EXPECT_EQ(bpm_pkg_extract(archive, dest), -EPERM);
+	EXPECT_EQ(faccessat(dest, "link", F_OK, AT_SYMLINK_NOFOLLOW), -1);
+	end_extract();
+	new_extract(two_trees, ARRAY_SIZE(two_trees));
+	EXPECT_EQ(bpm_pkg_extract(archive, dest), -EINVAL);
+	EXPECT_EQ(faccessat(dest, "b", F_OK, 0), -1);
+	end_extract();
+	new_extract(above, ARRAY_SIZE(above));
+	EXPECT_EQ(bpm_pkg_extract(archive, dest), -EINVAL);
+	end_extract();
+}
+
+static void extract_reaches_nothing_through_a_symbolic_link(void)
+{
+	static const struct archive_member m[] = {
+		{ "pkg/upatches/a.upatch", '0', "a" },
+	};
+	char outside[PATH_MAX];
+
+	new_extract(m, ARRAY_SIZE(m));
+	strscpy_literal(outside, "/tmp/shirudo-bpm-outside-XXXXXX");
+	ASSERT_TRUE(mkdtemp(outside));
+	ASSERT_EQ(symlinkat(outside, dest, "upatches"), 0);
+	EXPECT_EQ(bpm_pkg_extract(archive, dest), -ELOOP);
+	/* Still empty. */
+	ASSERT_EQ(rmdir(outside), 0);
+	end_extract();
+}
+
 static const struct unit_case cases[] = {
+	UNIT_CASE(extract_makes_the_members_below_the_open_directory),
+	UNIT_CASE(extract_takes_files_and_directories_of_one_tree_alone),
+	UNIT_CASE(extract_reaches_nothing_through_a_symbolic_link),
 	UNIT_CASE(tree_manifest_is_the_publisher_form),
 	UNIT_CASE(index_entry_needs_its_package_size),
 	UNIT_CASE(semver_valid_is_semver_alone),

@@ -551,6 +551,17 @@ For each package ``install`` and ``upgrade``:
    --no-precheck`` does, each load measured.
 #. Record the package in ``/var/lib/shirudo/bpm/state.json``.
 
+Both open the package's directory and ``/var/lib/shirudo/bpm/staging``
+once, below the state directory whose device and inode init recorded,
+and reach the downloaded archive, the extracted version, its
+``cert.der`` and its members from those directories. The package digest
+is computed from the descriptor the download was written through, and
+the extraction reads that same descriptor. A mount below the state root
+stops the install with ``Invalid cross-device link``, a bind on the same
+file system and one file bound over another included. A symbolic link or
+an entry without the seal label stops it too. The version a failed
+install extracted is removed again.
+
 ``upgrade`` takes no argument. For every package not installed ``direct``
 it installs the greatest version in the cached index when that version is
 greater than the installed one: it unloads the old version with its
@@ -566,8 +577,8 @@ and reads each from the descriptor it checked. A load member without its
 directive stops uninstall. Cleanup removes load members before their
 directives, so an interrupted uninstall can finish on a retry. Successful
 uninstall removes the whole package directory, including archives and
-older versions left by upgrades. Uninstall and failed-install cleanup
-refuse to cross mounts below the state root.
+older versions left by upgrades. Uninstall refuses to cross mounts below
+the state root, as install and upgrade do.
 
 ``list`` prints the installed packages under the heading ``Installed
 packages:`` as a table with the columns ``NAME``, ``VERSION`` and
