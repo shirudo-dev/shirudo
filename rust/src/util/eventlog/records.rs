@@ -224,8 +224,13 @@ fn init_line(line: &CStr, is_init: bool, out: &mut EventlogInit) -> c_int {
     {
         return -EINVAL;
     }
-    let Ok(reset_count) = u32::try_from(init.reset_count) else {
-        return -EINVAL;
+    let reset_count = if f[4].seen() {
+        let Ok(count) = u32::try_from(init.reset_count) else {
+            return -EINVAL;
+        };
+        count
+    } else {
+        u32::MAX
     };
     let Ok(pcr) = u32::try_from(init.pcr) else {
         return -EINVAL;
