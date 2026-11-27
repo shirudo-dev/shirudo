@@ -9,23 +9,23 @@
 //! the kernel's vmlinux, and shares the maps init made.
 
 use core::ffi::{CStr, c_int};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
 use crate::bpf::btf::{Btf, KIND_FUNC};
 use crate::errno::{EBUSY, ENAMETOOLONG, ENOENT, EPROTO, text};
 use crate::skel::bpf2::{ExpectedRoot, def};
-use crate::sys::libc::{SYS_PIDFD_OPEN, close, errno, syscall};
+use crate::sys::libc::{SYS_PIDFD_OPEN, errno, syscall};
 use crate::text::cstr;
 use crate::util::bpf_info::{Info, LINK_INFO_SIZE, MAP_INFO_SIZE, PROG_INFO_SIZE};
 use crate::util::bpf_sys::{
-    bpf_btf_get_fd_by_id, bpf_map_get_fd_by_id, bpf_map_lookup_elem, bpf_map_update_elem,
-    bpf_obj_get, bpf_prog_get_fd_by_id,
+    self, bpf_btf_get_fd_by_id, bpf_map_get_fd_by_id, bpf_map_lookup_elem, bpf_map_update_elem,
+    bpf_prog_get_fd_by_id,
 };
 use crate::util::identity;
 use crate::util::kernel_btf;
 use crate::util::lskel::MapDef;
 
-/// `struct image_guard`: a program and where its link is pinned.
-#[repr(C)]
+/// A program and where its link is pinned.
 pub(crate) struct ImageGuard {
     pub(crate) prog: &'static CStr,
     pub(crate) pin: &'static CStr,
@@ -343,12 +343,11 @@ pub(crate) static GUARD_MAPS: [GuardMap; GUARD_MAP_COUNT] = [
     ),
 ];
 
-/// `struct config_root_guard`: what config_root_begin() holds open, -1
-/// for none.
-#[repr(C)]
+/// The map and task descriptor kept open while a config root is staged.
+#[derive(Default)]
 pub(crate) struct ConfigRootGuard {
-    pub(crate) map_fd: c_int,
-    pub(crate) task_fd: c_int,
+    map: Option<OwnedFd>,
+    task: Option<OwnedFd>,
 }
 
 const BPF_ANY: u64 = 0;
@@ -358,46 +357,41 @@ const BPF_ANY: u64 = 0;
 /// its images before the guards exist. 0, -EBUSY with a root staged
 /// already, or -errno.
 pub(crate) fn config_root_begin(root: &[u8; 32], guard: &mut ConfigRootGuard) -> c_int {
-    *guard = ConfigRootGuard {
-        map_fd: -1,
-        task_fd: -1,
-    };
+    *guard = ConfigRootGuard::default();
     let mode = identity::enforcement_active();
     if mode <= 0 {
         return mode;
     }
-    // SAFETY: a C string.
-    guard.map_fd = unsafe { bpf_obj_get(GUARD_MAPS[GUARD_ROOTS].pin.as_ptr()) };
-    if guard.map_fd < 0 {
-        return -errno();
-    }
-    let ret = guard_map_check(guard.map_fd, &GUARD_MAPS[GUARD_ROOTS])
-        .map(|_| 0)
-        .unwrap_or_else(|e| e);
-    let ret = if ret == 0 { stage(root, guard) } else { ret };
+    let map = match bpf_sys::obj_get(GUARD_MAPS[GUARD_ROOTS].pin) {
+        Ok(fd) => fd,
+        Err(e) => return e,
+    };
+    let checked = guard_map_check(map.as_raw_fd(), &GUARD_MAPS[GUARD_ROOTS]);
+    guard.map = Some(map);
+    let ret = match checked {
+        Ok(_) => stage(root, guard),
+        Err(e) => e,
+    };
     if ret != 0 {
-        // SAFETY: the descriptors opened here, closed once.
-        unsafe {
-            if guard.task_fd >= 0 {
-                close(guard.task_fd);
-            }
-            close(guard.map_fd);
-        }
-        *guard = ConfigRootGuard {
-            map_fd: -1,
-            task_fd: -1,
-        };
+        *guard = ConfigRootGuard::default();
     }
     ret
 }
 
 fn stage(root: &[u8; 32], guard: &mut ConfigRootGuard) -> c_int {
+    let Some(map) = guard.map.as_ref() else {
+        return -EPROTO;
+    };
     // SAFETY: pidfd_open() of this process.
-    guard.task_fd =
-        unsafe { syscall(SYS_PIDFD_OPEN, std::process::id() as c_int, 0 as c_int) } as c_int;
-    if guard.task_fd < 0 {
+    let fd = unsafe { syscall(SYS_PIDFD_OPEN, std::process::id() as c_int, 0 as c_int) } as c_int;
+    if fd < 0 {
         return -errno();
     }
+    // SAFETY: pidfd_open made this descriptor, and the guard owns it.
+    let task = unsafe { OwnedFd::from_raw_fd(fd) };
+    let task_fd = task.as_raw_fd();
+    let map_fd = map.as_raw_fd();
+    guard.task = Some(task);
     let mut previous = ExpectedRoot {
         root: [0; 32],
         valid: 0,
@@ -405,8 +399,8 @@ fn stage(root: &[u8; 32], guard: &mut ConfigRootGuard) -> c_int {
     // SAFETY: the map, a task key and room for its value.
     if unsafe {
         bpf_map_lookup_elem(
-            guard.map_fd,
-            (&raw const guard.task_fd).cast(),
+            map_fd,
+            (&raw const task_fd).cast(),
             (&raw mut previous).cast(),
         )
     } != 0
@@ -424,8 +418,8 @@ fn stage(root: &[u8; 32], guard: &mut ConfigRootGuard) -> c_int {
     // SAFETY: the map, a task key and a value of its size.
     if unsafe {
         bpf_map_update_elem(
-            guard.map_fd,
-            (&raw const guard.task_fd).cast(),
+            map_fd,
+            (&raw const task_fd).cast(),
             (&raw const expected).cast(),
             BPF_ANY,
         )
@@ -439,9 +433,14 @@ fn stage(root: &[u8; 32], guard: &mut ConfigRootGuard) -> c_int {
 /// Takes the staged root back through the descriptors begin kept, on
 /// every exit: 0, or -errno when it could not be cleared.
 pub(crate) fn config_root_end(guard: &mut ConfigRootGuard) -> c_int {
-    if guard.map_fd < 0 {
+    let Some(map) = guard.map.as_ref() else {
         return 0;
-    }
+    };
+    let Some(task) = guard.task.as_ref() else {
+        *guard = ConfigRootGuard::default();
+        return -EPROTO;
+    };
+    let task_fd = task.as_raw_fd();
     let empty = ExpectedRoot {
         root: [0; 32],
         valid: 0,
@@ -449,8 +448,8 @@ pub(crate) fn config_root_end(guard: &mut ConfigRootGuard) -> c_int {
     // SAFETY: the map, a task key and a value of its size.
     let ret = if unsafe {
         bpf_map_update_elem(
-            guard.map_fd,
-            (&raw const guard.task_fd).cast(),
+            map.as_raw_fd(),
+            (&raw const task_fd).cast(),
             (&raw const empty).cast(),
             BPF_ANY,
         )
@@ -460,15 +459,7 @@ pub(crate) fn config_root_end(guard: &mut ConfigRootGuard) -> c_int {
     } else {
         0
     };
-    // SAFETY: the descriptors begin opened, closed once.
-    unsafe {
-        close(guard.task_fd);
-        close(guard.map_fd);
-    }
-    *guard = ConfigRootGuard {
-        map_fd: -1,
-        task_fd: -1,
-    };
+    *guard = ConfigRootGuard::default();
     ret
 }
 
@@ -531,19 +522,22 @@ pub(crate) fn guard_map_check(fd: c_int, expected: &GuardMap) -> Result<u32, c_i
     Ok(info.u32_at(MAP_ID))
 }
 
+/// Own a descriptor returned by a BPF id lookup, or keep its errno.
+fn opened_fd(fd: c_int) -> Result<OwnedFd, c_int> {
+    if fd < 0 {
+        return Err(-errno());
+    }
+    // SAFETY: the lookup made this descriptor; the owner closes it once.
+    Ok(unsafe { OwnedFd::from_raw_fd(fd) })
+}
+
 /// The IDs of the maps the guards share, each checked against its pin's
 /// expected shape and name.
 fn guard_map_ids() -> Result<[u32; GUARD_MAP_COUNT], c_int> {
     let mut ids = [0u32; GUARD_MAP_COUNT];
     for (id, expected) in ids.iter_mut().zip(&GUARD_MAPS) {
-        // SAFETY: a static C string.
-        let fd = unsafe { bpf_obj_get(expected.pin.as_ptr()) };
-        if fd < 0 {
-            return Err(-errno());
-        }
-        let checked = guard_map_check(fd, expected);
-        // SAFETY: the pin opened above.
-        unsafe { close(fd) };
+        let fd = bpf_sys::obj_get(expected.pin)?;
+        let checked = guard_map_check(fd.as_raw_fd(), expected);
         match checked {
             Ok(found) => *id = found,
             Err(e) => {
@@ -567,14 +561,12 @@ fn guard_map_ids() -> Result<[u32; GUARD_MAP_COUNT], c_int> {
 /// the one pinned: 0, -EPROTO, or -errno.
 fn guard_program_maps(map_ids: &[u32], expected: &[u32; GUARD_MAP_COUNT]) -> c_int {
     for &id in map_ids {
-        let fd = bpf_map_get_fd_by_id(id);
-        if fd < 0 {
-            return -errno();
-        }
+        let fd = match opened_fd(bpf_map_get_fd_by_id(id)) {
+            Ok(fd) => fd,
+            Err(e) => return e,
+        };
         let mut info = Info::<MAP_INFO_SIZE>::new();
-        let read = info.read(fd);
-        // SAFETY: the map opened above.
-        unsafe { close(fd) };
+        let read = info.read(fd.as_raw_fd());
         if let Err(e) = read {
             return e;
         }
@@ -592,17 +584,12 @@ fn guard_program_maps(map_ids: &[u32], expected: &[u32; GUARD_MAP_COUNT]) -> c_i
 /// The kernel's vmlinux BTF of object `id`, or -errno: -EPROTO for one
 /// that is a module's or not the kernel's.
 fn guard_kernel_btf(id: u32) -> Result<Btf, c_int> {
-    let fd = bpf_btf_get_fd_by_id(id);
-    if fd < 0 {
-        return Err(-errno());
-    }
+    let fd = opened_fd(bpf_btf_get_fd_by_id(id))?;
     let mut name = [0u8; 16];
     let mut info = Info::<BTF_INFO_SIZE>::new();
     info.set(BTF_NAME, &(name.as_mut_ptr() as u64).to_ne_bytes());
     info.set(BTF_NAME_LEN, &(name.len() as u32).to_ne_bytes());
-    let read = info.read(fd);
-    // SAFETY: the BTF opened above.
-    unsafe { close(fd) };
+    let read = info.read(fd.as_raw_fd());
     read?;
     if info.u32_at(BTF_KERNEL) == 0 || !name.contains(&0) || cstr(&name) != b"vmlinux" {
         return Err(-EPROTO);
@@ -620,15 +607,12 @@ struct Kernel {
 /// attached to bpf_lsm_<hook> of the vmlinux BTF, and its program shares
 /// the maps `maps` names: 0, -EPROTO, or -errno.
 fn guard_link(guard: &ImageGuard, maps: &[u32; GUARD_MAP_COUNT], kernel: &mut Kernel) -> c_int {
-    // SAFETY: a static C string.
-    let fd = unsafe { bpf_obj_get(guard.pin.as_ptr()) };
-    if fd < 0 {
-        return -errno();
-    }
+    let fd = match bpf_sys::obj_get(guard.pin) {
+        Ok(fd) => fd,
+        Err(e) => return e,
+    };
     let mut link = Info::<LINK_INFO_SIZE>::new();
-    let read = link.read(fd);
-    // SAFETY: the link opened above.
-    unsafe { close(fd) };
+    let read = link.read(fd.as_raw_fd());
     if let Err(e) = read {
         return e;
     }
@@ -639,17 +623,15 @@ fn guard_link(guard: &ImageGuard, maps: &[u32; GUARD_MAP_COUNT], kernel: &mut Ke
     {
         return -EPROTO;
     }
-    let prog = bpf_prog_get_fd_by_id(link.u32_at(LINK_PROG_ID));
-    if prog < 0 {
-        return -errno();
-    }
+    let prog = match opened_fd(bpf_prog_get_fd_by_id(link.u32_at(LINK_PROG_ID))) {
+        Ok(fd) => fd,
+        Err(e) => return e,
+    };
     let mut map_ids = [0u32; MAX_PROG_MAPS];
     let mut program = Info::<PROG_INFO_SIZE>::new();
     program.set(PROG_MAP_IDS, &(map_ids.as_mut_ptr() as u64).to_ne_bytes());
     program.set(PROG_NR_MAP_IDS, &(MAX_PROG_MAPS as u32).to_ne_bytes());
-    let read = program.read(prog);
-    // SAFETY: the program opened above.
-    unsafe { close(prog) };
+    let read = program.read(prog.as_raw_fd());
     if let Err(e) = read {
         return e;
     }

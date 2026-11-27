@@ -791,10 +791,7 @@ pub(crate) fn create(image: &ConfigImageOpen, name: &CStr) -> Result<DmVerity, c
     let mut salt = [0u8; 65];
     let mut params = [0u8; 512];
     let mut signature = [0u8; 64];
-    let mut guard = ConfigRootGuard {
-        map_fd: -1,
-        task_fd: -1,
-    };
+    let mut guard = ConfigRootGuard::default();
     let mut data_st = Statx::zeroed();
     let mut hash_st = Statx::zeroed();
     let mut buf = DmBuffer {
