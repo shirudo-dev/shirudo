@@ -12,16 +12,25 @@ one of its files, and the tasks those start, in three things:
 The package ships sandboxes for Apache httpd and PHP-FPM that keep a web
 application from writing the PHP files it serves, from starting other
 programs and from reaching beyond private networks: what an attacker
-who found a hole in the application does first. Replace them with
-sandboxes for your own applications.
+who found a hole in the application does first. A third, for nginx,
+keeps its workers from starting programs and from writing shared
+objects, PHP files and shell scripts; it leaves the network open,
+because a reverse proxy's upstreams are site specific. Replace them
+with sandboxes for your own applications.
 
-Its tree entry names the PHP2Shell advisories, CVE-2026-109618 and
-CVE-2026-109619, as `fixes`, so that a backend that reads the tree
+Its tree entry names the PHP2Shell advisories, CVE-2026-109618,
+CVE-2026-109619 and CVE-2026-115560, as `fixes`, so that a backend that reads the tree
 counts a node that loaded the upatch as shielded against them. The
 sandboxes do not close the hole in PHP: a request can still run the
 attacker's code in the application. They keep that code from leaving a
 PHP file behind, from running another program and from connecting out.
 Upgrade PHP as well.
+
+It names the NGINX2Shell advisories, CVE-2026-123007 and
+CVE-2026-123633, the same way. The nginx sandbox does not close those
+holes either: it keeps code running in a worker from starting a
+program or leaving a script or a shared object behind. Upgrade nginx
+as well.
 
 A sandbox restricts and never grants: a task in it keeps every limit it
 had. It is not a boundary against root outside the sandbox, and a file

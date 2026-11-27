@@ -33,3 +33,16 @@ network = ["@localnet"]
 create = ["*.php", "*.phar", "*.phtml", "*.pht", "*.php?"]
 rename = ["*.php", "*.phar", "*.phtml", "*.pht", "*.php?"]
 write = ["*.php", "*.phar", "*.phtml", "*.pht", "*.php?"]
+
+# nginx workers do not start programs, and exec = [] still lets nginx
+# run its own binary, so the binary upgrade on SIGUSR2 keeps working.
+# There is no network rule: a reverse proxy reaches upstreams anywhere.
+# Name them, as in network = ["@localnet", "192.0.2.0/24"], to keep a
+# compromised worker from connecting out.
+[sandbox.nginx]
+exec = []
+
+[sandbox.nginx.deny]
+create = ["*.so", "*.php", "*.sh"]
+rename = ["*.so", "*.php", "*.sh"]
+write = ["*.so", "*.php", "*.sh"]

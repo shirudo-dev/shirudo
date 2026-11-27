@@ -31,6 +31,11 @@ id = "php-fpm"
 bit = 0x2
 paths = ["/usr/sbin/php-fpm*", "/usr/local/sbin/php-fpm"]
 
+[[upatches.policy]]
+id = "nginx"
+bit = 0x4
+paths = ["/usr/sbin/nginx", "/usr/local/nginx/sbin/nginx", "/usr/local/openresty/nginx/sbin/nginx"]
+
 [upatches.tree]
 id = "app-sandbox"
-fixes = ["CVE-2026-109618", "CVE-2026-109619"]
+fixes = ["CVE-2026-109618", "CVE-2026-109619", "CVE-2026-115560", "CVE-2026-123007", "CVE-2026-123633"]
