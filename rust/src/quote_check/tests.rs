@@ -58,9 +58,7 @@ impl Quote {
     /// A quote of no PCR over the body's SHA-256, by an endorsement
     /// primary.
     fn new() -> Self {
-        // SAFETY: a public area of numbers and arrays, for which zeros
-        // are a value.
-        let mut ak: TpmPublic = unsafe { core::mem::zeroed() };
+        let mut ak = TpmPublic::zeroed();
         let key = software_ak();
         let (mut x, mut y) = (BigNum::new().unwrap(), BigNum::new().unwrap());
         let mut ctx = BigNumContext::new().unwrap();

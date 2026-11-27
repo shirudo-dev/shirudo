@@ -439,3 +439,30 @@ fn upatches_line(u: &mut UpatchSink<'_>, line: &CStr, is_init: bool) -> c_int {
     let event = if load { UPATCH_LOAD } else { UPATCH_UNLOAD };
     notify(u, event)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::CString;
+
+    #[test]
+    fn init_without_reset_count_is_accepted() {
+        let zeros = |bytes| "00".repeat(bytes);
+        let line = CString::new(format!(
+            r#"{{"pcr_before":"{}","nv_name":"{}","anchor_digest":"{}","pcr":9,"phase_before":"{}","nv_writer_public":"{}"}}"#,
+            zeros(32),
+            zeros(NAME_LEN),
+            zeros(32),
+            zeros(32),
+            zeros(NV_RSA_BYTES),
+        ))
+        .unwrap();
+        let mut init = EventlogInit::zeroed();
+
+        assert_eq!(init_line(&line, true, &mut init), 0);
+        assert_eq!(init.pcr, 9);
+        assert_eq!(init.records, 1);
+        assert!(!init.have_reset_count);
+        assert_eq!(init.reset_count, u32::MAX);
+    }
+}
