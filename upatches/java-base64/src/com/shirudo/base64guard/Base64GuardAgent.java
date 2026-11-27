@@ -95,27 +95,39 @@ public final class Base64GuardAgent {
             public byte[] transform(ClassLoader loader, String className, Class<?> redefining,
                                     ProtectionDomain domain, byte[] bytes) {
                 if (!TARGET.equals(className)) return null;
-                ClassFile cf = ClassFile.of();
-                ClassModel model = cf.parse(bytes);
-                long matches = model.methods().stream().filter(m -> m.methodName().equalsString("decode0")
-                        && m.methodType().equalsString("([BII[B)I")).count();
-                if (matches != 1) throw new IllegalStateException("decode0 signature changed");
-                byte[] result = cf.transformClass(model, ClassTransform.transformingMethodBodies(
-                        m -> m.methodName().equalsString("decode0") && m.methodType().equalsString("([BII[B)I"),
-                        PREPEND_GUARD));
-                transformed.set(true);
-                return result;
+                try {
+                    ClassFile cf = ClassFile.of();
+                    ClassModel model = cf.parse(bytes);
+                    long matches = model.methods().stream().filter(m -> m.methodName().equalsString("decode0")
+                            && m.methodType().equalsString("([BII[B)I")).count();
+                    if (matches != 1) throw new IllegalStateException("decode0 signature changed");
+                    byte[] result = cf.transformClass(model, ClassTransform.transformingMethodBodies(
+                            m -> m.methodName().equalsString("decode0") && m.methodType().equalsString("([BII[B)I"),
+                            PREPEND_GUARD));
+                    transformed.set(true);
+                    return result;
+                } catch (RuntimeException e) {
+                    // The JVM takes a throwing transformer as one that changes
+                    // nothing, so the decoder would lose the guard in silence.
+                    System.err.println("Base64 guard not applied to java.util.Base64$Decoder: " + e);
+                    throw e;
+                }
             }
         };
-        instrumentation.addTransformer(transformer, true);
         try {
+            instrumentation.addTransformer(transformer, true);
             instrumentation.retransformClasses(decoder);
             if (!transformed.get()) throw new IllegalStateException("decode0 was not transformed");
-            installed = true;
-            System.err.println("Base64 guard installed on java.util.Base64$Decoder.decode0");
-        } finally {
+        } catch (Throwable t) {
             instrumentation.removeTransformer(transformer);
+            throw t;
         }
+        // The transformer stays registered. When another agent retransforms
+        // the decoder, the JVM takes the class as it was before any
+        // retransformation and runs the registered transformers again:
+        // without this one the guard would be gone, with installed still set.
+        installed = true;
+        System.err.println("Base64 guard installed on java.util.Base64$Decoder.decode0");
     }
 
     private static void appendGuardCheck(Instrumentation instrumentation) throws Exception {
