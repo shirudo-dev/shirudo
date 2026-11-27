@@ -8,6 +8,7 @@
 
 use core::ffi::{CStr, c_int};
 use core::sync::atomic::{AtomicU16, Ordering};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
 use crate::errno::{
     E2BIG, EACCES, EAGAIN, EBADMSG, EINVAL, EMEDIUMTYPE, EMFILE, ENFILE, ENOBUFS, ENODEV, ENOMEM,
@@ -371,14 +372,15 @@ impl Request {
     }
 }
 
-/// A socket descriptor, closed when it goes.
-struct Socket(c_int);
-
-impl Drop for Socket {
-    fn drop(&mut self) {
-        // SAFETY: the socket's own descriptor, closed once.
-        unsafe { libc::close(self.0) };
+/// A socket, closed by its owner on every return.
+fn open_socket(domain: c_int, kind: c_int, protocol: c_int) -> Result<OwnedFd, c_int> {
+    // SAFETY: socket(2) takes numbers.
+    let fd = unsafe { libc::socket(domain, kind | libc::SOCK_CLOEXEC, protocol) };
+    if fd < 0 {
+        return Err(last_errno());
     }
+    // SAFETY: socket returned a new descriptor owned here alone.
+    Ok(unsafe { OwnedFd::from_raw_fd(fd) })
 }
 
 /// The request sent on a netlink socket of `protocol`, and each message
@@ -389,18 +391,10 @@ fn exchange(
     req: &mut Request,
     receive: &mut dyn FnMut(&[u8]) -> Result<(), c_int>,
 ) -> c_int {
-    // SAFETY: socket(2) takes numbers.
-    let fd = unsafe {
-        libc::socket(
-            libc::AF_NETLINK,
-            libc::SOCK_RAW | libc::SOCK_CLOEXEC,
-            protocol,
-        )
+    let sock = match open_socket(libc::AF_NETLINK, libc::SOCK_RAW, protocol) {
+        Ok(sock) => sock,
+        Err(err) => return err,
     };
-    if fd < 0 {
-        return last_errno();
-    }
-    let sock = Socket(fd);
     let timeout = libc::Timeval {
         tv_sec: 5,
         tv_usec: 0,
@@ -408,7 +402,7 @@ fn exchange(
     // SAFETY: the socket, and a timeval of its size.
     if unsafe {
         libc::setsockopt(
-            sock.0,
+            sock.as_raw_fd(),
             libc::SOL_SOCKET,
             libc::SO_RCVTIMEO,
             (&raw const timeout).cast(),
@@ -428,7 +422,7 @@ fn exchange(
     // SAFETY: the socket, the request's bytes and the kernel's address.
     if unsafe {
         libc::sendto(
-            sock.0,
+            sock.as_raw_fd(),
             req.0.as_ptr().cast(),
             req.0.len(),
             0,
@@ -456,7 +450,7 @@ fn exchange(
             msg_flags: 0,
         };
         // SAFETY: the socket and a message header over the buffer.
-        let n = unsafe { libc::recvmsg(sock.0, &mut msg, 0) };
+        let n = unsafe { libc::recvmsg(sock.as_raw_fd(), &mut msg, 0) };
         if n < 0 {
             // EAGAIN is SO_RCVTIMEO, not a dump to start again.
             let err = libc::errno();
@@ -626,13 +620,8 @@ fn device_details(dev: &mut XdpDevice) -> Result<(), c_int> {
     if crate::text::strscpy(&mut name, text(&dev.name)).is_err() {
         return Err(-EINVAL);
     }
-    // SAFETY: socket(2) takes numbers.
-    let fd = unsafe { libc::socket(libc::AF_INET, libc::SOCK_DGRAM | libc::SOCK_CLOEXEC, 0) };
-    if fd < 0 {
-        return Err(last_errno());
-    }
-    let sock = Socket(fd);
-    if !same_device(sock.0, &name, dev.ifindex) {
+    let sock = open_socket(libc::AF_INET, libc::SOCK_DGRAM, 0)?;
+    if !same_device(sock.as_raw_fd(), &name, dev.ifindex) {
         return Err(-EXDEV);
     }
     let mut info = [0u8; DRVINFO_LEN];
@@ -642,12 +631,12 @@ fn device_details(dev: &mut XdpDevice) -> Result<(), c_int> {
         data: [info.as_mut_ptr() as u64, 0, 0],
     };
     // SAFETY: a socket and an ifreq whose data points at the drvinfo.
-    let mut ret = if unsafe { libc::ioctl(sock.0, SIOCETHTOOL, &raw mut ifr) } != 0 {
+    let mut ret = if unsafe { libc::ioctl(sock.as_raw_fd(), SIOCETHTOOL, &raw mut ifr) } != 0 {
         last_errno()
     } else {
         0
     };
-    if !same_device(sock.0, &name, dev.ifindex) {
+    if !same_device(sock.as_raw_fd(), &name, dev.ifindex) {
         ret = -EXDEV;
     }
     drop(sock);
@@ -788,18 +777,16 @@ pub(crate) fn uncovered_reason(attached: u32, features_err: c_int, features: u64
 /// 0 in the initial network namespace, -EXDEV in another. Devices, and
 /// the hook of a netfilter link, are the caller's namespace's.
 pub(crate) fn netns_initial() -> c_int {
-    // SAFETY: socket(2) takes numbers.
-    let fd = unsafe { libc::socket(libc::AF_UNIX, libc::SOCK_DGRAM | libc::SOCK_CLOEXEC, 0) };
-    if fd < 0 {
-        return last_errno();
-    }
-    let sock = Socket(fd);
+    let sock = match open_socket(libc::AF_UNIX, libc::SOCK_DGRAM, 0) {
+        Ok(sock) => sock,
+        Err(err) => return err,
+    };
     let mut cookie = 0u64;
     let mut len = size_of::<u64>() as u32;
     // SAFETY: the socket and room for the cookie.
     if unsafe {
         libc::getsockopt(
-            sock.0,
+            sock.as_raw_fd(),
             libc::SOL_SOCKET,
             SO_NETNS_COOKIE,
             (&raw mut cookie).cast(),
