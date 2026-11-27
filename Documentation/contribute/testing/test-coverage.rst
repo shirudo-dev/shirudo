@@ -372,6 +372,13 @@ signed config image.
        call. The ``fmod_ret.s`` program fails the one call it is written
        for, the caller gets its error, the other two programs see that
        call, another call runs, and the unload detaches all three
+   * - ``t3121-mptcp-block``
+     - The CVE-2026-98432 mitigation of ``upatches/kernel-cve``, built
+       from its shipped source, driven by the shipped probe against the
+       MPTCP the CI kernel enables: a user task creates an IPv4 MPTCP
+       socket before the load (``OPEN``), is refused (``BLOCKED``) while
+       the mitigation is loaded with no plain TCP socket refused, and
+       creates one again after the unload
 
 ``tpm`` (4)
 ~~~~~~~~~~~

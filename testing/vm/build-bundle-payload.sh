@@ -789,6 +789,24 @@ build_copyfail_detector_fixture()
 	)
 }
 
+build_mptcp_block_fixture()
+{
+	local source_dir="$REPO_ROOT/upatches/kernel-cve/sources/cve-2026-98432-ipv4-inet-opt-ireq-opt-uaf"
+	local keys_dir="$1"
+
+	(
+		cd "$REPO_ROOT"
+		"$REPO_ROOT/tools/shirudo-build/shirudo-build" \
+			"$source_dir/mitigation/cve-2026-98432-mptcp-block.bpf.c" \
+			-o "$TMP_DIR/fixtures/cve-2026-98432-mptcp-block.upatch" \
+			--name cve-2026-98432-mptcp-block \
+			--vmlinux "$REPO_ROOT/vendor/linux/vmlinux.h" \
+			--extra-cflags "-I$REPO_ROOT/vendor/libbpf" \
+			--key "$keys_dir/signing_key.pem" \
+			--cert "$keys_dir/cert.der"
+	)
+}
+
 build_policy_labels_fixture()
 {
 	local source_dir="$FIXTURE_WORK/policy-labels"
@@ -897,6 +915,7 @@ queue_fixture build_obs_fixture "$FIXTURE_WORK/trusted"
 queue_fixture build_af_alg_block_fixture "$FIXTURE_WORK/trusted"
 queue_fixture build_alg_splice_block_fixture "$FIXTURE_WORK/trusted"
 queue_fixture build_copyfail_detector_fixture "$FIXTURE_WORK/trusted"
+queue_fixture build_mptcp_block_fixture "$FIXTURE_WORK/trusted"
 queue_fixture build_java_fixture
 wait_fixture_jobs
 
@@ -966,6 +985,9 @@ alg_splice_block_payload="$($REPO_ROOT/shirudo upatch info \
 copyfail_detector_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/cve-2026-31431-copyfail-detector.upatch" --json |
 	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
+mptcp_block_payload="$($REPO_ROOT/shirudo upatch info \
+	"$TMP_DIR/fixtures/cve-2026-98432-mptcp-block.upatch" --json |
+	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
 observability_payload="$($REPO_ROOT/shirudo upatch info \
 	"$TMP_DIR/fixtures/kernel-obs.upatch" --json |
 	python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_sha256"])')"
@@ -1024,6 +1046,7 @@ kernel-obs $observability_payload kernel-obs.unload.upatch
 cve-2026-31431-af-alg-block $af_alg_block_payload cve-2026-31431-af-alg-block.unload.upatch
 cve-2026-31431-alg-splice-block $alg_splice_block_payload cve-2026-31431-alg-splice-block.unload.upatch
 cve-2026-31431-copyfail-detector $copyfail_detector_payload cve-2026-31431-copyfail-detector.unload.upatch
+cve-2026-98432-mptcp-block $mptcp_block_payload cve-2026-98432-mptcp-block.unload.upatch
 kernel-obs $observability_anomaly_payload kernel-obs-cred-anomaly.unload.upatch
 shirudo-test-uprobe-multi $uprobe_payload shirudo-test-uprobe-multi.unload.upatch
 shirudo-test-uretprobe-multi $uretprobe_payload shirudo-test-uretprobe-multi.unload.upatch
@@ -1060,6 +1083,8 @@ cp "$REPO_ROOT/upatches/kernel-cve/sources/cve-2026-31431-crypto-algif-aead-copy
 	"$TMP_DIR/fixtures/cve-2026-31431-repro.py"
 cp "$REPO_ROOT/upatches/kernel-cve/sources/cve-2026-31431-crypto-algif-aead-copy-fail/reproducer/cve-2026-31431-splice-probe.py" \
 	"$TMP_DIR/fixtures/cve-2026-31431-splice-probe.py"
+cp "$REPO_ROOT/upatches/kernel-cve/sources/cve-2026-98432-ipv4-inet-opt-ireq-opt-uaf/reproducer/cve-2026-98432-mptcp-probe.py" \
+	"$TMP_DIR/fixtures/cve-2026-98432-mptcp-probe.py"
 cp "$FIXTURE_WORK/trusted/cert.der" "$TMP_DIR/fixtures/cert.der"
 cp "$FIXTURE_WORK/own/cert.der" "$TMP_DIR/fixtures/own.der"
 # The own certificate joins the enrolled set vouched for by the trusted
