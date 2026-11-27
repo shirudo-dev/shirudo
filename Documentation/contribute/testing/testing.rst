@@ -100,8 +100,8 @@ kernel.
 
 The merge queue starts the runs on ``main``, so GitHub tells no one when
 one fails. The ``Main status`` workflow opens an issue labelled
-``ci-main`` instead, ``main: <workflow> fails``, with the commit, the run
-and the jobs that failed. A later failure on ``main`` adds its run to the
+``area/ci/main`` instead, ``main: <workflow> fails``, with the commit,
+the run and the jobs that failed. A later failure on ``main`` adds its run to the
 issue, and the workflow's next pass there closes it.
 
 .. raw:: html

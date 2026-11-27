@@ -40,7 +40,7 @@ repos/o/r/actions/runs/*/jobs\?*) file=jobs ;;
 repos/o/r/issues\?*) file=issues ;;
 repos/o/r/issues/*/comments) file=comments ;;
 repos/o/r/issues/*) file=issue ;;
-repos/o/r/labels/ci-main) file=label ;;
+repos/o/r/labels/area%2Fci%2Fmain) file=label ;;
 *) exit 1 ;;
 esac
 [ -e "$fixture/$file.json" ] || exit 1
@@ -72,7 +72,7 @@ state() {
 	printf '%s\n' "$4" >"$fixture/comments.json"
 	printf '{"jobs":[{"name":"CI functional tests (shard 1)","conclusion":"failure"},{"name":"CI unit tests","conclusion":"success"}]}\n' \
 		>"$fixture/jobs.json"
-	printf '{"name":"ci-main"}\n' >"$fixture/label.json"
+	printf '{"name":"area/ci/main"}\n' >"$fixture/label.json"
 }
 
 report() {
@@ -93,8 +93,8 @@ test_expect_success 'a failure opens an issue with the commit, the run and the f
 	state "$(runs 12:failure)" "[]" "" "[]" &&
 	rm "$fixture/label.json" &&
 	report &&
-	grep -Fx "POST repos/o/r/labels name=ci-main color=d73a4a description=A workflow fails on main" "$fixture/writes" &&
-	grep -F "POST repos/o/r/issues title=main: CI suite fails labels[]=ci-main body=" "$fixture/writes" &&
+	grep -Fx "POST repos/o/r/labels name=area/ci/main color=e7878f description=CI issues on main branch" "$fixture/writes" &&
+	grep -F "POST repos/o/r/issues title=main: CI suite fails labels[]=area/ci/main body=" "$fixture/writes" &&
 	grep -F "fails on main at sha12: $url/12" "$fixture/writes" &&
 	grep -F "Failed jobs: CI functional tests (shard 1)" "$fixture/writes" &&
 	! grep -F "CI unit tests" "$fixture/writes"
