@@ -126,7 +126,8 @@ Load and observe it
    with a serializer is rendered by it, and ``--peek`` asks the serializer
    to leave the records for the exporter. Add ``--json`` to see what the
    map's decoder returns. For a map without a decoder, ``--json`` fails
-   with ``upatch map: print JSON: No data available``.
+   with ``upatch map: <name>/<map> has no decoder, and --json writes what
+   a decoder returns``.
 
 Unload it
 ---------

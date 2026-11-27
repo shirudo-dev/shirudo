@@ -211,7 +211,9 @@ JSON lines
 ``map_export.json_path`` or ``upatch map --json=<path>`` appends one line
 per map to a file, instead of OTLP or besides it. The line is the JSON
 value the map's decoder returns, not an OTLP document. A map without a
-decoder fails with ``ENODATA``. ``map_export.json_path`` must be an
+decoder has no line: ``upatch map`` reports ``<upatch>/<map> has no
+decoder, and --json writes what a decoder returns`` for it and exits 1
+once the other maps are handled. ``map_export.json_path`` must be an
 absolute path. A file or directory that carries shirudo's seal label is
 refused. A new file gets mode ``0644``.
 

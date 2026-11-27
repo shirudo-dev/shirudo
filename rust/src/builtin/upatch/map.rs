@@ -362,7 +362,20 @@ fn export(upatch: &CStr, map: &CStr, a: &Args, opts: &OtelOpts, detail: bool) ->
     if a.json {
         let e = append_json(a.json_path, &v);
         if e != 0 {
-            emit_failed(a.json_path, e);
+            if e == -ENODATA {
+                log_err(
+                    &[
+                        b"upatch map: ",
+                        u,
+                        b"/",
+                        m,
+                        b" has no decoder, and --json writes what a decoder returns",
+                    ]
+                    .concat(),
+                );
+            } else {
+                emit_failed(a.json_path, e);
+            }
             ret = 1;
         }
     }

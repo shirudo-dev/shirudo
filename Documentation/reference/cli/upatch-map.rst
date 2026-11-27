@@ -57,7 +57,11 @@ With ``<upatch> <map>``, ``map`` reads the map:
 - The human output shows at most 256 entries unless ``--show-full``.
   JSON and OTLP output have no limit.
 - ``--json`` prints one JSON line to standard output. ``--json=<path>``
-  appends it to ``<path>``.
+  appends it to ``<path>``. The line is what the map's signed Lua
+  decoder returns (:doc:`/upatches/write/decoders`). A map without a
+  decoder has no JSON form: the command prints ``upatch map:
+  <upatch>/<map> has no decoder, and --json writes what a decoder
+  returns`` and exits 1. The output without ``--json`` needs no decoder.
 - ``--otel`` sends the map to an OTLP collector. A map with a signed Lua
   decoder is sent as the log or metric the decoder declares. A map
   without one is classified by shirudo (see
