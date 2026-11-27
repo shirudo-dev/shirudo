@@ -77,7 +77,7 @@ state() {
 
 report() {
 	env PATH="$fixture/bin:$PATH" GITHUB_REPOSITORY=o/r GH_TOKEN=token \
-		WORKFLOW_ID=7 WORKFLOW_NAME="CI suite" sh "$reporter" >/dev/null
+		WORKFLOW_ID=7 WORKFLOW_NAME="CI suite" "$reporter" >/dev/null || return
 	touch "$fixture/writes"
 }
 
