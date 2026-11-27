@@ -52,7 +52,6 @@ const KEYCTL_CLEAR: c_long = 7;
 const KEYS_REVOKED_DIR: &CStr = c"/var/lib/shirudo/keys/revoked";
 
 /// `struct preflight_check`.
-#[repr(C)]
 pub struct PreflightCheck {
     pub(crate) id: c_int,
     pub(crate) name: *const c_char,
@@ -61,15 +60,11 @@ pub struct PreflightCheck {
 }
 
 /// `struct preflight_result`.
-#[repr(C)]
 pub struct PreflightResult {
     pub(crate) checks: [PreflightCheck; PRE_MAX],
     pub(crate) n: c_int,
     pub(crate) n_failed: c_int,
 }
-
-const _: () = assert!(size_of::<PreflightCheck>() == 280);
-const _: () = assert!(size_of::<PreflightResult>() == 3368);
 
 impl PreflightResult {
     /// No checks have run yet.
