@@ -423,7 +423,6 @@ fn forge_on_tpm(
     let quoted = PCR_DEFAULT | mask;
     let (mut written, mut init, mut policy) = ([0u8; 32], [0u8; 32], [0u8; 32]);
     let mut before = [0u8; 64];
-    let mut anchor = [0u8; ANCHOR_MAX];
     let mut values = [[0u8; 32]; 24];
 
     t.set_writer(seed, public)?;
@@ -443,7 +442,7 @@ fn forge_on_tpm(
     };
     t.nv_extend_first(index, mask, &branches, event)?;
     let nv = t.nv_info(index)?;
-    zero_or(chain::anchor(nv.name(), &mut anchor))?;
+    let anchor = chain::anchor(nv.name())?;
     let anchor_digest = sha256(crate::text::cstr(&anchor))?;
     t.pcr_extend(pcr, &anchor_digest)?;
     let value = t.nv_read(index)?;

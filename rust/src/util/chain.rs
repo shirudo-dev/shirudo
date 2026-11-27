@@ -407,19 +407,12 @@ fn lower_hex(v: u32, buf: &mut [u8; 8]) -> &[u8] {
     &buf[skip..]
 }
 
-/// The PCR record anchoring the register named `name`, its first
-/// NAME_LEN bytes, into `out`: "nvpcr-init:shirudo:0x<index>:<name in
-/// hex>", or -E2BIG and, for room of a byte or more, an empty string.
-pub(crate) fn anchor(name: &[u8], out: &mut [u8]) -> c_int {
+/// The NUL-terminated PCR record anchoring the register named `name`:
+/// "nvpcr-init:shirudo:0x<index>:<name in hex>".
+pub(crate) fn anchor(name: &[u8]) -> Result<[u8; ANCHOR_MAX], c_int> {
     let mut index = [0u8; 8];
-    let Some(name) = name.get(..NAME_LEN) else {
-        return -EINVAL;
-    };
+    let name = name.get(..NAME_LEN).ok_or(-EINVAL)?;
     let hex = crate::util::hex::encode(name);
-
-    if out.is_empty() {
-        return -E2BIG;
-    }
     let parts: [&[u8]; 6] = [
         b"nvpcr-init:",
         CHAIN_NAME,
@@ -428,11 +421,9 @@ pub(crate) fn anchor(name: &[u8], out: &mut [u8]) -> c_int {
         b":",
         &hex,
     ];
-
-    match strsprintf(out, &parts) {
-        Ok(_) => 0,
-        Err(_) => -E2BIG,
-    }
+    let mut out = [0u8; ANCHOR_MAX];
+    strsprintf(&mut out, &parts).map_err(|_| -E2BIG)?;
+    Ok(out)
 }
 
 /// The binding PCR values in PCR order, as PolicyPCR hashes them.
@@ -623,7 +614,7 @@ fn bind(tpm: &mut Tpm, event: &[u8; DIGEST_LEN], info: &mut ChainInitInfo) -> Re
         &info.writer_public,
         &mut e,
     ))?;
-    zero_or(anchor(&e.written, &mut info.anchor[..ANCHOR_MAX]))?;
+    info.anchor = anchor(&e.written)?;
 
     if !nv.defined || nv.written || !name_equals(&nv, &e.unwritten) {
         register_define(tpm, nv.defined, &e.policy)?;
@@ -697,7 +688,7 @@ fn rebind(
         info.pcr_before = rec.pcr_before;
         info.phase_before = rec.phase_before;
         info.anchor_digest = rec.anchor_digest;
-        zero_or(anchor(&info.name, &mut info.anchor[..ANCHOR_MAX]))?;
+        info.anchor = anchor(&info.name)?;
         info.initrd = rec.initrd;
         info.reused = true;
         return Ok(());

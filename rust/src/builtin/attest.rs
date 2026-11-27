@@ -17,9 +17,7 @@ use crate::util::attest::{
     self, AttestChallengePolicy, AttestExpect, MadeChallenge, NONCE_MAX, PCR_DEFAULT, Report,
     challenge_read, evidence_config, parse_name_digest, parse_pcr_value, parse_pcrs,
 };
-use crate::util::chain::{
-    self, ANCHOR_MAX, MeasuredUpatch, PCR, PCR_MASK as CHAIN_PCR_MASK, PHASE_PCR,
-};
+use crate::util::chain::{self, MeasuredUpatch, PCR, PCR_MASK as CHAIN_PCR_MASK, PHASE_PCR};
 use crate::util::config_measure::{CONFIG_NVPCR_INDEX, pcr_valid};
 use crate::util::crypto_openssl::sha256_into;
 use crate::util::eventlog::{self, NV_INDEX};
@@ -738,7 +736,6 @@ fn predict(args: &[&CStr]) -> c_int {
     if have_bind[0] && have_bind[1] {
         let (mut written, mut initial, mut policy) = ([0u8; 32], [0u8; 32], [0u8; 32]);
         let mut name = [0u8; NAME_LEN];
-        let mut anchor = [0u8; ANCHOR_MAX];
         let mut anchor_digest = [0u8; 32];
 
         if !have_writer {
@@ -771,10 +768,13 @@ fn predict(args: &[&CStr]) -> c_int {
             return 1;
         }
         out.kv(b"register_name", &hex::encode(&name));
-        if chain::anchor(&name, &mut anchor) != 0 {
-            error(&[b"attest predict: the anchor does not fit"]);
-            return EXIT_USAGE;
-        }
+        let anchor = match chain::anchor(&name) {
+            Ok(anchor) => anchor,
+            Err(_) => {
+                error(&[b"attest predict: the anchor does not fit"]);
+                return EXIT_USAGE;
+            }
+        };
         out.kv(b"anchor", cstr(&anchor));
         if sha256_into(cstr(&anchor), &mut anchor_digest) != 0 {
             error(&[b"attest predict: cannot hash the anchor"]);

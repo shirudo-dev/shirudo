@@ -1859,11 +1859,9 @@ fn check_replay(rep: &mut Report, p: &Parse, value: &[u8; 32]) {
 
 /// The anchor: the init record's digest of it and the anchoring PCR.
 fn check_anchor(rep: &mut Report, p: &Parse, expect: &AttestExpect) {
-    let mut anchor = [0u8; ANCHOR_MAX];
     let mut anchor_digest = [0u8; 32];
-
-    let mut named = chain::anchor(&p.init.name, &mut anchor) == 0
-        && sha256_into(cstr(&anchor), &mut anchor_digest) == 0;
+    let mut named = chain::anchor(&p.init.name)
+        .is_ok_and(|anchor| sha256_into(cstr(&anchor), &mut anchor_digest) == 0);
     rep.check(
         named && !memneq_explicit(&anchor_digest, &p.init.anchor_digest),
         b"anchor: record digest matches the index name",
