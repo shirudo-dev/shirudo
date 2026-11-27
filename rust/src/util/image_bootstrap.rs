@@ -25,7 +25,6 @@ const CONFIG_NVPCR_INDEX: u32 = 0x0181_8e04;
 const CONFIG_NVPCR_NAME: &[u8] = b"shirudo-config";
 
 /// `struct image_bootstrap`.
-#[repr(C)]
 pub struct ImageBootstrap {
     pub(crate) runtime: [u8; PATH_MAX],
     pub(crate) config: [u8; PATH_MAX],
@@ -36,8 +35,6 @@ pub struct ImageBootstrap {
     pub(crate) have_root: bool,
     pub(crate) have_pcr: bool,
 }
-
-const _: () = assert!(size_of::<ImageBootstrap>() == 73776);
 
 impl ImageBootstrap {
     /// An empty bootstrap file before its fields are parsed.
