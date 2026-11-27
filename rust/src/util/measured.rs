@@ -432,16 +432,17 @@ mod verified {
     /// The event the fields of `r` give, as the extend that wrote it made
     /// it; a type no writer uses is refused.
     fn event_of(r: &mut Record) -> Result<[u8; 32], c_int> {
-        let mut event = [0u8; 32];
         let ty = cstr(&r.ty);
-        let ret = match ty {
+        match ty {
             b"init" => {
                 if !r.init {
                     return Err(-EINVAL);
                 }
                 let (cert, root) = (decode32(&r.cert_hex)?, decode32(&r.tree_root_hex)?);
                 let mut set_digest = [0u8; 32];
-                chain::init_event(&cert, &mut r.set, &root, &mut set_digest, &mut event)
+                let mut event = [0u8; 32];
+                let ret = chain::init_event(&cert, &mut r.set, &root, &mut set_digest, &mut event);
+                if ret != 0 { Err(ret) } else { Ok(event) }
             }
             b"upatch_load" | b"upatch_unload" | b"java_load" | b"java_unload" => {
                 if !r.upatch || !member_valid(cstr(&r.name), cstr(&r.payload_hex)) {
@@ -450,25 +451,24 @@ mod verified {
                 let payload = decode32(&r.payload_hex)?;
                 let (payload_type, load) = eventlog::upatch_record_parse(ty).ok_or(-EINVAL)?;
                 let tag = chain::upatch_tag(payload_type, load).ok_or(-EINVAL)?;
-                chain::upatch_event(tag, &r.name, &payload, &mut event)
+                chain::upatch_event(tag, &r.name, &payload)
             }
             b"key_revoke" => {
                 if !r.key {
                     return Err(-EINVAL);
                 }
                 let cert = decode32(&r.key_hex)?;
-                chain::key_event(c"shirudo-key-revoke", &cert, &mut event)
+                chain::key_event(c"shirudo-key-revoke", &cert)
             }
             b"tree_op" => {
                 let operation = crate::util::bpm_tree::digest_bytes(&r.operation);
                 let (true, Some(operation)) = (r.tree, operation) else {
                     return Err(-EINVAL);
                 };
-                chain::tree_event(r.seq, &operation, &mut event)
+                chain::tree_event(r.seq, &operation)
             }
-            _ => return Err(-EINVAL),
-        };
-        if ret != 0 { Err(ret) } else { Ok(event) }
+            _ => Err(-EINVAL),
+        }
     }
 
     /// The event the fields of a record give and the digest the record

@@ -162,10 +162,15 @@ pub(crate) fn sha256_parts(a: &[u8], b: &[u8]) -> Result<[u8; DIGEST_LEN], c_int
     (*digest).try_into().map_err(|_| -EIO)
 }
 
+/// The digest of `parts` one after the other.
+fn digest(parts: &[&[u8]]) -> Result<[u8; DIGEST_LEN], c_int> {
+    crate::util::crypto_openssl::sha256(&parts.concat())
+}
+
 /// The digest of `parts` one after the other into `out`, or zeros and
 /// the error.
 fn digest_into(parts: &[&[u8]], out: &mut [u8; DIGEST_LEN]) -> c_int {
-    match crate::util::crypto_openssl::sha256(&parts.concat()) {
+    match digest(parts) {
         Ok(digest) => {
             *out = digest;
             0
@@ -219,13 +224,12 @@ pub(crate) fn init_event(
 }
 
 /// The event of the key `cert_sha` under `tag`: the digest of the tag,
-/// its NUL and the key's digest, or zeros and the error.
+/// its NUL and the key's digest.
 pub(crate) fn key_event(
     tag: &CStr,
     cert_sha: &[u8; DIGEST_LEN],
-    event: &mut [u8; DIGEST_LEN],
-) -> c_int {
-    digest_into(&[tag.to_bytes_with_nul(), cert_sha], event)
+) -> Result<[u8; DIGEST_LEN], c_int> {
+    digest(&[tag.to_bytes_with_nul(), cert_sha])
 }
 
 /// The domain tag of a BPF or Java load or unload.
@@ -246,11 +250,10 @@ pub(crate) fn upatch_event(
     tag: &CStr,
     name: &[u8],
     payload: &[u8; DIGEST_LEN],
-    event: &mut [u8; DIGEST_LEN],
-) -> c_int {
+) -> Result<[u8; DIGEST_LEN], c_int> {
     let name = cstr(name);
     let name = &name[..name.len().min(NAME_MAX)];
-    digest_into(&[tag.to_bytes_with_nul(), payload, name], event)
+    digest(&[tag.to_bytes_with_nul(), payload, name])
 }
 
 /// The event of a tree operation: the digest of the tag and its NUL,
@@ -259,12 +262,8 @@ pub(crate) fn upatch_event(
 pub(crate) fn tree_event(
     seq: i64,
     operation: &[u8; DIGEST_LEN],
-    event: &mut [u8; DIGEST_LEN],
-) -> c_int {
-    digest_into(
-        &[b"shirudo-tree\0", &(seq as u64).to_be_bytes(), operation],
-        event,
-    )
+) -> Result<[u8; DIGEST_LEN], c_int> {
+    digest(&[b"shirudo-tree\0", &(seq as u64).to_be_bytes(), operation])
 }
 
 /// The register `chain` extended by `event`, as the TPM extends it, or

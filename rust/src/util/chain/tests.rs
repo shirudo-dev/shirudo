@@ -21,12 +21,9 @@ fn sha256_parts_hashes_the_concatenation() {
 #[cfg_attr(miri, ignore = "OpenSSL SHA-256 is foreign code")]
 fn chain_events_hash_their_documented_input() {
     let cert = [0xa5u8; 32];
-    let mut event = [0u8; 32];
     let input = [&b"shirudo-key-revoke\0"[..], &cert].concat();
 
-    let ret = key_event(c"shirudo-key-revoke", &cert, &mut event);
-    assert_eq!(ret, 0);
-    assert_eq!(event, sha256(&input));
+    assert_eq!(key_event(c"shirudo-key-revoke", &cert), Ok(sha256(&input)));
 }
 
 #[test]
@@ -56,11 +53,9 @@ fn upatch_tags_are_distinct() {
 fn java_unload_event_hashes_its_documented_input() {
     let payload = [0x3cu8; 32];
     let mut name = [b'n'; NAME_MAX + 1];
-    let mut event = [0u8; 32];
-
     name[NAME_MAX] = 0;
     let tag = upatch_tag(TYPE_JAVA, false).unwrap();
-    assert_eq!(upatch_event(tag, &name, &payload, &mut event), 0);
+    let event = upatch_event(tag, &name, &payload).unwrap();
     assert_eq!(
         event,
         sha256(&[tag.to_bytes_with_nul(), &payload, &name[..NAME_MAX]].concat())

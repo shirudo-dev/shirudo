@@ -155,12 +155,11 @@ fn prepare_tree_record(
 }
 
 fn measure_locked(op: &TreeOperation, digest: &[u8; 32]) -> Result {
-    let mut event = [0; 32];
     let mut chain = [0; 32];
     let mut chain_hex = [0; 65];
     let mut line = [0u8; 4096];
 
-    status(chain::tree_event(op.seq, digest, &mut event))?;
+    let event = chain::tree_event(op.seq, digest)?;
     let (len, chain_at) = prepare_tree_record(op, &event, &mut line)?;
     status(chain::extend(&event, Some(&mut chain)))?;
     hex_into(&chain, &mut chain_hex);

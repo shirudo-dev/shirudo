@@ -941,17 +941,19 @@ fn format_key_event(
 /// in the archive, so evidence taken at any point names it. As for an
 /// upatch event, no TPM is an error, not an unmeasured success.
 fn measure_revoke_locked(sha256: &[u8; 32], fp_hex: &[u8]) -> c_int {
-    let (mut event, mut chain) = ([0u8; 32], [0u8; 32]);
+    let mut chain = [0u8; 32];
 
-    let ret = chain::key_event(c"shirudo-key-revoke", sha256, &mut event);
-    if ret != 0 {
-        error(&[
-            b"keys revoke: cannot hash the revocation event: ",
-            strerr(-ret),
-            b"; the key is revoked but the revocation is NOT measured; operator must reconcile",
-        ]);
-        return ret;
-    }
+    let event = match chain::key_event(c"shirudo-key-revoke", sha256) {
+        Ok(event) => event,
+        Err(ret) => {
+            error(&[
+                b"keys revoke: cannot hash the revocation event: ",
+                strerr(-ret),
+                b"; the key is revoked but the revocation is NOT measured; operator must reconcile",
+            ]);
+            return ret;
+        }
+    };
     // An encoding failure must be found before the register moves.
     let (record, record_len) = match format_key_event(c"key_revoke", fp_hex, sha256, &event) {
         Ok(record) => record,

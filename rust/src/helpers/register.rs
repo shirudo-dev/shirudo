@@ -219,16 +219,15 @@ fn load(name: &CStr, payload_hex: &CStr, ty: u32) -> c_int {
     let Some(payload) = digest(payload_hex) else {
         return 2;
     };
-    let mut event = [0u8; 32];
     let (Some(tag), Some(record)) = (
         chain::upatch_tag(ty, true),
         eventlog::upatch_record(ty, true),
     ) else {
         return 1;
     };
-    if chain::upatch_event(tag, name.to_bytes(), &payload, &mut event) != 0 {
+    let Ok(event) = chain::upatch_event(tag, name.to_bytes(), &payload) else {
         return 1;
-    }
+    };
     extend(
         &event,
         Some(&|e: &mut JsonEmit, chain: &[u8; 32]| {
@@ -251,13 +250,12 @@ fn tree(args: &[&CStr]) -> c_int {
         return 2;
     };
     let mut operation = [0u8; 32];
-    let mut event = [0u8; 32];
     if decode(hex_part, &mut operation).is_err() {
         return 2;
     }
-    if chain::tree_event(seq, &operation, &mut event) != 0 {
+    let Ok(event) = chain::tree_event(seq, &operation) else {
         return 2;
-    }
+    };
     extend(
         &event,
         Some(&|e: &mut JsonEmit, chain: &[u8; 32]| {

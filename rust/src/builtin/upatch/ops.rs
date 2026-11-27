@@ -905,7 +905,7 @@ fn measure(
     reason: Option<&[u8]>,
     out_chain: Option<&mut [c_char; 65]>,
 ) -> (c_int, bool) {
-    let (mut event, mut chain) = ([0u8; DIGEST_LEN], [0u8; DIGEST_LEN]);
+    let mut chain = [0u8; DIGEST_LEN];
     let Some(tag) = chain::upatch_tag(payload_type, load) else {
         log_err(&[b"upatch ", op, b": invalid payload type"].concat());
         return (-EINVAL, false);
@@ -914,18 +914,20 @@ fn measure(
         log_err(&[b"upatch ", op, b": invalid event record type"].concat());
         return (-EINVAL, false);
     };
-    let ret = chain::upatch_event(tag, name, payload, &mut event);
-    if ret != 0 {
-        log_err(
-            &[
-                b"upatch ",
-                op,
-                b": cannot hash the event (category: tpm_error)",
-            ]
-            .concat(),
-        );
-        return (ret, false);
-    }
+    let event = match chain::upatch_event(tag, name, payload) {
+        Ok(event) => event,
+        Err(ret) => {
+            log_err(
+                &[
+                    b"upatch ",
+                    op,
+                    b": cannot hash the event (category: tpm_error)",
+                ]
+                .concat(),
+            );
+            return (ret, false);
+        }
+    };
     // Prepare the full record before the irreversible register extend.
     let line = match event_record(record, name, payload, &event, reason) {
         Ok(line) => line,

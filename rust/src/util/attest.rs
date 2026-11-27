@@ -851,14 +851,13 @@ fn take_init(p: &mut Parse, digest: &[u8; 32]) -> Result<(), c_int> {
 fn derive_upatch(p: &Parse, tag: &CStr, r: &mut Record) -> Result<(), c_int> {
     let name = cstr(&p.upatch_name);
     let mut payload = [0u8; 32];
-    let mut event = [0u8; 32];
 
     if !upatch::name_valid(Some(name)) {
         return Err(-EINVAL);
     }
     r.label = name.to_vec();
     if hex_into(&p.upatch_payload_hex, &mut payload)
-        && chain::upatch_event(tag, name, &payload, &mut event) == 0
+        && let Ok(event) = chain::upatch_event(tag, name, &payload)
     {
         r.derived = !memneq_explicit(&event, &r.digest);
     }
@@ -868,13 +867,11 @@ fn derive_upatch(p: &Parse, tag: &CStr, r: &mut Record) -> Result<(), c_int> {
 /// Whether the digest of the tree operation `r` follows from its
 /// sequence and operation digest.
 fn derive_tree_op(p: &Parse, r: &mut Record) {
-    let mut event = [0u8; 32];
-
     // verify cannot tie op and id to the digest: leave them out.
     r.label = format!("seq {}", p.tree_seq).into_bytes();
     if p.tree_seq > 0
         && let Some(operation) = digest_bytes(&p.tree_digest_hex)
-        && chain::tree_event(p.tree_seq, &operation, &mut event) == 0
+        && let Ok(event) = chain::tree_event(p.tree_seq, &operation)
     {
         r.derived = !memneq_explicit(&event, &r.digest);
         // The digest's hex after its "sha256:".
@@ -891,11 +888,10 @@ fn derive_tree_op(p: &Parse, r: &mut Record) {
 /// certificate's digest.
 fn derive_key_revoke(p: &Parse, r: &mut Record) {
     let mut sha = [0u8; 32];
-    let mut event = [0u8; 32];
 
     // Nor the fingerprint: name the measured certificate.
     if hex_into(&p.key_sha_hex, &mut sha)
-        && chain::key_event(c"shirudo-key-revoke", &sha, &mut event) == 0
+        && let Ok(event) = chain::key_event(c"shirudo-key-revoke", &sha)
     {
         r.derived = !memneq_explicit(&event, &r.digest);
         r.label = [b"certificate ", first(cstr(&p.key_sha_hex), 12)].concat();

@@ -564,11 +564,9 @@ fn apply_event(spec: &[u8], register: &mut [u8; 32]) -> Result<(), c_int> {
         return Err(-EINVAL);
     };
     let (name, digest) = parse_name_digest(rest)?;
-    let mut event = [0u8; 32];
-
-    let ret = if let Some((ty, load)) = eventlog::upatch_kind_parse(kind) {
+    let event = if let Some((ty, load)) = eventlog::upatch_kind_parse(kind) {
         let tag = chain::upatch_tag(ty, load).ok_or(-EINVAL)?;
-        chain::upatch_event(tag, name, &digest, &mut event)
+        chain::upatch_event(tag, name, &digest)
     } else {
         match kind {
             b"tree" => {
@@ -577,13 +575,14 @@ fn apply_event(spec: &[u8], register: &mut [u8; 32]) -> Result<(), c_int> {
                     .and_then(|s| i64::try_from(s).ok())
                     .filter(|&s| s >= 1)
                     .ok_or(-EINVAL)?;
-                chain::tree_event(seq, &digest, &mut event)
+                chain::tree_event(seq, &digest)
             }
-            b"revoke" => chain::key_event(c"shirudo-key-revoke", &digest, &mut event),
+            b"revoke" => chain::key_event(c"shirudo-key-revoke", &digest),
             _ => return Err(-EINVAL),
         }
-    };
-    if ret != 0 || chain::fold(register, &event) != 0 {
+    }
+    .map_err(|_| -EIO)?;
+    if chain::fold(register, &event) != 0 {
         return Err(-EIO);
     }
     Ok(())
