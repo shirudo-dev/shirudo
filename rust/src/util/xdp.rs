@@ -8,7 +8,7 @@
 
 use core::ffi::{CStr, c_int};
 use core::sync::atomic::{AtomicU16, Ordering};
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
 
 use crate::errno::{
     E2BIG, EACCES, EAGAIN, EBADMSG, EINVAL, EMEDIUMTYPE, EMFILE, ENFILE, ENOBUFS, ENODEV, ENOMEM,
@@ -604,13 +604,13 @@ struct Ifreq {
 }
 
 /// The ifindex `name` has now, -EXDEV for another than `ifindex`.
-fn same_device(fd: c_int, name: &[u8; IFNAME_MAX], ifindex: u32) -> bool {
+fn same_device(fd: BorrowedFd<'_>, name: &[u8; IFNAME_MAX], ifindex: u32) -> bool {
     let mut identity = Ifreq {
         name: *name,
         data: [0; 3],
     };
     // SAFETY: a socket and an ifreq the ioctl fills.
-    let ok = unsafe { libc::ioctl(fd, SIOCGIFINDEX, &raw mut identity) } == 0;
+    let ok = unsafe { libc::ioctl(fd.as_raw_fd(), SIOCGIFINDEX, &raw mut identity) } == 0;
     ok && identity.data[0] as u32 as i32 == ifindex as i32
 }
 
@@ -621,7 +621,7 @@ fn device_details(dev: &mut XdpDevice) -> Result<(), c_int> {
         return Err(-EINVAL);
     }
     let sock = open_socket(libc::AF_INET, libc::SOCK_DGRAM, 0)?;
-    if !same_device(sock.as_raw_fd(), &name, dev.ifindex) {
+    if !same_device(sock.as_fd(), &name, dev.ifindex) {
         return Err(-EXDEV);
     }
     let mut info = [0u8; DRVINFO_LEN];
@@ -636,7 +636,7 @@ fn device_details(dev: &mut XdpDevice) -> Result<(), c_int> {
     } else {
         0
     };
-    if !same_device(sock.as_raw_fd(), &name, dev.ifindex) {
+    if !same_device(sock.as_fd(), &name, dev.ifindex) {
         ret = -EXDEV;
     }
     drop(sock);
