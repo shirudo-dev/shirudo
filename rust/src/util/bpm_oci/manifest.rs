@@ -8,7 +8,7 @@ use core::ffi::c_int;
 
 use super::{Descriptor, MAX_NAME, copy_string, cstr};
 use crate::errno::{E2BIG, EINVAL};
-use crate::util::hex::sha256_digest_decode;
+use crate::util::hex::decode_sha256_digest;
 use crate::util::json::{JsonEmit, JsonField, parse_schema};
 
 /// What a manifest's schema fills: its schema version, where the layers
@@ -25,18 +25,13 @@ struct DescSink<'l> {
 
 impl DescSink<'_> {
     fn take_descriptor(&mut self) -> Result<(), c_int> {
-        let mut digest = [0u8; 32];
-
         if self.n >= self.max {
             return Err(-E2BIG);
         }
         // The registry wrote this: a layer is all three or none.
         if self.scratch.media[0] == 0
             || self.scratch.size < 0
-            // SAFETY: a C string the parser wrote, and room for a digest.
-            || unsafe {
-                sha256_digest_decode(self.scratch.digest.as_ptr().cast(), digest.as_mut_ptr())
-            } != 0
+            || decode_sha256_digest(cstr(&self.scratch.digest)).is_err()
         {
             return Err(-EINVAL);
         }

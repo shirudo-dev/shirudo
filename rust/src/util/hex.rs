@@ -57,6 +57,14 @@ pub(crate) fn decode_max(hex: &[u8], out: &mut [u8]) -> Result<usize, c_int> {
     Ok(n)
 }
 
+/// The 32 bytes named by an OCI sha256 digest.
+pub(crate) fn decode_sha256_digest(digest: &[u8]) -> Result<[u8; 32], c_int> {
+    let hex = digest.strip_prefix(b"sha256:").ok_or(-EINVAL)?;
+    let mut out = [0u8; 32];
+    decode(hex, &mut out)?;
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests;
 
@@ -137,6 +145,7 @@ mod capi {
     /// # Safety
     ///
     /// `digest` is NULL or a C string, and `out` room for 32 bytes.
+    #[allow(dead_code)] // Removed after the remaining callers and tests use slices.
     pub unsafe extern "C" fn sha256_digest_decode(digest: *const c_char, out: *mut u8) -> c_int {
         if digest.is_null() {
             return -EINVAL;
@@ -168,4 +177,5 @@ pub(crate) fn sha256_digest_encode(d: &[u8; 32]) -> [u8; SHA256_DIGEST_STR_SIZE]
     out
 }
 
+#[allow(unused_imports)] // The digest shim remains for the next test commit.
 pub(crate) use capi::{hex_decode, hex_decode_max, hex_encode, sha256_digest_decode};
