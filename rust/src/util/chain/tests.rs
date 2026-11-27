@@ -142,6 +142,22 @@ fn history_root_differs_from_the_projection_root() {
 }
 
 #[test]
+fn anchor_returns_the_complete_terminated_record() {
+    let mut name = [0xa5u8; NAME_LEN];
+    name[..2].copy_from_slice(&[0, 0x0b]);
+    let value = anchor(&name).unwrap();
+    let expected = [
+        &b"nvpcr-init:shirudo:0x1818e00:000b"[..],
+        &b"a5".repeat(DIGEST_LEN),
+    ]
+    .concat();
+
+    assert_eq!(cstr(&value), expected);
+    assert!(value[expected.len()..].iter().all(|&byte| byte == 0));
+    assert_eq!(anchor(&name[..NAME_LEN - 1]), Err(-EINVAL));
+}
+
+#[test]
 fn anchor_record_matches_systemd_shape() {
     let anchor = b"nvpcr-init:shirudo:0x1818e00:000b01";
     let digest = [0x5a; 32];
