@@ -39,8 +39,12 @@ a file it matches, never one in another worktree; until then, read
 
 A BPF security platform that locks down the `bpf()` syscall so only signed in-kernel
 BPF loader programs can install BPF code, create maps or attach links,
-even for `CAP_SYS_ADMIN`. One plain-C binary serves two roles, chosen by
-what is present on the machine, never by separate builds:
+even for `CAP_SYS_ADMIN`. A runtime image may select shared enforcement
+instead, for hosts whose root is trusted with BPF of its own: root keeps
+`bpf()` for its own objects and shirudo guards only its own
+(`Documentation/internals/enforcement.rst`). One plain-C binary serves
+two roles, chosen by what is present on the machine, never by separate
+builds:
 
 - the *operator* holds the private ML-DSA-87 signing key and produces
   signed `.upatch` artifacts (`shirudo build`, `shirudo bpm build`), and
@@ -252,7 +256,9 @@ one usually still compiles and passes tests.
   signed upatches and binds the register. Mounts and pins live under `/run`
   across switch-root. The root service uses the verified runtime and adopts
   the pending initrd event. Missing images or settings are errors. No mode
-  selector, executable inode identity or unsealed fallback may be added.
+  selector, executable inode identity or unsealed fallback may be added;
+  the one mode is `enforcement.mode`, which only the runtime image sets
+  and `init` freezes into the identity record.
 - **Seal labels mark targets, not caller authority.** Only successful exec
   from the authenticated runtime grants the committed task mark. Fork inherits
   it, successful exec re-evaluates it and failed exec preserves it. Writable

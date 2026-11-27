@@ -286,6 +286,12 @@ without the protection.
        key live in it.
      - Partly. ``init`` requires ECC endorsement-key creation, salted
        session setup and RSA-3072 NV writer creation.
+   * - A16
+     - Where the runtime image sets ``enforcement.mode = shared``, root
+       and the BPF it loads are trusted not to attack the kernel.
+     - Shared enforcement leaves ``bpf()`` to root and keeps only
+       shirudo's own objects and files from it (T16, R25).
+     - No. ``shirudo status`` prints the mode.
 
 Assets
 ------
@@ -432,6 +438,15 @@ them, is outside the TCB and constrained by it. Root is not trusted
 because it is root. A task gains authority only by a successful exec of
 a file on the runtime image (T3).
 
+Shared enforcement, which a runtime image selects with
+``enforcement.mode = shared``, moves part of that line for hosts whose
+root runs BPF of its own, a network datapath such as Cilium among it.
+Root and what it loads are trusted with BPF (A16): the gates of T1 and
+the attach and detach refusals of T2 apply to shirudo's own tasks only.
+What stays outside root's reach is shirudo's: its maps, programs and
+links, its private bpffs, its files and its register (T16). Every
+other threat below holds as written.
+
 The operator TCB is the operator host, the signing key, clang/LLVM,
 libbpf, ``veritysetup`` and ``mkfs.ext4`` (A12). The verifier is a
 party of its own: it trusts the TPM's signatures and the values it
@@ -569,6 +584,11 @@ the keyring does not hold fails in the kernel's signature check, before
 The gates cover ``bpf()`` from userspace. In-kernel BPF users, classic
 BPF and programs loaded before ``init`` are outside them (R18, R7), and
 any loader the key ever signed passes (R16).
+
+In shared enforcement the two hooks hold for shirudo's tasks alone. A
+task without runtime authority loads any program the kernel lets it
+except an LSM or a modify-return program, and creates and writes maps
+of its own (T16, R25).
 
 .. rst-class:: facts
 
@@ -714,6 +734,11 @@ bpffs mount or of any mount above it (``BpffsUmountAbove``, ``t6155``).
 The tmpfs at ``/run/shirudo`` gets the same treatment without counters:
 no caller unmounts, moves or remounts it, and only authorized tasks
 mount onto it.
+
+In shared enforcement ``lsm/bpf`` leaves these commands to root for
+objects of its own, and ``BPF_OBJ_GET``, ``BPF_OBJ_PIN`` and
+``BPF_MAP_GET_FD_BY_ID`` with them. Root reaches none of shirudo's
+links, maps or programs to detach, replace or pin them (T16).
 
 Root also controls part of the site a load attaches at, since root
 runs ``shirudo upatch load``. A ``cgroup_skb`` program attaches at the
@@ -1554,6 +1579,10 @@ The boundary is the command interface: root can run the runtime binary,
 and ``shirudo upatch map`` drains a serializer unless ``--peek`` is
 given (R2).
 
+In shared enforcement ``lsm/bpf_map`` refuses the maps shirudo owns
+rather than every map, and ``lsm/bpf_prog`` the programs it owns, so a
+serializer cannot be test-run either (T16).
+
 .. rst-class:: facts
 
 :Adversary: ADV-B, root on the target without the signing key
@@ -1655,6 +1684,71 @@ load and unload are measured as ``java_load`` and
 :Proofs: ``upatch-header``, ``upatch-signed-sections``, ``chain-events``,
    ``Shirudo.Events``
 :Residual: R2, R24
+
+.. _tm-t16:
+
+T16 Reaching shirudo's objects beside other BPF users
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In shared enforcement root creates maps, loads programs, attaches,
+pins and detaches. Every one of those commands takes a descriptor, so
+a descriptor of one of shirudo's objects would undo it: a link held
+open or detached, a map read or written through a program of root's,
+the task authority map among them, and a program test-run or replaced
+by an extension program, which the kernel lets replace any global
+function, an LSM program's entry included.
+
+``lsm/bpf_map`` and ``lsm/bpf_prog`` run on every route to a map or
+program descriptor, ``BPF_OBJ_GET``, the ``*_GET_FD_BY_ID`` commands and
+the calls a syscall program of root's makes from inside the kernel
+alike. In shared enforcement they refuse a task without runtime
+authority the objects shirudo owns with ``ENOENT`` (``ObjGet``,
+``MapFdWrite``), as if they did not exist, so that a tool walking every
+id, ``bpftool`` or a datapath agent, skips them and goes on, and leave
+it every other. shirudo owns the objects ``bpf2`` and ``seal``
+create, whose ids ``init`` records in ``shirudo_boot_objects`` and
+freezes before ``lsm/bpf`` attaches, and those its tasks and the signed
+loaders they run create after ``init``, which ``lsm/bpf_map_create``
+and ``lsm/bpf_prog_load`` record by address in ``shirudo_owned`` and
+``lsm/bpf_map_free`` and ``lsm/bpf_prog_free`` remove. A creation that
+cannot be recorded fails.
+
+No hook sees a link descriptor handed out, so ``lsm/bpf`` refuses
+``BPF_LINK_GET_FD_BY_ID``, and ``lsm/inode_permission`` refuses the
+permission check ``BPF_OBJ_GET`` makes on a pin of the private bpffs
+(``ObjGet``). It also refuses a write to a directory of the private
+bpffs (``PinEntry``), which ``BPF_OBJ_PIN``, every other new entry,
+an unlink and a rename there need: a pin of root's in a upatch's directory would
+make ``status`` report the target tampered. ``BPF_TOKEN_CREATE`` and
+every unclassified command stay refused (``BpfCommand``).
+
+``lsm/bpf_prog_load`` refuses a task without runtime authority an LSM
+program and a modify-return program (``LoadNotLoader``), from
+userspace or from a syscall program of its own. An LSM program may
+call ``bpf_set_dentry_xattr()``, ``bpf_remove_dentry_xattr()`` and
+``bpf_inode_init_xattr()``, which write ``security.bpf.`` attributes
+past the xattr hooks and would undo the seal (T3). A modify-return
+program attaches to any ``security_*`` function and its return value
+replaces the function's: a positive one skips every LSM, shirudo's
+included, and the callers, which test for a negative value, go on as
+if the check had passed, so that ``security_bpf_map()`` returning 1
+would hand out a descriptor of ``shirudo_tasks``.
+
+.. rst-class:: facts
+
+:Adversary: ADV-B on a target in shared enforcement, through ``bpf()``
+   and the programs it loads (A16)
+:Enforced at: ``lsm/bpf``, ``lsm/bpf_map``, ``lsm/bpf_prog``,
+   ``lsm/bpf_prog_load``, ``lsm/bpf_map_create``, ``lsm/bpf_map_free``,
+   ``lsm/bpf_prog_free``, ``lsm/inode_permission``
+:Refusal: ``ENOENT`` from opening one of shirudo's maps or programs;
+   ``EACCES`` from the other refused ``bpf()`` calls and from opening a
+   pin of the private bpffs; ``EPERM`` from creating an entry there;
+   ``ENOMEM`` from a creation by shirudo that cannot be recorded
+:Counters: ``ObjGet``, ``MapFdWrite``, ``PinEntry``, ``LoadNotLoader``,
+   ``BpfCommand``
+:Tests: ``t5006``
+:Residual: R25
 
 Residual risks
 --------------
@@ -2067,6 +2161,25 @@ R24 A Java agent reaches only the JVMs its options reach
    the applications that start with it, not a boundary against root,
    which only a BPF upatch is. Detection: a JVM's ``-javaagent``
    arguments, ``jcmd <pid> VM.command_line``; none from shirudo.
+
+R25 Shared enforcement trusts root's BPF
+   In shared enforcement root's programs run with what the kernel gives
+   BPF. They read kernel memory and shirudo's process memory with
+   ``bpf_probe_read_kernel()``, make the functions of the
+   error-injection list fail through ``bpf_override_return()`` where
+   the kernel has ``CONFIG_BPF_KPROBE_OVERRIDE``, send signals, and
+   steer scheduling and traffic. None of it writes shirudo's state or
+   passes a check: ``bpf_probe_write_user()`` is a lockdown reason of
+   integrity mode, which ``lsm/locked_down`` refuses to every caller;
+   the error-injection list holds no permission check, and an override
+   only makes a function fail; root loads no LSM and no modify-return
+   program; and shirudo's objects stay out of reach (T16). What root
+   can do is make shirudo's operations fail. The register records
+   shirudo's upatches and nothing of root's BPF, so evidence from a
+   shared target does not show what else runs. The mode is part of the
+   runtime image, so a verifier that pins PCR 11 pins the mode with it.
+   Detection: ``Enforcement: shared`` in ``shirudo status``; the
+   expected PCR 11 value of a strict image.
 
 Threats to resolve
 ------------------

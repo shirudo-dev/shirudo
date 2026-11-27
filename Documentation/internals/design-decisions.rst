@@ -156,6 +156,28 @@ The costs: a dracut module, a measured UKI, an initrd that has to carry
 the binary and its settings, and a second run of ``init``. A failed
 ``init`` does not stop the boot.
 
+Shared enforcement guards shirudo's objects
+-------------------------------------------
+
+Some hosts need the upatches but also run BPF of root's own, a network
+datapath such as Cilium. The runtime image can select
+``enforcement.mode = shared`` for them, a setting of the image rather
+than of the config image or the command line, so that the mode is part
+of what PCR 11 pins and no later change loosens a strict target.
+
+The mode does not filter root's commands against a list of what Cilium
+needs, which would break with every release of every datapath. It
+leaves ``bpf()`` to root and guards ownership instead: every route to a
+map or program descriptor passes ``lsm/bpf_map`` or ``lsm/bpf_prog``,
+which refuse the objects shirudo created, and links, which no hook sees
+handed out, stay out of reach by id and by pin. What stays closed is
+what would write shirudo's state past those hooks: LSM programs, whose
+kfuncs write the seal's labels, and ``bpf_probe_write_user()``, which
+lockdown refuses. Root's BPF still runs with kernel privilege, so the
+mode is for hosts whose root is trusted with BPF, and evidence from
+them does not cover what root loads (A16 and R25 in
+:doc:`/security/threat-model`).
+
 A single instance per host
 --------------------------
 

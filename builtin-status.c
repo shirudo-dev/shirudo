@@ -22,6 +22,7 @@
 #include <bpf/btf.h>
 #include <bpf/libbpf.h>
 
+#include <shirudo/enforcement.h>
 #include <shirudo/misc.h>
 #include <shirudo/string.h>
 #include <shirudo/upatch.h>
@@ -1232,6 +1233,7 @@ struct status_view {
 	key_serial_t		keyring_serial;
 	key_serial_t		keyring_pinned;
 	const char		*keyring_mode;
+	const char		*enforcement;	/* NULL without a record */
 	bool			keyring_present;
 	struct trusted_set	certs;
 	int			certs_rc;
@@ -1342,8 +1344,11 @@ static void status_read_keyrings(struct status_view *v)
 	 * of that kind is what a load would name, and the two must agree.
 	 */
 	v->keyring_pinned = identity_read(&ident);
-	if (!v->keyring_pinned)
+	if (!v->keyring_pinned) {
 		v->keyring_pinned = ident.keyring_serial;
+		v->enforcement = ident.enforcement == ENFORCEMENT_SHARED ?
+				 "shared" : "strict";
+	}
 	v->keyring_serial = v->keyring_pinned >= 1 ? keyring_bpf_serial() :
 			    -ENOKEY;
 	v->keyring_mode = v->keyring_serial >= 0 ? "bpf" : "none";
@@ -1823,6 +1828,10 @@ static void status_emit_json(struct json_emit *e, const struct status_view *v,
 	json_kv_bool(e, "is_operator", v->is_operator);
 	emit_verdict_json(e, &v->cin);
 	json_kv_bool(e, "lsm_attached", v->lsm_attached);
+	if (v->enforcement)
+		json_kv_string(e, "enforcement", v->enforcement);
+	else
+		json_kv_null(e, "enforcement");
 	emit_anchor_json(e, v);
 	json_kv_bool(e, "cert_present", v->cert_present);
 	emit_certs_json(e, v);
@@ -1914,6 +1923,8 @@ static void print_summary(const struct status_view *v, const char *verdict,
 	print_system_text("", "Host:", v->hostname);
 	printf("%-22s %s\n", "Roles:",
 	       roles_str(v->is_target, v->is_operator));
+	if (v->enforcement)
+		printf("%-22s %s\n", "Enforcement:", v->enforcement);
 	if (reason[0])
 		printf("%-22s %s  (%s)\n", "Status:", verdict, reason);
 	else

@@ -68,6 +68,11 @@ determined, as noted.
    * - ``lsm_attached``
      - boolean
      - ``true`` when the pin ``/run/shirudo/bpffs/lsm_link`` opens.
+   * - ``enforcement``
+     - string or ``null``
+     - ``strict`` or ``shared``, as ``init`` froze it in the identity
+       record from the runtime image's ``enforcement.mode``. ``null``
+       when there is no record, see :doc:`/internals/enforcement`.
    * - ``keyring_mode``
      - string
      - ``bpf`` when the ``.bpf`` keyring is present, else ``none``.
@@ -851,6 +856,7 @@ indented here:
        }
      ],
      "lsm_attached": true,
+     "enforcement": "strict",
      "keyring_mode": "bpf",
      "keyring_present": true,
      "keyring_serial": 272801410,

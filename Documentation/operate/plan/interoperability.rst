@@ -135,6 +135,52 @@ What common software sees:
    * - systemd
      - Starts units without its BPF-based settings, see the next section.
 
+Other BPF users in shared enforcement
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:Mechanism: A runtime image built with ``enforcement.mode = shared``
+   leaves ``bpf()`` to root for objects of its own, and keeps shirudo's
+   maps, programs, links and private bpffs out of its reach, see
+   :doc:`/internals/enforcement`. Use it only where root is trusted with
+   BPF (A16 in :doc:`/security/threat-model`).
+:Still refused: an LSM or a modify-return (``fmod_ret``) program
+   (``LoadNotLoader``), ``BPF_LINK_GET_FD_BY_ID`` and opening a pin in
+   ``/run/shirudo/bpffs`` (``ObjGet``), creating a pin or any other
+   entry there (``PinEntry``), a descriptor of a map or program shirudo
+   owns, which fails with ``ENOENT`` as if it did not exist (``ObjGet``,
+   ``MapFdWrite``), ``BPF_TOKEN_CREATE`` and every command shirudo has
+   not classified (``BpfCommand``). The kexec, lockdown,
+   keyring, TPM, image and seal guards are those of ``strict``, so
+   ``bpf_probe_write_user()`` stays unavailable.
+:What to do: Load datapaths and tracing tools as on any host.
+
+What common software sees in shared enforcement:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 76
+
+   * - Software
+     - Effect
+   * - Cilium and other BPF datapaths
+     - Create their maps, load and attach their tc, XDP, cgroup and
+       socket programs, and pin under ``/sys/fs/bpf``. An agent that
+       walks every id at start skips shirudo's objects, and each moves
+       ``ObjGet``. cilium/ebpf tries a token once each time it starts,
+       which moves ``BpfCommand``; it goes on without one.
+   * - ``bpftool``
+     - ``prog show`` and ``map show`` list root's objects and leave out
+       shirudo's, and each left out moves ``ObjGet``; ``link show``
+       stops at the first link, as links are not handed out by id.
+   * - bcc, bpftrace, ``perf`` with BPF
+     - Work, except tools that attach LSM or ``fmod_ret`` programs.
+   * - Tetragon, Falco's eBPF drivers, bpfjailer
+     - The parts that load LSM or ``fmod_ret`` programs fail; the rest
+       works.
+   * - systemd
+     - Its BPF-based settings work except ``RestrictFileSystems=``,
+       which is an LSM program; units that set it start without it.
+
 systemd's BPF-based settings
 ----------------------------
 

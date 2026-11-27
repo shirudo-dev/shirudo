@@ -368,6 +368,10 @@ by ``BPF_OBJ_GET`` (``ObjGet``). Directories stay listable.
    * - ``file_ioctl_link``, ``file_ioctl_compat_link``,
        ``bdev_integrity_link``, ``bdev_free_link``
      - Links of the ioctl guard and the dm-verity device recorders.
+   * - ``bpf2_inode_permission_link``, ``bpf2_bpf_map_free_link``,
+       ``bpf2_bpf_prog_free_link``, ``bpf2_bpf_map_create_link``
+     - Links of the guards of shared enforcement, present only when the
+       identity record says ``shared``.
    * - ``seal_*_link``
      - Links of the seal hooks, one per hook, such as
        ``seal_file_open_link`` and ``seal_mmap_link``.

@@ -255,7 +255,8 @@ static int config_parse(struct config *cfg, FILE *f,
 			else
 				cfg->map_export_otlp_max_bytes = (__u32)v;
 		} else if (str_has_prefix(key, "config.") ||
-			   str_has_prefix(key, "runtime.")) {
+			   str_has_prefix(key, "runtime.") ||
+			   str_has_prefix(key, "enforcement.")) {
 			continue;
 		} else {
 			if (str_has_prefix(key, "map_export.")) {

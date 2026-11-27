@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /* Copyright (c) 2026 Authors of shirudo */
 
+#include <shirudo/enforcement.h>
 #include <shirudo/misc.h>
 #include <shirudo/string.h>
 #include <shirudo/tpm.h>
@@ -60,6 +61,21 @@ static int bootstrap_add_certificate(struct image_bootstrap *boot,
 	return 0;
 }
 
+static int bootstrap_enforcement(struct image_bootstrap *boot,
+				 const char *mode)
+{
+	if (boot->have_enforcement)
+		return -EINVAL;
+	boot->have_enforcement = true;
+	if (!strcmp(mode, "strict"))
+		boot->enforcement = ENFORCEMENT_STRICT;
+	else if (!strcmp(mode, "shared"))
+		boot->enforcement = ENFORCEMENT_SHARED;
+	else
+		return -EINVAL;
+	return 0;
+}
+
 /* The stream is consumed and closed. */
 static int bootstrap_parse(FILE *file, struct image_bootstrap *boot,
 			   bool initial)
@@ -68,6 +84,10 @@ static int bootstrap_parse(FILE *file, struct image_bootstrap *boot,
 	char *line = NULL;
 	int got, ret = 0;
 
+	if (!initial) {
+		boot->enforcement = ENFORCEMENT_STRICT;
+		boot->have_enforcement = false;
+	}
 	while ((got = read_text_line(file, &line, &capacity,
 				     PATH_MAX + 127)) != 0) {
 		char *key, *value;
@@ -126,8 +146,11 @@ static int bootstrap_parse(FILE *file, struct image_bootstrap *boot,
 				boot->pcr = TPM_CONFIG_NVPCR_INDEX;
 				boot->have_pcr = true;
 			}
+		} else if (!strcmp(key, "enforcement.mode") && !initial) {
+			ret = bootstrap_enforcement(boot, value);
 		} else if (str_has_prefix(key, "config.") ||
-			   str_has_prefix(key, "runtime.")) {
+			   str_has_prefix(key, "runtime.") ||
+			   str_has_prefix(key, "enforcement.")) {
 			ret = -EINVAL;
 		}
 		if (ret)

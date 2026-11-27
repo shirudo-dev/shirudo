@@ -7,6 +7,9 @@
 #ifndef EPERM
 #define EPERM		1
 #endif
+#ifndef ENOENT
+#define ENOENT		2
+#endif
 #ifndef ENOMEM
 #define ENOMEM		12
 #endif

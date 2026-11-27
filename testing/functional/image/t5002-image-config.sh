@@ -26,7 +26,7 @@ test_expect_success 'allowed settings are accepted while TPM bootstrap settings 
 '
 
 test_expect_success 'config cannot override runtime, verification key, PCR or TPM bootstrap settings' '
-	for key in config.verification_key config.pcr config.image runtime.image runtime.root_hash tpm.owner_auth tpm.tcti; do
+	for key in config.verification_key config.pcr config.image runtime.image runtime.root_hash tpm.owner_auth tpm.tcti enforcement.mode; do
 		source_tree "$key" &&
 		printf "%s = attacker\n" "$key" >>"$WORK/$key/etc/shirudo/shirudo.conf" &&
 		! "$H" validate "$WORK/$key" || exit 1

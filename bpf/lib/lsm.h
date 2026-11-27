@@ -20,6 +20,9 @@
 #ifndef S_IFDIR
 #define S_IFDIR		0040000
 #endif
+#ifndef MAY_WRITE
+#define MAY_WRITE	0x00000002
+#endif
 #define LSM_UNSAFE_PTRACE	2
 /* include/linux/ptrace.h; a #define, so not in BTF. */
 #define PTRACE_MODE_ATTACH	0x02

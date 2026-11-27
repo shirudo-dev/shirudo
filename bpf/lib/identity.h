@@ -27,6 +27,7 @@ struct sb_id {
 	__u32	config_pcr;
 	__u64	state_dev;
 	__u64	state_ino;
+	__u32	enforcement;	/* ENFORCEMENT_STRICT or _SHARED */
 };
 
 struct {
