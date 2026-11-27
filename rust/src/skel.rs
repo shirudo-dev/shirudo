@@ -24,9 +24,9 @@ use core::ffi::c_char;
 
 /// An embedded skeleton, which the test helper test-mode-objects
 /// inspects through bpf2_blob() and seal_blob().
-#[repr(C)]
 pub struct EmbeddedBpf {
     name: *const c_char,
+    #[cfg(feature = "test-helpers")]
     data: *const u8,
     size: usize,
 }
@@ -36,12 +36,14 @@ unsafe impl Sync for EmbeddedBpf {}
 
 static BPF2_BLOB: EmbeddedBpf = EmbeddedBpf {
     name: c"bpf2".as_ptr(),
+    #[cfg(feature = "test-helpers")]
     data: bpf2::LOADER.as_ptr(),
     size: bpf2::LOADER.len(),
 };
 
 static SEAL_BLOB: EmbeddedBpf = EmbeddedBpf {
     name: c"seal".as_ptr(),
+    #[cfg(feature = "test-helpers")]
     data: seal::LOADER.as_ptr(),
     size: seal::LOADER.len(),
 };
