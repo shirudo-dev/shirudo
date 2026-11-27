@@ -173,38 +173,31 @@ struct PolicyLabelsAt {
 const _: () = assert!(size_of::<UpatchHostHeader>() == HEADER_SIZE);
 const _: () = assert!(core::mem::offset_of!(UpatchHostHeader, payload_sha256) == 272);
 
-/// `struct upatch_decoder_view`: a decoder of the signed blob, its
-/// source within the container.
-#[repr(C)]
-pub struct DecoderView {
+/// A decoder of the signed blob, borrowing its source from the container.
+pub struct DecoderView<'a> {
     pub(crate) language: u32,
     pub(crate) api_version: u32,
     pub(crate) input_format: u32,
     pub(crate) export_signal: u32,
-    pub(crate) upatch: [u8; 64],
     pub(crate) map: [u8; 16],
     pub(crate) source_name: [u8; 64],
     pub(crate) entrypoint: [u8; 32],
-    pub(crate) source: *const c_char,
-    pub(crate) source_len: u32,
+    pub(crate) source: &'a [u8],
 }
 
-const _: () = assert!(size_of::<DecoderView>() == 208);
-
-impl DecoderView {
+impl<'a> DecoderView<'a> {
     /// The view of `d`, none for a source a u32 cannot measure.
-    pub(crate) fn of(d: &Decoder<'_>) -> Option<Self> {
+    pub(crate) fn of(d: &Decoder<'a>) -> Option<Self> {
+        u32::try_from(d.source.len()).ok()?;
         Some(DecoderView {
             language: d.language,
             api_version: d.api_version,
             input_format: d.input_format,
             export_signal: d.export_signal,
-            upatch: *d.upatch,
             map: *d.map,
             source_name: *d.source_name,
             entrypoint: *d.entrypoint,
-            source: d.source.as_ptr().cast(),
-            source_len: u32::try_from(d.source.len()).ok()?,
+            source: d.source,
         })
     }
 }

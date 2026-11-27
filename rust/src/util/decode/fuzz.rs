@@ -9,7 +9,6 @@
 //! The input is the decoder's index, the page's cursor, eight bytes,
 //! then the page.
 
-use core::ffi::c_char;
 use std::sync::OnceLock;
 
 use crate::fuzzing::fuzz_target;
@@ -31,12 +30,7 @@ const SOURCES: [&str; 9] = [
 ];
 
 /// The decoders, each over its source, which the process keeps.
-struct Views(Vec<DecoderView>);
-
-// SAFETY: made once, then only read, by the fuzzer's one thread.
-unsafe impl Sync for Views {}
-// SAFETY: as Sync.
-unsafe impl Send for Views {}
+struct Views(Vec<DecoderView<'static>>);
 
 static VIEWS: OnceLock<Views> = OnceLock::new();
 
@@ -51,11 +45,17 @@ fn init() {
             let Ok(source) = std::fs::read(tree.join(rel)) else {
                 std::process::abort();
             };
-            let source = Box::leak(source.into_boxed_slice());
-            // SAFETY: a view of nothing, for which zeros are the value.
-            let mut d: DecoderView = unsafe { core::mem::zeroed() };
-            d.source = source.as_ptr().cast::<c_char>();
-            d.source_len = source.len() as u32;
+            let source: &'static [u8] = Box::leak(source.into_boxed_slice());
+            let mut d = DecoderView {
+                language: 0,
+                api_version: 0,
+                input_format: 0,
+                export_signal: 0,
+                map: [0; 16],
+                source_name: [0; 64],
+                entrypoint: [0; 32],
+                source,
+            };
             let name = rel.rsplit('/').next().unwrap_or(rel).as_bytes();
             let n = name.len().min(d.source_name.len() - 1);
             d.source_name[..n].copy_from_slice(&name[..n]);

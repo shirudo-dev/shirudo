@@ -18,7 +18,6 @@ use std::ffi::CString;
 use std::fs::File;
 
 use crate::errno::{E2BIG, EINVAL, ENAMETOOLONG, ENODATA, ENOENT, ERANGE, ESTALE, text};
-use crate::ffi;
 use crate::sys::libc::{explicit_bzero, snprintf};
 use crate::sys::luajit::{
     Allocator, LUA_MASKCOUNT, Lua, LuaCFunction, LuaDebug, LuaState, LuaType, Stack,
@@ -794,11 +793,6 @@ fn push_map_data(s: &mut Stack<'_>, v: &MapView) {
     s.set_field(-2, c"pages");
 }
 
-/// A length the view holds, as one: 0 for one no slice can have.
-fn view_len(n: u64) -> usize {
-    usize::try_from(n).unwrap_or(0)
-}
-
 /// The entries of the view, each its key and its value on every CPU as
 /// hex.
 fn push_entries(s: &mut Stack<'_>, v: &MapView) {
@@ -1028,13 +1022,6 @@ fn open_sandbox(s: &mut Stack<'_>) -> Result<(), c_int> {
     Ok(())
 }
 
-/// The decoder's Lua source.
-fn decoder_source(d: &DecoderView) -> &[u8] {
-    // SAFETY: DecoderView::of() points a view's source at source_len bytes
-    // of the open container, which outlives the view's use.
-    unsafe { ffi::slice(d.source.cast::<u8>(), view_len(u64::from(d.source_len))) }
-}
-
 /// Loads the decoder and calls its entrypoint on the view, the result
 /// encoded into `e`: -EINVAL when the decoder fails, -ENOENT without its
 /// entrypoint, or the encoder's error, each logged.
@@ -1048,7 +1035,7 @@ fn decode(
     let source_name = CString::new(cstr(&d.source_name)).unwrap_or_default();
     let entrypoint = CString::new(cstr(&d.entrypoint)).unwrap_or_default();
     // LuaJIT checks no bytecode it loads: a decoder is source text.
-    if !s.load(decoder_source(d), &source_name, c"t") || !s.pcall(0, 1) {
+    if !s.load(d.source, &source_name, c"t") || !s.pcall(0, 1) {
         report(s, "decoder load failed");
         return Err(-EINVAL);
     }
@@ -1160,7 +1147,7 @@ fn open_artifact(path: &CStr, archived: bool, v: &MapView) -> Result<Upatch<'sta
 
 /// The decoders of the open artifact, each as a view, the bad ones left
 /// out.
-fn decoders<'a>(u: &'a Upatch<'_>) -> impl Iterator<Item = DecoderView> + 'a {
+fn decoders<'a>(u: &'a Upatch<'_>) -> impl Iterator<Item = DecoderView<'a>> + 'a {
     u.decoders().filter_map(|d| DecoderView::of(&d))
 }
 
