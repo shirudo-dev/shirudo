@@ -48,7 +48,7 @@ impl IndexParse<'_> {
 
 /// The entries of an index of schema 1, as many as `entries` has room
 /// for, into it, and how many there are.
-pub(super) fn index_parse(body: &[u8], entries: &mut [IndexEntry], n_entries: &mut c_int) -> c_int {
+pub(super) fn index_parse(body: &[u8], entries: &mut [IndexEntry]) -> Result<usize, c_int> {
     let mut index = IndexParse {
         schema: 0,
         items: entries,
@@ -71,11 +71,9 @@ pub(super) fn index_parse(body: &[u8], entries: &mut [IndexEntry], n_entries: &m
         JsonField::int(c"schema", |p: &mut IndexParse| &mut p.schema),
         JsonField::array(c"packages", &sub, &IndexParse::take_entry),
     ];
-    let ret = parse_schema(body, &root, &mut index);
-
-    if ret.is_err() || index.schema != 1 || !root[1].seen() {
-        return -EINVAL;
+    parse_schema(body, &root, &mut index).map_err(|_| -EINVAL)?;
+    if index.schema != 1 || !root[1].seen() {
+        return Err(-EINVAL);
     }
-    *n_entries = index.n as c_int;
-    0
+    Ok(index.n)
 }

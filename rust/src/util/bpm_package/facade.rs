@@ -111,15 +111,9 @@ pub(crate) fn verify_cms_fd(payload: &[u8], sig: &[u8], cert_fd: BorrowedFd<'_>)
 /// The entries of a signed repository index.
 pub(crate) fn index_parse(body: &[u8]) -> Result<Vec<IndexEntry>> {
     let mut entries = vec![IndexEntry::new(); MAX_ENTRIES];
-    let mut n = 0;
-
-    match index::index_parse(body, &mut entries, &mut n) {
-        0 => {
-            entries.truncate(usize::try_from(n).map_err(|_| -EINVAL)?);
-            Ok(entries)
-        }
-        err => Err(err),
-    }
+    let n = index::index_parse(body, &mut entries)?;
+    entries.truncate(n);
+    Ok(entries)
 }
 
 /// The checked bytes of the tree publication at `repository:reference`,
