@@ -829,25 +829,11 @@ fn signer_matches(signature: &[u8], x509: &X509Ref) -> c_int {
 }
 
 /// Attribute a complete CMS signature to a certificate.
-///
-/// # Safety
-///
-/// `signature` holds `signature_len` bytes, and `cert` is NULL or
-/// points to a certificate.
-pub(crate) unsafe fn cms_signed_by(
-    signature: *const u8,
-    signature_len: usize,
-    cert: *const Cert,
-) -> c_int {
-    // SAFETY: the caller passes NULL or a cert.
-    let Some(x509) = (unsafe { x509_of(cert) }) else {
+pub(crate) fn cms_signed_by(signature: &[u8], cert: &Cert) -> c_int {
+    let Some(x509) = cert.imp.as_deref() else {
         return -EINVAL;
     };
-    if signature.is_null() {
-        return -EINVAL;
-    }
-    // SAFETY: the caller's signature_len bytes.
-    signer_matches(unsafe { slice(signature, signature_len) }, x509)
+    signer_matches(signature, x509)
 }
 
 /// HMAC-SHA-256 of `data` under `key`.

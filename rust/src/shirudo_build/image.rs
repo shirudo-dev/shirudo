@@ -132,8 +132,7 @@ fn verify_root_signature(
     if crate::text::cstr(&alg) != b"ML-DSA-87" {
         return Err(-EKEYREJECTED);
     }
-    // SAFETY: the signature slice and certificate are live for the call.
-    if unsafe { cms_signed_by(signature.as_ptr(), signature.len(), cert) } != 1 {
+    if cms_signed_by(signature, cert) != 1 {
         return Err(-EKEYREJECTED);
     }
     // SAFETY: both input slices have the stated lengths and cert is live.

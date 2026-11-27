@@ -1073,7 +1073,7 @@ fn purge_signed_by(der: &[u8], boot: bool) -> c_int {
             continue;
         }
         let name_c = message(&[name]);
-        let prc = crate::builtin::upatch::purge(&name_c, (&raw const cert).cast(), c"key_revoke");
+        let prc = crate::builtin::upatch::purge(&name_c, &cert, c"key_revoke");
         if prc == UPATCH_PURGE_OTHER_SIGNER || prc == UPATCH_PURGE_NO_ARCHIVE {
             continue;
         }

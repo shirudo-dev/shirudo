@@ -41,14 +41,12 @@ fn signers_need_a_complete_envelope() {
     let read = unsafe { cert_read_der(der.as_ptr(), der.len(), &mut cert) };
     assert_eq!(read, 0);
     assert_eq!(cms_check_signers(&signature), 0);
-    // SAFETY: the signature bytes and the live certificate remain valid.
-    let signed_by = unsafe { cms_signed_by(signature.as_ptr(), signature.len(), &cert) };
+    let signed_by = cms_signed_by(&signature, &cert);
     assert_eq!(signed_by, 1);
 
     signature.push(0);
     assert_eq!(cms_check_signers(&signature), -EBADMSG);
-    // SAFETY: the signature bytes and the live certificate remain valid.
-    let signed_by = unsafe { cms_signed_by(signature.as_ptr(), signature.len(), &cert) };
+    let signed_by = cms_signed_by(&signature, &cert);
     assert_eq!(signed_by, -EINVAL);
 }
 

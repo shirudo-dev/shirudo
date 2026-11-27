@@ -87,8 +87,7 @@ fn signer(upatch: &CStr, cert_file: &CStr) -> c_int {
         return 2;
     }
     let sig = u.signature();
-    // SAFETY: the upatch's signature and the certificate remain live.
-    let ret = unsafe { cms_signed_by(sig.as_ptr().cast(), sig.len(), &cert) };
+    let ret = cms_signed_by(sig, &cert);
     out(match ret {
         1 => "yes\n",
         0 => "no\n",

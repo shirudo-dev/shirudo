@@ -24,20 +24,20 @@ fuzz_target!(shirudo_fuzz_cms, shirudo_fuzz_cms_init, |data| {
     };
     let _ = digest_der(der);
     let mut cert = Cert::new();
-    // SAFETY: the certificate's bytes, the signature's, and the
-    // certificate read, freed once.
-    unsafe {
-        if cert_read_der(der.as_ptr(), der.len(), &mut cert) == 0 {
-            let signed_by = cms_signed_by(sig.as_ptr(), sig.len(), &cert);
-            if verify_detached(der.as_ptr(), der.len(), sig.as_ptr(), sig.len(), &cert) == 0
-                && signed_by != 1
-            {
-                std::process::abort();
-            }
-            let mut public: CertPubkey = core::mem::zeroed();
-            if cert_pubkey(&cert, &mut public) == 0 && public.n_len > public.n.len() {
-                std::process::abort();
-            }
+    // SAFETY: der holds a certificate and cert receives it.
+    if unsafe { cert_read_der(der.as_ptr(), der.len(), &mut cert) } == 0 {
+        let signed_by = cms_signed_by(sig, &cert);
+        // SAFETY: the DER and signature slices remain live with cert.
+        let verified =
+            unsafe { verify_detached(der.as_ptr(), der.len(), sig.as_ptr(), sig.len(), &cert) };
+        if verified == 0 && signed_by != 1 {
+            std::process::abort();
+        }
+        // SAFETY: an all-zero CertPubkey is a valid empty output value.
+        let mut public: CertPubkey = unsafe { core::mem::zeroed() };
+        // SAFETY: cert and public remain live for the call.
+        if unsafe { cert_pubkey(&cert, &mut public) } == 0 && public.n_len > public.n.len() {
+            std::process::abort();
         }
     }
     let mut raw = vec![0u8; sig.len() + 1];

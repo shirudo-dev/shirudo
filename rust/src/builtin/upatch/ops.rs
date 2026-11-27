@@ -1688,7 +1688,7 @@ pub(crate) fn remove_fd(path: &CStr, fd: BorrowedFd<'_>) -> c_int {
 /// UPATCH_PURGE_NO_ARCHIVE when it is gone, UPATCH_PURGE_NO_SIGNER when
 /// its signer cannot be read and nothing runs under the name, or -errno.
 /// -ENOENT from the register lock or a pin is a failure.
-pub(crate) fn purge(name: &CStr, signer: *const Cert, reason: &CStr) -> c_int {
+pub(crate) fn purge(name: &CStr, signer: &Cert, reason: &CStr) -> c_int {
     if !name_valid(Some(name.to_bytes())) {
         return -EINVAL;
     }
@@ -1787,7 +1787,7 @@ fn purge_no_signer(name: &[u8], err: c_int) -> c_int {
     }
 }
 
-fn purge_locked(name: &[u8], signer: *const Cert, reason: &[u8]) -> c_int {
+fn purge_locked(name: &[u8], signer: &Cert, reason: &[u8]) -> c_int {
     let u = match purge_archive(name) {
         Ok(Some(u)) => u,
         Ok(None) => return UPATCH_PURGE_NO_ARCHIVE,
@@ -1795,8 +1795,7 @@ fn purge_locked(name: &[u8], signer: *const Cert, reason: &[u8]) -> c_int {
     };
     let archived = archive_path(name);
     let sig = u.signature();
-    // SAFETY: the archive's signature and the caller's certificate.
-    let ret = unsafe { cms_signed_by(sig.as_ptr(), sig.len(), signer) };
+    let ret = cms_signed_by(sig, signer);
     let payload = u.hdr.payload_sha256;
     let payload_type = u.hdr.ty;
     drop(u);
