@@ -1311,6 +1311,8 @@ $(FUZZ_OUT)/fuzz-kconfig: testing/fuzz/fuzz-kconfig.c $(FUZZ_BASE) \
 $(FUZZ_OUT)/fuzz-quote-check: testing/fuzz/fuzz-quote-check.c $(FUZZ_BASE) \
                                tools/quote-check/row.c util/tpm_wire.c \
                                util/crypto_openssl.c util/io.c util/seal.c
+$(FUZZ_OUT)/fuzz-jar: testing/fuzz/fuzz-jar.c $(FUZZ_BASE) \
+                       tools/shirudo-build/jar.c
 $(FUZZ_OUT)/fuzz-upatch-info: testing/fuzz/fuzz-upatch-info.c $(FUZZ_BASE) \
                               testing/fuzz/output.c builtin-upatch.c \
                               builtin.h util/chain.c util/crypto_openssl.c \
@@ -1378,6 +1380,7 @@ $(FUZZ_OUT)/fuzz-config-update: FUZZ_INCLUDED := util/config_update.c
 $(FUZZ_OUT)/fuzz-upatch-info: FUZZ_INCLUDED := builtin-upatch.c
 $(FUZZ_OUT)/fuzz-bpm-info: FUZZ_INCLUDED := builtin-bpm.c
 $(FUZZ_OUT)/fuzz-attest-report: FUZZ_INCLUDED := builtin-attest.c
+$(FUZZ_OUT)/fuzz-jar: FUZZ_INCLUDED := tools/shirudo-build/jar.c
 
 # A target compiles its sources and links in one step, so it depends on
 # every header a source may include, and on the compiler and flags it was

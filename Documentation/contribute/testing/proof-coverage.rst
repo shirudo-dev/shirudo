@@ -1651,7 +1651,8 @@ a proof covers.
      - The builder's check of a jar the operator hands it, which reads
        the zip directory and has zlib inflate the manifest. The ``jar``
        unit cases run it on every truncation and every byte flip of a
-       jar; no harness is written for it yet
+       jar, and the ``jar`` fuzz target covers it; no proof harness is
+       written for it yet
    * - :src:`builtin-attest.c`, :src:`builtin-build.c`,
        :src:`builtin-config.c`, :src:`builtin-genkey.c`,
        :src:`builtin-image.c`, :src:`builtin-init.c`,
@@ -1702,9 +1703,9 @@ server's answer: ``bpm-oci-token`` takes every outcome of
 ``json_parse()`` its contract allows, as parsing 17 bytes of any value
 outgrew 6 GB, and the ``bpm_oci`` unit cases and the ``oci-http`` fuzz
 target read real answers. The zip directory walk of
-``jar_premain_class()`` in :src:`tools/shirudo-build/jar.c` has neither
-a fuzz target nor a proof; its unit cases cut and flip a jar byte by
-byte.
+``jar_premain_class()`` in :src:`tools/shirudo-build/jar.c` has the
+``jar`` fuzz target and no proof; its unit cases cut and flip a jar byte
+by byte.
 
 Of :src:`util/io.c` the proofs cover ``lines_len()``,
 ``read_text_line()`` and the append of a record. ``pread()`` never fails
