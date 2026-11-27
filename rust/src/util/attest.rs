@@ -2365,24 +2365,31 @@ fn challenge_document(
 /// `--pcrs`: PCRs 0 to 23 apart by commas, as a mask; -EINVAL for
 /// anything else, an empty list among it.
 pub(crate) fn parse_pcrs(list: &[u8]) -> Result<u32, c_int> {
-    let mut mask = 0u32;
-    let mut rest = list;
-
-    while !rest.is_empty() {
-        let (number, after) = rest.split_at(digits(rest));
-        let pcr = parse_u64(number, 23).map_err(|_| -EINVAL)?;
-
-        mask |= 1 << pcr;
-        rest = match after {
-            [b',', next @ ..] if !next.is_empty() => next,
-            [] => after,
-            _ => return Err(-EINVAL),
-        };
-    }
-    if mask == 0 {
+    if list.is_empty() {
         return Err(-EINVAL);
     }
-    Ok(mask)
+    let mut mask = 0u32;
+    let mut pcr = 0u32;
+    let mut have_digit = false;
+    for (at, &byte) in list.iter().enumerate() {
+        if byte.is_ascii_digit() {
+            pcr = pcr * 10 + u32::from(byte - b'0');
+            if pcr > 23 {
+                return Err(-EINVAL);
+            }
+            have_digit = true;
+        } else if byte == b',' && have_digit && at + 1 < list.len() {
+            mask |= 1 << pcr;
+            pcr = 0;
+            have_digit = false;
+        } else {
+            return Err(-EINVAL);
+        }
+    }
+    if !have_digit {
+        return Err(-EINVAL);
+    }
+    Ok(mask | 1 << pcr)
 }
 
 /// `<pcr>=<value>`: the PCR, below 24, and the text of its value after
