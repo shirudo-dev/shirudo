@@ -55,6 +55,7 @@ fn fail_writes() -> std::io::Result<()> {
     // SAFETY: SIGXFSZ ignored, and this process's file size limit read
     // and lowered.
     unsafe {
+        // SAFETY: libc::rlimit contains integer limits; zero is valid.
         let mut lim: libc::rlimit = core::mem::zeroed();
         if libc::signal(libc::SIGXFSZ, libc::SIG_IGN) == libc::SIG_ERR
             || libc::getrlimit(libc::RLIMIT_FSIZE, &mut lim) != 0

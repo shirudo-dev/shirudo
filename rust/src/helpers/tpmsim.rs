@@ -78,6 +78,7 @@ fn install_shutdown_handler() -> Option<OwnedFd> {
             return None;
         }
         SHUTDOWN.store(fds[1], Ordering::Relaxed);
+        // SAFETY: a zeroed sigaction has a null handler and empty mask.
         let mut sa: libc::sigaction = core::mem::zeroed();
         sa.sa_sigaction = request_shutdown as extern "C" fn(c_int) as usize;
         if libc::sigaction(libc::SIGTERM, &sa, core::ptr::null_mut()) != 0 {
