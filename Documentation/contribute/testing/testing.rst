@@ -1742,9 +1742,9 @@ holds ``testutil::serial()`` meanwhile. A module that reads a fixed path,
 as the event log and the tree state do, takes it in a test build from a
 thread-local each case sets for its own thread.
 
-One suite stays in C, ``testing/unit/overflow.c``. It tests the
-overflow macros and inline helpers of :src:`include/shirudo/` still
-used by C, with ``unit.h`` macros and one case per child process.
+One suite stays in C, ``testing/unit/pin_grant.c``. It tests the
+pin grant helper that the BPF program uses, with ``unit.h`` macros
+and one case per child process.
 
 Write a shell test
 ~~~~~~~~~~~~~~~~~~

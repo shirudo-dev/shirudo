@@ -746,9 +746,6 @@ can rewrite what it finds does so with ``-D patch``:
    * - ``openssl_ret``
      - A test of the truth of an OpenSSL function that returns 0 or a
        negative value on failure.
-   * - ``overflow``
-     - A sum or product tested for overflow by hand rather than with
-       the helpers of ``<shirudo/overflow.h>``.
    * - ``ctype``
      - A ``char`` passed to a ``<ctype.h>`` function without a cast to
        ``__u8``. Rewrites.
