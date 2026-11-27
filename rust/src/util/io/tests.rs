@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Authors of shirudo
 
 use super::*;
-use crate::errno::{EINVAL, EIO, EISDIR, ELOOP, ENOTDIR, EPERM, ESTALE};
+use crate::errno::{EBADF, EINVAL, EIO, EISDIR, ELOOP, ENOTDIR, EPERM, ESTALE};
 use crate::sys::libc::O_WRONLY;
 use crate::testutil::TempDir;
 use std::fs::{File, OpenOptions};
@@ -168,6 +168,16 @@ fn append_line_takes_one_line_alone() {
 
     assert_eq!(append(&f, b"a\nb"), Err(-EINVAL));
     assert_eq!(append(&f, b"a\0b"), Err(-EINVAL));
+    assert_eq!(log_of(&dir), b"x\n");
+}
+
+#[test]
+fn append_line_failed_write_keeps_the_log() {
+    let dir = TempDir::new();
+    drop(log_with(&dir, b"x\n"));
+    let read_only = File::open(dir.join("log")).unwrap();
+
+    assert_eq!(append(&read_only, b"y"), Err(-EBADF));
     assert_eq!(log_of(&dir), b"x\n");
 }
 
