@@ -267,7 +267,7 @@ one usually still compiles and passes tests.
   authority. The seal marks what it labels at creation, what shirudo
   opens and what anyone opens for writing or as a directory, and
   refreshes a directory's mark in every entry hook from the label it
-  reads there (carried kernel patches 0003 and 0004 make those hooks
+  reads there (carried kernel patches 0022 and 0023 make those hooks
   sleepable and `dentry->d_parent` trusted), so that
   `inode_init_security`, which has no dentry, labels the new inode from
   it: the marks are a cache, never the decision. A sealed inode cannot

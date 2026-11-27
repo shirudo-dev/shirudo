@@ -361,12 +361,12 @@ LSM hooks
    * - ``inode_create``, ``inode_symlink``, ``inode_mknod``,
        ``inode_rename`` (all sleepable)
      - ``seal``
-     - Carried patch 0004, for the read of ``dentry->d_parent``
+     - Carried patch 0023, for the read of ``dentry->d_parent``
    * - ``inode_mkdir``, ``inode_link``, ``inode_set_acl``,
        ``inode_remove_acl``, ``inode_file_setattr``, ``inode_copy_up``
        (all sleepable)
      - ``seal``
-     - Carried patch 0003, and 0004 for ``inode_mkdir`` and
+     - Carried patch 0022, and 0023 for ``inode_mkdir`` and
        ``inode_link``
 
 A hook the kernel's BTF lacks fails the pre-flight check
