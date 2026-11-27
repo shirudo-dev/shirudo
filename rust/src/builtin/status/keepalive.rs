@@ -104,8 +104,7 @@ impl View {
         let mut set: Vec<MeasuredUpatch> = Vec::with_capacity(names.len());
         self.not_ok = 0;
         for pin in &names {
-            // SAFETY: an all-zero member is an empty one.
-            let mut u: MeasuredUpatch = unsafe { core::mem::zeroed() };
+            let mut u = MeasuredUpatch::empty();
             if name_from_bpffs(&mut u.name, pin) != 0 {
                 continue;
             }
@@ -121,8 +120,7 @@ impl View {
         // The tree operation compared by a collector names each upatch and
         // payload, not its kind, so these members intentionally keep type 0.
         let mut add_java = |name: &[u8], payload: &[u8; 32]| {
-            // SAFETY: an all-zero member is an empty one.
-            let mut u: MeasuredUpatch = unsafe { core::mem::zeroed() };
+            let mut u = MeasuredUpatch::empty();
             if name.len() >= u.name.len() {
                 return -ENAMETOOLONG;
             }

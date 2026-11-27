@@ -78,6 +78,20 @@ pub struct Descriptor {
     size: i64,
 }
 
+impl OciClient {
+    /// An empty client before an endpoint and credentials are set.
+    const fn empty() -> Self {
+        Self {
+            base_url: [0; MAX_ENDPOINT],
+            registry: [0; MAX_ENDPOINT],
+            username: [0; USERNAME_SIZE],
+            password: [0; PASSWORD_SIZE],
+            token: [0; TOKEN_SIZE],
+            ca_file: [0; PATH_MAX],
+        }
+    }
+}
+
 const _: () = assert!(size_of::<OciClient>() == 13568);
 const _: () = assert!(size_of::<Descriptor>() == 4424);
 

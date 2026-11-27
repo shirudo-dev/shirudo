@@ -27,8 +27,7 @@ fn text(field: &[u8]) -> std::borrow::Cow<'_, str> {
 }
 
 fn read_bootstrap(args: &[&CStr]) -> c_int {
-    // SAFETY: a bootstrap of nothing read, for which zeros are the value.
-    let mut boot: Box<ImageBootstrap> = Box::new(unsafe { core::mem::zeroed() });
+    let mut boot: Box<ImageBootstrap> = Box::new(ImageBootstrap::empty());
     let mut ret = image_bootstrap::read(args[2], &mut boot, true);
     if ret == 0
         && let Some(runtime) = args.get(3)

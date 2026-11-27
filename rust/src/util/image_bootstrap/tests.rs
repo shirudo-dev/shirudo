@@ -5,8 +5,7 @@ use super::*;
 use crate::errno::{E2BIG, EINVAL};
 
 fn parsed(text: &[u8], initial: bool) -> (c_int, Box<ImageBootstrap>) {
-    // SAFETY: a bootstrap of nothing read, for which zeros are the value.
-    let mut boot: Box<ImageBootstrap> = Box::new(unsafe { core::mem::zeroed() });
+    let mut boot: Box<ImageBootstrap> = Box::new(ImageBootstrap::empty());
     let ret = parse(text, &mut boot, initial);
     (ret, boot)
 }

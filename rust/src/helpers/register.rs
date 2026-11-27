@@ -175,7 +175,7 @@ fn append_init(event: &[u8; 32], info: &ChainInitInfo) -> c_int {
 
 fn print_init(event: &[u8; 32]) -> c_int {
     // SAFETY: a record of numbers and arrays, for which zeros are a value.
-    let mut info: ChainInitInfo = unsafe { core::mem::zeroed() };
+    let mut info = ChainInitInfo::zeroed();
     let ret = chain::init(event, &mut info);
     out(&format!("rc={ret}\n"));
     if ret != 0 {
@@ -274,7 +274,7 @@ fn tree(args: &[&CStr]) -> c_int {
 
 fn status() -> c_int {
     // SAFETY: a status of numbers and arrays, for which zeros are a value.
-    let mut st: Box<ChainStatus> = Box::new(unsafe { core::mem::zeroed() });
+    let mut st = Box::new(ChainStatus::zeroed());
     let ret = chain::status(&mut st);
     let b = |v: bool| c_int::from(v);
     out(&format!(

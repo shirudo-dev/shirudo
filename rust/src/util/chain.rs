@@ -45,6 +45,16 @@ pub struct MeasuredUpatch {
     pub(crate) ty: u32,
 }
 
+impl MeasuredUpatch {
+    pub(crate) const fn empty() -> Self {
+        Self {
+            name: [0; NAME_MAX + 1],
+            payload_hex: [0; 2 * PAYLOAD_HASH_LEN + 1],
+            ty: 0,
+        }
+    }
+}
+
 /// `struct chain_init_info`: the binding chain_init() made or found.
 #[repr(C)]
 pub struct ChainInitInfo {
@@ -78,7 +88,7 @@ pub struct ChainStatus {
 
 impl ChainInitInfo {
     /// No binding, for init() to fill.
-    const fn zeroed() -> Self {
+    pub(crate) const fn zeroed() -> Self {
         ChainInitInfo {
             writer_public: [0; NV_RSA_BYTES],
             reused: false,
@@ -97,7 +107,7 @@ impl ChainInitInfo {
 
 impl ChainStatus {
     /// No status, for status() to fill.
-    const fn zeroed() -> Self {
+    pub(crate) const fn zeroed() -> Self {
         ChainStatus {
             tpm: false,
             defined: false,

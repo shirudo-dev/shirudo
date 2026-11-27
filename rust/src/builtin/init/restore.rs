@@ -6,7 +6,6 @@
 //! event, extended once and recorded in the eventlog.
 
 use core::ffi::c_int;
-use core::mem;
 use std::ffi::CString;
 use std::fs::File;
 
@@ -444,7 +443,7 @@ pub(super) fn bind_register(init: &Init, set: &mut [MeasuredUpatch]) -> c_int {
         }
     }
     // SAFETY: an all-zero binding is room for one.
-    let mut bound: Box<ChainInitInfo> = Box::new(unsafe { mem::zeroed() });
+    let mut bound = Box::new(ChainInitInfo::zeroed());
     let ret = chain::init(&d.init, &mut bound);
     match ret {
         0 => {}

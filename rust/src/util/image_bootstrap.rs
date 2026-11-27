@@ -39,6 +39,22 @@ pub struct ImageBootstrap {
 
 const _: () = assert!(size_of::<ImageBootstrap>() == 73776);
 
+impl ImageBootstrap {
+    /// An empty bootstrap file before its fields are parsed.
+    pub(crate) const fn empty() -> Self {
+        Self {
+            runtime: [0; PATH_MAX],
+            config: [0; PATH_MAX],
+            certificates: [[0; PATH_MAX]; KEYS_MAX],
+            n_certificates: 0,
+            runtime_root: [0; 32],
+            pcr: 0,
+            have_root: false,
+            have_pcr: false,
+        }
+    }
+}
+
 /// An absolute path without `.` or `..` components or empty ones, and
 /// not `/`.
 pub(crate) fn path_valid(path: &[u8]) -> bool {

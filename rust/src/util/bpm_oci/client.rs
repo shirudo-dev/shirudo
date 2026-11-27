@@ -25,8 +25,7 @@ pub(crate) struct Client(Box<OciClient>);
 
 impl Client {
     pub(crate) fn new() -> Self {
-        // SAFETY: an all-zero client is a cleared one, as C's `= {}`.
-        Client(Box::new(unsafe { core::mem::zeroed() }))
+        Client(Box::new(OciClient::empty()))
     }
 
     pub(crate) fn as_mut(&mut self) -> &mut OciClient {

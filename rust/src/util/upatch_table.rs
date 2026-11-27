@@ -27,6 +27,24 @@ pub struct UpatchTableRow {
     pub(crate) payload_sha256: [c_char; 65],
 }
 
+impl UpatchTableRow {
+    /// An empty row before its fields are filled.
+    pub(crate) const fn empty() -> Self {
+        Self {
+            name: [0; 257],
+            location: [0; 160],
+            loaded_at: [0; 32],
+            status: [0; 64],
+            n_maps: 0,
+            missed_ret: 0,
+            missed_counted: 0,
+            missed_runs: 0,
+            age_sec: 0,
+            payload_sha256: [0; 65],
+        }
+    }
+}
+
 const _: () = assert!(size_of::<UpatchTableRow>() == 616);
 const _: () = assert!(core::mem::offset_of!(UpatchTableRow, n_maps) == 516);
 const _: () = assert!(core::mem::offset_of!(UpatchTableRow, payload_sha256) == 544);
@@ -178,8 +196,7 @@ mod tests {
     #[test]
     fn json_distinguishes_counted_misses_from_unavailable_counters() {
         let mut rows: [UpatchTableRow; 3] = std::array::from_fn(|_| {
-            // SAFETY: an all-zero row is an empty one.
-            let mut r: UpatchTableRow = unsafe { core::mem::zeroed() };
+            let mut r = UpatchTableRow::empty();
             r.age_sec = -1;
             r
         });

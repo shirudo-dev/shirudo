@@ -10,7 +10,7 @@
 mod keepalive;
 
 use core::ffi::{CStr, c_char, c_int};
-use core::{mem, ptr};
+use core::ptr;
 use std::ffi::{CString, OsStr};
 use std::io::Read;
 use std::os::unix::ffi::OsStrExt;
@@ -482,8 +482,7 @@ struct JavaAgent {
 
 impl JavaAgent {
     fn row(&self) -> UpatchTableRow {
-        // SAFETY: an all-zero row is an empty one.
-        let mut r: UpatchTableRow = unsafe { mem::zeroed() };
+        let mut r = UpatchTableRow::empty();
 
         row_field(&mut r.name, &self.name);
         row_field(&mut r.location, b"java");
@@ -530,8 +529,7 @@ fn upatch_rows(pins: &[Vec<u8>], java: &[JavaAgent]) -> Vec<UpatchTableRow> {
         // vmlinux BTF loaded once; every BPF upatch attaches to vmlinux.
         let vbtf = kernel_btf::vmlinux();
         rows.extend(pins.iter().map(|pin| {
-            // SAFETY: an all-zero row is an empty one.
-            let mut r: UpatchTableRow = unsafe { mem::zeroed() };
+            let mut r = UpatchTableRow::empty();
             let name = message(&[&name_from_pin(pin).unwrap_or_else(|| pin.clone())]);
 
             row_field(&mut r.name, name.to_bytes());
@@ -713,8 +711,7 @@ impl KeyringView {
         };
         let frozen = &ident.dm_verity_keys[..n_frozen];
         let mut k = KeyringView::new(serial, pinned, frozen);
-        // SAFETY: an all-zero bootstrap is an empty one.
-        let mut boot: Box<ImageBootstrap> = Box::new(unsafe { mem::zeroed() });
+        let mut boot = Box::new(ImageBootstrap::empty());
 
         if let Ok(links) = &k.links {
             k.key_missing = frozen
@@ -1136,8 +1133,7 @@ impl Drop for Otel {
 
 impl Otel {
     fn load() -> Result<Self, c_int> {
-        // SAFETY: an all-zero configuration is an empty one.
-        let cfg = Box::new(unsafe { mem::zeroed() });
+        let cfg = Box::new(Config::zeroed());
         let mut o = Otel { cfg };
 
         let err = config::load(&mut o.cfg);
@@ -1286,8 +1282,7 @@ impl Report {
         }]);
 
         let tcti = tpm::tcti().map_or_else(|_| b"?".to_vec(), CString::into_bytes);
-        // SAFETY: an all-zero status is an empty one.
-        let mut cst: ChainStatus = unsafe { mem::zeroed() };
+        let mut cst = ChainStatus::zeroed();
         let mut chain_rc = chain::status(&mut cst);
         if chain_rc == 0 && !(cst.defined && cst.written) {
             chain_rc = -ENODEV;

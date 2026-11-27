@@ -126,10 +126,8 @@ impl State {
             boot_runtime: DmVerity::empty(),
             candidate: None,
             candidate_device: DmVerity::empty(),
-            // SAFETY: as above.
-            bootstrap_config: unsafe { core::mem::zeroed() },
-            // SAFETY: as above.
-            bootstrap: unsafe { core::mem::zeroed() },
+            bootstrap_config: Config::zeroed(),
+            bootstrap: ImageBootstrap::empty(),
             tpm: None,
             candidate_fd: None,
             certificates: Vec::new(),
