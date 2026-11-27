@@ -369,7 +369,7 @@ is in sight, rather than waiting for the copy. Copies drift apart, and
 the difference between them is usually a bug in one: the `sha256:`
 digest of a manifest was checked and decoded by hand in six places, one
 with a length check the others lacked, and written in ten, each its own
-way, until `sha256_digest_decode()` and `sha256_digest_encode()`, now
+way, until `decode_sha256_digest()` and `sha256_digest_encode()`, now
 of `rust/src/util/hex.rs`, took the place of them all.
 
 Never write the same logic twice. Before writing a parser, a check, a
@@ -396,8 +396,8 @@ has it already, or should. The basics:
 | Secrets | `explicit_bzero()` (`rust/src/sys/libc.rs`), `memneq_explicit()` (`rust/src/util/chain.rs`) |
 | Files | `read()`, `read_whole()`, `write_complete()`, `append_line()`, `dir_names()`, `dir_names_at()`, `open_beneath()`, `lock_exclusive()` (`rust/src/util/io.rs`) |
 | Sealed state and paths root names | `open()`, `open_read()`, `open_sealed()`, `lock()`, `append()`, `mkdir_p()`, `write_file()`; `Output::create()` and `Output::commit()` for a report or export, `output_open()` for one appended to (`rust/src/util/seal.rs`) |
-| Bytes on the wire | `from_le_bytes()`, `to_be_bytes()` and kin; `encode()` and `decode()` for hex, and `hex_encode()`, `hex_decode()`, `hex_decode_max()` over C strings (`rust/src/util/hex.rs`) |
-| SHA-256 | `sha256()` or `sha256_into()` of a slice, or a `Sha256Ctx` through `sha256_init()`, `sha256_update()` and `sha256_final()` over pieces (`rust/src/util/crypto_openssl.rs`); `sha256_digest_encode()` and `sha256_digest_decode()` for the `sha256:<hex>` form (`rust/src/util/hex.rs`), `sha256_hex()` for its bare hex (`rust/src/util/bpm_oci/http.rs`) |
+| Bytes on the wire | `from_le_bytes()`, `to_be_bytes()` and kin; `encode()`, `decode()` and `decode_max()` for hex (`rust/src/util/hex.rs`) |
+| SHA-256 | `sha256()` or `sha256_into()` of a slice, or a `Sha256Ctx` through `sha256_init()`, `sha256_update()` and `sha256_final()` over pieces (`rust/src/util/crypto_openssl.rs`); `sha256_digest_encode()` and `decode_sha256_digest()` for the `sha256:<hex>` form (`rust/src/util/hex.rs`), `sha256_hex()` for its bare hex (`rust/src/util/bpm_oci/http.rs`) |
 | JSON | `rust/src/util/json/`: `parse_schema()` over a table of `JsonField`s into a state the caller passes, each field naming its place in it, and `JsonEmit`, whose `str_lossy()` and `key_lossy()` write text from outside |
 | Messages | `log::err()`, `warn()`, `info()`, `audit()`, and `log_c!` for a C format (`rust/src/log.rs`) |
 | A command's options | a table of `OptSpec` indexed by the command's constant for each option, an `OptParser` and a `match` over its `next()`, `number()` for a value in a range, `choice()` for one from a set of `OptName`s, `usage()` and `EXIT_USAGE` (`rust/src/util/options.rs`); `HelpSection::options()` (`rust/src/util/help.rs`) lists the same table in help, and `--list-opts` for completion; never compare an argument by hand |

@@ -191,9 +191,9 @@ the model follows the C.
    * - ``Shirudo.Hex``, :src:`rust/src/util/hex.rs`
      - ``decode_encode``, ``length_encode``, ``encode_lower``: an encoding
        is lowercase hex twice its length that decodes back;
-       ``decode_spec``: ``hex_decode()`` takes exactly ``2 * n`` hex
+       ``decode_spec``: ``decode()`` takes exactly ``2 * n`` hex
        digits of either case, and its bytes encode back to them in
-       lowercase; ``decodeMax_spec``: ``hex_decode_max()`` takes exactly
+       lowercase; ``decodeMax_spec``: ``decode_max()`` takes exactly
        the even runs of at most ``2 * cap``; ``encode_injective``
      - A string is shorter than ``SIZE_MAX``
      - None since the port to Rust; the CBMC model went with

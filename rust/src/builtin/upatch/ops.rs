@@ -211,7 +211,7 @@ fn parse<'a>(args: &'a [&'a CStr], unload: bool) -> Result<OpArgs<'a>, c_int> {
     Ok(o)
 }
 
-/// The register value a caller expects, as hex_decode() reads it.
+/// The register value a caller expects, as decode() reads it.
 fn decode_chain(hex: &CStr) -> Option<[u8; DIGEST_LEN]> {
     let mut want = [0u8; DIGEST_LEN];
     decode(hex.to_bytes(), &mut want).ok().map(|()| want)

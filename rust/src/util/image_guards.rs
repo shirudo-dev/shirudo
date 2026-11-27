@@ -663,7 +663,6 @@ fn guard_link(guard: &ImageGuard, maps: &[u32; GUARD_MAP_COUNT], kernel: &mut Ke
     if kernel.id != obj_id {
         return -EPROTO;
     }
-    // SAFETY: a static C string of the tables.
     let prog_name = guard.prog.to_bytes();
     let hook = prog_name
         .strip_prefix(b"shirudo_lsm_")
