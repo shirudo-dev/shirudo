@@ -41,10 +41,12 @@ error injection or a function the kernel build tagged because it returns
 errors, and it can observe or filter
 (:doc:`/upatches/write/attach-kinds`). In exchange, the BPF verifier checks
 every program, CO-RE lets one artifact load on more than one kernel
-build, and each load and unload is measured. A target can run both:
-shirudo does not gate module loading (:doc:`/operate/plan/interoperability`).
-Used together, a upatch blocks a vulnerable path until a live patch or a
-fixed kernel is in place, and a signed unload directive removes it then.
+build, and each load and unload is measured. A target can run both
+when every livepatch module is signed with a key the kernel trusts,
+since shirudo refuses unsigned modules
+(:doc:`/operate/plan/interoperability`). Used together, a upatch blocks
+a vulnerable path until a live patch or a fixed kernel is in place, and
+a signed unload directive removes it then.
 
 IMA and IPE
 -----------

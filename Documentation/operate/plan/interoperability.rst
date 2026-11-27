@@ -126,9 +126,9 @@ What common software sees:
      - The agent cannot create its maps or load its programs, so the
        datapath does not come up.
    * - Tetragon, Falco's eBPF drivers
-     - Cannot load their programs. Falco's kernel module driver is a
-       kernel module, which shirudo does not gate, see `Module loading
-       and kernel live patching`_.
+     - Cannot load their programs. Falco's kernel module driver loads
+       when it is signed with a key the kernel trusts, see `Module
+       loading and kernel live patching`_.
    * - XDP and tc programs from ``ip`` and ``tc``, sched_ext schedulers,
        HID-BPF
      - The program load is refused.
