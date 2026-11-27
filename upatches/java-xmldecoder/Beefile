@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+
+[package]
+name = "java-xmldecoder"
+description = "A Java agent that has java.beans.XMLDecoder refuse method calls, constructions and field access on JDK classes off an allow list"
+license = "BSD-2-Clause"
+authors = ["Authors of shirudo"]
+
+[[upatches]]
+type = "java"
+source = "java-xmldecoder.jar"
+
+[upatches.tree]
+id = "java-xmldecoder"
