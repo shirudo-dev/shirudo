@@ -33,7 +33,6 @@ pub(crate) const XDP_PROG_PIN_PREFIX: &[u8] = b"xdp_prog_";
 /// whether it is loaded, and whole, goes: `link` of a single attach
 /// program, the numbered links, lowest and highest, and the XDP program
 /// pins, lowest first.
-#[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Pins {
     pub(crate) has_link: bool,
