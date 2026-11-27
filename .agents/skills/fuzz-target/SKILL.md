@@ -1,6 +1,6 @@
 ---
 name: fuzz-target
-description: Add or extend a libFuzzer target for a shirudo parser of input from outside the host. Covers the harness and the properties it should hold the parser to, the Makefile rule, seed inputs, the coverage table, and running a target and reproducing what it finds. Use when adding or changing a parser of registry, package, upatch, config, evidence or collector input, or when a fuzz run fails.
+description: Adds or extends a libFuzzer target for a shirudo parser of input from outside the host. Covers the harness and the properties it should hold the parser to, the Makefile rule, seed inputs, the coverage table, and running a target and reproducing what it finds. Use when adding or changing a parser of registry, package, upatch, config, evidence or collector input, or when a fuzz run fails.
 ---
 
 # Fuzz targets

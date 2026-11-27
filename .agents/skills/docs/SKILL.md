@@ -1,6 +1,6 @@
 ---
 name: docs
-description: Keep Documentation/ in step with a change to shirudo. Covers which pages describe a command, option, message, failure category, tamper or integrity counter, LSM hook, file, unit, environment variable, setting, format, Beefile key, test, kernel patch or threat, how to write the change in the voice of its page, and how to check the result. Use whenever code changes behavior a page describes, when a test is added or removed, and when writing or reviewing a page.
+description: Keeps Documentation/ in step with a change to shirudo. Covers which pages describe a command, option, message, failure category, tamper or integrity counter, LSM hook, file, unit, environment variable, setting, format, Beefile key, test, kernel patch or threat, how to write the change in the voice of its page, and how to check the result. Use whenever code changes behavior a page describes, when a test is added or removed, and when writing or reviewing a page.
 ---
 
 # Documentation
@@ -23,7 +23,7 @@ Then go through the pages each kind of change has:
 
 | Change | Pages |
 |---|---|
-| Command, option, usage | `reference/cli/<command>.rst`, the command's help text, `completion/shirudo.bash`, `reference/cheat-sheet.rst`, the guides that run it |
+| Command, option, usage | `reference/cli/<command>.rst`, the command's help text, `reference/cheat-sheet.rst`, the guides that run it; `completion/shirudo.bash` only for what `--list-cmds` and `--list-opts` cannot say: a placeholder's meaning, a command's file arguments |
 | Error message, exit status, failure category | `reference/failure-categories.rst` |
 | Tamper counter | `security/tamper-counters.rst` |
 | Integrity counter | `security/integrity-counters.rst` |
@@ -64,15 +64,14 @@ Then go through the pages each kind of change has:
   rendered SVG (`rsvg-convert`) before handing it over.
 - A new page carries `:page-type:` and `:audience:` and goes into its
   section's toctree. Nothing that is not about the project as a whole
-  goes in the top-level directory, and no README or notes file goes
-  beside the code.
+  goes in the top-level directory, and no README or notes file goes beside the code but those AGENTS.md excepts.
 
 ## Check
 
 ```sh
 .github/scripts/check-docs.sh
 make -C Documentation check       # DOCS_CONTAINER=0 without podman or docker
-make docs                         # renders and serves on 127.0.0.1:8000
+make docs                         # renders, serves on 127.0.0.1:8000 and watches until stopped: run it in the background
 ```
 
 `check-docs.sh` checks the options of console examples, the failure
