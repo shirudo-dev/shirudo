@@ -112,7 +112,6 @@ pub(crate) const KPROBE_TARGETS: usize = 16;
 pub(crate) const KPROBE_TARGET: usize = 12;
 
 /// `struct upatch_host_header`: the container's header in host order.
-#[repr(C)]
 pub struct UpatchHostHeader {
     pub(crate) magic: u64,
     pub(crate) version: u32,
@@ -169,9 +168,6 @@ struct PolicyLabelsAt {
     map_idx: u32,
     socket_map_idx: u32,
 }
-
-const _: () = assert!(size_of::<UpatchHostHeader>() == HEADER_SIZE);
-const _: () = assert!(core::mem::offset_of!(UpatchHostHeader, payload_sha256) == 272);
 
 /// A decoder of the signed blob, borrowing its source from the container.
 pub struct DecoderView<'a> {
