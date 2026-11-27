@@ -44,7 +44,8 @@ C each commit touches and over its message, with the userspace
 exceptions the script lists, and refuses the netdev block-comment
 opener. `check-dco.sh` wants a one-line subject, a body beyond the tags
 and the author's sign-off from a real address; a noreply address or a
-`[bot]` is refused as author, signer or co-developer. An agent never
+`[bot]` is refused as author, signer or co-developer, and so is a name
+that is not a given name and a surname, capitalized. An agent never
 adds a sign-off, so it fails until the person who submits the series
 signs off.
 

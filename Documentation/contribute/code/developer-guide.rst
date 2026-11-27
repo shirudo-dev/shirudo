@@ -468,7 +468,8 @@ the commit at ``HEAD`` alone without them.
      - Checks
    * - ``check-dco.sh <range>``
      - A one-line subject, a body beyond the tags and the author's
-       ``Signed-off-by:``. See :doc:`/contribute/code/contributing`.
+       ``Signed-off-by:``, every identity a person's full name. See
+       :doc:`/contribute/code/contributing`.
    * - ``check-style.sh <range>``
      - The kernel's ``checkpatch.pl`` in strict mode over the C each
        commit touches, at its default limit of 100 columns, and over its

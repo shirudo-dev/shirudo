@@ -35,7 +35,8 @@ signed config image.
      - Covers
    * - ``t0001-check-dco``
      - ``check-dco.sh``: subject, body and sign-off, the identities it
-       rejects, the author the sign-off must match, merge commits
+       rejects, the full names it wants, the author the sign-off must
+       match, merge commits
    * - ``t0002-check-spdx``
      - ``check-spdx.sh``: tag form by file type, the two expressions,
        the dual license of BPF sources and package files, vendored
