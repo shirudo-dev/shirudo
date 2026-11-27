@@ -68,91 +68,84 @@ pub(crate) fn path_valid(path: &[u8]) -> bool {
 
 /// One more config verification certificate, a file of the runtime
 /// image named once.
-fn add_certificate(boot: &mut ImageBootstrap, path: &[u8]) -> c_int {
+fn add_certificate(boot: &mut ImageBootstrap, path: &[u8]) -> Result<(), c_int> {
     let n = boot.n_certificates;
 
     if !path.starts_with(RUNTIME_DIR_PREFIX) || !path_valid(path) {
-        return -EPERM;
+        return Err(-EPERM);
     }
     if n == KEYS_MAX {
-        return -E2BIG;
+        return Err(-E2BIG);
     }
     if boot.certificates[..n].iter().any(|c| cstr(c) == path) {
-        return -EEXIST;
+        return Err(-EEXIST);
     }
-    if strscpy(&mut boot.certificates[n], path).is_err() {
-        return -ENAMETOOLONG;
-    }
+    strscpy(&mut boot.certificates[n], path).map_err(|_| -ENAMETOOLONG)?;
     boot.n_certificates += 1;
-    0
+    Ok(())
 }
 
 /// One `key = value` line, cut in place, into `boot`.
-fn apply(boot: &mut ImageBootstrap, key: &[u8], value: &CStr, initial: bool) -> c_int {
+fn apply(boot: &mut ImageBootstrap, key: &[u8], value: &CStr, initial: bool) -> Result<(), c_int> {
     let v = value.to_bytes();
 
     match key {
         b"runtime.root_hash" => {
             if !initial || boot.have_root {
-                return -EINVAL;
+                return Err(-EINVAL);
             }
-            if decode(value.to_bytes(), &mut boot.runtime_root).is_err() {
-                return -EINVAL;
-            }
+            decode(v, &mut boot.runtime_root).map_err(|_| -EINVAL)?;
             boot.have_root = true;
-            0
+            Ok(())
         }
         b"runtime.image" if initial => {
             if !path_valid(v) || boot.runtime[0] != 0 {
-                -EINVAL
-            } else if strscpy(&mut boot.runtime, v).is_err() {
-                -ENAMETOOLONG
-            } else {
-                0
+                return Err(-EINVAL);
             }
+            strscpy(&mut boot.runtime, v).map_err(|_| -ENAMETOOLONG)?;
+            Ok(())
         }
         b"config.image" => {
             if !path_valid(v) {
-                -EINVAL
-            } else if strscpy(&mut boot.config, v).is_err() {
-                -ENAMETOOLONG
-            } else {
-                0
+                return Err(-EINVAL);
             }
+            strscpy(&mut boot.config, v).map_err(|_| -ENAMETOOLONG)?;
+            Ok(())
         }
         b"config.verification_key" => add_certificate(boot, v),
-        b"config.pcr" => match parse_u64(v, 23) {
-            Ok(pcr) if pcr_valid(pcr as u32) == 0 => {
-                boot.pcr = pcr as u32;
-                boot.have_pcr = true;
-                0
+        b"config.pcr" => {
+            let pcr = parse_u64(v, 23).map_err(|_| -EINVAL)?;
+            let pcr = u32::try_from(pcr).map_err(|_| -EINVAL)?;
+            if pcr_valid(pcr) != 0 {
+                return Err(-EINVAL);
             }
-            _ => -EINVAL,
-        },
+            boot.pcr = pcr;
+            boot.have_pcr = true;
+            Ok(())
+        }
         b"config.nvpcr" => {
             if v != CONFIG_NVPCR_NAME {
-                -EINVAL
-            } else {
-                boot.pcr = CONFIG_NVPCR_INDEX;
-                boot.have_pcr = true;
-                0
+                return Err(-EINVAL);
             }
+            boot.pcr = CONFIG_NVPCR_INDEX;
+            boot.have_pcr = true;
+            Ok(())
         }
-        _ if key.starts_with(b"config.") || key.starts_with(b"runtime.") => -EINVAL,
-        _ => 0,
+        _ if key.starts_with(b"config.") || key.starts_with(b"runtime.") => Err(-EINVAL),
+        _ => Ok(()),
     }
 }
 
 /// The lines of `text` into `boot`, each as getline() gave it, its
 /// newline included; only the `initial` read takes the runtime image and
 /// its root.
-fn parse(text: &[u8], boot: &mut ImageBootstrap, initial: bool) -> c_int {
+fn parse(text: &[u8], boot: &mut ImageBootstrap, initial: bool) -> Result<(), c_int> {
     for line in text.split_inclusive(|&c| c == b'\n') {
         if line.contains(&0) {
-            return -EINVAL;
+            return Err(-EINVAL);
         }
         if line.strip_suffix(b"\n").unwrap_or(line).len() > PATH_MAX + 127 {
-            return -E2BIG;
+            return Err(-E2BIG);
         }
         // The line as the C string the C trimmed in place.
         let mut buf = [line, b"\0"].concat();
@@ -161,46 +154,39 @@ fn parse(text: &[u8], boot: &mut ImageBootstrap, initial: bool) -> c_int {
             continue;
         }
         let Some(eq) = buf[ls..le].iter().position(|&c| c == b'=').map(|i| ls + i) else {
-            return -EINVAL;
+            return Err(-EINVAL);
         };
         buf[eq] = 0;
         let (ks, ke) = trim_blanks(&mut buf, ls, eq);
         let (vs, _) = trim_blanks(&mut buf, eq + 1, le);
         let value = CStr::from_bytes_until_nul(&buf[vs..]).unwrap_or(c"");
-        let ret = apply(boot, &buf[ks..ke], value, initial);
-        if ret != 0 {
-            return ret;
-        }
+        apply(boot, &buf[ks..ke], value, initial)?;
     }
-    0
+    Ok(())
 }
 
 /// The bootstrap file at `path` into `boot`.
-pub(crate) fn read(path: &CStr, boot: &mut ImageBootstrap, initial: bool) -> c_int {
-    match std::fs::read(OsStr::from_bytes(path.to_bytes())) {
-        Ok(text) => parse(&text, boot, initial),
-        Err(e) => -e.raw_os_error().unwrap_or(EIO),
-    }
+pub(crate) fn read(path: &CStr, boot: &mut ImageBootstrap, initial: bool) -> Result<(), c_int> {
+    let text = std::fs::read(OsStr::from_bytes(path.to_bytes()))
+        .map_err(|e| -e.raw_os_error().unwrap_or(EIO))?;
+    parse(&text, boot, initial)
 }
 
 /// The bootstrap file open at `fd`, from its start, into `boot`, through
 /// a copy of the fd: the caller keeps its own.
-pub(crate) fn read_fd(fd: c_int, boot: &mut ImageBootstrap, initial: bool) -> c_int {
+pub(crate) fn read_fd(fd: c_int, boot: &mut ImageBootstrap, initial: bool) -> Result<(), c_int> {
     // SAFETY: the caller's fd, and a minimum.
     let copy = unsafe { fcntl(fd, F_DUPFD_CLOEXEC, 3) };
     if copy < 0 {
-        return -errno();
+        return Err(-errno());
     }
     // SAFETY: the copy fcntl() gave, owned from here.
     let mut f = File::from(unsafe { OwnedFd::from_raw_fd(copy) });
     let mut text = Vec::new();
-    match f
-        .seek(SeekFrom::Start(0))
+    f.seek(SeekFrom::Start(0))
         .and_then(|_| f.read_to_end(&mut text))
-    {
-        Ok(_) => parse(&text, boot, initial),
-        Err(e) => -e.raw_os_error().unwrap_or(EIO),
-    }
+        .map_err(|e| -e.raw_os_error().unwrap_or(EIO))?;
+    parse(&text, boot, initial)
 }
 
 #[cfg(shirudo_fuzz)]

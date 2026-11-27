@@ -718,7 +718,9 @@ impl KeyringView {
                 .iter()
                 .any(|key| !links.iter().any(|l| l.serial == *key));
         }
-        let mut rc = image_bootstrap::read(RUNTIME_CONF_PATH, &mut boot, false);
+        let mut rc = image_bootstrap::read(RUNTIME_CONF_PATH, &mut boot, false)
+            .err()
+            .unwrap_or(0);
         if rc == 0 && boot.n_certificates == 0 {
             rc = -ENOENT;
         }

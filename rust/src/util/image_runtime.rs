@@ -448,7 +448,9 @@ fn load_runtime_config(s: &mut State, trusted_boot: bool) -> c_int {
         Err(err) => return err,
     };
     s.bootstrap.n_certificates = 0;
-    let mut ret = image_bootstrap::read_fd(conf.as_raw_fd(), &mut s.bootstrap, false);
+    let mut ret = image_bootstrap::read_fd(conf.as_raw_fd(), &mut s.bootstrap, false)
+        .err()
+        .unwrap_or(0);
     if ret == 0 {
         ret = config::load_fd(&mut s.bootstrap_config, conf.as_fd(), RUNTIME_CONF_PATH);
     }
@@ -1086,7 +1088,9 @@ pub(crate) fn bootstrap_load() -> c_int {
             s.bootstrap.have_root = true;
             load_runtime_config(s, false)
         } else {
-            let mut ret = image_bootstrap::read(CONF_PATH, &mut s.bootstrap, true);
+            let mut ret = image_bootstrap::read(CONF_PATH, &mut s.bootstrap, true)
+                .err()
+                .unwrap_or(0);
             if ret == 0 && (s.bootstrap.runtime[0] == 0 || !s.bootstrap.have_root) {
                 ret = -EINVAL;
             }

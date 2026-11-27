@@ -28,11 +28,15 @@ fn text(field: &[u8]) -> std::borrow::Cow<'_, str> {
 
 fn read_bootstrap(args: &[&CStr]) -> c_int {
     let mut boot: Box<ImageBootstrap> = Box::new(ImageBootstrap::empty());
-    let mut ret = image_bootstrap::read(args[2], &mut boot, true);
+    let mut ret = image_bootstrap::read(args[2], &mut boot, true)
+        .err()
+        .unwrap_or(0);
     if ret == 0
         && let Some(runtime) = args.get(3)
     {
-        ret = image_bootstrap::read(runtime, &mut boot, false);
+        ret = image_bootstrap::read(runtime, &mut boot, false)
+            .err()
+            .unwrap_or(0);
     }
     if ret == 0 {
         let root = crate::util::hex::encode(&boot.runtime_root);

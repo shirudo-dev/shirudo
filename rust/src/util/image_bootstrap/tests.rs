@@ -6,7 +6,7 @@ use crate::errno::{E2BIG, EINVAL};
 
 fn parsed(text: &[u8], initial: bool) -> (c_int, Box<ImageBootstrap>) {
     let mut boot: Box<ImageBootstrap> = Box::new(ImageBootstrap::empty());
-    let ret = parse(text, &mut boot, initial);
+    let ret = parse(text, &mut boot, initial).err().unwrap_or(0);
     (ret, boot)
 }
 

@@ -15,7 +15,7 @@ fuzz_target!(shirudo_fuzz_image, shirudo_fuzz_image_init, |data| {
     };
     let fd = input.fd.as_raw_fd();
     let mut boot: Box<super::ImageBootstrap> = Box::new(super::ImageBootstrap::empty());
-    super::read_fd(fd, &mut boot, true);
-    super::read_fd(fd, &mut boot, false);
+    let _ = super::read_fd(fd, &mut boot, true);
+    let _ = super::read_fd(fd, &mut boot, false);
     let _ = crate::util::config_image::read_header(&File::from(input.fd));
 });
