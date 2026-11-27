@@ -246,8 +246,11 @@ pub struct ProgSpec {
 }
 
 impl ProgSpec {
-    pub(crate) fn kprobe_symbol(&self, off: usize) -> &[u8] {
-        &self.kprobe_sym_buf[off..]
+    /// One NUL-terminated kprobe name at a checked metadata offset.
+    pub(crate) fn kprobe_symbol(&self, off: usize) -> Result<&CStr, c_int> {
+        let tail = self.kprobe_sym_buf.get(off..).ok_or(-EINVAL)?;
+        let end = tail.iter().position(|&byte| byte == 0).ok_or(-EINVAL)?;
+        CStr::from_bytes_with_nul(&tail[..=end]).map_err(|_| -EINVAL)
     }
 
     fn new() -> Self {

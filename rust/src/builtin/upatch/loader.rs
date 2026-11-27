@@ -14,7 +14,7 @@
 //! and every undo compare with the records.
 
 use crate::util::paths::{POLICY_PIN, SOCKET_POLICY_PIN, XATTR_POLICY};
-use core::ffi::{CStr, c_char, c_int, c_long};
+use core::ffi::{CStr, c_int, c_long};
 use std::ffi::{CString, OsStr};
 use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::{ErrorKind, Read, Write};
@@ -519,7 +519,7 @@ fn attach_kprobe_multi(prog: c_int, spec: &ProgSpec) -> Result<OwnedFd, c_int> {
         .try_reserve_exact(spec.kprobe_sym_offsets.len())
         .map_err(|_| ENOMEM)?;
     for &off in &spec.kprobe_sym_offsets {
-        symbols.push(spec.kprobe_symbol(off).as_ptr().cast::<c_char>());
+        symbols.push(spec.kprobe_symbol(off)?.as_ptr());
     }
     let flags = if spec.kind == ATTACH_KRETPROBE_MULTI {
         F_KPROBE_MULTI_RETURN
