@@ -197,6 +197,6 @@ added | grep -n -P '[^\x00-\x7F]'
 
 The last grep finds every byte outside ASCII: a name or a quoted string
 keeps its letters, a symbol becomes a word. For a commit message, pipe
-`git log -1 --format=%B` into the same greps in place of `added`. Then read the
-text once more as its reader: whether a sentence is needed is a judgment
-the grep cannot make.
+`git log -1 --format=%B` into the same greps in place of `added`. Then
+read the text once more as its reader: whether a sentence is needed is
+a judgment the grep cannot make.
