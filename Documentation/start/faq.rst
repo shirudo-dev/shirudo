@@ -11,6 +11,14 @@ FAQ
 Short answers to the questions newcomers ask most, each with the page
 that explains it.
 
+Can I test shirudo somewhere first?
+-----------------------------------
+
+Yes. The `online getting-started lab
+<https://labs.isovalent.com/#/lab/shirudo-getting-started>`__ runs
+shirudo in a browser. On your own Linux machine,
+:doc:`/start/quickstart` boots a test target in a virtual machine.
+
 What is a upatch?
 ------------------
 
@@ -47,12 +55,49 @@ Before the first release, the project plans to add a mode for older
 kernels, for environments where root is trusted, which uses no TPM. See
 :doc:`/concepts/background/tpm`.
 
+Does a target run in a cloud VM or a microVM?
+---------------------------------------------
+
+Yes, where the VM has a TPM 2.0, such as the virtual TPM of a cloud
+provider or a VMM, and boots a signed UKI under UEFI Secure Boot, so
+that the boot is measured. shirudo then runs in the VM's own kernel as
+it does on a physical machine. The test VM is a QEMU guest of this kind,
+with a software TPM. :doc:`/operate/plan/system-requirements` lists
+what a target needs, and :doc:`/operate/deploy/boot-integration` how it
+boots.
+
 Who decides which upatches run on my machines?
 ----------------------------------------------
 
 Only holders of a signing key your targets trust. You create each key
 with ``shirudo genkey`` on your operator host, and targets hold only its
 certificate. See :doc:`/operate/maintain/keys`.
+
+Who holds the signing key, and how is it protected?
+---------------------------------------------------
+
+You do. ``shirudo genkey`` writes each ML-DSA-87 signing key on your
+operator host, mode ``0600``. The key stays there, and a target holds
+only its certificate. Guard that host. A key signs any upatch for every
+target that trusts it, and anything it ever signed can load again. Vouch
+for a standby signer in the first config, so that you can revoke the
+primary key later and keep signing. Revoking a key also purges the
+upatches it signed. :doc:`/operate/maintain/keys` covers key management.
+
+Do I need to rebuild my kernel to enroll a signing key?
+-------------------------------------------------------
+
+No. Your keys are not built into the kernel, so changing them never
+takes a new kernel build. The kernel starts the ``.bpf`` and
+``.dm-verity`` keyrings open when it boots with
+``bpf.keyring_unsealed=1`` and ``dm_verity.keyring_unsealed=1``. In the
+initrd, ``init`` enrolls your certificates from the signed runtime and
+config images and then seals both keyrings. This is the kernel's own
+mechanism, which systemd's ``systemd-keyring-setup`` also uses from
+version 263. On a shirudo target ``init`` does the enrollment, so no
+other unit may seal the keyrings before it
+(:doc:`/operate/deploy/boot-integration`). See
+:doc:`/operate/maintain/keys`.
 
 Is there an official shirudo OCI registry for upatches?
 -------------------------------------------------------
@@ -108,6 +153,15 @@ that a person guides and checks, so that the two work together. The
 agent can use any model, open-weight ones included, and can follow
 :src:`.agents/skills/upatch/SKILL.md`. Nothing loads until a key holder
 signs it.
+
+Does a signed upatch mean it works?
+-----------------------------------
+
+No. The signature proves who built it, the BPF verifier proves memory
+safety, attestation proves what loaded; whether it mitigates is the
+author's job. Test a upatch before it ships, as the next answer
+describes. :doc:`/upatches/write/index` covers writing one, and
+:doc:`/upatches/learn/examples` describes the upatches the tree ships.
 
 How do I test a upatch safely?
 ------------------------------
