@@ -108,14 +108,24 @@ fn kprobe_multi_names_are_parsed_in_order() {
     ))
     .unwrap();
     let spec = &specs.as_slice()[0];
-    let names: Vec<Vec<u8>> = spec
+    let symbols: Vec<_> = spec
         .kprobe_sym_offsets
         .iter()
-        .map(|&off| cstr(&spec.kprobe_sym_buf[off..]).to_vec())
+        .map(|&off| spec.kprobe_symbol(off).unwrap())
         .collect();
+    let pointers: Vec<_> = symbols.iter().map(|symbol| symbol.as_ptr()).collect();
 
     assert_eq!(spec.kind, ATTACH_KRETPROBE_MULTI);
-    assert_eq!(names, [b"vfs_a".to_vec(), b"vfs_b".to_vec()]);
+    assert_eq!(symbols[0].to_bytes_with_nul(), b"vfs_a\0");
+    assert_eq!(symbols[1].to_bytes_with_nul(), b"vfs_b\0");
+    assert_eq!(pointers.len(), spec.nr_kprobe_syms as usize);
+    for (&off, &ptr) in spec.kprobe_sym_offsets.iter().zip(&pointers) {
+        assert_eq!(ptr, spec.kprobe_sym_buf[off..].as_ptr().cast());
+    }
+    assert_eq!(
+        spec.kprobe_symbol(spec.kprobe_sym_buf.len()).err(),
+        Some(-EINVAL)
+    );
 }
 
 #[test]
