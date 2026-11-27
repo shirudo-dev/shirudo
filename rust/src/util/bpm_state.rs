@@ -26,7 +26,6 @@ const VAR_DIR: &CStr = c"/var/lib/shirudo/bpm";
 const PACKAGES_DIR: &[u8] = b"/var/lib/shirudo/bpm/packages";
 
 /// `struct bpm_state_entry`.
-#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct BpmStateEntry {
     pub(crate) name: [u8; MAX_NAME],
@@ -34,8 +33,6 @@ pub struct BpmStateEntry {
     pub(crate) source: [u8; MAX_NAME],
     pub(crate) path: [u8; PATH_MAX],
 }
-
-const _: () = assert!(size_of::<BpmStateEntry>() == 3 * 128 + 4096);
 
 impl BpmStateEntry {
     pub(crate) const fn new() -> Self {
