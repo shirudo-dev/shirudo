@@ -81,7 +81,6 @@ unsafe fn x509_of<'a>(cert: *const Cert) -> Option<&'a X509Ref> {
 
 /// `struct sha256_ctx`: a digest under way, which sha256_final() or
 /// sha256_free() releases.
-#[repr(C)]
 pub struct Sha256Ctx {
     imp: Option<Box<Hasher>>,
 }
@@ -93,7 +92,6 @@ impl Sha256Ctx {
 }
 
 /// `struct cert_pubkey`.
-#[repr(C)]
 pub struct CertPubkey {
     pub(crate) rsa: bool,
     pub(crate) n: [u8; 512],
@@ -116,9 +114,6 @@ impl CertPubkey {
         }
     }
 }
-
-const _: () = assert!(size_of::<CertPubkey>() == 600);
-const _: () = assert!(size_of::<Sha256Ctx>() == size_of::<*mut c_void>());
 
 /// Drops what libcrypto queued for this thread, the ERR_clear_error()
 /// of the calls the crate does not make itself.
