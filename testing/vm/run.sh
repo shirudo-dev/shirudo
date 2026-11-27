@@ -20,6 +20,8 @@
 #
 # TEST_VM_SERVE_COMMAND names a program a serve-mode VM runs on the host,
 # with the VM's name as its argument, instead of the target tests.
+# TEST_VM_ENFORCEMENT=shared boots the runtime image built for shared
+# enforcement, as the shared family always does.
 # TEST_VM_ROLE=operator boots the operator of the end-to-end test in serve
 # mode: no TPM, no initrd and no shirudo kernel arguments, the operator
 # package built in the guest, and alone the signing key in
@@ -94,6 +96,7 @@ SERVE_COMMAND="${TEST_VM_SERVE_COMMAND:-}"
 OPERATOR_KEYS="${TEST_VM_OPERATOR_KEYS:-}"
 OPERATOR_DISK_SIZE=16G
 VM_SUITE="${TEST_VM_SUITE:-}"
+ENFORCEMENT="${TEST_VM_ENFORCEMENT:-}"
 NODE_ROLE="${TEST_VM_NODE_ROLE:-core}"
 TEST_MODE="${TEST_VM_MODE:-verity}"
 SKIP_SEAL="${TEST_VM_SKIP_SEAL:-0}"
@@ -1356,6 +1359,16 @@ kernel_release_of()
 # is a stock cloud image, so a seed unit in the initrd copies both onto
 # it before shirudo runs: init records the root's binary as the lasting
 # identity and the cloud-init stage later finds the files in place.
+# The bootstrap the initrd pins, and so the runtime image the VM boots.
+seed_bootstrap()
+{
+	if [[ "$ENFORCEMENT" == shared || "$VM_SUITE" == shared ]]; then
+		printf 'bootstrap-shared.conf\n'
+	else
+		printf 'bootstrap.conf\n'
+	fi
+}
+
 build_initrd()
 {
 	local kver gen unit seed trusted fp cert work_dir
@@ -1395,7 +1408,7 @@ build_initrd()
 	mkdir -p "$seed/shirudo-test-images"
 	cp "$TEST_VM_HOST_BUNDLE/verity/"*.{img,verity,roothash,p7s} \
 		"$seed/shirudo-test-images/"
-	cp "$TEST_VM_HOST_BUNDLE/verity/bootstrap.conf" \
+	cp "$TEST_VM_HOST_BUNDLE/verity/$(seed_bootstrap)" \
 		"$seed/shirudo-test-images/bootstrap.conf"
 	cp "$REPO_ROOT/testing/vm/files/seed-images.sh" \
 		"$seed/shirudo-test-seed-images.sh"
@@ -1432,7 +1445,7 @@ initrd_cache_key()
 	kver="$(kernel_release_of "$KERNEL")" ||
 		die "cannot read the kernel release from $KERNEL"
 	{
-		printf '%s\n' "$kver" "$(dracut --version)"
+		printf '%s\n' "$kver" "$(dracut --version)" "$(seed_bootstrap)"
 		sha256sum "$KERNEL"
 		if [[ -n "$KERNEL_ARTIFACT_DIR" ]]; then
 			sha256sum "$KERNEL_ARTIFACT_DIR/${TEST_VM_ARCH_KIMAGE}.sha256sum"

@@ -812,6 +812,7 @@ TEST_HELPERS := $(VERITY_TEST_HELPERS) \
 		testing/helper/test-bpm-source \
                 testing/helper/test-bpf-load \
                 testing/helper/test-bpf-cmd \
+                testing/helper/test-shared-bpf \
                 testing/helper/test-exec-fail \
                 testing/helper/test-exec-shared \
                 testing/helper/test-xfs-attrmulti \
@@ -950,6 +951,10 @@ testing/helper/test-bpf-load: testing/helper/test-bpf-load.c
 	$(Q)$(CC) $(CFLAGS) -o $@ $^
 
 testing/helper/test-bpf-cmd: testing/helper/test-bpf-cmd.c
+	@printf '  CC      $@\n'
+	$(Q)$(CC) $(CFLAGS) -o $@ $^
+
+testing/helper/test-shared-bpf: testing/helper/test-shared-bpf.c util/string.o
 	@printf '  CC      $@\n'
 	$(Q)$(CC) $(CFLAGS) -o $@ $^
 

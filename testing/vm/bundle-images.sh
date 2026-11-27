@@ -32,6 +32,23 @@ sed 's/@config_image@/config-boot-keys/g' "$templates/runtime.conf.in" \
 	>"$bundle/verity/runtime.root"
 sed "s/@root_hash@/$(cat "$bundle/verity/runtime.root")/g" \
 	"$templates/bootstrap.conf.in" >"$bundle/verity/bootstrap.conf"
+# The same runtime in shared enforcement, for the shared family.
+{ cat "$work/runtime.conf"; echo "enforcement.mode = shared"; } \
+	>"$work/runtime-shared.conf"
+"$source_dir/tools/gen-image/shirudo-gen-runtime" \
+	--binary "$bundle/root/usr/local/bin/shirudo" \
+	--bootstrap-conf "$work/runtime-shared.conf" --cert "$keys/cert.der" \
+	--config-cert "$work/verity/public/config-c.der" \
+	--config-cert "$work/verity/public/config-d.der" \
+	--output "$bundle/verity/runtime-shared" \
+	--keys-dir "$keys" --builder "$source_dir/tools/shirudo-build/shirudo-build" \
+	--size 64 \
+	--extra-binary "$source_dir/build/verity-tests/shirudo-policy-probe" \
+	--extra-binary "$source_dir/build/verity-tests/shirudo-image-fault" \
+	>"$bundle/verity/runtime-shared.root"
+sed -e "s/@root_hash@/$(cat "$bundle/verity/runtime-shared.root")/g" \
+	-e 's|^runtime.image = .*|&-shared|' \
+	"$templates/bootstrap.conf.in" >"$bundle/verity/bootstrap-shared.conf"
 command=$(sed -n 's/^ExecStart=\(.*\) init$/\1/p' \
 	"$bundle/verity/runtime-service.conf")
 [ -n "$command" ]
@@ -40,4 +57,5 @@ sed "s|@runtime_command@|$command_escaped|g" "$templates/shirudo-runtime.in" \
 	>"$bundle/verity/shirudo-runtime"
 chmod 0755 "$bundle/verity/shirudo-runtime"
 (cd "$bundle/verity" && sha256sum -- *.img *.verity *.roothash *.p7s *.der \
-	*.fingerprint *.upatch bootstrap.conf runtime-service.conf shirudo-runtime >manifest)
+	*.fingerprint *.upatch bootstrap.conf bootstrap-shared.conf \
+	runtime-service.conf shirudo-runtime >manifest)

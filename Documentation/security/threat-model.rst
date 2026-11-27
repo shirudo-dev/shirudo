@@ -1747,7 +1747,7 @@ would hand out a descriptor of ``shirudo_tasks``.
    ``ENOMEM`` from a creation by shirudo that cannot be recorded
 :Counters: ``ObjGet``, ``MapFdWrite``, ``PinEntry``, ``LoadNotLoader``,
    ``BpfCommand``
-:Tests: ``t5006``
+:Tests: ``t5006``, ``t6160``
 :Residual: R25
 
 Residual risks
