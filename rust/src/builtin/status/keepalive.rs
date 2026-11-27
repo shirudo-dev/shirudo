@@ -141,13 +141,14 @@ impl View {
             return ret;
         }
         let none = [0u8; 32];
-        let (mut digest, mut event) = ([0u8; 32], [0u8; 32]);
-        let ret = chain::init_event(&none, &mut set, &none, &mut digest, &mut event);
-        if ret == 0 {
-            self.set_sha256 = hex(&digest);
-            self.count = set.len() as u64;
+        match chain::init_event(&none, &mut set, &none) {
+            Ok(digests) => {
+                self.set_sha256 = hex(&digests.set);
+                self.count = set.len() as u64;
+                0
+            }
+            Err(ret) => ret,
         }
-        ret
     }
 }
 

@@ -66,10 +66,7 @@ impl ConfigUpdateOps for RefCell<Context<'_>> {
     fn pcr_extend(&self, _: u32, event: &[u8; 32]) -> Result<(), c_int> {
         let mut c = self.borrow_mut();
         c.extends += 1;
-        match fold(&mut c.pcr, event) {
-            0 => Ok(()),
-            err => Err(err),
-        }
+        fold(&mut c.pcr, event)
     }
 
     fn prepare(&self, _: &ConfigUpdateTarget) -> Result<(), c_int> {

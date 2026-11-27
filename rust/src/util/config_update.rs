@@ -565,10 +565,7 @@ fn events_scan(
             replay.value = record.initial_pcr;
         }
         let event = config_measure::event(record.kind, &record.target.root_hash)?;
-        let ret = fold(&mut replay.value, &event);
-        if ret != 0 {
-            return Err(ret);
-        }
+        fold(&mut replay.value, &event)?;
         consume(&record)?;
         replay.last = record;
         replay.end += line.len() as u64;
@@ -770,10 +767,7 @@ impl ConfigUpdate<'_> {
         event_follows(previous, &record)?;
         let event = config_measure::event(kind, &target.root_hash)?;
         let mut expected = before;
-        let ret = fold(&mut expected, &event);
-        if ret != 0 {
-            return Err(ret);
-        }
+        fold(&mut expected, &event)?;
         self.state_save(&record, true)?;
         self.ops.checkpoint(Checkpoint::PendingSync)?;
         self.ops.pcr_extend(pcr, &event)?;

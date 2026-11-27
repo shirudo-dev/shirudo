@@ -43,22 +43,15 @@ fn member_type_is_bpf_or_java() {
 fn init_event_tells_java_from_bpf() {
     let p = PAYLOAD.to_bytes();
     let (cert, root) = ([0u8; 32], [0u8; 32]);
-    let (mut set_digest, mut bpf_event, mut java_event) = ([0u8; 32], [0u8; 32], [0u8; 32]);
     let mut set = Vec::new();
 
     set_add(&mut set, 1, b"a", p, TYPE_BPF).unwrap();
-    assert_eq!(
-        crate::util::chain::init_event(&cert, &mut set, &root, &mut set_digest, &mut bpf_event,),
-        0
-    );
+    let bpf = crate::util::chain::init_event(&cert, &mut set, &root).unwrap();
     set[0].ty = TYPE_JAVA;
+    let java = crate::util::chain::init_event(&cert, &mut set, &root).unwrap();
+    assert_ne!(bpf.event, java.event);
     assert_eq!(
-        crate::util::chain::init_event(&cert, &mut set, &root, &mut set_digest, &mut java_event,),
-        0
-    );
-    assert_ne!(bpf_event, java_event);
-    assert_eq!(
-        set_digest,
+        java.set,
         crate::util::crypto_openssl::sha256(&[&b"java "[..], p, b" a\n"].concat()).unwrap()
     );
 }

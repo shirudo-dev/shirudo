@@ -87,8 +87,7 @@ fn replay(view: &Evidence, out: &mut [u8; 32]) -> c_int {
             Ok(digest) => digest,
             Err(err) => return err,
         };
-        let ret = chain::fold(out, &digest);
-        if ret != 0 {
+        if let Err(ret) = chain::fold(out, &digest) {
             return ret;
         }
         sequence = event.sequence;

@@ -433,16 +433,15 @@ pub(super) fn bind_register(init: &Init, set: &mut [MeasuredUpatch]) -> c_int {
             return ret;
         }
     }
-    let ret = chain::init_event(
-        &d.cert,
-        &mut set[..n],
-        &d.tree_root,
-        &mut d.set,
-        &mut d.init,
-    );
-    if ret != 0 {
-        error(&cat!("chain: cannot hash the init event: ", strerr(-ret)));
-        return ret;
+    match chain::init_event(&d.cert, &mut set[..n], &d.tree_root) {
+        Ok(digests) => {
+            d.set = digests.set;
+            d.init = digests.event;
+        }
+        Err(ret) => {
+            error(&cat!("chain: cannot hash the init event: ", strerr(-ret)));
+            return ret;
+        }
     }
     // SAFETY: an all-zero binding is room for one.
     let mut bound: Box<ChainInitInfo> = Box::new(unsafe { mem::zeroed() });

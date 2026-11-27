@@ -1823,7 +1823,7 @@ fn check_replay(rep: &mut Report, p: &Parse, value: &[u8; 32]) {
     let mut replayed = true;
 
     for r in &p.recs {
-        if chain::fold(&mut register, &r.digest) != 0 {
+        if chain::fold(&mut register, &r.digest).is_err() {
             replayed = false;
         }
     }
@@ -1863,7 +1863,7 @@ fn check_anchor(rep: &mut Report, p: &Parse, expect: &AttestExpect) {
         b"anchor: record digest matches the index name",
     );
     let mut pcr_expected = p.init.pcr_before;
-    named = chain::fold(&mut pcr_expected, &anchor_digest) == 0 && named;
+    named = chain::fold(&mut pcr_expected, &anchor_digest).is_ok() && named;
     if p.pcr_have & (1 << CHAIN_PCR) == 0 {
         rep.check(
             false,
@@ -1906,7 +1906,7 @@ fn check_state(rep: &mut Report, p: &Parse, expect: &AttestExpect, value: &[u8; 
         );
     } else if let Some(init_event) = &expect.init_event {
         let mut predicted = [0u8; 32];
-        let folded = chain::fold(&mut predicted, init_event) == 0;
+        let folded = chain::fold(&mut predicted, init_event).is_ok();
 
         if runtime == 0 {
             rep.check(

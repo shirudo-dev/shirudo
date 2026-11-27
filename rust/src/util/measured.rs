@@ -439,10 +439,7 @@ mod verified {
                     return Err(-EINVAL);
                 }
                 let (cert, root) = (decode32(&r.cert_hex)?, decode32(&r.tree_root_hex)?);
-                let mut set_digest = [0u8; 32];
-                let mut event = [0u8; 32];
-                let ret = chain::init_event(&cert, &mut r.set, &root, &mut set_digest, &mut event);
-                if ret != 0 { Err(ret) } else { Ok(event) }
+                chain::init_event(&cert, &mut r.set, &root).map(|digests| digests.event)
             }
             b"upatch_load" | b"upatch_unload" | b"java_load" | b"java_unload" => {
                 if !r.upatch || !member_valid(cstr(&r.name), cstr(&r.payload_hex)) {
@@ -537,8 +534,7 @@ mod verified {
             if memneq_explicit(&event, &digest) {
                 return -EBADMSG;
             }
-            let ret = chain::fold(&mut register, &event);
-            if ret != 0 {
+            if let Err(ret) = chain::fold(&mut register, &event) {
                 return ret;
             }
             let Ok(line) = CString::new(*line) else {

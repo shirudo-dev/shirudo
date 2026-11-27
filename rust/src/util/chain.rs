@@ -167,35 +167,22 @@ fn digest(parts: &[&[u8]]) -> Result<[u8; DIGEST_LEN], c_int> {
     crate::util::crypto_openssl::sha256(&parts.concat())
 }
 
-/// The digest of `parts` one after the other into `out`, or zeros and
-/// the error.
-fn digest_into(parts: &[&[u8]], out: &mut [u8; DIGEST_LEN]) -> c_int {
-    match digest(parts) {
-        Ok(digest) => {
-            *out = digest;
-            0
-        }
-        Err(err) => {
-            *out = [0; DIGEST_LEN];
-            err
-        }
-    }
+/// The two digests of a boot's measured upatch set.
+pub(crate) struct InitDigests {
+    pub(crate) set: [u8; DIGEST_LEN],
+    pub(crate) event: [u8; DIGEST_LEN],
 }
 
 /// The init event: the set sorted by name, its listing of one
-/// "[java ]<payload hex> <name>\n" line a member, whose digest goes
-/// into `set_digest`, and the digest of the tag, `cert_sha`, the listing's
-/// and `tree_root` into `event`. Both are zeros when it fails.
+/// "[java ]<payload hex> <name>\n" line a member, then the hash of
+/// the tag, `cert_sha`, listing digest and `tree_root`.
 pub(crate) fn init_event(
     cert_sha: &[u8; DIGEST_LEN],
     set: &mut [MeasuredUpatch],
     tree_root: &[u8; DIGEST_LEN],
-    set_digest: &mut [u8; DIGEST_LEN],
-    event: &mut [u8; DIGEST_LEN],
-) -> c_int {
+) -> Result<InitDigests, c_int> {
     // In the order strcmp() gives their names, which no two share.
     set.sort_unstable_by(|a, b| cstr(&a.name).cmp(cstr(&b.name)));
-    *event = [0; DIGEST_LEN];
     let listing: Vec<u8> = set
         .iter()
         .flat_map(|m| {
@@ -213,14 +200,9 @@ pub(crate) fn init_event(
             .concat()
         })
         .collect();
-    let ret = digest_into(&[&listing], set_digest);
-    if ret != 0 {
-        return ret;
-    }
-    digest_into(
-        &[b"shirudo-init\0", cert_sha, &set_digest[..], tree_root],
-        event,
-    )
+    let set = digest(&[&listing])?;
+    let event = digest(&[b"shirudo-init\0", cert_sha, &set, tree_root])?;
+    Ok(InitDigests { set, event })
 }
 
 /// The event of the key `cert_sha` under `tag`: the digest of the tag,
@@ -266,11 +248,19 @@ pub(crate) fn tree_event(
     digest(&[b"shirudo-tree\0", &(seq as u64).to_be_bytes(), operation])
 }
 
-/// The register `chain` extended by `event`, as the TPM extends it, or
-/// zeros and the error.
-pub(crate) fn fold(chain: &mut [u8; DIGEST_LEN], event: &[u8; DIGEST_LEN]) -> c_int {
+/// Extend `chain` by `event` as the TPM does. On a hash error, clear it.
+pub(crate) fn fold(chain: &mut [u8; DIGEST_LEN], event: &[u8; DIGEST_LEN]) -> Result<(), c_int> {
     let both = [&chain[..], event].concat();
-    digest_into(&[&both], chain)
+    match digest(&[&both]) {
+        Ok(value) => {
+            *chain = value;
+            Ok(())
+        }
+        Err(err) => {
+            *chain = [0; DIGEST_LEN];
+            Err(err)
+        }
+    }
 }
 
 /// Append the PCR 9 anchor to systemd's userspace measurement log. A

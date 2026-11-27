@@ -201,10 +201,7 @@ impl ConfigUpdateOps for RefCell<Context<'_>> {
             }
             Some(tpm) => tpm.pcr_extend(pcr, event)?,
             None => {
-                let ret = fold(&mut c.sim.value, event);
-                if ret != 0 {
-                    return Err(ret);
-                }
+                fold(&mut c.sim.value, event)?;
             }
         }
         c.save()?;

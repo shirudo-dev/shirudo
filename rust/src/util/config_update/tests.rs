@@ -68,10 +68,7 @@ impl ConfigUpdateOps for FakeTpm {
     fn pcr_extend(&self, _: u32, event: &[u8; 32]) -> Result<(), c_int> {
         self.extends.set(self.extends.get() + 1);
         let mut value = self.value.get();
-        let ret = fold(&mut value, event);
-        if ret != 0 {
-            return Err(ret);
-        }
+        fold(&mut value, event)?;
         self.value.set(value);
         Ok(())
     }

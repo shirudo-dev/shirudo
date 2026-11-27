@@ -582,7 +582,7 @@ fn apply_event(spec: &[u8], register: &mut [u8; 32]) -> Result<(), c_int> {
         }
     }
     .map_err(|_| -EIO)?;
-    if chain::fold(register, &event) != 0 {
+    if chain::fold(register, &event).is_err() {
         return Err(-EIO);
     }
     Ok(())
@@ -702,23 +702,17 @@ fn predict(args: &[&CStr]) -> c_int {
         e.obj_open();
         e.kv_int(b"schema", 1);
     }
-    let (mut set_digest, mut init, mut register) = ([0u8; 32], [0u8; 32], [0u8; 32]);
-    let ok = anchor_digest(&certs).is_some_and(|cert_sha| {
-        chain::init_event(
-            &cert_sha,
-            m.members(),
-            &tree_root,
-            &mut set_digest,
-            &mut init,
-        ) == 0
-    });
-    if !ok {
+    let Some(digests) = anchor_digest(&certs)
+        .and_then(|cert_sha| chain::init_event(&cert_sha, m.members(), &tree_root).ok())
+    else {
         error(&[b"attest predict: cannot hash the init event"]);
         return EXIT_USAGE;
-    }
-    out.kv(b"set_digest", &hex::encode(&set_digest));
+    };
+    let init = digests.event;
+    let mut register = [0u8; 32];
+    out.kv(b"set_digest", &hex::encode(&digests.set));
     out.kv(b"init_event", &hex::encode(&init));
-    if chain::fold(&mut register, &init) != 0 {
+    if chain::fold(&mut register, &init).is_err() {
         error(&[b"attest predict: cannot hash the register at boot"]);
         return EXIT_USAGE;
     }
@@ -779,7 +773,7 @@ fn predict(args: &[&CStr]) -> c_int {
             error(&[b"attest predict: cannot hash the anchor"]);
             return EXIT_USAGE;
         }
-        if chain::fold(&mut bind[0], &anchor_digest) != 0 {
+        if chain::fold(&mut bind[0], &anchor_digest).is_err() {
             error(&[
                 format!("attest predict: cannot hash PCR {CHAIN_PCR} after the anchor").as_bytes(),
             ]);
@@ -965,21 +959,13 @@ fn verify_against(args: &[&CStr], x: &mut AttestExpect) -> Result<c_int, c_int> 
     }
     x.nonce = nonce[..nonce_len].to_vec();
     if !certs.is_empty() {
-        let (mut set_digest, mut init) = ([0u8; 32], [0u8; 32]);
-        let ok = anchor_digest(&certs).is_some_and(|cert_sha| {
-            chain::init_event(
-                &cert_sha,
-                m.members(),
-                &tree_root,
-                &mut set_digest,
-                &mut init,
-            ) == 0
-        });
-        if !ok {
+        let Some(digests) = anchor_digest(&certs)
+            .and_then(|cert_sha| chain::init_event(&cert_sha, m.members(), &tree_root).ok())
+        else {
             error(&[b"attest verify: cannot hash the init event"]);
             return Err(EXIT_USAGE);
-        }
-        x.init_event = Some(init);
+        };
+        x.init_event = Some(digests.event);
     }
     let evidence = read_evidence(evidence_path)?;
     let mut report = Report::new(REPORT_MAX);

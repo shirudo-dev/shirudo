@@ -12,7 +12,7 @@ fn one_event(pcr: u32) -> Evidence {
     let root = [0x42; 32];
     let event = measure_event(EVENT_BOOT, &root).unwrap();
     let mut value = initial;
-    assert_eq!(chain::fold(&mut value, &event), 0);
+    assert_eq!(chain::fold(&mut value, &event), Ok(()));
     Evidence {
         events: vec![EvidenceEvent {
             root_hash: root,
