@@ -26,7 +26,11 @@ https://github.com/shirudo-dev/shirudo.
    * - Security problems
      - Never a public issue. Report them privately, as
        :doc:`/security/reporting` describes.
-   * - Questions & discussions
-     - Community support on shirudo's Zulip at
-       https://shirudo.zulipchat.com: questions about using shirudo,
-       help from other users, ideas and design discussion.
+   * - Community support
+     - `shirudo's Zulip <https://shirudo.zulipchat.com>`__.
+       Use the `#help channel
+       <https://shirudo.zulipchat.com/#narrow/channel/659552-help>`__
+       for questions about using shirudo and help from other users.
+   * - Ideas and design discussions
+     - Use the `#ideas-design channel
+       <https://shirudo.zulipchat.com/#narrow/channel/659583-ideas-design>`__.
