@@ -171,7 +171,7 @@ took a token from the first bytes of an answer that was no text.
   filled has no terminator until the code writes one.
 - A fixed-size field of a format is a string only once its parser found
   a NUL inside it, `memchr(field, '\0', sizeof(field))`, as
-  `parse_header()` of `util/upatch.c` does before anything reads the
+  `parse_header()` in `rust/src/util/upatch.rs` does before anything reads the
   name. Two such fields are compared whole, with `memcmp()` over their
   size, as the signed name is with the header's.
 - A pointer with a length stays one where it can: `memchr()`,

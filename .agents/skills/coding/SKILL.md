@@ -297,18 +297,14 @@ and the C-shaped one goes.
   and `///`, and `//!` holds the lines of purpose under the SPDX line
   and the copyright.
 
-## Remaining userspace C
+## Remaining C
 
-These rules apply only to C maintained by shirudo: BPF programs,
-remaining userspace helpers, and C test or build helpers. They do not
-apply to Rust or vendored sources.
-
-The remaining C helpers under `util/` and `tools/shirudo-build/` keep
-the kernel C style above. Keep their headers, tests, and C callers in
-sync when changing an interface. Check the return from `strscpy()` and
-`strsprintf()`, release allocations on every error path, and use the
-existing zeroing helpers for secrets. New shared userspace logic belongs
-in Rust.
+These rules apply to BPF C in `bpf/`, C fixtures, and the remaining C
+test and build helpers, including `testing/helper/test-tpm-command.c`
+and `testing/unit/pin_grant.c`. They do not apply to Rust or vendored
+sources. The command and package builder are Rust; new shared userspace
+logic belongs there. Keep C headers, tests and callers in sync when an
+interface changes, and release resources on every error path.
 
 ### Coccinelle and sparse
 

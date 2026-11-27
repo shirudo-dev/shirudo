@@ -26,7 +26,7 @@ Contents:
 
 Hunt each class in the BPF programs, the userspace Rust and the
 remaining userspace C, and with the kernel source open: a checkout of the kernel the test
-VM boots, which `testing/vm/build-kernel.sh` builds, with the patches of
+VM boots, which `testing/kernel/build-kernel.sh` builds, with the patches of
 `kernel/` applied. Neither half can be judged without it. For a hook,
 read the callers of `security_<hook>()`, what each does with the return
 value and what it holds while it calls; for a helper or kfunc, what it
