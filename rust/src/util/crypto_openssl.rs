@@ -937,6 +937,44 @@ pub(crate) unsafe fn aes128_cfb_encrypt(
     0
 }
 
+/// An OAEP label allocated by OpenSSL until the key context takes it.
+struct OpenSslLabel(Option<NonNull<c_void>>);
+
+impl OpenSslLabel {
+    fn copy_from(label: &[u8]) -> Result<Self, ErrorStack> {
+        // SAFETY: OpenSSL allocates room for the label's bytes.
+        let p = unsafe { ffi::OPENSSL_malloc(label.len()) };
+        let p = NonNull::new(p).ok_or_else(ErrorStack::get)?;
+        // SAFETY: p holds label.len() bytes and does not overlap label.
+        unsafe { ptr::copy_nonoverlapping(label.as_ptr(), p.as_ptr().cast(), label.len()) };
+        Ok(Self(Some(p)))
+    }
+
+    fn install(mut self, ctx: &mut PkeyCtx<Public>, len: c_int) -> Result<(), ErrorStack> {
+        let Some(p) = self.0 else {
+            return Err(ErrorStack::get());
+        };
+        // SAFETY: p holds the label, and libcrypto takes it on success.
+        let ret = unsafe { more::EVP_PKEY_CTX_set0_rsa_oaep_label(ctx.as_ptr(), p.as_ptr(), len) };
+        if ret > 0 {
+            self.0 = None;
+            Ok(())
+        } else {
+            drop(self);
+            Err(ErrorStack::get())
+        }
+    }
+}
+
+impl Drop for OpenSslLabel {
+    fn drop(&mut self) {
+        if let Some(p) = self.0 {
+            // SAFETY: this allocation was not handed to libcrypto.
+            unsafe { ffi::OPENSSL_free(p.as_ptr()) };
+        }
+    }
+}
+
 /// Hands `label` to `ctx` as its OAEP label through libcrypto's own
 /// EVP_PKEY_CTX_set0_rsa_oaep_label(), which takes the allocation over.
 /// openssl-sys sends it through EVP_PKEY_CTX_ctrl(), as the macro before
@@ -944,22 +982,7 @@ pub(crate) unsafe fn aes128_cfb_encrypt(
 /// frees the crate's allocation.
 fn set_oaep_label(ctx: &mut PkeyCtx<Public>, label: &[u8]) -> Result<(), ErrorStack> {
     let len = c_int::try_from(label.len()).map_err(|_| ErrorStack::get())?;
-
-    // SAFETY: an allocation of the label's length, filled with it and
-    // handed over, or freed here when libcrypto does not take it.
-    unsafe {
-        let p = ffi::OPENSSL_malloc(label.len());
-        if p.is_null() {
-            return Err(ErrorStack::get());
-        }
-        ptr::copy_nonoverlapping(label.as_ptr(), p.cast(), label.len());
-        if more::EVP_PKEY_CTX_set0_rsa_oaep_label(ctx.as_ptr(), p, len) > 0 {
-            Ok(())
-        } else {
-            ffi::OPENSSL_free(p);
-            Err(ErrorStack::get())
-        }
-    }
+    OpenSslLabel::copy_from(label)?.install(ctx, len)
 }
 
 /// RSA-OAEP with SHA-256, MGF1-SHA-256 and the label, to the modulus `n`
