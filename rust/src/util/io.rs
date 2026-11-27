@@ -87,6 +87,11 @@ pub(crate) fn write_complete(fd: BorrowedFd<'_>, buf: &[u8]) -> Result<(), c_int
     Ok(())
 }
 
+/// The offset after the last newline in one chunk, or 0 for none.
+fn last_newline_end(chunk: &[u8]) -> usize {
+    chunk.iter().rposition(|&c| c == b'\n').map_or(0, |i| i + 1)
+}
+
 /// The offset after the last newline of the `size` bytes of `fd`, read
 /// back from its end a chunk at a time, or 0 for none.
 fn last_line_end(fd: BorrowedFd<'_>, size: i64) -> Result<i64, c_int> {
@@ -109,8 +114,9 @@ fn last_line_end(fd: BorrowedFd<'_>, size: i64) -> Result<i64, c_int> {
         if got as usize != n {
             return Err(-EIO);
         }
-        if let Some(i) = chunk[..n].iter().rposition(|&c| c == b'\n') {
-            return Ok(start + i as i64 + 1);
+        let end = last_newline_end(&chunk[..n]);
+        if end != 0 {
+            return Ok(start + end as i64);
         }
         off = start;
     }
@@ -235,18 +241,20 @@ pub(crate) fn stat_fd(fd: BorrowedFd<'_>) -> Result<Statx, c_int> {
     Ok(st)
 }
 
+/// Accept one line, allowing one final newline and no embedded NUL.
+fn append_text(line: &[u8]) -> Result<&[u8], c_int> {
+    let text = line.strip_suffix(b"\n").unwrap_or(line);
+    if text.contains(&b'\n') || text.contains(&0) {
+        return Err(-EINVAL);
+    }
+    Ok(text)
+}
+
 /// `line` and its newline appended to the log open on `fd` at `path`,
 /// after a torn tail is dropped; the log taken back to its last record
 /// when the append fails.
 pub(crate) fn append_line(fd: BorrowedFd<'_>, path: &CStr, line: &[u8]) -> Result<(), c_int> {
-    let mut text = line;
-
-    if text.last() == Some(&b'\n') {
-        text = &text[..text.len() - 1];
-    }
-    if text.contains(&b'\n') || text.contains(&0) {
-        return Err(-EINVAL);
-    }
+    let text = append_text(line)?;
     let size = stat_fd(fd)?.stx_size as i64;
     let end = last_line_end(fd, size)?;
     if end != size {
