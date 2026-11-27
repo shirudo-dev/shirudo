@@ -33,6 +33,7 @@ shirudo is an open source project with the following governance rules:
    decides.
 
 8. Communication happens in public where possible, through GitHub
-   issues, pull requests and discussions. The maintainers also have a
+   issues and pull requests and on shirudo's Zulip,
+   https://shirudo.zulipchat.com. The maintainers also have a
    private channel, among other things for votes and for changes to
    the set of maintainers.

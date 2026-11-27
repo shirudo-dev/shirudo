@@ -130,6 +130,7 @@ Every package comes with a Software Bill of Materials (SBOM) in
 [![Coverity Scan Build Status](https://scan.coverity.com/projects/33401/badge.svg)](https://scan.coverity.com/projects/shirudo-dev-shirudo)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/17035/badge)](https://www.bestpractices.dev/projects/17035)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/shirudo-dev/shirudo/badge)](https://scorecard.dev/viewer/?uri=github.com/shirudo-dev/shirudo)
+[![Zulip](https://img.shields.io/badge/zulip-join_chat-brightgreen.svg)](https://shirudo.zulipchat.com)
 
 ## License
 

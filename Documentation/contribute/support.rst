@@ -20,12 +20,13 @@ https://github.com/shirudo-dev/shirudo.
    * - Feature requests
      - A GitHub issue that describes the problem the feature would
        solve.
-   * - Bug reports
+   * - Bug reports and regressions
      - A GitHub issue with what
        :doc:`/operate/troubleshoot/bug-report` asks for.
    * - Security problems
      - Never a public issue. Report them privately, as
        :doc:`/security/reporting` describes.
    * - Questions & discussions
-     - GitHub Discussions at
-       https://github.com/shirudo-dev/shirudo/discussions
+     - Community support on shirudo's Zulip at
+       https://shirudo.zulipchat.com: questions about using shirudo,
+       help from other users, ideas and design discussion.

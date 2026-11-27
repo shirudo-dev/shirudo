@@ -28,7 +28,8 @@ Before you begin
 Report the problem
 ------------------
 
-1. Do not open a public issue, discussion or pull request about it.
+1. Do not open a public issue, discussion or pull request about it, and
+   do not raise it on shirudo's Zulip.
 2. Open the shirudo repository on GitHub,
    https://github.com/shirudo-dev/shirudo, and go to its Security tab.
 3. Select Report a vulnerability, which opens the private report form,
@@ -51,8 +52,9 @@ The repository's `security policy
 <https://github.com/shirudo-dev/shirudo/blob/main/SECURITY.md>`__,
 :src:`SECURITY.md`, is the policy of record. It says:
 
-- Do not report a vulnerability in a public issue or discussion. Use
-  GitHub's Report a vulnerability feature instead.
+- Do not report a vulnerability in a public issue, discussion or chat,
+  such as shirudo's Zulip. Use GitHub's Report a vulnerability
+  feature instead.
 - shirudo is pre-release and has no stable releases or supported
   release branches. Reports about the ``main`` branch are welcome, to
   harden it before the first release.
