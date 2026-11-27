@@ -78,6 +78,8 @@ Properties
 The :doc:`security/threat-model` states where each of these mechanisms
 stops.
 
+.. _defense-in-depth:
+
 Defense in depth
 ----------------
 
