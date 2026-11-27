@@ -442,7 +442,6 @@ pub(super) fn bind_register(init: &Init, set: &mut [MeasuredUpatch]) -> c_int {
             return ret;
         }
     }
-    // SAFETY: an all-zero binding is room for one.
     let mut bound = Box::new(ChainInitInfo::zeroed());
     let ret = chain::init(&d.init, &mut bound);
     match ret {

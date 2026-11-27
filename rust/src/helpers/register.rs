@@ -272,7 +272,6 @@ fn tree(args: &[&CStr]) -> c_int {
 }
 
 fn status() -> c_int {
-    // SAFETY: a status of numbers and arrays, for which zeros are a value.
     let mut st = Box::new(ChainStatus::zeroed());
     let ret = chain::status(&mut st);
     let b = |v: bool| c_int::from(v);
