@@ -513,15 +513,14 @@ fn exchange(
     }
 }
 
-/// The program ids of an IFLA_XDP attribute's payload.
-fn xdp_ids_parse(xdp: &[u8], out: &mut XdpDevice) -> Result<(), c_int> {
+/// The driver and other program ids of an IFLA_XDP attribute's payload.
+fn xdp_ids_parse(xdp: &[u8]) -> Result<(u32, u32), c_int> {
     let attrs = Attrs(xdp);
 
-    out.xdp_drv_id = attrs.u32(IFLA_XDP_DRV_PROG_ID)?.unwrap_or(out.xdp_drv_id);
+    let drv = attrs.u32(IFLA_XDP_DRV_PROG_ID)?.unwrap_or(0);
     let skb = attrs.u32(IFLA_XDP_SKB_PROG_ID)?.unwrap_or(0);
     let hw = attrs.u32(IFLA_XDP_HW_PROG_ID)?.unwrap_or(0);
-    out.xdp_other_id = if skb != 0 { skb } else { hw };
-    Ok(())
+    Ok((drv, if skb != 0 { skb } else { hw }))
 }
 
 /// One RTM_NEWLINK message's payload as a device, its driver and devlink
@@ -550,7 +549,7 @@ pub(crate) fn device_parse(data: &[u8]) -> Result<XdpDevice, c_int> {
         Attrs(linkinfo).string(IFLA_INFO_KIND, &mut out.kind)?;
     }
     if let Some(xdp) = attrs.find(IFLA_XDP)? {
-        xdp_ids_parse(xdp, &mut out)?;
+        (out.xdp_drv_id, out.xdp_other_id) = xdp_ids_parse(xdp)?;
     }
     let Some(port) = attrs.find(IFLA_DEVLINK_PORT)?.filter(|p| !p.is_empty()) else {
         return Ok(out);
