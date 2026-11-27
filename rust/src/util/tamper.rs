@@ -6,9 +6,10 @@
 //! counts; and the reader the integrity counters share.
 
 use core::ffi::{CStr, c_int};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 
-use crate::sys::libc::{close, errno};
-use crate::util::bpf_sys::{bpf_map_lookup_elem, bpf_obj_get};
+use crate::sys::libc::errno;
+use crate::util::bpf_sys::{bpf_map_lookup_elem, obj_get};
 use crate::util::image_guards::{GUARD_MAPS, GUARD_TAMPER, GuardMap, guard_map_check};
 
 /// `TAMPER_MAX` of `bpf/lib/tamper.h`: the tamper points there are.
@@ -282,16 +283,21 @@ pub(crate) fn counters_read<const N: usize>(map: &GuardMap) -> Result<Counters<N
     Ok(Counters { count, total })
 }
 
-fn read_map(fd: c_int, map: &GuardMap, count: &mut [u64]) -> Result<u64, c_int> {
-    guard_map_check(fd, map)?;
+fn read_map(fd: BorrowedFd<'_>, map: &GuardMap, count: &mut [u64]) -> Result<u64, c_int> {
+    guard_map_check(fd.as_raw_fd(), map)?;
     if count.len() != map.def.max_entries as usize {
         return Err(-crate::errno::EPROTO);
     }
     let mut total = 0u64;
     for (key, value) in (0u32..).zip(count.iter_mut()) {
         // SAFETY: the map, a key of its size and room for a value of its size.
-        if unsafe { bpf_map_lookup_elem(fd, (&raw const key).cast(), (&raw mut *value).cast()) }
-            != 0
+        if unsafe {
+            bpf_map_lookup_elem(
+                fd.as_raw_fd(),
+                (&raw const key).cast(),
+                (&raw mut *value).cast(),
+            )
+        } != 0
         {
             return Err(-errno());
         }
@@ -304,15 +310,8 @@ fn read_map(fd: c_int, map: &GuardMap, count: &mut [u64]) -> Result<u64, c_int> 
 /// The counters of the array map pinned at `pin` into `count`, as many
 /// as it holds, which must be the map's entries: their sum.
 fn counters_read_into(map: &GuardMap, count: &mut [u64]) -> Result<u64, c_int> {
-    // SAFETY: a C string.
-    let fd = unsafe { bpf_obj_get(map.pin.as_ptr()) };
-    if fd < 0 {
-        return Err(-errno());
-    }
-    let ret = read_map(fd, map, count);
-    // SAFETY: the pin opened above.
-    unsafe { close(fd) };
-    ret
+    let fd = obj_get(map.pin)?;
+    read_map(fd.as_fd(), map, count)
 }
 
 #[cfg(test)]
