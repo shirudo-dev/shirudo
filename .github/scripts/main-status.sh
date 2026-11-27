@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Copyright (c) 2026 Authors of shirudo
 #
-# .github/scripts/main-status.sh -- keep an issue open, labelled ci-main,
-# while a workflow fails on main: open it, or add the run to it, when the
+# .github/scripts/main-status.sh -- keep an issue open, labelled
+# area/ci/main, while a workflow fails on main: open it, or add the run to it, when the
 # workflow's newest finished push run on main failed, and close it when
 # that run passed.
 #
@@ -15,7 +15,8 @@
 set -eu
 
 repo=repos/$GITHUB_REPOSITORY
-label=ci-main
+label=area/ci/main
+label_path=$(printf '%s' "$label" | sed 's|/|%2F|g')
 TITLE="main: $WORKFLOW_NAME fails"
 export TITLE
 
@@ -45,10 +46,10 @@ reported() {
 
 # Another workflow's run can create the label first.
 ensure_label() {
-	gh api "$repo/labels/$label" --silent 2>/dev/null ||
-		gh api -X POST "$repo/labels" -f name="$label" -f color=d73a4a \
-			-f description='A workflow fails on main' --silent ||
-		gh api "$repo/labels/$label" --silent
+	gh api "$repo/labels/$label_path" --silent 2>/dev/null ||
+		gh api -X POST "$repo/labels" -f name="$label" -f color=e7878f \
+			-f description='CI issues on main branch' --silent ||
+		gh api "$repo/labels/$label_path" --silent
 }
 
 report_failure() {
