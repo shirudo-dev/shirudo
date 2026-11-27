@@ -1,6 +1,10 @@
 ---
 name: coding
-description: Write or change shirudo's code, the Rust of its userspace and the C of its BPF programs, in the tree's style. Covers rustfmt and the kernel coding style the BPF C follows, when and where to split a function that grew too long, how to shape interfaces, resources, errors, types, shared state and hot paths so that a mistake has nowhere to hide, what to delete, where a comment belongs and where it is clutter, the helpers in rust/src/ to use instead of libc or open code, moving code two places need into rust/src/util/, memory, secrets, JSON and logging, unsafe code and the C it calls, the use of charts where they explain a change faster, and the checks a change passes. Use whenever writing, changing or reviewing Rust or C in shirudo; commit messages follow the commits skill.
+description: Writes or changes shirudo's Rust userspace and BPF C in the tree's style. Covers naming, comments, conventions and checks; shape.md covers functions, interfaces, resources, outside data and hot paths, and util.md lists shared Rust helpers. Use for Rust or C changes; commit messages follow the commits skill.
+paths:
+  - "**/*.rs"
+  - "**/*.c"
+  - "**/*.h"
 ---
 
 # Coding
@@ -29,7 +33,7 @@ the names and the shape of the code, without a comment.
   says it, and a condition that needs reading twice becomes a helper or
   a well-named local.
 - One function does one job and fits on a screen or two; errors return
-  early instead of nesting the rest. "Functions" below says when and
+  early instead of nesting the rest. "Functions" in shape.md says when and
   where to split one.
 - The plain construct beats the clever one. Where the clever one is
   needed for correctness or speed, that need is the why worth a comment.
@@ -53,256 +57,43 @@ if (upatch_map_is_percpu(type))
 
 ## Shape the code
 
-Code that reads well is code a mistake cannot hide in. These choices
-keep it that way.
+Read [shape.md](shape.md) before changing a function body, an
+interface, a parser of outside bytes, or code that shares state. It
+covers functions, resources, errors, types, bounds and hot paths.
 
-### Functions
+## Use rust/src/util/, and grow it
 
-How long a function may be depends on how hard it is to follow: the
-more it branches and nests, the shorter it has to be. A flat `switch`
-that does one small thing per case may run long; a function that keeps
-several things in flight may not.
+Read [util.md](util.md) before writing a parser, a check, a path, a
+copy loop or a record format. It lists the shared Rust helpers and
+when code belongs in `rust/src/util/`.
 
-Split a function when any of these holds:
+## Where a file goes
 
-- it runs past two screens, about 50 lines;
-- it keeps more than 7 to 10 locals alive at once, more than a reader
-  can track;
-- its body nests more than three levels deep;
-- a block in it needs a comment to say what it does, or comments mark
-  where one phase ends and the next begins.
+A reader finds code by where it lives. Put a new file beside code of
+its kind:
 
-Cut it where the work already divides:
+- A shirudo command lives in `rust/src/builtin/<command>.rs`, with its
+  module registered in `rust/src/builtin/mod.rs`.
+- Shared Rust logic lives in `rust/src/util/<module>.rs`, with tests in
+  that module's `tests.rs`. String and number basics live in
+  `rust/src/text.rs`.
+- shirudo's own BPF programs live in `bpf/`, shared BPF code in
+  `bpf/lib/`, and an upatch package under `upatches/<name>/`.
+- A separate program lives under `tools/<tool>/`, or as one script at
+  `tools/<tool>`. The Rust package builder lives in
+  `rust/src/shirudo_build/`; operator-only work stays out of the core
+  command.
+- Tests go in their tier and family under `testing/`, CI scripts in
+  `.github/scripts/`, and documentation in its section of
+  `Documentation/`.
+- Top-level files concern the project as a whole. The README exceptions
+  in AGENTS.md still apply.
 
-- By phase: read and parse, check, then act, each a function the top
-  level calls in turn, so that the top level reads as the list of
-  steps.
-- A loop body that does more than a few lines becomes a function on one
-  item, and the loop stays where it was.
-- Each case of a `switch` that does more than a line or two becomes a
-  handler of its own.
-- Around a resource, the wrapper takes and releases it and an inner
-  function does the work, as "Resources and errors" shows.
-
-A good cut leaves each helper a name that says its job and a handful of
-parameters. A helper that needs six or more, or that takes most of its
-caller's locals, cuts in the wrong place: put the state the steps share
-in a struct they take, or cut elsewhere. A helper with one caller is
-fine and often right, and one private to its file, `static` in C, lets
-the compiler inline it. Do not split a flat `switch` or a table only to
-make it shorter, and do not spread one step over two functions.
-
-A split is a refactor: one function per commit, a message that says
-behavior does not change and how to read the diff (`git show
---color-moved`). A CBMC harness bounds a loop by its function's name
-(`--unwindset <function>.<n>:<bound>` in `proofs.list`), so the
-harnesses that include the file follow in the same commit, and the
-proofs that reach the code run again. Split the functions a change
-writes or touches; a long function the change leaves alone is split in
-a series of its own, not along the way.
-
-### Interfaces
-
-- When callers keep getting an interface wrong, change the interface,
-  not each caller. Return what every caller needs, such as the end
-  pointer rather than a length, or the object found under the lock
-  rather than a yes and a second lookup. Make the cleanup accept what a
-  failed constructor returns, so that freeing whatever came back is
-  always right. Prefer one entry point to two that each have their own
-  problem cases.
-- Put a check where it cannot be skipped: in the constructor, in the
-  one accessor of a raw field, in the single decoder. Fix the helper
-  that owns a rule rather than every caller of it.
-- Make a special case impossible rather than handled. A counter that
-  cannot wrap is a `__u64`; an empty table beats a NULL to test.
-- A name means one thing and states an odd contract, even when that
-  makes it long. When a field's meaning changes, rename it so that every
-  stale user fails to compile, and delete a function whose tempting name
-  invites misuse.
-
-### Resources and errors
-
-- Take and release a resource in the same function. When the cleanup
-  grows, a wrapper takes and releases and an inner function does the
-  work with plain returns, instead of a ladder of `goto` labels:
-
-  ```c
-  int record_load(const char *path, struct record *out)
-  {
-  	int fd, ret;
-
-  	fd = open(path, O_RDONLY | O_CLOEXEC);
-  	if (fd < 0)
-  		return -errno;
-  	ret = record_read(fd, out);
-  	close(fd);
-  	return ret;
-  }
-  ```
-
-  In Rust, a type that releases what it holds when it is dropped, an
-  `OwnedFd` for a descriptor, releases it on every return.
-
-- Free in the function that allocated. A helper makes all of its
-  allocations or none, and hands over ownership by clearing the pointer
-  it gave away.
-- Order a function so that everything that can fail comes before
-  anything that cannot be undone. Compute into a local, check it, then
-  publish it to shared state or to an output parameter, and write an
-  output once. Check a failure where it happens, so that the shared
-  cleanup at the end runs unconditionally.
-- One errno for each distinct failure, the one that means it: `ENOTTY`
-  for an unknown request, `EAGAIN` for a busy resource, `ENOMEM` only
-  for memory.
-
-### Data and types
-
-- The simplest representation that fits: a `__u64`, not two `__u32`; a
-  `bool` or a bit, not a bitmap, for two flags; a lookup table, not a
-  `switch`, to classify characters; a table indexed by its enum with
-  designated initializers, `[KIND_LOAD] = "load"`, not one that depends
-  on the order of its lines; no negative enumerator as a sentinel.
-- Let the compiler see the real types: `const` on what a function only
-  reads, a union instead of a cast, one named helper for a cast that
-  cannot be avoided, a constant of the type it is compared with.
-- Keep a length in the type it arrives in and make wraparound explicit.
-  Compare bytes as `u8`, `unsigned char` in C, or with `memcmp()`; never
-  rely on `char`, or Rust's `c_char`, being signed, which it is not on
-  arm64 and riscv64.
-- Compute in the data's own unit and convert only at the edges. A range
-  check subtracts from the limit, where adding to the offset can wrap,
-  and accepts an end exactly at the limit:
-
-  ```c
-  if (off > size || len > size - off)
-  	return -EINVAL;
-  ```
-
-  A limit gets a name, not a literal whose digits a reader counts.
-- A loop ends by construction: its condition tests what is left, a
-  chain it walks must strictly advance, and a limit is clamped once
-  before it starts.
-- A constant table inside a function is `static const`, or the compiler
-  copies it to the stack, which a BPF program has 512 bytes of. A return
-  value beats an output parameter wherever one value comes back.
-
-### Strings from outside
-
-`strcmp()`, `strlen()`, `strchr()`, `strstr()`, `strcspn()` and their
-kin read up to a terminator and take no length. The tree calls them
-hundreds of times on strings it terminated itself, so no poison can
-refuse them as it refuses the names `<shirudo/string.h>` replaces. What
-makes one of these calls right is where its argument came from, and
-nothing checks that but you.
-
-Bytes from outside come with a length: a registry's or a collector's
-reply, a token server's answer, a package and its members, an index or
-a tree publication, a `.upatch` file and its sections, the settings
-and labels of a config image, evidence, the eventlog and the other
-sealed logs, a TPM, netlink or ioctl reply, an xattr value, `/proc`
-and sysfs text, the kernel's config. A NUL among them ends a string
-short of the bytes that were read, hashed or signed, so that two
-readers take one input differently: `status` listed the eventlog up to
-a NUL where the replay refused the whole log, and the registry client
-took a token from the first bytes of an answer that was no text.
-
-- Bytes become a C string only after a check for embedded NUL and a
-  terminator is added. `io::read()` and `read_whole()` return owned
-  bytes; a caller that needs a C string checks and terminates them.
-  Source settings use `BufRead::read_until()` with an explicit length
-  and NUL check. JSON strings are decoded before a caller uses them.
-- A buffer `read()`, `pread()`, `recv()`, `readlink()` or `getxattr()`
-  filled has no terminator until the code writes one.
-- A fixed-size field of a format is a string only once its parser found
-  a NUL inside it, `memchr(field, '\0', sizeof(field))`, as
-  `parse_header()` of `util/upatch.c` does before anything reads the
-  name. Two such fields are compared whole, with `memcmp()` over their
-  size, as the signed name is with the header's.
-- A pointer with a length stays one where it can: `memchr()`,
-  `memcmp()`, `span_equals()`, `name_has_suffix()`, `digits()` and
-  `parse_u64()` read no further than they are told. Copy it out only
-  for a callee that needs a terminator.
-- A log of records is walked by the length of its lines, or refused
-  whole for a NUL, and a last line without its newline is no record
-  (`lines_len()`).
-- A name from outside is checked once, by the function that owns its
-  rule (`upatch_name_valid()`, `bpm_name_ok()`, `dns_name_valid()`),
-  before it reaches a path, a digest or a strict JSON writer; until
-  then it is printed through `text_sanitize()` or a lossy writer.
-- A digest over several strings delimits or counts each: a tag with its
-  NUL, then the fixed-size fields, then at most one field of any length,
-  as `chain_upatch_event()` hashes, or one canonical document, as
-  `tree_operation_digest()` does. Two strings set side by side hash
-  like one string cut elsewhere.
-
-A whole-file read returns bytes. Search them as bytes:
-
-```rust
-let body = io::read(path, max)?;
-let found = body.split(|&b| b == b'\n').any(|line| line == needle);
-```
-
-When a C API needs a string, `CString::new(body)` checks for an embedded
-NUL and adds the terminator. The `read_unterminated` and
-`file_as_string` Coccinelle rules still catch C buffers used as strings
-before that check. A fixed-size field, a pointer with a length and a
-digest still need review.
-
-### State that changes under you
-
-- Read a value that can change under you once, into a local, and use
-  only the local. In BPF that is `READ_ONCE()`; `volatile` is never the
-  fix.
-- Never measure and then fill, or test and then look up again, across a
-  window in which the data can change. Size for the maximum once, or
-  have the lookup return what it found.
-- Take the lock a whole operation needs, once. Do not release and retake
-  it when the caller holds on to state, re-read what may have changed
-  after any lock was dropped, and register for a wakeup before testing
-  the condition it waits for.
-
-### Warnings, noise and dead code
-
-- A warning about code a reader also finds hard to follow is fixed by
-  making the code clear: return the match from inside the search loop
-  rather than break and test the index afterwards. Never a cast, an
-  annotation or a dummy value whose only job is to quiet a tool. Where
-  no clearer shape exists, start the value at the one the code relies
-  on.
-- Before adding an annotation or a check that warns, a `#[must_use]`, a
-  lint, a Coccinelle rule or an analyzer, fix its existing users in the
-  commits before it.
-- Print nothing nobody will act on. A warning users cannot respond to
-  teaches them that warnings are normal, and then they miss the real
-  one.
-- Delete rather than keep: a helper with no caller, a variant that is
-  dangerous or unused, a debug check that never caught anything, an
-  optimization nobody measured to pay off. Disallow what has no reason
-  to be allowed; it can come back the day a user needs it.
-- No option in place of a decision. A new option defaults off, and
-  behavior users rely on, command output, JSON keys and exit statuses,
-  is an interface: changing it breaks them.
-
-### Hot paths
-
-BPF programs and upatches run in the kernel's hot paths, where these
-matter. The userspace commands rarely do.
-
-- Keep the common path straight-line and cheap, and never make it
-  slower for a rare case. Move the rare case into a function of its own
-  marked `noinline`, keep a critical section minimal, and test before
-  writing memory other CPUs read rather than writing it every time.
-- Distrust an optimization until it is measured, and remove the ones
-  that do not pay.
-
-### Refactors
-
-- Keep a refactor apart from a behavior change, each in a commit of its
-  own, and say in the refactor's message that behavior does not change.
-- To untangle code, first rewrite it to a clean base, then add each
-  special case back as a helper of its own in the next commit.
-- A mechanical change, a rename or a converted call, goes in a commit
-  of its own.
+Name a file for what it holds, as its neighbors are named, and give it
+one job: a file that grows a second one is split, and the second goes
+where its kind lives. A new directory is a structural decision taken
+only when no existing one fits; the commit that adds it says why, and
+moves nothing else along the way.
 
 ## Comments
 
@@ -356,67 +147,6 @@ Worth writing:
  * other bytes.
  */
 ```
-
-## Use rust/src/util/, and grow it
-
-Write common code once, in `rust/src/util/`, and call it. A hash, an
-encoding, a digest's text form, a path, a record format, a file read
-with its checks, the parse of a name or a number: code that does a job
-like these belongs in a module of `rust/src/util/`, or in
-`rust/src/text.rs` for the string and number basics, not inline in a
-command or a tool. Write it there from the start when a second caller
-is in sight, rather than waiting for the copy. Copies drift apart, and
-the difference between them is usually a bug in one: the `sha256:`
-digest of a manifest was checked and decoded by hand in six places, one
-with a length check the others lacked, and written in ten, each its own
-way, until `decode_sha256_digest()` and `sha256_digest_encode()`, now
-of `rust/src/util/hex.rs`, took the place of them all.
-
-Never write the same logic twice. Before writing a parser, a check, a
-path, a copy loop or a record format, look for one that already does it,
-in `rust/src/util/`, `rust/src/text.rs` and the commands alike: `git grep
--n '<word>'`. A variant that differs only in a length check, a bound or a
-message is still a copy: make one helper, with a parameter or with the
-extra check left to the caller, and move one found in a command into
-`rust/src/util/` for both. A copy found while working on something else
-is consolidated in a commit of its own, before the change that needed
-it. A review asks of every new block of code whether `rust/src/util/`
-has it already, or should. The basics:
-
-| Need | Use |
-|---|---|
-| Parse a number | `parse_u64()`, `parse_s64()`, `parse_x64()`, `digits()` (`rust/src/text.rs`) |
-| Copy a string into a fixed buffer | `strscpy()`, and check `-E2BIG`; `strsprintf()` to join parts, `csprintf!` for a C format (`rust/src/text.rs`) |
-| An upatch's pin directory or a pin in it | `pin_path()` (`rust/src/util/upatch_resolve.rs`) |
-| A string's prefix, or a span that must be one literal | `starts_with()` to test a prefix, `strip_prefix()` to step past it, `==` for a span; never a length counted by hand |
-| A file name's extension | `name_has_suffix()` (`rust/src/text.rs`), and `dir_names()` (`rust/src/util/io.rs`) with it for the files of a directory that have one |
-| Text from outside on a terminal | `sanitize()`; UTF-8 with `utf8_width()` (`rust/src/text.rs`); `rust/src/log.rs` escapes what it logs |
-| Sizes and lengths | `checked_add()`, `checked_mul()` and kin, `div_ceil()` |
-| Memory | `Vec` and `Box`, from the scrubbing global allocator of `rust/src/heap.rs`; wrap a buffer returned by a C library in an owning type with `Drop` |
-| Secrets | `explicit_bzero()` (`rust/src/sys/libc.rs`), `memneq_explicit()` (`rust/src/util/chain.rs`) |
-| Files | `read()`, `read_whole()`, `write_complete()`, `append_line()`, `dir_names()`, `dir_names_at()`, `open_beneath()`, `lock_exclusive()` (`rust/src/util/io.rs`) |
-| Sealed state and paths root names | `open()`, `open_read()`, `open_sealed()`, `lock()`, `append()`, `mkdir_p()`, `write_file()`; `Output::create()` and `Output::commit()` for a report or export, `output_open()` for one appended to (`rust/src/util/seal.rs`) |
-| Bytes on the wire | `from_le_bytes()`, `to_be_bytes()` and kin; `encode()`, `decode()` and `decode_max()` for hex (`rust/src/util/hex.rs`) |
-| SHA-256 | `sha256()` or `sha256_into()` of a slice, or a `Sha256Ctx` through `sha256_init()`, `sha256_update()` and `sha256_final()` over pieces (`rust/src/util/crypto_openssl.rs`); `sha256_digest_encode()` and `decode_sha256_digest()` for the `sha256:<hex>` form (`rust/src/util/hex.rs`), `sha256_hex()` for its bare hex (`rust/src/util/bpm_oci/http.rs`) |
-| JSON | `rust/src/util/json/`: `parse_schema()` over a table of `JsonField`s into a state the caller passes, each field naming its place in it, and `JsonEmit`, whose `str_lossy()` and `key_lossy()` write text from outside |
-| Messages | `log::err()`, `warn()`, `info()`, `audit()`, and `log_c!` for a C format (`rust/src/log.rs`) |
-| A command's options | a table of `OptSpec` indexed by the command's constant for each option, an `OptParser` and a `match` over its `next()`, `number()` for a value in a range, `choice()` for one from a set of `OptName`s, `usage()` and `EXIT_USAGE` (`rust/src/util/options.rs`); `HelpSection::options()` (`rust/src/util/help.rs`) lists the same table in help, and `--list-opts` for completion; never compare an argument by hand |
-
-Code that a second place needs moves into `rust/src/util/<m>.rs`, or
-into `rust/src/text.rs` for the string and number basics, with cases in
-its `tests.rs`, and the copies it replaces go in the same commit, whose
-message names each copy and how they differed. Two private copies of
-one helper in two commands are a bug in waiting: one gets fixed and the
-other does not. A util function takes a slice rather than trusting a
-terminator in outside data, returns 0 or a negative errno, or a
-`Result` whose error is one, and leaves the message to its caller.
-
-Code the BPF programs share goes in `bpf/lib/` the same way. Where a
-shared helper does not make sense, the copy stays and its commit says
-why: operator-only code, signing and the package builder, stays out of
-the core binary, and a file a CBMC proof includes whole keeps a local
-copy when a call into another file would leave the proof a function
-without a body.
 
 ## Conventions
 
@@ -568,7 +298,7 @@ and the C-shaped one goes.
 
 ## Remaining userspace C
 
-These rules apply only to C maintained by Shirudo: BPF programs,
+These rules apply only to C maintained by shirudo: BPF programs,
 remaining userspace helpers, and C test or build helpers. They do not
 apply to Rust or vendored sources.
 
@@ -581,7 +311,7 @@ in Rust.
 
 ### Coccinelle and sparse
 
-- `testing/coccinelle/banned.cocci` reports C calls to functions Shirudo
+- `testing/coccinelle/banned.cocci` reports C calls to functions shirudo
 does not use, including `rand()` and its kin, `strtok()`, temporary-file
 functions, `vfork()`, `alloca()`, `setjmp()` and `longjmp()`, obsolete
 time and signal functions, user and group database lookups, and
