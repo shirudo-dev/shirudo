@@ -50,14 +50,17 @@ fi
 SH
 chmod +x "$fixture/bin/gh"
 
-# runs <id>:<conclusion>..., newest first
+# runs <id>:<conclusion>[:<event>[:<commit>]]..., newest first; a run is
+# of a push and at commit sha<id> unless it says otherwise.
 runs() {
 	sep=
 	printf '{"workflow_runs":['
 	for r; do
-		id=${r%%:*}
-		printf '%s{"id":%s,"conclusion":"%s","head_sha":"sha%s","html_url":"https://github.com/o/r/actions/runs/%s"}' \
-			"$sep" "$id" "${r#*:}" "$id" "$id"
+		IFS=: read -r id conclusion event commit <<EOF
+$r
+EOF
+		printf '%s{"id":%s,"conclusion":"%s","event":"%s","head_sha":"%s","html_url":"https://github.com/o/r/actions/runs/%s"}' \
+			"$sep" "$id" "$conclusion" "${event:-push}" "${commit:-sha$id}" "$id"
 		sep=,
 	done
 	printf ']}\n'
@@ -149,6 +152,35 @@ test_expect_success 'the issue of another workflow is left alone' '
 	report &&
 	grep -F "POST repos/o/r/issues title=main: CI suite fails" "$fixture/writes" &&
 	! grep -F "issues/6" "$fixture/writes"
+'
+
+test_expect_success 'a failure names the changes since the workflow last passed' '
+	state "$(runs 14:failure 13:failure 12:success)" "[]" "" "[]" &&
+	report &&
+	grep -F "Changes since it last passed: https://github.com/o/r/compare/sha12...sha14" "$fixture/writes"
+'
+
+test_expect_success 'a failure at a commit that passed before names no changes' '
+	state "$(runs 15:failure:push:shaX 14:success:schedule:shaX)" "[]" "" "[]" &&
+	report &&
+	grep -F "It passed at this commit before" "$fixture/writes" &&
+	! grep -F "/compare/" "$fixture/writes"
+'
+
+test_expect_success 'a scheduled run is judged with the pushes' '
+	state "$(runs 16:failure:schedule 15:success)" "[]" "" "[]" &&
+	report &&
+	grep -F "fails on main at sha16: $url/16" "$fixture/writes" &&
+	grep -F "/compare/sha15...sha16" "$fixture/writes"
+'
+
+test_expect_success 'a run of a pull request or by hand says nothing about main' '
+	state "$(runs 18:failure:pull_request 17:failure:workflow_dispatch 16:success)" \
+		"$(ci_suite_issue)" "fails on main at sha15: $url/15" "[]" &&
+	report &&
+	grep -Fx "PATCH repos/o/r/issues/5 state=closed state_reason=completed" "$fixture/writes" &&
+	! grep -F "sha18" "$fixture/writes" &&
+	! grep -F "sha17" "$fixture/writes"
 '
 
 test_expect_success 'no finished run writes nothing' '

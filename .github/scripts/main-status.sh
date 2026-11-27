@@ -20,12 +20,18 @@ label_path=$(printf '%s' "$label" | sed 's|/|%2F|g')
 TITLE="main: $WORKFLOW_NAME fails"
 export TITLE
 
-# Runs finish out of order: judge main by the newest run that finished,
-# leaving out the cancelled and skipped ones, which say nothing about it.
+# Runs finish out of order: judge main by the newest run of a push or of
+# the schedule that finished, leaving out the cancelled and skipped ones,
+# which say nothing about it. The commit of the newest pass before it
+# bounds the changes a failure can come from.
 newest_run() {
-	gh api "$repo/actions/workflows/$WORKFLOW_ID/runs?branch=main&event=push&status=completed&per_page=20" \
-		--jq '[.workflow_runs[] | select(.conclusion != "cancelled" and .conclusion != "skipped")][0]
-		      | select(. != null) | [.id, .conclusion, .head_sha, .html_url] | @tsv'
+	gh api "$repo/actions/workflows/$WORKFLOW_ID/runs?branch=main&status=completed&per_page=50" \
+		--jq '[.workflow_runs[] | select((.event == "push" or .event == "schedule") and
+		        .conclusion != "cancelled" and .conclusion != "skipped")]
+		      | select(length > 0)
+		      | [.[0].id, .[0].conclusion, .[0].head_sha, .[0].html_url,
+		         (map(select(.conclusion == "success")) | .[0].head_sha // "")]
+		      | @tsv'
 }
 
 open_issue() {
@@ -36,6 +42,19 @@ open_issue() {
 failed_jobs() {
 	gh api "$repo/actions/runs/$1/jobs?filter=latest&per_page=100" \
 		--jq '[.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | .name] | join(", ")'
+}
+
+# A scheduled run tests a night of merges: name them.
+changes() {
+	if [ -z "$pass" ]; then
+		return 0
+	fi
+	if [ "$pass" = "$sha" ]; then
+		printf '\n\nIt passed at this commit before, so the failure may not come from a change.'
+	else
+		printf '\n\nChanges since it last passed: https://github.com/%s/compare/%s...%s' \
+			"$GITHUB_REPOSITORY" "$pass" "$sha"
+	fi
 }
 
 # Two runs of this script can judge main by the same run.
@@ -59,6 +78,7 @@ report_failure() {
 
 Failed jobs: $jobs"
 	fi
+	jobs="$jobs$(changes)"
 	if [ -z "$issue" ]; then
 		ensure_label
 		gh api -X POST "$repo/issues" -f title="$TITLE" -f "labels[]=$label" \
@@ -86,7 +106,7 @@ report_pass() {
 run=$(newest_run)
 [ -n "$run" ] || exit 0
 tab=$(printf '\t')
-IFS=$tab read -r id conclusion sha url <<EOF
+IFS=$tab read -r id conclusion sha url pass <<EOF
 $run
 EOF
 issue=$(open_issue)
