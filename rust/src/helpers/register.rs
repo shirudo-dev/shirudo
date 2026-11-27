@@ -174,7 +174,6 @@ fn append_init(event: &[u8; 32], info: &ChainInitInfo) -> c_int {
 }
 
 fn print_init(event: &[u8; 32]) -> c_int {
-    // SAFETY: a record of numbers and arrays, for which zeros are a value.
     let mut info = ChainInitInfo::zeroed();
     let ret = chain::init(event, &mut info);
     out(&format!("rc={ret}\n"));
@@ -353,8 +352,7 @@ fn first_write(event_hex: &CStr) -> c_int {
     let Some(event) = digest(event_hex) else {
         return 2;
     };
-    // SAFETY: a record of numbers and arrays, for which zeros are a value.
-    let mut rec: Box<EventlogInit> = Box::new(unsafe { core::mem::zeroed() });
+    let mut rec: Box<EventlogInit> = Box::new(EventlogInit::zeroed());
     let (mut seed, mut public) = ([0u8; 32], [0u8; NV_RSA_BYTES]);
     if boot_init(&mut rec) != 0 {
         return 2;

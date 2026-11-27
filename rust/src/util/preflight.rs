@@ -72,6 +72,20 @@ const _: () = assert!(size_of::<PreflightCheck>() == 280);
 const _: () = assert!(size_of::<PreflightResult>() == 3368);
 
 impl PreflightResult {
+    /// No checks have run yet.
+    pub(crate) fn empty() -> Self {
+        Self {
+            checks: std::array::from_fn(|_| PreflightCheck {
+                id: 0,
+                name: core::ptr::null(),
+                ok: false,
+                detail: [0; DETAIL_MAX],
+            }),
+            n: 0,
+            n_failed: 0,
+        }
+    }
+
     /// The next check's slot, named, its detail emptied: its index.
     fn next_slot(&mut self, id: c_int, name: &'static CStr) -> usize {
         let i = self.n as usize;

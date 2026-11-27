@@ -14,6 +14,7 @@ use std::os::unix::fs::MetadataExt;
 use super::beefile::{PATH_MAX, Spec};
 use super::{build, path, print};
 use crate::errno::{E2BIG, EFBIG, EINVAL, EIO, ENAMETOOLONG, ENOENT};
+use crate::sys::libc::Zeroed;
 use crate::sys::version::shirudo_version;
 use crate::util::gzip::GzWrite;
 use crate::util::io;
@@ -142,8 +143,7 @@ fn environment(spec: &Spec, version: &[u8], fingerprint: &[u8]) -> Result<Vec<u8
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(Ok(0), |d| i64::try_from(d.as_secs()).map_err(|_| -EIO))?;
-    // SAFETY: an all-zero utsname is room for one.
-    let mut un: crate::sys::libc::Utsname = unsafe { core::mem::zeroed() };
+    let mut un = crate::sys::libc::Utsname::zeroed();
     // SAFETY: room for the names.
     if unsafe { crate::sys::libc::uname(&mut un) } != 0 || iso8601(now, &mut stamp) != 0 {
         return Err(-EIO);

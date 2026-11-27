@@ -47,8 +47,7 @@ fn public_matches_init(hex: &CStr) -> c_int {
         ));
         return 1;
     }
-    // SAFETY: a record of nothing, for which zeros are the value.
-    let mut rec: Box<EventlogInit> = Box::new(unsafe { core::mem::zeroed() });
+    let mut rec: Box<EventlogInit> = Box::new(EventlogInit::zeroed());
     if boot_init(&mut rec) != 0 || rec.writer_public != expected {
         err("writer modulus differs between identity and init record\n");
         return 1;

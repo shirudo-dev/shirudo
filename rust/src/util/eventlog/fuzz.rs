@@ -55,8 +55,7 @@ fuzz_target!(
         env("SHIRUDO_EVENTLOG_PATH", &input.path.to_string_lossy());
         let mut root = [0u8; 32];
         let _ = super::replay(&mut root);
-        // SAFETY: a record of nothing, for which zeros are the value.
-        let mut rec: EventlogInit = unsafe { core::mem::zeroed() };
+        let mut rec: EventlogInit = EventlogInit::zeroed();
         let _ = boot_init(&mut rec);
         let mut seen = 0usize;
         let _ = boot_lines(&mut |line| {

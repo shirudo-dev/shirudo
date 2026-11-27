@@ -95,8 +95,7 @@ fn run(args: &[&CStr]) -> c_int {
             c_int::from(ret != 0)
         }
         (Some(b"boot-init"), _) => {
-            // SAFETY: a record of nothing, for which zeros are the value.
-            let mut rec: EventlogInit = unsafe { core::mem::zeroed() };
+            let mut rec: EventlogInit = EventlogInit::zeroed();
             let ret = boot_init(&mut rec);
             out(&format!("rc={ret}\n"));
             if ret != 0 {

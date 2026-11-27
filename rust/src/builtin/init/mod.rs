@@ -11,7 +11,7 @@ mod lsm;
 mod restore;
 
 use core::ffi::{CStr, c_int};
-use core::{mem, ptr};
+use core::ptr;
 use std::ffi::{CString, OsStr};
 use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
@@ -441,8 +441,7 @@ fn initrd_enter() -> c_int {
         ));
         return err;
     }
-    // SAFETY: an all-zero statvfs is room for one.
-    let mut state: Statvfs = unsafe { mem::zeroed() };
+    let mut state = Statvfs::zeroed();
     // SAFETY: a C string and the room.
     let ret = if unsafe { statvfs(VAR_LIB.as_ptr(), &mut state) } != 0 {
         let err = last_err();
@@ -549,8 +548,7 @@ fn run(init: &mut Init) -> c_int {
     // The record is the eventlog's, which root can hide behind a mount;
     // the register is the TPM's, written once this boot by whoever bound
     // it. Either says the restore has happened.
-    // SAFETY: an all-zero record is room for one.
-    let mut rec: EventlogInit = unsafe { mem::zeroed() };
+    let mut rec: EventlogInit = EventlogInit::zeroed();
     let ret = eventlog::boot_init(&mut rec);
     if ret != 0 && ret != -ENOENT {
         let log = eventlog::path().to_bytes();
@@ -641,8 +639,7 @@ pub(super) fn cmd_init(args: &[&CStr]) -> c_int {
         p.usage(b"--json takes --check-only");
         return EXIT_USAGE;
     }
-    // SAFETY: an all-zero result is room for one.
-    let mut res: Box<PreflightResult> = Box::new(unsafe { mem::zeroed() });
+    let mut res = Box::new(PreflightResult::empty());
     preflight::run(&mut res);
     if json {
         if print_preflight_json(&res) != 0 {

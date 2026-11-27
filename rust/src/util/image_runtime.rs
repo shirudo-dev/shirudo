@@ -28,6 +28,7 @@ use crate::errno::{
     ENOENT, ENOKEY, ENXIO, EPERM, EPROTO, ESTALE, EUCLEAN, last_errno, text,
 };
 use crate::sys::identity::{DEVICE_CONFIG, DEVICE_RUNTIME, DeviceAuthority, Identity};
+use crate::sys::libc::Zeroed;
 use crate::sys::libc::{
     O_DIRECTORY, O_NOFOLLOW, O_PATH, Statvfs, explicit_bzero, fsetxattr, fstatvfs, fwrite, ioctl,
     stdout, umount2,
@@ -390,8 +391,7 @@ fn device_observed(device: u64, root: Option<&[u8; 32]>, kind: u32) -> c_int {
 /// nodev, and noexec unless `executable`: 0 or -EPERM.
 fn mount_flags(fd: c_int, executable: bool) -> c_int {
     let required = ST_RDONLY | ST_NOSUID | ST_NODEV | if executable { 0 } else { ST_NOEXEC };
-    // SAFETY: plain C data, filled below.
-    let mut st: Statvfs = unsafe { core::mem::zeroed() };
+    let mut st = Statvfs::zeroed();
     // SAFETY: the caller's fd and room for its filesystem's state.
     if unsafe { fstatvfs(fd, &mut st) } != 0 {
         return last_errno();
