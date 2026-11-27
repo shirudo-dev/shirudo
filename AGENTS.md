@@ -9,13 +9,14 @@ not visible from the code.
 
 Read `.agents/skills/coding/SKILL.md` and follow it before you write,
 change or review any C in this tree, userspace, BPF, tests and tools
-alike, and before you write the commit message of such a change. It is
-how code here is written, with
+alike. It is how code here is written, with
 `Documentation/contribute/code/coding-style.rst` that it builds on.
 Claude Code loads it as the `coding` skill, Codex from `.agents/skills/`,
 and an agent that does not load skills reads the file.
 
-Work another skill covers loads that skill as well:
+Load the `commits` skill before every commit, of code, documentation,
+tests, scripts and CI alike. Work another skill covers loads that skill
+as well:
 
 - `testing` for tests
 - `proofs` for proofs
@@ -66,7 +67,7 @@ change, and a check of whether a reported issue is real, follow the
 | `Documentation/upatches/` | Authoring and shipping upatches: attach kinds, maps and serializers, decoders, the Beefile, publishing, debugging a failed load. |
 | `Documentation/reference/` | Every command (`reference/cli/`), the formats (`reference/formats/`, including the `.upatch` container), the settings (`configuration.rst`), the eventlog, failure categories and exit status, files, units, environment variables, the cheat sheet. |
 | `Documentation/contribute/` | Developer guide, test tiers and the test VM (read `testing.rst` before adding or moving a test), test coverage, the kernel coding style, commits and sign-off (read `contributing.rst` before crafting a commit), and the documentation style guide `writing-docs.rst`. |
-| `.agents/skills/` | Skills for coding agents in the `SKILL.md` format of agentskills.io, which Codex reads there and Claude Code through the `.claude/skills` link: `coding` writes C in the tree's style, grows `util/` and writes its commit messages, `testing` runs the test tiers and the test VM, `pre-submit` the checks CI runs on a series, `upatch` writes for the target's preemption model and a low cost, builds, packages and publishes an upatch, `bpf-concurrency` checks upatch code whose runs share state, `bpf-coccinelle` runs and extends the Coccinelle rules for it, `docs` finds and checks the pages a change touches, `fuzz-target` adds a libFuzzer target for a parser, `proofs` runs and writes the CBMC and Lean 4 proofs, `security-audit` audits the tree against the threat model, and the threat model and the proofs against the tree. |
+| `.agents/skills/` | Skills for coding agents in the `SKILL.md` format of agentskills.io, which Codex reads there and Claude Code through the `.claude/skills` link: `coding` writes C in the tree's style and grows `util/`, `commits` writes commit messages and shapes a series, `testing` runs the test tiers and the test VM, `pre-submit` the checks CI runs on a series, `upatch` writes for the target's preemption model and a low cost, builds, packages and publishes an upatch, `bpf-concurrency` checks upatch code whose runs share state, `bpf-coccinelle` runs and extends the Coccinelle rules for it, `docs` finds and checks the pages a change touches, `fuzz-target` adds a libFuzzer target for a parser, `proofs` runs and writes the CBMC and Lean 4 proofs, `security-audit` audits the tree against the threat model, and the threat model and the proofs against the tree. |
 
 The kernel side of the signing design is the kernel's own
 `Documentation/bpf/signing.rst`; `bpf_prog_verify_signature()` runs
@@ -118,20 +119,21 @@ package for `bpm info`.
 
 C follows the kernel coding style,
 `Documentation/contribute/code/coding-style.rst`, in userspace and BPF
-alike. The `coding` skill gives these conventions with their reasons,
-the helpers to use and the commit message that carries a change:
-`.agents/skills/coding/SKILL.md` is the reference, and the "Before you
-write code" section above has you load and follow it.
+alike. The `coding` skill gives these conventions with their reasons
+and the helpers to use: `.agents/skills/coding/SKILL.md` is the
+reference, and the "Before you write code" section above has you load
+and follow it.
 
-Coding conventions, helpers, patterns, and commit message format belong
-in the `coding` skill, not here. This file documents architecture,
-invariants, and project policies; the skill documents how to write C.
+Coding conventions, helpers and patterns belong in the `coding` skill,
+the commit message format in the `commits` skill, not here. This file
+documents architecture, invariants, and project policies; the skills
+document how to write C and how to commit it.
 
 ## Commits
 
 Every commit follows `Documentation/contribute/code/contributing.rst` and
-the commit message format in the `coding` skill. One logical change per
-commit, each one building and passing on its own.
+the `commits` skill, which an agent loads before it commits. One logical
+change per commit, each one building and passing on its own.
 
 An agent never adds a `Signed-off-by:`, on its own or anyone else's
 behalf: only a person can give one, and that line is left to the human
