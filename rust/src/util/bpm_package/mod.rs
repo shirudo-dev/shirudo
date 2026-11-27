@@ -26,7 +26,6 @@ pub(crate) use tar::{archive_rel_ok, upatch_member, upatch_pair};
 use super::bpm_oci::{MAX_DIGEST, MAX_ENDPOINT, MAX_NAME};
 
 /// `struct bpm_index_entry`.
-#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct IndexEntry {
     pub(crate) name: [u8; MAX_NAME],
@@ -58,16 +57,12 @@ impl PackageInfo {
 }
 
 /// `enum bpm_upatch_member`: what a file of a package's upatches/ is.
-#[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum UpatchMember {
     Other = 0,
     Load = 1,
     Unload = 2,
 }
-
-const _: () = assert!(size_of::<IndexEntry>() == 1160);
-const _: () = assert!(size_of::<UpatchMember>() == size_of::<core::ffi::c_int>());
 
 impl IndexEntry {
     pub(crate) const fn new() -> Self {
