@@ -250,10 +250,12 @@ size_t utf8_width(const char *s, size_t n);
 
 /*
  * Make the len bytes at s, text from outside, safe to print on a
- * terminal: each byte of a control character, C0, DEL or C1 alike, and
- * each byte that starts no well-formed UTF-8 character becomes '?',
- * but for a tab and a line feed where lines is set, and there a carriage
- * return before a line feed. The length stays as it was.
+ * terminal: each byte of a control character, C0, DEL or C1 alike, of a
+ * bidi or zero-width format character (U+061C, U+200B to U+200F,
+ * U+2028 to U+202E, U+2066 to U+2069) and each byte that starts no
+ * well-formed UTF-8 character becomes '?', but for a tab and a line feed
+ * where lines is set, and there a carriage return before a line feed.
+ * The length stays as it was.
  */
 void text_sanitize(char *s, size_t len, bool lines);
 
