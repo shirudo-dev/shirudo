@@ -86,6 +86,13 @@ LOGS_DIR="${VM_ROOT}/logs"
 DEFAULT_KERNEL="${REPO_ROOT}/artifacts/bpf-next-kernel-debs/${TEST_VM_ARCH_KIMAGE}"
 CPUS="${TEST_VM_CPUS:-4}"
 MEMORY="${TEST_VM_MEMORY:-4G}"
+# Accelerator for the guest qemu. "kvm" (the default, host CPU passthrough) is
+# what CI uses. On a nested hypervisor such as Lima/vz, -cpu host + gic-version=
+# host can wedge the guest boot; the supported fix is to add the GICv3 trap flags
+# (kvm-arm.vgic_v3_{group0,group1,common}_trap=1) to the Lima guest kernel so
+# nested KVM works. Where that is not an option, set TEST_VM_ACCEL=tcg to boot
+# the target under software emulation instead.
+VM_ACCEL="${TEST_VM_ACCEL:-kvm}"
 DISK_SIZE="${TEST_VM_DISK_SIZE:-30G}"
 VM_TIMEOUT="${TEST_VM_TIMEOUT:-3600}"
 VM_MODE="${VM_MODE:-test}"
@@ -1986,7 +1993,11 @@ KERNEL_NET_DEVICE="virtio-net-pci,netdev=net0"
 # devices, declared so that the root disk is vda.
 case "$TEST_VM_ARCH" in
 x86_64)
-	MACHINE_ARGS=(-cpu host -machine q35)
+	if [[ "$VM_ACCEL" == tcg ]]; then
+		MACHINE_ARGS=(-cpu max -machine q35 -accel tcg,thread=multi)
+	else
+		MACHINE_ARGS=(-enable-kvm -cpu host -machine q35)
+	fi
 	DISK_ARGS=(
 		-drive "file=${OVERLAY},if=virtio,format=qcow2"
 		-drive "file=${SEED},if=virtio,format=raw,readonly=on"
@@ -1994,7 +2005,11 @@ x86_64)
 	TPM_DEVICE="tpm-tis,tpmdev=tpm0"
 	;;
 aarch64)
-	MACHINE_ARGS=(-cpu host -machine "virt,gic-version=host")
+	if [[ "$VM_ACCEL" == tcg ]]; then
+		MACHINE_ARGS=(-cpu max -machine "virt,gic-version=max" -accel tcg,thread=multi)
+	else
+		MACHINE_ARGS=(-enable-kvm -cpu host -machine "virt,gic-version=host")
+	fi
 	DISK_ARGS=(
 		-drive "file=${OVERLAY},if=none,id=rootdisk,format=qcow2"
 		-device "virtio-blk-pci,drive=rootdisk"
@@ -2006,7 +2021,6 @@ aarch64)
 esac
 
 QEMU_ARGS=(
-	-enable-kvm \
 	"${MACHINE_ARGS[@]}" \
 	-smp "$CPUS" \
 	-m "$MEMORY" \
