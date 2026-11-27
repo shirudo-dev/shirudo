@@ -297,10 +297,9 @@ pub(crate) unsafe fn base64_encode(
         Err(err) => return err,
     };
     // SAFETY: the caller's room for need bytes.
-    unsafe {
-        ptr::copy_nonoverlapping(text.as_ptr(), out.cast(), text.len());
-        *out.add(need - 1) = 0;
-    }
+    unsafe { ptr::copy_nonoverlapping(text.as_ptr(), out.cast(), text.len()) };
+    // SAFETY: need - 1 is the last byte of the caller's output room.
+    unsafe { *out.add(need - 1) = 0 };
     0
 }
 
@@ -446,22 +445,21 @@ pub(crate) unsafe fn cert_read_fd(fd: BorrowedFd<'_>, cert: *mut Cert) -> c_int 
 
 /// The DER SubjectPublicKeyInfo of the certificate as it holds it.
 fn spki_der(x509: &X509Ref) -> Option<Vec<u8>> {
-    // SAFETY: the certificate's own key, encoded twice, first for its
-    // length and then into room of that length.
-    unsafe {
-        let spki = more::X509_get_X509_PUBKEY(x509.as_ptr());
-        if spki.is_null() {
-            return None;
-        }
-        let len = more::i2d_X509_PUBKEY(spki, ptr::null_mut());
-        if len <= 0 {
-            return None;
-        }
-        let mut der = vec![0u8; len as usize];
-        let mut p = der.as_mut_ptr();
-
-        (more::i2d_X509_PUBKEY(spki, &mut p) == len).then_some(der)
+    // SAFETY: the public key belongs to the live certificate.
+    let spki = unsafe { more::X509_get_X509_PUBKEY(x509.as_ptr()) };
+    if spki.is_null() {
+        return None;
     }
+    // SAFETY: the public key is live; a null output asks for its size.
+    let len = unsafe { more::i2d_X509_PUBKEY(spki, ptr::null_mut()) };
+    if len <= 0 {
+        return None;
+    }
+    let mut der = vec![0u8; usize::try_from(len).ok()?];
+    let mut p = der.as_mut_ptr();
+    // SAFETY: der has the size the same public key just reported.
+    let written = unsafe { more::i2d_X509_PUBKEY(spki, &mut p) };
+    (written == len).then_some(der)
 }
 
 /// SHA-256 over the DER SubjectPublicKeyInfo, the bytes Go's
@@ -601,11 +599,10 @@ pub(crate) unsafe fn cert_subject(cert: *const Cert, out: *mut c_char, out_sz: u
     if text.len() >= out_sz {
         return -ENAMETOOLONG;
     }
-    // SAFETY: the caller's room for out_sz bytes.
-    unsafe {
-        ptr::copy_nonoverlapping(text.as_ptr(), out.cast(), text.len());
-        *out.add(text.len()) = 0;
-    }
+    // SAFETY: text fits in the caller's output room.
+    unsafe { ptr::copy_nonoverlapping(text.as_ptr(), out.cast(), text.len()) };
+    // SAFETY: text.len() leaves one byte for the terminator.
+    unsafe { *out.add(text.len()) = 0 };
     0
 }
 
@@ -1092,11 +1089,10 @@ pub(crate) fn base64_decode(inp: &[u8], out: &mut [u8]) -> Result<usize, c_int> 
 /// `cert` is NULL or points to a cert, and `out` to room for a
 /// cert_pubkey.
 pub(crate) unsafe fn cert_pubkey(cert: *const Cert, out: *mut CertPubkey) -> c_int {
-    // SAFETY: the caller's room, zeroed whole first, as the C's memset.
-    let out = unsafe {
-        out.write_bytes(0, 1);
-        &mut *out
-    };
+    // SAFETY: the caller's room for the whole output value.
+    unsafe { out.write_bytes(0, 1) };
+    // SAFETY: the caller's output value remains live and unique.
+    let out = unsafe { &mut *out };
     // SAFETY: the caller passes NULL or a cert.
     let Some(key) = (unsafe { x509_of(cert) }).and_then(|x| x.public_key().ok()) else {
         clear_errors();
@@ -1181,9 +1177,10 @@ pub(crate) unsafe fn cert_verify_chain(
     match verified {
         Ok((Ok(true), _)) => 0,
         Ok((_, err)) => {
-            // SAFETY: a static string of libcrypto's, into the caller's
-            // place for the reason.
-            unsafe { *reason = ffi::X509_verify_cert_error_string(c_long::from(err.as_raw())) };
+            // SAFETY: libcrypto returns a static explanation for this error.
+            let text = unsafe { ffi::X509_verify_cert_error_string(c_long::from(err.as_raw())) };
+            // SAFETY: the caller's place for the reason remains live.
+            unsafe { *reason = text };
             -EKEYREJECTED
         }
         Err(_) => -EIO,
