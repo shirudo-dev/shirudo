@@ -35,7 +35,7 @@ fn emitted(st: &[BpmStateEntry], cap: usize) -> (c_int, Vec<u8>) {
 
 /// parse() of `doc`: its result and the entries.
 fn parsed(doc: &[u8]) -> (c_int, Vec<BpmStateEntry>) {
-    let mut out = vec![BpmStateEntry::new(); MAX_STATE];
+    let mut out = vec![BpmStateEntry::new(); 2];
     let ret = match parse(doc, &mut out) {
         Ok(n) => {
             out.truncate(n);
