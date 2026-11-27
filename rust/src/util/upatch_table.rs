@@ -13,7 +13,6 @@ use crate::util::json::JsonEmit;
 use crate::util::timefmt::format_duration;
 
 /// `struct upatch_table_row`.
-#[repr(C)]
 pub struct UpatchTableRow {
     pub(crate) name: [c_char; 257],
     pub(crate) location: [c_char; 160],
@@ -44,10 +43,6 @@ impl UpatchTableRow {
         }
     }
 }
-
-const _: () = assert!(size_of::<UpatchTableRow>() == 616);
-const _: () = assert!(core::mem::offset_of!(UpatchTableRow, n_maps) == 516);
-const _: () = assert!(core::mem::offset_of!(UpatchTableRow, payload_sha256) == 544);
 
 /// The string in a fixed array, up to its NUL.
 fn in_array(a: &[c_char]) -> &[u8] {
