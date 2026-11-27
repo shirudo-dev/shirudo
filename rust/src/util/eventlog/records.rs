@@ -224,6 +224,12 @@ fn init_line(line: &CStr, is_init: bool, out: &mut EventlogInit) -> c_int {
     {
         return -EINVAL;
     }
+    let Ok(reset_count) = u32::try_from(init.reset_count) else {
+        return -EINVAL;
+    };
+    let Ok(pcr) = u32::try_from(init.pcr) else {
+        return -EINVAL;
+    };
     out.initrd = f[6].seen() && cstr(&init.bound_in) == b"initrd";
     // Records are of one TPM reset unless both carry a count and the
     // counts differ; a record without one cannot vouch for a reset in
@@ -231,16 +237,16 @@ fn init_line(line: &CStr, is_init: bool, out: &mut EventlogInit) -> c_int {
     let have_reset_count = f[4].seen();
     out.records = out.records.wrapping_add(1);
     if out.records == 1
-        || (have_reset_count && out.have_reset_count && init.reset_count as u32 != out.reset_count)
+        || (have_reset_count && out.have_reset_count && reset_count != out.reset_count)
     {
         out.records_epoch = 1;
     } else {
         out.records_epoch = out.records_epoch.wrapping_add(1);
     }
     out.have_reset_count = have_reset_count;
-    out.reset_count = init.reset_count as u32;
+    out.reset_count = reset_count;
     out.name_len = NAME_LEN;
-    out.pcr = init.pcr as u32;
+    out.pcr = pcr;
     0
 }
 
