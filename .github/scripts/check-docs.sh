@@ -261,7 +261,7 @@ for model in testing/proofs/lean4/Shirudo/*.lean; do
 	model=${model##*/}
 	printf 'Shirudo.%s\n' "${model%.lean}"
 done >>"$work/proofs"
-grep -v '^[[:space:]]*\(#\|$\)' testing/proofs/kani/proofs.list >>"$work/proofs"
+awk 'NF && $1 !~ /^#/ { print $1 }' testing/proofs/kani/proofs.list >>"$work/proofs"
 while IFS= read -r proof; do
     grep -qF "* - \`\`$proof\`\`" "$coverage" ||
         report "$coverage" "no row for the proof $proof"

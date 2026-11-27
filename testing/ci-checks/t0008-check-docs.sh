@@ -55,6 +55,7 @@ good() {
 	put bpf/lib/guard.h 'struct guard;' &&
 	put testing/functional/build/t1001-one.sh '#!/bin/sh' &&
 	put testing/proofs/cbmc/proofs.list 'first --unwind 1' 'second --unwind 1' &&
+	put testing/proofs/kani/proofs.list &&
 	put testing/proofs/cbmc/first.c '#include "proof.h"' \
 		'#include "../../../util/read.c"' &&
 	put testing/proofs/cbmc/model.h '#include "../../../util/chained.c"' &&
@@ -87,6 +88,11 @@ refuses() {
 
 test_expect_success 'a tree whose fields continue on a second line passes' '
 	good && check
+'
+
+test_expect_success 'a Kani proof needs a coverage row' '
+    good && put testing/proofs/kani/proofs.list rust_example &&
+    refuses "no row for the proof rust_example"
 '
 
 # A page whose console block holds the given lines.
