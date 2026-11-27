@@ -97,7 +97,8 @@ moves nothing else along the way.
 
 ## Comments
 
-Code says what it does; a comment is for what it cannot say.
+Code says what it does; a comment is for what it cannot say. Its prose
+follows the `writing` skill.
 
 - A `.c` file starts with `// SPDX-License-Identifier: BSD-2-Clause`, a
   header with `/* SPDX-License-Identifier: BSD-2-Clause */`, followed by

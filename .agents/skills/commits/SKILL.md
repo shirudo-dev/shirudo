@@ -23,7 +23,8 @@ diff shows what changed, so leave that out.
    describe what it changes (AGENTS.md), and nothing else.
 3. Read `git log --format=%s -- <the files>` for the area prefix the
    files take and how recent messages there read.
-4. Write the message as "The message" below says.
+4. Write the message as "The message" below says, and read it through
+   the `writing` skill and its check.
 5. Add the tags of "Tags". An agent never adds a `Signed-off-by:`, on
    its own or anyone else's behalf: only a person can certify the
    Developer's Certificate of Origin, and that line is left to the
