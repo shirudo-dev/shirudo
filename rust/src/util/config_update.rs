@@ -303,26 +303,28 @@ fn record_decode(data: &[u8], state: bool) -> Result<ConfigUpdateRecord, c_int> 
     if fields[..required].iter().any(|f| !f.seen()) {
         return Err(-EBADMSG);
     }
+    let sequence = u64::try_from(json.sequence).map_err(|_| -EBADMSG)?;
+    let reset_count = u32::try_from(json.reset).map_err(|_| -EBADMSG)?;
+    let restart_count = u32::try_from(json.restart).map_err(|_| -EBADMSG)?;
+    let pcr = u32::try_from(json.pcr).map_err(|_| -EBADMSG)?;
+    let kind = c_int::try_from(json.kind).map_err(|_| -EBADMSG)?;
     let mut record = ConfigUpdateRecord::zeroed();
     record.target.prefix = json.prefix;
     if json.schema != 1
-        || json.sequence <= 0
-        || !(0..=i64::from(u32::MAX)).contains(&json.reset)
-        || !(0..=i64::from(u32::MAX)).contains(&json.restart)
-        || !(0..=i64::from(u32::MAX)).contains(&json.pcr)
-        || config_measure::pcr_valid(json.pcr as u32) != 0
-        || (json.kind != i64::from(EVENT_BOOT) && json.kind != i64::from(EVENT_UPDATE))
+        || sequence == 0
+        || config_measure::pcr_valid(pcr) != 0
+        || (kind != EVENT_BOOT && kind != EVENT_UPDATE)
         || hex::decode(cstr(&json.root), &mut record.target.root_hash).is_err()
         || hex::decode(cstr(&json.initial), &mut record.initial_pcr).is_err()
         || (state && !target_valid(&record.target))
     {
         return Err(-EBADMSG);
     }
-    record.sequence = json.sequence as u64;
-    record.reset_count = json.reset as u32;
-    record.restart_count = json.restart as u32;
-    record.pcr = json.pcr as u32;
-    record.kind = json.kind as c_int;
+    record.sequence = sequence;
+    record.reset_count = reset_count;
+    record.restart_count = restart_count;
+    record.pcr = pcr;
+    record.kind = kind;
     record.pending = json.pending;
     Ok(record)
 }
