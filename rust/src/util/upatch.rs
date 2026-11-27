@@ -869,33 +869,56 @@ fn prog_name_char(c: u8) -> bool {
 /// The bpffs name of upatch `name`: bpffs reserves dots in a path
 /// component, so each becomes `~d`, which no name has.
 pub(crate) fn pin_name(name: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(name.len());
-    for &c in name {
-        if c == b'.' {
-            out.extend_from_slice(b"~d");
+    let mut out = vec![0u8; name.len().saturating_mul(2)];
+    let used = pin_name_into(name, &mut out);
+    out.truncate(used);
+    out
+}
+
+/// Write the pin spelling of `name` into room for twice its length.
+fn pin_name_into(name: &[u8], out: &mut [u8]) -> usize {
+    let mut used = 0;
+    for &byte in name {
+        if byte == b'.' {
+            out[used] = b'~';
+            out[used + 1] = b'd';
+            used += 2;
         } else {
-            out.push(c);
+            out[used] = byte;
+            used += 1;
         }
     }
-    out
+    used
 }
 
 /// The upatch name a bpffs pin spells, `~d` a dot again; none for
 /// another `~`.
 pub(crate) fn name_from_pin(pin: &[u8]) -> Option<Vec<u8>> {
-    let mut out = Vec::with_capacity(pin.len());
-    let mut it = pin.iter();
-
-    while let Some(&c) = it.next() {
-        if c != b'~' {
-            out.push(c);
-        } else if it.next() == Some(&b'd') {
-            out.push(b'.');
-        } else {
-            return None;
-        }
-    }
+    let mut out = vec![0u8; pin.len()];
+    let used = name_from_pin_into(pin, &mut out)?;
+    out.truncate(used);
     Some(out)
+}
+
+/// Decode into room for every input byte. Return the written length.
+fn name_from_pin_into(pin: &[u8], out: &mut [u8]) -> Option<usize> {
+    let mut at = 0;
+    let mut used = 0;
+    while at < pin.len() {
+        let byte = pin[at];
+        at += 1;
+        if byte == b'~' {
+            if pin.get(at) != Some(&b'd') {
+                return None;
+            }
+            out[used] = b'.';
+            at += 1;
+        } else {
+            out[used] = byte;
+        }
+        used += 1;
+    }
+    Some(used)
 }
 
 /// An upatch name: `[A-Za-z0-9._-]+`, not starting with '.', whose pin
