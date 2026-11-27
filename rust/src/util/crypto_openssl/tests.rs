@@ -63,6 +63,8 @@ fn certificate_owner_clears_on_reparse() {
 
     assert_eq!(cert_read_memory(der, &mut cert), 0);
     assert!(cert.imp.is_some());
+    assert_eq!(cert_read_memory(der, &mut cert), 0);
+    assert!(cert.imp.is_some());
     assert_eq!(cert_read_memory(b"not a certificate", &mut cert), -EINVAL);
     assert!(cert.imp.is_none());
 }
@@ -105,6 +107,13 @@ fn oaep_encryption_uses_the_supplied_label() {
             .is_err()
     );
     clear_errors();
+    decrypt
+        .set_rsa_oaep_label(b"shirudo\0")
+        .expect("set matching label");
+    let written = decrypt
+        .decrypt(&encrypted[..len], Some(&mut plain))
+        .expect("decrypt with matching label");
+    assert_eq!(&plain[..written], b"seed");
 
     let len = rsa_oaep_encrypt(&n, 0, b"", b"seed", &mut encrypted).expect("encrypt without label");
     let mut decrypt = PkeyCtx::new(&key).expect("decrypt context");
