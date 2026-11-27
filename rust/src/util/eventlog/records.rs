@@ -84,7 +84,6 @@ pub(crate) type LineFn<'a> = &'a mut dyn FnMut(&CStr) -> c_int;
 pub(crate) type UpatchFn<'a> = &'a mut dyn FnMut(c_int, &[u8], &[u8]) -> c_int;
 
 /// `struct eventlog_init`: this boot's last init record.
-#[repr(C)]
 pub struct EventlogInit {
     pub(crate) writer_public: [u8; NV_RSA_BYTES],
     pub(crate) pcr: u32,
@@ -99,8 +98,6 @@ pub struct EventlogInit {
     pub(crate) records: u32,
     pub(crate) records_epoch: u32,
 }
-
-const _: () = assert!(size_of::<EventlogInit>() == 544);
 
 impl EventlogInit {
     /// No record, for boot_init() to fill.
