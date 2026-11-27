@@ -1290,6 +1290,31 @@ static int decode_map_open(const char *path, bool archived,
 		break;
 	}
 	upatch_close(&u);
+	/* A map no decoder claims still has its BTF: the cells the text
+	   output prints are the cells a JSON reader wants, so the
+	   no-decoder fallback is the same formatting under JSON keys.
+	   The output says so, because a consumer that expects a
+	   decoder's shape is reading a different document. Without
+	   this, `upatch map --json` fails on exactly the maps that
+	   print fine without --json. */
+	if (ret == -ENODATA && !otel) {
+		struct json_emit e = { .max = max_bytes };
+
+		json_obj_open(&e);
+		json_kv_string(&e, "format", "btf");
+		upatch_maps_emit_json_fields(&e, v);
+		json_obj_close(&e);
+		if (!e.err) {
+			*out = e.buf;
+			*out_len = e.len;
+			e.buf = NULL;
+			e.cap = 0;
+			ret = 0;
+		} else {
+			ret = e.err;
+		}
+		xfree(e.buf, e.cap);
+	}
 	return ret;
 }
 

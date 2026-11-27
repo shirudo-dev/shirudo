@@ -198,6 +198,67 @@ static void decoder_error_is_sanitized(void)
 	EXPECT_EQ(close(capture), 0);
 }
 
+/*
+ * A map no decoder claims falls back to the BTF formatting: the cells
+ * the text output prints, under JSON keys, with a format tag that
+ * says no decoder ran. The artifact carries the trailer and the
+ * section of a decoder archive with a zero decoder count, so the
+ * archive opens and no decoder matches it.
+ */
+static void map_without_a_decoder_prints_btf_json(void)
+{
+	const size_t data_off = offsetof(struct decoder_fixture, blob);
+	char path[] = "/tmp/shirudo-unit-decoder-XXXXXX";
+	struct upatch_decoder_blob blob = {};
+	struct decoder_fixture f = {};
+	struct map_view view = {
+		.name = "records",
+		.max_entries = 1,
+		.type_name = "array",
+	};
+	size_t out_len = 0;
+	char *out = NULL;
+	int fd, ret;
+
+	ASSERT_TRUE(strscpy(view.upatch, "unit-no-decoder",
+			    sizeof(view.upatch)) >= 0);
+	f.header.magic = cpu_to_le64(UPATCH_MAGIC);
+	f.header.version = cpu_to_le32(UPATCH_VERSION);
+	f.header.type = cpu_to_le32(UPATCH_TYPE_BPF);
+	ASSERT_TRUE(strscpy(f.header.name, view.upatch,
+			    sizeof(f.header.name)) >= 0);
+	f.header.loader_insns_off = cpu_to_le32(offsetof(struct decoder_fixture, loader));
+	f.header.loader_insns_len = cpu_to_le32(sizeof(f.loader));
+	f.header.signature_off = cpu_to_le32(offsetof(struct decoder_fixture, signature));
+	f.header.signature_len = cpu_to_le32(sizeof(f.signature));
+	f.header.data_off = cpu_to_le32(data_off);
+	f.header.data_len = cpu_to_le32(sizeof(f) - data_off);
+	f.loader.code = BPF_JMP | BPF_EXIT;
+	blob.magic = cpu_to_le32(UPATCH_DECODER_MAGIC);
+	blob.version = cpu_to_le32(UPATCH_DECODER_VERSION);
+	blob.nr_decoders = cpu_to_le32(0);
+	memcpy(f.blob, &blob, sizeof(blob));
+	f.section.tag = cpu_to_le32(UPATCH_SECTION_DECODERS);
+	f.section.len = cpu_to_le32(sizeof(f.blob));
+	f.trailer.magic = cpu_to_le32(UPATCH_SIGNED_TRAILER_MAGIC);
+	f.trailer.version = cpu_to_le32(UPATCH_SIGNED_VERSION);
+	f.trailer.dir_off = cpu_to_le32(offsetof(struct decoder_fixture, section) - data_off);
+	f.trailer.nr_sections = cpu_to_le32(1);
+	fd = mkstemp(path);
+	ASSERT_TRUE(fd >= 0);
+	ASSERT_EQ(write_complete(fd, &f, sizeof(f)), 0);
+	ASSERT_EQ(close(fd), 0);
+	ret = upatch_decode_map_file_json(path, &view, &out, &out_len);
+	EXPECT_EQ(unlink(path), 0);
+	EXPECT_EQ(ret, 0);
+	if (!ret) {
+		EXPECT_TRUE(str_contains(out, "\"format\":\"btf\""));
+		EXPECT_TRUE(str_contains(out, "\"name\":\"records\""));
+		EXPECT_TRUE(str_contains(out, "\"n_entries\":0"));
+	}
+	xfree(out, out_len + 1);
+}
+
 static const struct unit_case cases[] = {
 	UNIT_CASE(decoder_initializes_and_returns_json),
 	UNIT_CASE(decoder_of_a_upatch_with_the_longest_name_runs),
@@ -207,6 +268,7 @@ static const struct unit_case cases[] = {
 	UNIT_CASE(decoder_cannot_reach_unbudgeted_code),
 	UNIT_CASE(fixed_records_keep_the_first_slot_of_a_chunked_page),
 	UNIT_CASE(decoder_error_is_sanitized),
+	UNIT_CASE(map_without_a_decoder_prints_btf_json),
 	{}
 };
 
