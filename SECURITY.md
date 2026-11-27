@@ -1,6 +1,6 @@
 # Security Policy
 
-Please do not report security vulnerabilities in public issues or discussions.
+Please do not report security vulnerabilities in public issues, discussions or chat, such as shirudo's Zulip.
 Instead, use GitHub’s
 [**Report a vulnerability**](https://github.com/shirudo-dev/shirudo/security/advisories/new)
 feature.
