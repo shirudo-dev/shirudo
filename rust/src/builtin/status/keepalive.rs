@@ -110,7 +110,8 @@ impl View {
                 continue;
             }
             let name = crate::text::cstr(&u.name).to_vec();
-            payload_sha256(&name, &mut u.payload_hex);
+            let payload = payload_sha256(&name);
+            let _ = crate::text::strscpy(&mut u.payload_hex, &payload);
             let status = tree_status_path(&name);
             if std::fs::metadata(OsStr::from_bytes(status.to_bytes())).is_ok() {
                 self.not_ok += 1;

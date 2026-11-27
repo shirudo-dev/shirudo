@@ -12,7 +12,7 @@ use std::ffi::CString;
 use super::{JSON_MAX, Summaries, log_err, out, print_json, strerr, type_name};
 use crate::bpf::btf::Btf;
 use crate::sys::libc::close;
-use crate::text::{cstr, strscpy};
+use crate::text::cstr;
 use crate::util::bpf_info::{Info, PROG_INFO_SIZE};
 use crate::util::bpf_sys::bpf_prog_get_fd_by_id;
 use crate::util::help::{Help, HelpSection};
@@ -104,27 +104,16 @@ fn source(prog: c_int) -> Result<Vec<Line>, c_int> {
     Ok(lines(&btf, &recs, rec_size as usize))
 }
 
-/// A C string the call writes into `N` bytes.
-fn filled<const N: usize>(f: impl FnOnce(&mut [u8])) -> Vec<u8> {
-    let mut buf = [0u8; N];
-    f(&mut buf);
-    cstr(&buf).to_vec()
-}
-
 /// Upatch `name` as loaded, from its first link or, an XDP upatch with no
 /// device yet, its program pin; or -errno. Missing line_info is no
 /// failure: the rest still describes it.
 fn collect(name: &CStr) -> Result<Loaded, c_int> {
     let prog_id = first_prog_id(name.to_bytes())?;
     let n = name.to_bytes();
-    let loaded_at = filled::<32>(|o| loaded_at(n, o));
-    let payload = filled::<65>(|o| payload_sha256(n, o));
+    let loaded_at = loaded_at(n);
+    let payload = payload_sha256(n);
     let vbtf = kernel_btf::vmlinux();
-    let mut location = [0u8; 160];
-    if resolve_location(vbtf, n, &mut location) != 0 {
-        let _ = strscpy(&mut location, b"?");
-    }
-    let location = cstr(&location).to_vec();
+    let location = resolve_location(vbtf, n).unwrap_or_else(|_| b"?".to_vec());
 
     let programs = each_link_misses(vbtf, n).ok();
 

@@ -535,27 +535,17 @@ fn upatch_rows(pins: &[Vec<u8>], java: &[JavaAgent]) -> Vec<UpatchTableRow> {
             let name = message(&[&name_from_pin(pin).unwrap_or_else(|| pin.clone())]);
 
             row_field(&mut r.name, name.to_bytes());
-            // SAFETY: each field's room.
-            unsafe {
-                let upatch = name.to_bytes();
-                if upatch_resolve::resolve_location(
-                    vbtf,
-                    upatch,
-                    ffi::bytes_mut(r.location.as_mut_ptr().cast(), r.location.len()),
-                ) != 0
-                {
-                    row_field(&mut r.location, b"?");
-                }
-                upatch_resolve::loaded_at(
-                    upatch,
-                    ffi::bytes_mut(r.loaded_at.as_mut_ptr().cast(), r.loaded_at.len()),
-                );
-                upatch_resolve::payload_sha256(
-                    upatch,
-                    ffi::bytes_mut(r.payload_sha256.as_mut_ptr().cast(), r.payload_sha256.len()),
-                );
-                r.age_sec = upatch_table::age_sec(r.loaded_at.as_ptr());
-            }
+            let upatch = name.to_bytes();
+            let location =
+                upatch_resolve::resolve_location(vbtf, upatch).unwrap_or_else(|_| b"?".to_vec());
+            row_field(&mut r.location, &location);
+            row_field(&mut r.loaded_at, &upatch_resolve::loaded_at(upatch));
+            row_field(
+                &mut r.payload_sha256,
+                &upatch_resolve::payload_sha256(upatch),
+            );
+            // SAFETY: row_field terminated the timestamp in the fixed row field.
+            r.age_sec = unsafe { upatch_table::age_sec(r.loaded_at.as_ptr()) };
             r.n_maps =
                 u32::try_from(map_read::list(Some(name.to_bytes())).len()).unwrap_or(u32::MAX);
             match upatch_resolve::missed_runs(name.to_bytes()) {

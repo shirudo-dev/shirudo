@@ -152,9 +152,8 @@ fn restore_one(
         ));
     })?;
     if loaded {
-        let mut pinned = [0u8; 65];
-        upatch_resolve::payload_sha256(upatch, &mut pinned);
-        if cstr(&pinned) != cstr(&e.payload_hex) {
+        let pinned = upatch_resolve::payload_sha256(upatch);
+        if pinned != cstr(&e.payload_hex) {
             error(&cat!(
                 "boot-restore: ",
                 upatch,

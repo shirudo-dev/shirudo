@@ -743,7 +743,9 @@ pub(crate) fn read(upatch: &[u8], map: &[u8], cap: u32, flags: u32) -> Result<Ma
     out.value_stride = stride_of(ty, out.value_size).ok_or(-EOVERFLOW)?;
     out.max_entries = info.u32_at(MAP_MAX_ENTRIES);
     out.n_cpus = if is_percpu(ty) { nproc_possible()? } else { 1 };
-    resolve_location(kernel_btf::vmlinux(), upatch, &mut out.location);
+    if let Ok(location) = resolve_location(kernel_btf::vmlinux(), upatch) {
+        let _ = strscpy(&mut out.location, &location);
+    }
     if let Ok(dir) = pin_path(upatch, &[])
         && let Ok(st) = fs::metadata(os(dir.as_bytes()))
     {

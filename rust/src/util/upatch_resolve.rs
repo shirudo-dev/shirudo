@@ -8,26 +8,25 @@
 use core::ffi::{CStr, c_int};
 use std::ffi::{CString, OsStr};
 use std::fs;
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
 
 use crate::bpf::btf::Btf;
 use crate::errno::{EINVAL, ENAMETOOLONG, ENOENT};
-use crate::sys::libc::{close, errno, if_indextoname};
+use crate::sys::libc::if_indextoname;
 use crate::text::{strscpy, strsprintf};
 use crate::util::bpf_info::{Info, LINK_INFO_SIZE, PROG_INFO_SIZE};
-use crate::util::bpf_sys::{self, bpf_obj_get, bpf_prog_get_fd_by_id, prog_type_name};
+use crate::util::bpf_sys::{self, bpf_prog_get_fd_by_id, prog_type_name};
 use crate::util::timefmt::iso8601;
 use crate::util::upatch::{NAME_MAX, pin_name};
-use crate::util::upatch_pins::{
-    PAYLOAD_HASH_LEN, Pins, each_link, pin_payload, xdp_prog_open, xdp_prog_pin,
-};
+use crate::util::upatch_pins::{Pins, each_link, pin_payload, xdp_prog_open, xdp_prog_pin};
 
 /// BPFFS_UPATCHES_DIR and XATTR_PAYLOAD of util/paths.h.
 pub(crate) const BPFFS_UPATCHES_DIR: &str = "/run/shirudo/bpffs/upatches";
 pub(crate) const XATTR_PAYLOAD: &CStr = c"security.bpf.shirudo.payload";
 const PATH_MAX: usize = 4096;
+const LOCATION_MAX: usize = 160;
 
 /// Where `struct bpf_link_info` and `struct bpf_prog_info` keep the
 /// fields read here.
@@ -99,28 +98,30 @@ pub(crate) fn pin_path(name: &[u8], parts: &[&[u8]]) -> Result<CString, c_int> {
 }
 
 /// The first link pinned for upatch `name`: "link" for one program,
-/// "link_0" of "link_0", "link_1", ... for more. A descriptor, or -errno,
-/// the first pin's when neither is there.
-pub(crate) fn open_first_link(name: &[u8]) -> c_int {
-    let open = |link: &[u8]| -> Result<c_int, c_int> {
-        let pin = pin_path(name, &[link])?;
-        // SAFETY: a C string.
-        match unsafe { bpf_obj_get(pin.as_ptr()) } {
-            fd if fd >= 0 => Ok(fd),
-            _ => Err(errno()),
-        }
+/// "link_0" of "link_0", "link_1", ... for more. Its descriptor, or
+/// the first pin's error when neither is there.
+pub(crate) fn open_first_link(name: &[u8]) -> Result<OwnedFd, c_int> {
+    let first = pin_path(name, &[b"link"])?;
+    let first_error = match bpf_sys::obj_get(&first) {
+        Ok(fd) => return Ok(fd),
+        Err(err) => err,
     };
-    let first = match open(b"link") {
-        Ok(fd) => return fd,
-        Err(e) if e < 0 => return e,
-        Err(e) => e,
-    };
-    match open(b"link_0") {
-        Ok(fd) => fd,
-        Err(e) if e < 0 => e,
-        Err(ENOENT) => -first,
-        Err(e) => -e,
+    let second = pin_path(name, &[b"link_0"])?;
+    match bpf_sys::obj_get(&second) {
+        Ok(fd) => Ok(fd),
+        Err(err) if err == -ENOENT => Err(first_error),
+        Err(err) => Err(err),
     }
+}
+
+/// Open the program by id, keeping its descriptor until the caller drops it.
+fn open_prog(id: u32) -> Result<OwnedFd, c_int> {
+    let fd = bpf_prog_get_fd_by_id(id);
+    if fd < 0 {
+        return Err(fd);
+    }
+    // SAFETY: the kernel returned a new descriptor owned here alone.
+    Ok(unsafe { OwnedFd::from_raw_fd(fd) })
 }
 
 /// The SEC() prefix of a program of `prog_type` attached as
@@ -173,7 +174,7 @@ fn kprobe_multi(info: &Info<LINK_INFO_SIZE>, out: &mut [u8]) -> c_int {
 }
 
 /// A uprobe-multi link's location: its binary and how many functions.
-fn uprobe_multi(link: c_int, first: &Info<LINK_INFO_SIZE>, out: &mut [u8]) -> c_int {
+fn uprobe_multi(link: BorrowedFd<'_>, first: &Info<LINK_INFO_SIZE>, out: &mut [u8]) -> c_int {
     let count = first.u32_at(LINK_UPROBE_COUNT);
     let path_size = first.u32_at(LINK_UPROBE_PATH_SIZE);
     if path_size == 0 || path_size as usize > PATH_MAX {
@@ -183,7 +184,7 @@ fn uprobe_multi(link: c_int, first: &Info<LINK_INFO_SIZE>, out: &mut [u8]) -> c_
     let mut detail = Info::<LINK_INFO_SIZE>::new();
     detail.set(LINK_UPROBE_PATH, &(path.as_mut_ptr() as u64).to_ne_bytes());
     detail.set(LINK_UPROBE_PATH_SIZE, &path_size.to_ne_bytes());
-    let ret = detail.read(link).err().unwrap_or(0);
+    let ret = detail.read(link.as_raw_fd()).err().unwrap_or(0);
     if ret != 0 {
         return ret;
     }
@@ -216,15 +217,13 @@ pub(crate) fn each_link_info(
     cb: &mut dyn FnMut(u32, &CStr, &Info<LINK_INFO_SIZE>) -> c_int,
 ) -> c_int {
     each_link(name, &mut |index, pin| {
-        // SAFETY: a C string.
-        let fd = unsafe { bpf_obj_get(pin.as_ptr()) };
-        if fd < 0 {
-            return -errno();
-        }
+        let fd = match bpf_sys::obj_get(pin) {
+            Ok(fd) => fd,
+            Err(err) => return err,
+        };
         let mut info = Info::<LINK_INFO_SIZE>::new();
-        let ret = info.read(fd).err().unwrap_or(0);
-        // SAFETY: the link opened above.
-        unsafe { close(fd) };
+        let ret = info.read(fd.as_raw_fd()).err().unwrap_or(0);
+        drop(fd);
         if ret != 0 { ret } else { cb(index, pin, &info) }
     })
 }
@@ -232,18 +231,17 @@ pub(crate) fn each_link_info(
 /// The program id of upatch `name`: its first link's, or with no link an
 /// XDP program pin's.
 pub(crate) fn first_prog_id(name: &[u8]) -> Result<u32, c_int> {
-    let fd = open_first_link(name);
-    if fd >= 0 {
-        let mut linfo = Info::<LINK_INFO_SIZE>::new();
-        let ret = linfo.read(fd);
-        // SAFETY: the link opened above.
-        unsafe { close(fd) };
-        ret?;
-        let id = linfo.u32_at(LINK_PROG_ID);
-        return if id != 0 { Ok(id) } else { Err(-EINVAL) };
-    }
-    if fd != -ENOENT {
-        return Err(fd);
+    match open_first_link(name) {
+        Ok(fd) => {
+            let mut linfo = Info::<LINK_INFO_SIZE>::new();
+            let ret = linfo.read(fd.as_raw_fd());
+            drop(fd);
+            ret?;
+            let id = linfo.u32_at(LINK_PROG_ID);
+            return if id != 0 { Ok(id) } else { Err(-EINVAL) };
+        }
+        Err(err) if err == -ENOENT => {}
+        Err(err) => return Err(err),
     }
     let pins = Pins::read(name)?;
     if pins.nr_xdp_progs == 0 {
@@ -296,7 +294,7 @@ fn link_is_uprobe(linfo: &Info<LINK_INFO_SIZE>) -> bool {
 }
 
 /// A uprobe or uretprobe link's location: its binary and offset.
-fn uprobe_location(link: c_int, out: &mut [u8]) -> c_int {
+fn uprobe_location(link: BorrowedFd<'_>, out: &mut [u8]) -> c_int {
     let mut path = vec![0u8; PATH_MAX];
     let mut linfo = Info::<LINK_INFO_SIZE>::new();
     linfo.set(
@@ -304,7 +302,7 @@ fn uprobe_location(link: c_int, out: &mut [u8]) -> c_int {
         &(path.as_mut_ptr() as u64).to_ne_bytes(),
     );
     linfo.set(LINK_PERF_UPROBE_NAME_LEN, &(PATH_MAX as u32).to_ne_bytes());
-    if let Err(err) = linfo.read(link) {
+    if let Err(err) = linfo.read(link.as_raw_fd()) {
         return err;
     }
     let Some(end) = path.iter().position(|&c| c == 0) else {
@@ -336,10 +334,10 @@ fn location_copy(out: &mut [u8], text: &[u8]) -> c_int {
 }
 
 /// Where one link attaches, using program information already read when
-/// provided. The caller owns `link` and closes it after this call.
+/// provided. The caller keeps `link` open through this call.
 fn link_location(
     vbtf: Option<&Btf>,
-    link: c_int,
+    link: BorrowedFd<'_>,
     linfo: &Info<LINK_INFO_SIZE>,
     pinfo: Option<&Info<PROG_INFO_SIZE>>,
     out: &mut [u8],
@@ -371,13 +369,12 @@ fn link_location(
     let info = if let Some(info) = pinfo {
         info
     } else {
-        let prog = bpf_prog_get_fd_by_id(linfo.u32_at(LINK_PROG_ID));
-        if prog < 0 {
-            return prog;
-        }
-        let ret = read_info.read(prog).err().unwrap_or(0);
-        // SAFETY: the program opened above.
-        unsafe { close(prog) };
+        let prog = match open_prog(linfo.u32_at(LINK_PROG_ID)) {
+            Ok(prog) => prog,
+            Err(err) => return err,
+        };
+        let ret = read_info.read(prog.as_raw_fd()).err().unwrap_or(0);
+        drop(prog);
         if ret != 0 {
             return ret;
         }
@@ -401,10 +398,18 @@ fn link_location(
     strsprintf(out, &[prefix, b"/", attach]).map_or_else(|e| e, |_| 0)
 }
 
-/// Where upatch `name` attaches, as a C string into `out`: the SEC()-style
-/// hook, its attach target named from `vbtf`, the vmlinux BTF, when there
-/// is one. 0, or -errno and as the C left it.
-pub(crate) fn resolve_location(vbtf: Option<&Btf>, name: &[u8], out: &mut [u8]) -> c_int {
+/// The SEC()-style hook and target of upatch `name`, or -errno.
+pub(crate) fn resolve_location(vbtf: Option<&Btf>, name: &[u8]) -> Result<Vec<u8>, c_int> {
+    let mut out = [0u8; LOCATION_MAX];
+    let ret = resolve_location_into(vbtf, name, &mut out);
+    if ret != 0 {
+        return Err(ret);
+    }
+    Ok(crate::text::cstr(&out).to_vec())
+}
+
+/// Fill the fixed-size location field as the old formatter did.
+fn resolve_location_into(vbtf: Option<&Btf>, name: &[u8], out: &mut [u8]) -> c_int {
     if let Some(first) = out.first_mut() {
         *first = 0;
     }
@@ -415,19 +420,16 @@ pub(crate) fn resolve_location(vbtf: Option<&Btf>, name: &[u8], out: &mut [u8]) 
     if pins.nr_xdp_progs != 0 {
         return xdp_location(name, out);
     }
-    let link = open_first_link(name);
-    if link < 0 {
-        return link;
-    }
-    let mut linfo = Info::<LINK_INFO_SIZE>::new();
-    let ret = match linfo.read(link) {
-        Err(e) => e,
-        Ok(()) if linfo.u32_at(LINK_PROG_ID) == 0 => -EINVAL,
-        Ok(()) => link_location(vbtf, link, &linfo, None, out),
+    let link = match open_first_link(name) {
+        Ok(link) => link,
+        Err(err) => return err,
     };
-    // SAFETY: the link opened above.
-    unsafe { close(link) };
-    ret
+    let mut linfo = Info::<LINK_INFO_SIZE>::new();
+    match linfo.read(link.as_raw_fd()) {
+        Err(err) => err,
+        Ok(()) if linfo.u32_at(LINK_PROG_ID) == 0 => -EINVAL,
+        Ok(()) => link_location(vbtf, link.as_fd(), &linfo, None, out),
+    }
 }
 
 /// A counted link's location and the number of runs the kernel skipped.
@@ -485,18 +487,13 @@ fn read_link_misses(
     if !link_counts_misses(&linfo) {
         return Ok(None);
     }
-    let prog = bpf_prog_get_fd_by_id(linfo.u32_at(LINK_PROG_ID));
-    if prog < 0 {
-        return Err(prog);
-    }
-    // SAFETY: the kernel returned a new program descriptor.
-    let prog = unsafe { OwnedFd::from_raw_fd(prog) };
+    let prog = open_prog(linfo.u32_at(LINK_PROG_ID))?;
     let mut pinfo = Info::<PROG_INFO_SIZE>::new();
     pinfo.read(prog.as_raw_fd())?;
     let missed = total_link_missed(&pinfo, &linfo);
-    let mut location = [0u8; 160];
+    let mut location = [0u8; LOCATION_MAX];
     if with_location {
-        let ret = link_location(vbtf, link.as_raw_fd(), &linfo, Some(&pinfo), &mut location);
+        let ret = link_location(vbtf, link.as_fd(), &linfo, Some(&pinfo), &mut location);
         if ret != 0 {
             location[0] = 0;
         }
@@ -557,41 +554,32 @@ pub(crate) fn missed_runs(name: &[u8]) -> Result<(u32, u64), c_int> {
     Ok((count, missed))
 }
 
-/// When upatch `name` was loaded, its pin directory's change time, into
-/// `out`; empty when unknown. Later XDP links change the directory's
-/// ctime, so an XDP upatch's is its first program pin's.
-pub(crate) fn loaded_at(name: &[u8], out: &mut [u8]) {
-    if let Some(first) = out.first_mut() {
-        *first = 0;
-    }
+/// When upatch `name` was loaded, from its pin directory's change time;
+/// empty when unknown. Later XDP links change the directory's ctime, so
+/// an XDP upatch uses its first program pin.
+pub(crate) fn loaded_at(name: &[u8]) -> Vec<u8> {
     let dir = match Pins::read(name) {
         Ok(p) if p.nr_xdp_progs != 0 => xdp_prog_pin(name, p.first_xdp_prog),
         Ok(_) => pin_path(name, &[]),
-        Err(_) => return,
+        Err(_) => return Vec::new(),
     };
     let Ok(dir) = dir else {
-        return;
+        return Vec::new();
     };
-    if let Ok(st) = fs::metadata(OsStr::from_bytes(dir.as_bytes())) {
-        iso8601(st.ctime(), out);
-    }
+    let Ok(st) = fs::metadata(OsStr::from_bytes(dir.as_bytes())) else {
+        return Vec::new();
+    };
+    let mut out = [0u8; 32];
+    iso8601(st.ctime(), &mut out);
+    crate::text::cstr(&out).to_vec()
 }
 
-/// The hex payload digest recorded on the pins of upatch `name` into
-/// `out`, which holds 65 bytes; empty on any failure.
-pub(crate) fn payload_sha256(name: &[u8], out: &mut [u8]) {
-    if let Some(first) = out.first_mut() {
-        *first = 0;
-    }
-    if out.len() < 2 * PAYLOAD_HASH_LEN + 1 {
-        return;
-    }
-    let Ok(raw) = pin_payload(name) else {
-        return;
-    };
-    let hex = crate::util::hex::encode(&raw);
-    out[..hex.len()].copy_from_slice(&hex);
-    out[hex.len()] = 0;
+/// The hex payload digest on the pins of upatch `name`; empty on any
+/// failure.
+pub(crate) fn payload_sha256(name: &[u8]) -> Vec<u8> {
+    pin_payload(name)
+        .map(|raw| crate::util::hex::encode(&raw))
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
