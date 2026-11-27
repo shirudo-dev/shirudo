@@ -1,9 +1,10 @@
 ---
 name: upatch
-description: Write, build, sign, inspect and package a shirudo upatch. Covers the BPF C program written for the target kernels' preemption model and at a low cost on machines large and small, `shirudo build` for a .upatch and its unload directive, the Beefile and `shirudo bpm build` for a .bee package, `bpm info` to inspect one, `bpm push` and `bpm tree append` to publish, `bpm tree show` to read a publication back, and loading it on a test target. Use when asked to create, change or ship a upatch or a bpm package, or to reproduce a failed upatch build or load.
+description: Writes, builds, signs, inspects and packages a shirudo upatch. Covers the BPF C program written for the target kernels' preemption model and at a low cost on machines large and small, `shirudo build` for a .upatch and its unload directive, the Beefile and `shirudo bpm build` for a .bee package, `bpm info` to inspect one, `bpm push` and `bpm tree append` to publish, `bpm tree show` to read a publication back, and loading it on a test target. Use when asked to create, change or ship a upatch or a bpm package, or to reproduce a failed upatch build or load.
 ---
 
-# Upatch
+# upatch
+
 
 `Documentation/upatches/` is the reference: `learn/concepts.rst`, then
 under `write/` the attach kinds, maps, arenas and serializers, decoders,
@@ -110,9 +111,13 @@ needs, depends on the target kernels' preemption model
 (`Documentation/upatches/write/memory-consistency/hazards.rst`). Settle
 it before writing code that shares state:
 
-- When the task does not say which kernels the upatch is for, ask:
-  distribution kernels (`PREEMPT_DYNAMIC`, booted `full` or `lazy`),
-  `PREEMPT_RT`, `PREEMPT_LAZY` alone as the test VM runs, or a mix.
+- When the task does not say which kernels the upatch is for, write for
+  preemptible RCU, the weakest guarantee and what distribution kernels
+  give, so the code is right on every model, and say so in the reply:
+  the user may name distribution kernels (`PREEMPT_DYNAMIC`, booted
+  `full` or `lazy`), `PREEMPT_RT`, `PREEMPT_LAZY` alone as the test VM
+  runs, or a mix, which can let a guard go. Ask first only when a hot
+  path's cost turns on the answer.
 - On a target, `CONFIG_PREEMPT_RCU` in `/proc/config.gz` or
   `/boot/config-$(uname -r)` says whether RCU is preemptible, `uname -v`
   names `PREEMPT_DYNAMIC` or `PREEMPT_RT`, and with `PREEMPT_DYNAMIC`
