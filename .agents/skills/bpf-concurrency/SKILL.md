@@ -1,6 +1,9 @@
 ---
 name: bpf-concurrency
-description: Write or review BPF code in a shirudo upatch whose runs share state, across CPUs at once or interleaved on one. Covers shared map values, per-CPU scratch, inserting and deleting entries, compare-and-swap, publishing records, double buffers, user memory, and the runs the kernel skips. Use when a upatch program updates state other runs read, when a lock, atomic, acquire or release is involved, or to check such code with the Coccinelle rules and blitmus.
+description: Writes or reviews BPF code in a shirudo upatch whose runs share state, across CPUs at once or interleaved on one. Covers shared map values, per-CPU scratch, inserting and deleting entries, compare-and-swap, publishing records, double buffers, user memory, and the runs the kernel skips. Use when a upatch program updates state other runs read, when a lock, atomic, acquire or release is involved, or to check such code with the Coccinelle rules and blitmus.
+paths:
+  - "upatches/**/*.bpf.c"
+  - "upatches/**/*.h"
 ---
 
 # Concurrent BPF code in upatches
@@ -22,9 +25,9 @@ socket or cgroup storage, an arena, or the stack.
 
 ## 2. Fix the model
 
-Ask which kernels the upatch is for when the task does not say, and
-without an answer write for preemptible RCU, which is right on every
-model; the `upatch` skill says how to read a target's model. Runs on
+When the task does not say which kernels the upatch is for, write for
+preemptible RCU, which is right on every model, as the `upatch` skill
+says; it also says how to read a target's model. Runs on
 different CPUs at once happen on every kernel. A second run on
 the same CPU before the first ends depends on the kernel's preemption
 model and the program types, as the table in "Where each hazard
