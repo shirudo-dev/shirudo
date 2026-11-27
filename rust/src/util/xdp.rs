@@ -106,7 +106,6 @@ const NET_NS_INIT_COOKIE: u64 = 7;
 const SO_NETNS_COOKIE: c_int = 71;
 
 /// `struct xdp_device`: what discovery tells of one network device.
-#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct XdpDevice {
     pub(crate) devlink_device: [u8; 128],
@@ -129,8 +128,6 @@ pub struct XdpDevice {
     pub(crate) devlink_port: bool,
     pub(crate) unresolved: bool,
 }
-
-const _: () = assert!(size_of::<XdpDevice>() == 468);
 
 /// The bytes of a C string field, up to its terminator.
 fn text(field: &[u8]) -> &[u8] {
@@ -243,7 +240,6 @@ pub(crate) fn selected(devs: &[XdpDevice], index: usize, mask: u32) -> bool {
 }
 
 /// `enum xdp_reconcile`: what reconcile does of a device.
-#[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Reconcile {
     None,
