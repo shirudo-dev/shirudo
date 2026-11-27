@@ -680,9 +680,9 @@ It rejects a literal that does not fit at build time. The
 `-Wunused-parameter`; remove unused variables, and check results marked
 `__must_check`.
 - For multi-byte fields in C formats and protocols, use the `__le16`,
-`__le32`, `__le64`, `__be16`, `__be32`, and `__be64` types and convert
-between host and wire order with `include/shirudo/byteorder.h`. `make
-sparse` checks these conversions in maintained C sources; it leaves
+`__le32`, `__le64`, `__be16`, `__be32`, and `__be64` types. Use the
+kernel byte-order helpers in BPF code and Rust byte conversion methods
+in userspace. `make sparse` checks maintained C sources and leaves
 vendored sources out.
 
 ## Check

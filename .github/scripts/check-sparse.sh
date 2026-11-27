@@ -5,8 +5,8 @@
 # .github/scripts/check-sparse.sh -- run sparse over the userspace sources
 # the binaries are built from, through make sparse, and fail on any
 # warning, above all on a value moved between host order and the __le
-# and __be types of <shirudo/types.h> without cpu_to_le32() and its kin
-# from <shirudo/byteorder.h>.
+# and __be types of <shirudo/types.h> without the kernel byte-order
+# helpers used by BPF code.
 #
 #   .github/scripts/check-sparse.sh
 #
