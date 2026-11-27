@@ -16,7 +16,7 @@ use crate::util::seal;
 use crate::util::{identity, io};
 
 /// `BPM_MAX_STATE`: the most packages the state records.
-const MAX_STATE: c_int = 256;
+const MAX_STATE: usize = 256;
 const STATE_FILE_MAX: usize = 8 * 1024 * 1024;
 const STATE_EMIT_MAX: usize = 1024 * 1024;
 
@@ -86,9 +86,9 @@ impl StateSink<'_> {
     }
 }
 
-/// The entries of a state document into `st`, as many as it holds, and
-/// their count into `n`: 0, -EINVAL or -E2BIG.
-fn parse(body: &[u8], st: &mut [BpmStateEntry], n: &mut c_int) -> c_int {
+/// The entries of a state document into `st`, as many as it holds, or
+/// -EINVAL or -E2BIG.
+fn parse(body: &[u8], st: &mut [BpmStateEntry]) -> Result<usize, c_int> {
     let mut sink = StateSink {
         items: st,
         n: 0,
@@ -102,19 +102,16 @@ fn parse(body: &[u8], st: &mut [BpmStateEntry], n: &mut c_int) -> c_int {
     ];
     let root = [JsonField::array(c"packages", &sub, &StateSink::take_entry)];
 
-    if let Err(err) = parse_schema(body, &root, &mut sink) {
-        return err;
-    }
+    parse_schema(body, &root, &mut sink)?;
     if !root[0].seen() {
-        return -EINVAL;
+        return Err(-EINVAL);
     }
-    *n = sink.n as c_int;
-    0
+    Ok(sink.n)
 }
 
-/// The entries as the document parse() reads, into `buf`, and its length
-/// into `len`: 0 or -E2BIG.
-fn emit(st: &[BpmStateEntry], buf: &mut [u8], len: &mut usize) -> c_int {
+/// The entries as the document parse() reads, into `buf`: the written
+/// length or -E2BIG.
+fn emit(st: &[BpmStateEntry], buf: &mut [u8]) -> Result<usize, c_int> {
     let mut e = JsonEmit::fixed(buf);
 
     e.obj_open();
@@ -131,10 +128,9 @@ fn emit(st: &[BpmStateEntry], buf: &mut [u8], len: &mut usize) -> c_int {
     e.arr_close();
     e.obj_close();
     if e.err() != 0 {
-        return -E2BIG;
+        return Err(-E2BIG);
     }
-    *len = e.written();
-    0
+    Ok(e.written())
 }
 
 fn read_state_file() -> Result<Vec<u8>, c_int> {
@@ -153,30 +149,21 @@ fn read_state_file() -> Result<Vec<u8>, c_int> {
 
 /// The recorded entries, as many as `st` holds; none when there is no
 /// state yet.
-fn read(st: &mut [BpmStateEntry], n: &mut c_int) -> c_int {
+fn read(st: &mut [BpmStateEntry]) -> Result<usize, c_int> {
     let body = match read_state_file() {
         Ok(body) => body,
-        Err(err) if err == -ENOENT => {
-            *n = 0;
-            return 0;
-        }
-        Err(err) => return err,
+        Err(err) if err == -ENOENT => return Ok(0),
+        Err(err) => return Err(err),
     };
-    parse(&body, st, n)
+    parse(&body, st)
 }
 
 /// The packages the state records.
 pub(crate) fn read_all() -> Result<Vec<BpmStateEntry>, c_int> {
-    let mut st = vec![BpmStateEntry::new(); MAX_STATE as usize];
-    let mut n = 0;
-
-    match read(&mut st, &mut n) {
-        0 => {
-            st.truncate(usize::try_from(n).unwrap_or(0));
-            Ok(st)
-        }
-        err => Err(err),
-    }
+    let mut st = vec![BpmStateEntry::new(); MAX_STATE];
+    let n = read(&mut st)?;
+    st.truncate(n);
+    Ok(st)
 }
 
 fn write_state_file(body: &[u8]) -> Result<(), c_int> {
@@ -193,14 +180,10 @@ fn write_state_file(body: &[u8]) -> Result<(), c_int> {
     seal::replace_locked_at(bpm.as_fd(), c"state.json", body, 0o600)
 }
 
-pub(crate) fn write(st: &[BpmStateEntry]) -> c_int {
-    let mut len = 0usize;
+pub(crate) fn write(st: &[BpmStateEntry]) -> Result<(), c_int> {
     let mut buf = vec![0u8; STATE_EMIT_MAX];
-    let ret = emit(st, &mut buf, &mut len);
-    if ret != 0 {
-        return ret;
-    }
-    write_state_file(&buf[..len]).err().unwrap_or(0)
+    let len = emit(st, &mut buf)?;
+    write_state_file(&buf[..len])
 }
 
 #[cfg(test)]

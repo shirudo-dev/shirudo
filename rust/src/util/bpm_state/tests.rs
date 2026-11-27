@@ -20,20 +20,32 @@ fn entry(name: &[u8], version: &[u8]) -> BpmStateEntry {
 /// document.
 fn emitted(st: &[BpmStateEntry], cap: usize) -> (c_int, Vec<u8>) {
     let mut buf = vec![0u8; cap];
-    let mut len = 0;
-    let ret = emit(st, &mut buf, &mut len);
-
-    buf.truncate(len);
+    let ret = match emit(st, &mut buf) {
+        Ok(len) => {
+            buf.truncate(len);
+            0
+        }
+        Err(err) => {
+            buf.clear();
+            err
+        }
+    };
     (ret, buf)
 }
 
 /// parse() of `doc`: its result and the entries.
 fn parsed(doc: &[u8]) -> (c_int, Vec<BpmStateEntry>) {
-    let mut out = vec![BpmStateEntry::new(); MAX_STATE as usize];
-    let mut n = 0;
-    let ret = parse(doc, &mut out, &mut n);
-
-    out.truncate(n as usize);
+    let mut out = vec![BpmStateEntry::new(); MAX_STATE];
+    let ret = match parse(doc, &mut out) {
+        Ok(n) => {
+            out.truncate(n);
+            0
+        }
+        Err(err) => {
+            out.clear();
+            err
+        }
+    };
     (ret, out)
 }
 

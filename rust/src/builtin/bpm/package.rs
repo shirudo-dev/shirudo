@@ -18,7 +18,7 @@ use super::fetch;
 use super::source::{self, Source};
 use super::{
     PACKAGE_MEDIA, PACKAGES_DIR, Result, curl_ready, error, fail, finish, lock, needs_enforcement,
-    os_err, path, print, remove, status,
+    os_err, path, print, remove,
 };
 use crate::errno::{E2BIG, EEXIST, EINVAL, EIO, EKEYREJECTED, ENAMETOOLONG, ENOENT};
 use crate::sys::libc::{O_CREAT, O_EXCL, O_TRUNC, O_WRONLY};
@@ -249,7 +249,7 @@ pub(super) fn install(reference: &[u8]) -> c_int {
         return finish(Some(held), Err(-ENAMETOOLONG), b"install");
     }
     state.push(added);
-    let ret = status(bpm_state::write(&state));
+    let ret = bpm_state::write(&state);
     if ret.is_err() {
         // Unlisted, the package could never be removed.
         if package_uninstall(&added).is_err() {
@@ -318,7 +318,7 @@ pub(super) fn upgrade() -> c_int {
             }
         }
     }
-    let written = status(bpm_state::write(&state));
+    let written = bpm_state::write(&state);
     match ret {
         Err(_) => finish(Some(held), ret, b"upgrade"),
         Ok(()) => finish(Some(held), written, b"write state"),
@@ -414,7 +414,7 @@ pub(super) fn uninstall(name: &[u8]) -> c_int {
             .ok_or(-ENOENT)?;
         package_uninstall(&state[i])?;
         state.remove(i);
-        status(bpm_state::write(&state))
+        bpm_state::write(&state)
     });
     finish(Some(held), ret, b"uninstall")
 }
