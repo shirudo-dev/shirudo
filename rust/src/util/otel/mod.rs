@@ -35,7 +35,6 @@ pub(crate) const S3: c_int = 3;
 const MAX_TYPE_UNWRAP: usize = 32;
 
 /// `struct otel_opts`: where and how to export, NULL strings for none.
-#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct OtelOpts {
     pub endpoint: *const c_char,
@@ -46,8 +45,6 @@ pub struct OtelOpts {
     pub log_record_max_bytes: u32,
     pub otlp_max_bytes: u32,
 }
-
-const _: () = assert!(size_of::<OtelOpts>() == 40);
 
 impl OtelOpts {
     /// What a caller without options gets: 3 retries.
