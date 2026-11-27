@@ -13,10 +13,20 @@ const DIGITS: &[u8; 16] = b"0123456789abcdef";
 
 /// The lowercase hex of `bytes`.
 pub(crate) fn encode(bytes: &[u8]) -> Vec<u8> {
-    bytes
-        .iter()
-        .flat_map(|b| [DIGITS[usize::from(b >> 4)], DIGITS[usize::from(b & 0xf)]])
-        .collect()
+    let len = bytes.len().saturating_mul(2);
+    let mut out = vec![0u8; len];
+
+    encode_into(bytes, &mut out);
+    out
+}
+
+/// Write the two lowercase digits of each input byte into a slice with
+/// exactly twice as many bytes as the input.
+fn encode_into(bytes: &[u8], out: &mut [u8]) {
+    for (pair, &byte) in out.chunks_exact_mut(2).zip(bytes) {
+        pair[0] = DIGITS[usize::from(byte >> 4)];
+        pair[1] = DIGITS[usize::from(byte & 0xf)];
+    }
 }
 
 /// The value of hex digit `c` of either case.
