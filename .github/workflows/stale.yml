@@ -1,0 +1,77 @@
+name: Stale
+
+# An issue or a pull request that nobody touches says nothing about
+# whether anyone still means to work on it. Label it stale after a time
+# without activity and close it after as long again: an issue after 90
+# and 90 more days, a pull request after 30 and 30 more. A comment or a
+# push takes the label off and starts the count again. The pinned label
+# keeps an issue or a pull request out of this altogether.
+on:
+  schedule:
+    - cron: "30 1 * * *"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Log what a run would label and close, and change nothing
+        type: boolean
+        default: true
+
+permissions: {}
+
+# The action notes in the cache which issues a run that ran out of
+# operations got through, for the next run to go on from there.
+cache-mode: write
+
+# A run reads every open issue and pull request, so two never overlap.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  stale:
+    name: Label and close stale issues and pull requests
+    runs-on: ubuntu-latest
+    # A fork decides for itself what happens to its own issues.
+    if: github.repository == 'shirudo-dev/shirudo'
+    timeout-minutes: 10
+    permissions:
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Label and close what has gone stale
+        uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93 # v11.0.0
+        with:
+          debug-only: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
+          # Half of the 1000 requests an hour the repository's token
+          # gets; a run that needs more goes on the next day.
+          operations-per-run: 500
+
+          stale-issue-label: stale
+          # Main status keeps its issue open for as long as a workflow
+          # fails on main, however long nobody comments on it.
+          exempt-issue-labels: pinned,area/ci/main
+          days-before-issue-stale: 90
+          stale-issue-message: >-
+            This issue has had no activity for 90 days and is labeled
+            stale. It is closed after 90 more days without activity. A
+            comment takes the label off again, and a maintainer keeps the
+            issue open with the pinned label.
+          days-before-issue-close: 90
+          close-issue-message: >-
+            This issue has had no activity for 180 days and is closed. If
+            it still applies, reopen it or open a new issue that refers to
+            this one.
+
+          stale-pr-label: stale
+          exempt-pr-labels: pinned
+          days-before-pr-stale: 30
+          stale-pr-message: >-
+            This pull request has had no activity for 30 days and is
+            labeled stale. It is closed after 30 more days without
+            activity. A push or a comment takes the label off again, and a
+            maintainer keeps the pull request open with the pinned label.
+          days-before-pr-close: 30
+          close-pr-message: >-
+            This pull request has had no activity for 60 days and is
+            closed. Reopen it when you pick the work up again.
