@@ -264,6 +264,9 @@ Generator and installer scripts
    * - ``SHIRUDO_CERT``
      - :src:`tools/gen-initrd/install.sh`
      - Same as ``--cert``.
+   * - ``SHIRUDO_CERT_SHA256``
+     - :src:`tools/gen-initrd/install.sh`
+     - Same as ``--cert-sha256``.
    * - ``SHIRUDO_VERSION``
      - :src:`tools/gen-initrd/install.sh`
      - Same as ``--version``.

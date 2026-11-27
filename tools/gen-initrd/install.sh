@@ -11,7 +11,7 @@
 # is rebuilt.
 #
 #   curl -fsSL https://raw.githubusercontent.com/shirudo-dev/shirudo/main/tools/gen-initrd/install.sh |
-#       bash -s -- --cert https://example.com/shirudo/cert.der
+#       bash -s -- --cert https://example.com/shirudo/cert.der --cert-sha256 <sha256>
 
 set -euo pipefail
 
@@ -21,6 +21,8 @@ usage()
 usage: install.sh [options]
 
   --cert <file|url>      the operator's certificate (cert.der); also SHIRUDO_CERT
+  --cert-sha256 <hex>    the SHA-256 of that file, which a URL requires;
+                         also SHIRUDO_CERT_SHA256
   --version <tag>        release to install (default: latest); also SHIRUDO_VERSION
   --package <file>       install this package instead of downloading one;
                          also SHIRUDO_PACKAGE
@@ -38,6 +40,7 @@ CMDLINE_PARAM="bpf.keyring_unsealed=1 dm_verity.keyring_unsealed=1"
 CERT_DST=/var/lib/shirudo/keys/cert.der
 
 cert=${SHIRUDO_CERT:-}
+cert_sha256=${SHIRUDO_CERT_SHA256:-}
 version=${SHIRUDO_VERSION:-}
 package=${SHIRUDO_PACKAGE:-}
 do_cmdline=1
@@ -48,6 +51,7 @@ dry_run=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--cert) cert=${2:?}; shift 2 ;;
+	--cert-sha256) cert_sha256=${2:?}; shift 2 ;;
 	--version) version=${2:?}; shift 2 ;;
 	--package) package=${2:?}; shift 2 ;;
 	--no-cmdline) do_cmdline=0; shift ;;
@@ -80,6 +84,28 @@ run()
 	"$@"
 }
 
+# A certificate from a URL is whatever the server sent; only a digest the
+# operator got another way makes it theirs.
+check_cert_options()
+{
+	case "$cert_sha256" in
+	'') ;;
+	*[!0-9a-fA-F]*) die "--cert-sha256 takes 64 hex digits" ;;
+	*) [ "${#cert_sha256}" = 64 ] || die "--cert-sha256 takes 64 hex digits" ;;
+	esac
+	cert_sha256=$(printf '%s' "$cert_sha256" | tr 'A-F' 'a-f')
+	case "$cert" in
+	http://*|https://*)
+		[ -n "$cert_sha256" ] ||
+			die "a certificate from a URL needs --cert-sha256 (sha256sum cert.der on the operator host)"
+		;;
+	'')
+		[ -z "$cert_sha256" ] || die "--cert-sha256 needs --cert"
+		;;
+	esac
+}
+
+check_cert_options
 [ "$dry_run" = 1 ] || [ "$(id -u)" = 0 ] || die "run as root (or --dry-run)"
 command -v curl >/dev/null 2>&1 || [ -n "$package" ] || die "curl not found"
 
@@ -182,13 +208,10 @@ install_package()
 	esac
 }
 
-[ -n "$package" ] || fetch_package
-[ "$dry_run" = 1 ] || [ -s "$package" ] || die "no package at $package"
-install_package
-
-# ---- the certificate -----------------------------------------------------
-
-if [ -n "$cert" ]; then
+# Fetched and checked before the package goes in, so that a certificate
+# that does not match leaves the host as it was.
+fetch_cert()
+{
 	case "$cert" in
 	http://*|https://*)
 		say "fetching the certificate from $cert"
@@ -197,6 +220,23 @@ if [ -n "$cert" ]; then
 		;;
 	esac
 	[ "$dry_run" = 1 ] || [ -s "$cert" ] || die "no certificate at $cert"
+	[ -n "$cert_sha256" ] || return 0
+	say "checking the certificate against its SHA-256"
+	if [ "$dry_run" = 1 ] && [ ! -e "$cert" ]; then
+		printf '  + check sha256 %s of %s\n' "$cert_sha256" "$cert"
+	elif [ "$(sha256sum <"$cert" | cut -d' ' -f1)" != "$cert_sha256" ]; then
+		die "the certificate at $cert does not have SHA-256 $cert_sha256"
+	fi
+}
+
+[ -z "$cert" ] || fetch_cert
+[ -n "$package" ] || fetch_package
+[ "$dry_run" = 1 ] || [ -s "$package" ] || die "no package at $package"
+install_package
+
+# ---- the certificate -----------------------------------------------------
+
+if [ -n "$cert" ]; then
 	say "installing the certificate at $CERT_DST"
 	run install -d -m 0700 "$(dirname "$CERT_DST")"
 	run install -m 0644 "$cert" "$CERT_DST"

@@ -72,7 +72,11 @@ def main():
         for command in ("add", "fingerprint", "list"):
             run(command, "--help")
         for args in (("add",), ("fingerprint",), ("list", "extra"),
-                     ("fingerprint", str(bee), "extra"), ("invalid",)):
+                     ("fingerprint", str(bee), "extra"), ("invalid",),
+                     ("fingerprint", "--fingerprint", fingerprint, str(der)),
+                     ("add", "--fingerprint", fingerprint[:63], str(der)),
+                     ("add", "--fingerprint", "g" * 64, str(der)),
+                     ("add", "oci://127.0.0.1:1/demo/package:valid")):
             run(*args, ok=False)
         assert run("fingerprint", str(der)) == fingerprint
         assert run("fingerprint", str(pem)) == fingerprint
@@ -98,6 +102,10 @@ def main():
             assert (keys / "cert.der").read_bytes() == der.read_bytes()
             run("add", str(other), ok=False)
             assert not (keys / f"{other_fp}.der").exists()
+            run("add", "--fingerprint", fingerprint, str(other), ok=False)
+            assert not (keys / f"{other_fp}.der").exists()
+            assert run("add", "--fingerprint", fingerprint.upper(),
+                       str(der)) == fingerprint
             shutil.copyfile(other, keys / f"{other_fp}.der")
             (keys / ("0" * 64 + ".der")).write_bytes(der.read_bytes())
             (keys / ("1" * 64 + ".der")).write_text("invalid")
@@ -152,12 +160,17 @@ def main():
             reference = f"oci://127.0.0.1:{server.server_port}/demo/package:"
             assert run("fingerprint", reference + "valid") == fingerprint
             if isolated:
-                assert run("add", reference + "valid") == fingerprint
+                run("add", reference + "valid", ok=False)
+                run("add", "--fingerprint", other_fp, reference + "valid",
+                    ok=False)
+                assert run("add", "--fingerprint", fingerprint,
+                           reference + "valid") == fingerprint
                 assert (keys / "cert.der").read_bytes() == der.read_bytes()
             for tag in ("bad-digest", "bad-size", "missing-layer"):
                 run("fingerprint", reference + tag, ok=False)
                 if isolated:
-                    run("add", reference + tag, ok=False)
+                    run("add", "--fingerprint", fingerprint, reference + tag,
+                        ok=False)
                     assert (keys / "cert.der").read_bytes() == der.read_bytes()
             def pull(tag):
                 return subprocess.run([binary, "bpm", "pull", reference + tag],

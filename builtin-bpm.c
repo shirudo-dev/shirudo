@@ -2663,8 +2663,19 @@ static const struct opt_spec bpm_key_list_opts[] = {
 		"print the certificates as JSON" },
 };
 
+enum bpm_key_add_opt {
+	KEY_ADD_FINGERPRINT,
+};
+
+static const struct opt_spec bpm_key_add_opts[] = {
+	[KEY_ADD_FINGERPRINT] = { "--fingerprint", 0, 0, "<sha256>",
+		"the SPKI fingerprint the certificate must have; required "
+		"for an oci:// reference" },
+};
+
 static const struct help_section bpm_key_sections[] = {
 	HELP_ITEMS("subcommands:", bpm_key_subcmds),
+	HELP_OPTIONS("add options:", bpm_key_add_opts),
 	HELP_OPTIONS("list options:", bpm_key_list_opts),
 };
 
@@ -2677,17 +2688,61 @@ static const struct help bpm_key_help = {
 		  "oci://registry/repository:tag. list reads /var/lib/shirudo/keys.\n"
 		  "Examples:\n"
 		  "  shirudo bpm key fingerprint ./package.bee\n"
-		  "  shirudo bpm key add oci://quay.io/namespace/package:tag\n"
+		  "  shirudo bpm key add --fingerprint <sha256> \\\n"
+		  "      oci://quay.io/namespace/package:tag\n"
 		  "  shirudo bpm key list",
 };
 
+/*
+ * The fingerprint add must find, as 64 lowercase hex digits in want, or
+ * an empty want when none is given. A certificate from a registry is
+ * installed only against one the operator obtained out of band.
+ */
+static int key_add_pin(const struct opt_parser *p, const char *value,
+		       const char *source, char want[65])
+{
+	__u8 digest[CRYPTO_SHA256_LEN];
+
+	want[0] = '\0';
+	if (!value) {
+		if (!str_has_prefix(source, "oci://"))
+			return OPT_END;
+		opt_usage(p, "an oci:// reference needs --fingerprint");
+		return OPT_USAGE;
+	}
+	if (hex_decode(value, digest, sizeof(digest))) {
+		opt_usage(p, "--fingerprint takes 64 hex digits");
+		return OPT_USAGE;
+	}
+	hex_encode(digest, sizeof(digest), want);
+	return OPT_END;
+}
+
+static int key_add(const __u8 *der, size_t len, const char *want,
+		   char hex[65])
+{
+	int ret;
+
+	ret = key_fingerprint(der, len, hex);
+	if (ret)
+		return ret;
+	if (want[0] && strcmp(hex, want)) {
+		pr_err("bpm key add: the certificate's fingerprint is %s, "
+		       "not %s", hex, want);
+		return -EKEYREJECTED;
+	}
+	return install_key(der, len);
+}
+
 static int cmd_bpm_key(int argc, const char **argv)
 {
+	const char *values[ARRAY_SIZE(bpm_key_add_opts)] = {};
 	size_t len = 0, cap = 0, n;
 	const char *sub, *source;
+	char hex[65], want[65];
 	struct opt_parser p;
 	__u8 *der = NULL;
-	char hex[65];
+	bool add;
 	int ret;
 
 	if (argc < 2 || is_help(argv[1])) {
@@ -2712,31 +2767,42 @@ static int cmd_bpm_key(int argc, const char **argv)
 		ret = list_keys(opt_given(&p, KEY_LIST_JSON));
 		return ret ? bpm_fail("key list", ret) : 0;
 	}
-	opt_init(&p, !strcmp(sub, "add") ? "bpm key add" : "bpm key fingerprint",
-		 NULL, 0, &bpm_key_help, argc, argv, 2);
-	ret = bpm_args(&p, NULL, &source, 1, 1,
+	add = !strcmp(sub, "add");
+	if (add)
+		OPT_INIT(&p, "bpm key add", bpm_key_add_opts, &bpm_key_help,
+			 argc, argv, 2);
+	else
+		opt_init(&p, "bpm key fingerprint", NULL, 0, &bpm_key_help,
+			 argc, argv, 2);
+	ret = bpm_args(&p, values, &source, 1, 1,
 		       "a certificate, a .bee package or an oci:// reference",
 		       &n);
 	if (ret != OPT_END)
 		return bpm_exit(ret);
-	if (!strcmp(sub, "add") && image_config_active()) {
+	if (add && image_config_active()) {
 		pr_err("image mode: add vouched BPF signers to the signed "
 		       "config selected for boot and reboot to enroll them");
 		return 1;
+	}
+	if (add) {
+		ret = key_add_pin(&p, values[KEY_ADD_FINGERPRINT], source,
+				  want);
+		if (ret != OPT_END)
+			return bpm_exit(ret);
 	}
 	if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
 		return bpm_fail("initialize curl", -EIO);
 	ret = key_source_read(source, &der, &len, &cap);
 	if (!ret) {
-		ret = key_fingerprint(der, len, hex);
-		if (!ret && !strcmp(sub, "add"))
-			ret = install_key(der, len);
+		if (add)
+			ret = key_add(der, len, want, hex);
+		else
+			ret = key_fingerprint(der, len, hex);
 		if (!ret)
 			puts(hex);
 		xfree(der, cap);
 	}
-	return bpm_finish(-1, ret, !strcmp(sub, "add") ?
-			  "key add" : "key fingerprint");
+	return bpm_finish(-1, ret, add ? "key add" : "key fingerprint");
 }
 
 /* The package index and the state take over a MiB between them. */

@@ -33,7 +33,8 @@ Usage
    shirudo bpm tree append <package> oci://<registry>/<repository> [<append-options>]
    shirudo bpm tree show oci://<registry>/<repository> (--cert <certificate> | --cert=<certificate>)
                          [--reference <reference> | --reference=<reference>] [--walk]
-   shirudo bpm key (add | fingerprint) <certificate | package | oci-reference>
+   shirudo bpm key add [--fingerprint <sha256>] <certificate | package | oci-reference>
+   shirudo bpm key fingerprint <certificate | package | oci-reference>
    shirudo bpm key list [--json]
    shirudo bpm pull oci://<registry>/<repository>:<tag>
    shirudo bpm info <package>
@@ -446,9 +447,14 @@ key
   or ``none``. With ``--json`` it prints one object with ``schema`` and
   ``fingerprints``.
 
-``key add`` with an ``oci://`` reference installs the certificate the
-registry serves. Run ``key fingerprint`` on the same reference first and
-compare the result with a fingerprint you obtained out of band.
+``key add --fingerprint <sha256>`` installs the certificate only when its
+SPKI fingerprint is ``<sha256>``, 64 hex digits of either case, and
+otherwise exits 1 with ``bpm key add: the certificate's fingerprint is
+<fingerprint>, not <sha256>`` and installs nothing. An ``oci://``
+reference requires ``--fingerprint``: the registry chooses the
+certificate it serves, so ``add`` without one exits 2 with ``bpm key
+add: an oci:// reference needs --fingerprint``. Obtain the fingerprint
+out of band, with ``key fingerprint`` on the certificate file.
 
 pull and info
 -------------

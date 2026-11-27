@@ -1314,7 +1314,7 @@ and tree signatures accept algorithms other than ML-DSA (U4).
    ``bpm-tree-state-pending``, ``bpm-tree-state-replay``,
    ``bpm-tree-reader``, ``json-string``,
    ``json-limits``
-:Residual: R8, R9, U3, U4, U15
+:Residual: R8, R9, U3, U4
 
 T8 Quantum-capable adversaries against the trust anchor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2207,14 +2207,6 @@ U13 A revoked signer's historical vouches remain valid
       dependent key whose authority should no longer be trusted. A
       planned overlap is not sufficient compromise recovery by itself.
 
-U15 Certificates are fetched without a pin
-   :Affects: ``tools/gen-initrd/install.sh --cert <url>`` and
-      ``shirudo bpm key add oci://...``, which image mode refuses on a
-      target.
-   :Consequence: The certificate installed is whatever the URL served.
-   :Status: Confirmed in code.
-   :Meanwhile: Pass a local file after checking its fingerprint.
-
 U16 Boot restore is not all or nothing
    :Affects: ``init`` (T6).
    :Consequence: ``init`` restores archived upatches in name order and
@@ -2351,7 +2343,8 @@ The deployer:
 - Uses only ML-DSA-87 certificates from ``shirudo genkey``, repository
   certificates included (U4)
 - Treats the TPM owner password as known to root (R20)
-- Checks the fingerprint of every certificate it installs (U15)
+- Pins every certificate it fetches with a digest obtained out of band:
+  ``install.sh --cert-sha256`` and ``bpm key add --fingerprint``
 - Watches the size of the eventlog (U6) and the keepalives, and treats a
   ``tampered`` status as an incident to understand, not a condition to
   retry (:doc:`/operate/troubleshoot/incident-tampered`)
