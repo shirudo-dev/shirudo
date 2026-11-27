@@ -4,7 +4,7 @@ Thanks for your interest in contributing to shirudo. Please see the [contributio
 
 shirudo is a complex project in which most contributions require a significant level of expertise in kernel and/or eBPF development. It has a high technical bar to contribute because it operates in such a critical area. For these reasons, if you are new to open source contributions or to eBPF, this is unlikely to be the best open source project to get involved with.
 
-If you are new to shirudo, before making your first PR, we recommend raising a concise GitHub Issue describing your proposed contribution. To talk an idea through first, use shirudo's [Zulip](https://shirudo.zulipchat.com), and file a bug or a feature request that comes out of it as a GitHub Issue. Reviewing contributions takes effort, so please bear in mind that Maintainers are under no obligation to review or give feedback on issues, PRs and discussions.
+If you are new to shirudo, before making your first PR, we recommend raising a concise GitHub Issue describing your proposed contribution. To talk an idea through first, use shirudo's [#ideas-design channel on Zulip](https://shirudo.zulipchat.com/#narrow/channel/659583-ideas-design), and file a bug or a feature request that comes out of it as a GitHub Issue. Reviewing contributions takes effort, so please bear in mind that Maintainers are under no obligation to review or give feedback on issues, PRs and discussions.
 
 ## AI contributions
 
