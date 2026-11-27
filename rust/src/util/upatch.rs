@@ -5,16 +5,16 @@
 //! the bounds of its sections, the signed sections behind the loader
 //! data, the programs' metadata, and the names of upatches.
 
-use core::ffi::{CStr, c_char, c_int};
+use core::ffi::{CStr, c_int};
 use core::ops::Range;
 use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::fs::File;
+use std::os::fd::OwnedFd;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::FileExt;
 
 use crate::errno::{EFBIG, EINVAL, ENOMEM, EOPNOTSUPP, EOVERFLOW};
-use crate::sys::libc::close;
 use crate::text::cstr;
 use crate::util::hex;
 use crate::util::io;
@@ -238,14 +238,18 @@ pub struct ProgSpec {
     pub(crate) build_id_len: u32,
     pub(crate) uprobe_offsets: Vec<u64>,
     pub(crate) nr_uprobe_offsets: u32,
-    /// Holds the bytes named by the pointers in `kprobe_syms`.
+    /// Holds NUL-terminated symbols. Offsets name their starts in this buffer.
     kprobe_sym_buf: Vec<u8>,
-    pub(crate) kprobe_syms: Vec<*const c_char>,
+    pub(crate) kprobe_sym_offsets: Vec<usize>,
     pub(crate) nr_kprobe_syms: u32,
-    pub(crate) target_fd: c_int,
+    pub(crate) target_fd: Option<OwnedFd>,
 }
 
 impl ProgSpec {
+    pub(crate) fn kprobe_symbol(&self, off: usize) -> &[u8] {
+        &self.kprobe_sym_buf[off..]
+    }
+
     fn new() -> Self {
         Self {
             role: 0,
@@ -260,18 +264,9 @@ impl ProgSpec {
             uprobe_offsets: Vec::new(),
             nr_uprobe_offsets: 0,
             kprobe_sym_buf: Vec::new(),
-            kprobe_syms: Vec::new(),
+            kprobe_sym_offsets: Vec::new(),
             nr_kprobe_syms: 0,
-            target_fd: -1,
-        }
-    }
-}
-
-impl Drop for ProgSpec {
-    fn drop(&mut self) {
-        if self.target_fd >= 0 {
-            // SAFETY: this spec owns the target descriptor after preparation.
-            unsafe { close(self.target_fd) };
+            target_fd: None,
         }
     }
 }
@@ -1129,7 +1124,7 @@ fn kprobe_syms(syms: &[u8], nr_syms: u32, spec: &mut ProgSpec) -> c_int {
     }
     spec.kprobe_sym_buf.extend_from_slice(syms);
     if spec
-        .kprobe_syms
+        .kprobe_sym_offsets
         .try_reserve_exact(nr_syms as usize)
         .is_err()
     {
@@ -1138,9 +1133,7 @@ fn kprobe_syms(syms: &[u8], nr_syms: u32, spec: &mut ProgSpec) -> c_int {
     spec.nr_kprobe_syms = nr_syms;
     off = 0;
     for _ in 0..nr_syms {
-        // SAFETY: off is a checked name start in the immutable symbol buffer.
-        spec.kprobe_syms
-            .push(unsafe { spec.kprobe_sym_buf.as_ptr().add(off) }.cast());
+        spec.kprobe_sym_offsets.push(off);
         let Some(len) = syms[off..].iter().position(|&c| c == 0) else {
             return -EINVAL;
         };
@@ -1182,7 +1175,7 @@ fn kprobe_targets(
             return Err(-EINVAL);
         };
         if !kind_is_kprobe_multi(spec.kind)
-            || !spec.kprobe_syms.is_empty()
+            || !spec.kprobe_sym_offsets.is_empty()
             || nr_syms == 0
             || nr_syms > KPROBE_SYMS_MAX
             || syms_len / 2 < nr_syms as usize
@@ -1198,7 +1191,7 @@ fn kprobe_targets(
     }
     if specs
         .iter()
-        .any(|s| kind_is_kprobe_multi(s.kind) && s.kprobe_syms.is_empty())
+        .any(|s| kind_is_kprobe_multi(s.kind) && s.kprobe_sym_offsets.is_empty())
     {
         return Err(-EINVAL);
     }

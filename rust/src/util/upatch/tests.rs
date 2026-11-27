@@ -37,10 +37,8 @@ fn prog_specs_take_the_signed_counts() {
     let specs = Specs::parse(&md, 3, 1).unwrap();
     let s = &specs.as_slice()[0];
 
-    assert_eq!(
-        (s.role, s.kind, s.target_fd),
-        (ROLE_ATTACH, ATTACH_RAW_TRACEPOINT, -1)
-    );
+    assert_eq!((s.role, s.kind), (ROLE_ATTACH, ATTACH_RAW_TRACEPOINT));
+    assert!(s.target_fd.is_none());
 }
 
 #[test]
@@ -111,10 +109,9 @@ fn kprobe_multi_names_are_parsed_in_order() {
     .unwrap();
     let spec = &specs.as_slice()[0];
     let names: Vec<Vec<u8>> = spec
-        .kprobe_syms
+        .kprobe_sym_offsets
         .iter()
-        // SAFETY: the parser points each entry into its owned NUL-terminated buffer.
-        .map(|&sym| unsafe { CStr::from_ptr(sym) }.to_bytes().to_vec())
+        .map(|&off| cstr(&spec.kprobe_sym_buf[off..]).to_vec())
         .collect();
 
     assert_eq!(spec.kind, ATTACH_KRETPROBE_MULTI);

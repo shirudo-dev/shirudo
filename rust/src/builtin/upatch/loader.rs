@@ -14,7 +14,7 @@
 //! and every undo compare with the records.
 
 use crate::util::paths::{POLICY_PIN, SOCKET_POLICY_PIN, XATTR_POLICY};
-use core::ffi::{CStr, c_int, c_long};
+use core::ffi::{CStr, c_char, c_int, c_long};
 use std::ffi::{CString, OsStr};
 use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::{ErrorKind, Read, Write};
@@ -27,7 +27,8 @@ use super::ops::{PinGrant, fail, remove_pins};
 use super::{log_audit, log_err, log_info, log_warn, strerr};
 use crate::errno::{
     E2BIG, EACCES, EBADMSG, EBUSY, EEXIST, EINVAL, EIO, EKEYREJECTED, ENAMETOOLONG, ENODATA,
-    ENOENT, ENOKEY, ENOPKG, ENOTDIR, EOPNOTSUPP, EOVERFLOW, EPERM, ERANGE, ESRCH, ESTALE, EXDEV,
+    ENOENT, ENOKEY, ENOMEM, ENOPKG, ENOTDIR, EOPNOTSUPP, EOVERFLOW, EPERM, ERANGE, ESRCH, ESTALE,
+    EXDEV,
 };
 use crate::sys::libc::{
     O_CLOEXEC, O_NOFOLLOW, O_NONBLOCK, O_RDONLY, close, errno, fcntl, fgetxattr, fsetxattr,
@@ -436,10 +437,11 @@ fn perf_event_open_probe(
 /// prepare_uprobe_targets() checked: the probe lands in that inode, not
 /// in whatever the spec's path names by now.
 fn perf_event_open_uprobe(spec: &ProgSpec) -> Result<OwnedFd, c_int> {
-    if spec.target_fd < 0 || spec.uprobe_offsets.is_empty() || spec.nr_uprobe_offsets != 1 {
+    let target = spec.target_fd.as_ref().ok_or(EINVAL)?;
+    if spec.uprobe_offsets.is_empty() || spec.nr_uprobe_offsets != 1 {
         return Err(EINVAL);
     }
-    let path = format!("/proc/self/fd/{}", spec.target_fd);
+    let path = format!("/proc/self/fd/{}", target.as_raw_fd());
     let offset = spec.uprobe_offsets[0];
     perf_event_open_probe(
         "uprobe",
@@ -484,19 +486,18 @@ fn prepare_uprobe_targets(specs: &mut [ProgSpec]) -> Result<(), c_int> {
         if id.len() != spec.build_id_len as usize || id[..] != spec.build_id[..id.len()] {
             return Err(ESTALE);
         }
-        spec.target_fd = file.into_raw_fd();
+        spec.target_fd = Some(file.into());
     }
     Ok(())
 }
 
 fn attach_uprobe_multi(prog: c_int, spec: &ProgSpec) -> Result<OwnedFd, c_int> {
-    if spec.target_fd < 0
-        || spec.uprobe_path.is_empty()
-        || spec.uprobe_offsets.is_empty()
-        || spec.nr_uprobe_offsets == 0
+    let target = spec.target_fd.as_ref().ok_or(EINVAL)?;
+    if spec.uprobe_path.is_empty() || spec.uprobe_offsets.is_empty() || spec.nr_uprobe_offsets == 0
     {
         return Err(EINVAL);
     }
+    let target_fd = u32::try_from(target.as_raw_fd()).map_err(|_| EINVAL)?;
     let mut flags = F_UPROBE_MULTI_PATH_FD;
     if spec.kind == ATTACH_URETPROBE_MULTI {
         flags |= F_UPROBE_MULTI_RETURN;
@@ -505,13 +506,20 @@ fn attach_uprobe_multi(prog: c_int, spec: &ProgSpec) -> Result<OwnedFd, c_int> {
         a.ptr(24, spec.uprobe_offsets.as_ptr())
             .u32(48, spec.nr_uprobe_offsets)
             .u32(52, flags)
-            .u32(60, spec.target_fd as u32)
+            .u32(60, target_fd)
     })
 }
 
 fn attach_kprobe_multi(prog: c_int, spec: &ProgSpec) -> Result<OwnedFd, c_int> {
-    if spec.kprobe_syms.is_empty() || spec.nr_kprobe_syms == 0 {
+    if spec.kprobe_sym_offsets.is_empty() || spec.nr_kprobe_syms == 0 {
         return Err(EINVAL);
+    }
+    let mut symbols = Vec::new();
+    symbols
+        .try_reserve_exact(spec.kprobe_sym_offsets.len())
+        .map_err(|_| ENOMEM)?;
+    for &off in &spec.kprobe_sym_offsets {
+        symbols.push(spec.kprobe_symbol(off).as_ptr().cast::<c_char>());
     }
     let flags = if spec.kind == ATTACH_KRETPROBE_MULTI {
         F_KPROBE_MULTI_RETURN
@@ -521,7 +529,7 @@ fn attach_kprobe_multi(prog: c_int, spec: &ProgSpec) -> Result<OwnedFd, c_int> {
     link_create(prog, 0, TRACE_KPROBE_MULTI, |a| {
         a.u32(16, flags)
             .u32(20, spec.nr_kprobe_syms)
-            .ptr(24, spec.kprobe_syms.as_ptr())
+            .ptr(24, symbols.as_ptr())
     })
 }
 
