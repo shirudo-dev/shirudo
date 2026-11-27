@@ -135,16 +135,7 @@ fn verify_root_signature(
     if cms_signed_by(signature, cert) != 1 {
         return Err(-EKEYREJECTED);
     }
-    // SAFETY: both input slices have the stated lengths and cert is live.
-    let ret = unsafe {
-        verify_detached(
-            root.as_ptr(),
-            root.len(),
-            signature.as_ptr(),
-            signature.len(),
-            cert,
-        )
-    };
+    let ret = verify_detached(root, signature, cert);
     if ret == 0 { Ok(()) } else { Err(ret) }
 }
 

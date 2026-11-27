@@ -746,32 +746,10 @@ pub(crate) fn cms_check_signers(signature: &[u8]) -> c_int {
 /// cert. The algorithm comes from the SignerInfo, so an ML-DSA
 /// signature, with signedAttrs and SHA-512 or bare on OpenSSL 4, and an
 /// RSA one verify through one call; ML-DSA needs libcrypto >= 3.5.
-///
-/// # Safety
-///
-/// `payload` and `signature` hold their lengths, and `cert` is NULL or
-/// points to a cert.
-pub(crate) unsafe fn verify_detached(
-    payload: *const u8,
-    payload_len: usize,
-    signature: *const u8,
-    signature_len: usize,
-    cert: *const Cert,
-) -> c_int {
-    // SAFETY: the caller passes NULL or a cert.
-    let Some(x509) = (unsafe { x509_of(cert) }) else {
+pub(crate) fn verify_detached(payload: &[u8], signature: &[u8], cert: &Cert) -> c_int {
+    let Some(x509) = cert.imp.as_deref() else {
         return -EINVAL;
     };
-    if payload.is_null()
-        || signature.is_null()
-        || payload_len > c_int::MAX as usize
-        || signature_len > c_int::MAX as usize
-    {
-        return -EINVAL;
-    }
-    // SAFETY: the caller's payload and signature.
-    let (payload, signature) =
-        unsafe { (slice(payload, payload_len), slice(signature, signature_len)) };
     verify_detached_x509(payload, signature, x509)
 }
 

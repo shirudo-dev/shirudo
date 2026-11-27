@@ -19,31 +19,27 @@ use crate::util::crypto_openssl::{Cert, cert_read_fd, cert_read_file, verify_det
 use crate::util::json::JsonEmit;
 use crate::util::keys::{TrustedSet, verify_signature};
 
-/// A signed payload: the bytes and the signature as the caller holds
-/// them, NULL pointers included, which `verify_detached()` refuses.
-pub(super) struct Signed {
-    pub payload: *const u8,
-    pub payload_len: usize,
-    pub sig: *const u8,
-    pub sig_len: usize,
+/// A signed payload and signature, preserving absent buffers as None.
+pub(super) struct Signed<'a> {
+    pub payload: Option<&'a [u8]>,
+    pub sig: Option<&'a [u8]>,
 }
 
 /// 0 when `s` verifies against the certificate `read` fills, -EINVAL when
 /// there is none.
-fn verify_with(s: &Signed, read: impl FnOnce(&mut Cert) -> c_int) -> c_int {
+fn verify_with(s: &Signed<'_>, read: impl FnOnce(&mut Cert) -> c_int) -> c_int {
     let mut cert = Cert::new();
-    let mut ret = -EINVAL;
-
-    if read(&mut cert) == 0 {
-        // SAFETY: the payload and signature as the caller lends them,
-        // and the cert just read.
-        ret = unsafe { verify_detached(s.payload, s.payload_len, s.sig, s.sig_len, &cert) };
+    if read(&mut cert) != 0 {
+        return -EINVAL;
     }
-    ret
+    match (s.payload, s.sig) {
+        (Some(payload), Some(sig)) => verify_detached(payload, sig, &cert),
+        _ => -EINVAL,
+    }
 }
 
 /// Against the certificate in the file at `cert_path`.
-pub(super) fn verify_cms(s: &Signed, cert_path: &CStr) -> c_int {
+pub(super) fn verify_cms(s: &Signed<'_>, cert_path: &CStr) -> c_int {
     // SAFETY: cert_read_file() takes the caller's path as it is.
     verify_with(s, |cert| unsafe {
         cert_read_file(cert_path.as_ptr(), cert)
@@ -51,7 +47,7 @@ pub(super) fn verify_cms(s: &Signed, cert_path: &CStr) -> c_int {
 }
 
 /// Against the certificate the open `cert_fd` reads.
-pub(super) fn verify_cms_fd(s: &Signed, cert_fd: BorrowedFd<'_>) -> c_int {
+pub(super) fn verify_cms_fd(s: &Signed<'_>, cert_fd: BorrowedFd<'_>) -> c_int {
     // SAFETY: an fd and a cert to fill.
     verify_with(s, |cert| unsafe { cert_read_fd(cert_fd, cert) })
 }
@@ -244,10 +240,8 @@ fn fetch_checked(
         None => match cert_path {
             Some(cert_path) => verify_cms(
                 &Signed {
-                    payload: payload.as_ptr(),
-                    payload_len: payload.bytes().len(),
-                    sig: f.sig.as_ptr(),
-                    sig_len: f.sig.bytes().len(),
+                    payload: payload.has_data().then(|| payload.bytes()),
+                    sig: f.sig.has_data().then(|| f.sig.bytes()),
                 },
                 cert_path,
             ),

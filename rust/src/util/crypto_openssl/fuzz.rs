@@ -27,9 +27,7 @@ fuzz_target!(shirudo_fuzz_cms, shirudo_fuzz_cms_init, |data| {
     // SAFETY: der holds a certificate and cert receives it.
     if unsafe { cert_read_der(der.as_ptr(), der.len(), &mut cert) } == 0 {
         let signed_by = cms_signed_by(sig, &cert);
-        // SAFETY: the DER and signature slices remain live with cert.
-        let verified =
-            unsafe { verify_detached(der.as_ptr(), der.len(), sig.as_ptr(), sig.len(), &cert) };
+        let verified = verify_detached(der, sig, &cert);
         if verified == 0 && signed_by != 1 {
             std::process::abort();
         }

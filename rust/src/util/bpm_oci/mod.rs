@@ -97,14 +97,6 @@ impl BpmBuffer {
             &self.data[..self.data.len() - 1]
         }
     }
-
-    pub(crate) fn as_ptr(&self) -> *const u8 {
-        if self.has_data() {
-            self.data.as_ptr()
-        } else {
-            core::ptr::null()
-        }
-    }
 }
 
 impl HttpResponse {

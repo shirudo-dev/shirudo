@@ -4,7 +4,6 @@
 //! The package reader as Rust code calls it, with what it reads owned.
 
 use core::ffi::{CStr, c_char, c_int};
-use core::ptr;
 use std::os::fd::BorrowedFd;
 
 use super::archive::{self, Found};
@@ -91,20 +90,10 @@ pub(crate) fn extract_fd(archive: BorrowedFd<'_>, dest: BorrowedFd<'_>) -> c_int
     archive::extract_fd(archive, dest)
 }
 
-fn signed(payload: &[u8], sig: &[u8]) -> Signed {
-    let at = |b: &[u8]| {
-        if b.is_empty() {
-            ptr::null()
-        } else {
-            b.as_ptr()
-        }
-    };
-
+fn signed<'a>(payload: &'a [u8], sig: &'a [u8]) -> Signed<'a> {
     Signed {
-        payload: at(payload),
-        payload_len: payload.len(),
-        sig: at(sig),
-        sig_len: sig.len(),
+        payload: (!payload.is_empty()).then_some(payload),
+        sig: (!sig.is_empty()).then_some(sig),
     }
 }
 
