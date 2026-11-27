@@ -64,6 +64,18 @@ upatches/test/build.sh
 java -jar upatches/test/badDecoder.jar
 ```
 
+The guard has to stay when another agent in the JVM retransforms the
+decoder. `upatches/test/retransform.jar` is such an agent, one that
+changes nothing; with it after the guard, `badDecoder.jar` still exits
+with 0:
+
+```sh
+upatches/java-base64/build.sh --jar-only
+java -javaagent:upatches/java-base64/java-base64.jar \
+	'-javaagent:upatches/test/retransform.jar=java.util.Base64$Decoder' \
+	-jar upatches/test/badDecoder.jar
+```
+
 A test VM sees the checkout at `/mnt/shirudo-src`, so the jar built on
 the host runs there, in a JVM that a user manager starts after the
 upatch is loaded:
