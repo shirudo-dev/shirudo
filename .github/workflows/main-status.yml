@@ -7,6 +7,7 @@ name: Main status
 on:
   workflow_run:
     workflows:
+      - AFL++
       - Build
       - Build every commit
       - Build packages

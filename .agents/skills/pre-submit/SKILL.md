@@ -89,7 +89,7 @@ written without `le32_to_cpu()`, `cpu_to_le32()` or their kin, and
 scan-build what clang's static analyzer proves on some path: a NULL or
 uninitialized value used, a leak, a use after free, a store never read.
 
-CI runs the proofs only after a push to main, in the `Proofs` workflow,
+CI runs the proofs only every night on main, in the `Proofs` workflow,
 so this run is the only one a series gets before it lands, and the only
 one at all of a proof `testing/proofs/cbmc/ci-skip.list` names, which CI
 leaves out. `CHANGED` takes what `git diff` takes and runs the CBMC
@@ -103,9 +103,9 @@ checks: read it against the change. A proof out of step with the code
 is a security bug, as the `security-audit` skill has it; the `proofs`
 skill says how to fix one.
 
-The clang and TSan legs of the `Sanitizers` workflow and its `afl-fuzz`
-job also run only after a push to main, so the clang and TSan runs
-above are the only ones a series gets before it lands.
+The clang and TSan legs of the `Sanitizers` workflow also run only after
+a push to main, and the `AFL++` workflow only every night, so the clang
+and TSan runs above are the only ones a series gets before it lands.
 
 ## Fixing a commit of the series
 

@@ -231,8 +231,8 @@ unit, CI check, functional, end-to-end and backend tiers in that order.
 ``BACKEND=0`` leaves out the backend tier, which needs docker or podman
 and reads no C: the sanitizer runs pass it. The fuzz targets and the
 proofs run on their own. CI runs the
-proofs only after a push to main, in the ``Proofs`` workflow, never on a
-pull request: :doc:`proofs` says which to run for a change.
+proofs every night on main, in the ``Proofs`` workflow, never on a pull
+request: :doc:`proofs` says which to run for a change.
 
 Each functional family with target tests gets a fresh VM. The VM runner
 caches the generated dracut initrd in ``build/test-vm/cache/initrd/``
@@ -552,12 +552,12 @@ corpus, which the next libFuzzer run merges down. A crash fails the run
 and leaves its input in ``testing/fuzz/crash-afl-<target>-<n>``; the
 libFuzzer build of the target reproduces it like any other input.
 
-The ``afl-fuzz`` job of the ``Sanitizers`` workflow runs every target
-under AFL++ on each push to ``main`` and in a run started by hand, for
-as long as the ``libFuzzer`` job, and saves its corpus when that job
-does. A pull request leaves it out. Each starts from the newest corpus either
-kept, so that what one finds the other starts from. What crashed is in
-the job's ``afl-fuzz-crashes`` artifact.
+The ``AFL++`` workflow, :src:`.github/workflows/afl.yml`, runs every
+target under AFL++ for ten minutes every night and in a run started by
+hand, and saves its corpus on ``main``. Its run and the ``libFuzzer``
+job each start from the newest corpus either kept, so that what one
+finds the other starts from. What crashed is in its ``afl-fuzz-crashes``
+artifact.
 
 Use the test VM
 ---------------
