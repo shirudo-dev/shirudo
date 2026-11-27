@@ -688,22 +688,24 @@ impl Tpm {
     /// The session key: the ECC endorsement key, which once enforcement
     /// is active must be the one init froze in the identity.
     fn session_setup(&mut self, active: bool) -> Result<(), c_int> {
-        let mut id = Identity::zeroed();
-
-        if active {
-            let ret = identity::read(&mut id);
-
-            if ret != 0 {
-                crate::log::err(
-                    format!("tpm: frozen identity unreadable: {}", text(ret)).as_bytes(),
-                );
-                return Err(ret);
-            }
+        let id = if active {
+            let id = match identity::read() {
+                Ok(id) => id,
+                Err(ret) => {
+                    crate::log::err(
+                        format!("tpm: frozen identity unreadable: {}", text(ret)).as_bytes(),
+                    );
+                    return Err(ret);
+                }
+            };
             if id.ek_name[0] != 0 || u16::from(id.ek_name[1]) != ALG_SHA256 {
                 crate::log::err(b"tpm: no frozen session key; trusted reboot required");
                 return Err(-EACCES);
             }
-        }
+            id
+        } else {
+            Identity::zeroed()
+        };
         let (key, public) = self.ek_create(false)?.into_raw();
 
         self.session_key = key;

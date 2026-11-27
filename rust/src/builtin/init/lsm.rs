@@ -577,15 +577,21 @@ pub(super) fn attach() -> c_int {
     let bpf_gate = gate(GUARD_BPF).pin;
 
     if exists(bpf_gate) {
-        let mut id = Identity::zeroed();
-        let err = identity::read(&mut id);
-        if err != 0
-            || id.nv_writer_public[0] & 0x80 == 0
+        let id = match identity::read() {
+            Ok(id) => id,
+            Err(err) => {
+                error(
+                    b"init: TPM NV index guard missing or changed; reboot with the updated initrd",
+                );
+                return err;
+            }
+        };
+        if id.nv_writer_public[0] & 0x80 == 0
             || id.nv_index != NV_INDEX
             || !exists(TPM_COMMAND_LINK_PIN)
         {
             error(b"init: TPM NV index guard missing or changed; reboot with the updated initrd");
-            return if err != 0 { err } else { -EACCES };
+            return -EACCES;
         }
         info(&cat!(
             "bpf2 already attached (",

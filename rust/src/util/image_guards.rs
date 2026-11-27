@@ -9,7 +9,7 @@
 //! the kernel's vmlinux, and shares the maps init made.
 
 use core::ffi::{CStr, c_int};
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
 
 use crate::bpf::btf::{Btf, KIND_FUNC};
 use crate::errno::{EBUSY, ENAMETOOLONG, ENOENT, EPROTO, text};
@@ -366,7 +366,7 @@ pub(crate) fn config_root_begin(root: &[u8; 32], guard: &mut ConfigRootGuard) ->
         Ok(fd) => fd,
         Err(e) => return e,
     };
-    let checked = guard_map_check(map.as_raw_fd(), &GUARD_MAPS[GUARD_ROOTS]);
+    let checked = guard_map_check(map.as_fd(), &GUARD_MAPS[GUARD_ROOTS]);
     guard.map = Some(map);
     let ret = match checked {
         Ok(_) => stage(root, guard),
@@ -513,9 +513,9 @@ fn guard_map_matches(info: &Info<MAP_INFO_SIZE>, expected: &GuardMap) -> bool {
         && identity::guard_name_matches(obj_name(info.bytes(), MAP_NAME), def.name)
 }
 
-pub(crate) fn guard_map_check(fd: c_int, expected: &GuardMap) -> Result<u32, c_int> {
+pub(crate) fn guard_map_check(fd: BorrowedFd<'_>, expected: &GuardMap) -> Result<u32, c_int> {
     let mut info = Info::<MAP_INFO_SIZE>::new();
-    info.read(fd)?;
+    info.read(fd.as_raw_fd())?;
     if !guard_map_matches(&info, expected) {
         return Err(-EPROTO);
     }
@@ -537,7 +537,7 @@ fn guard_map_ids() -> Result<[u32; GUARD_MAP_COUNT], c_int> {
     let mut ids = [0u32; GUARD_MAP_COUNT];
     for (id, expected) in ids.iter_mut().zip(&GUARD_MAPS) {
         let fd = bpf_sys::obj_get(expected.pin)?;
-        let checked = guard_map_check(fd.as_raw_fd(), expected);
+        let checked = guard_map_check(fd.as_fd(), expected);
         match checked {
             Ok(found) => *id = found,
             Err(e) => {

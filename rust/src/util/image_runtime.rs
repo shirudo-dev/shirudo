@@ -346,7 +346,7 @@ fn device_observed(device: u64, root: Option<&[u8; 32]>, kind: u32) -> c_int {
     }
     // SAFETY: the map bpf_obj_get() opened, the fd's from here.
     let map = unsafe { OwnedFd::from_raw_fd(fd) };
-    if let Err(e) = guard_map_check(map.as_raw_fd(), &GUARD_MAPS[GUARD_DEVICES]) {
+    if let Err(e) = guard_map_check(map.as_fd(), &GUARD_MAPS[GUARD_DEVICES]) {
         return e;
     }
     let dev = kernel_dev(device);
@@ -1072,8 +1072,10 @@ pub(crate) fn bootstrap_load() -> c_int {
     if mode < 0 {
         return mode;
     }
-    let mut identity = Identity::zeroed();
-    let id = identity::read(&mut identity);
+    let (identity, id) = match identity::read() {
+        Ok(identity) => (identity, 0),
+        Err(err) => (Identity::zeroed(), err),
+    };
     if mode != 0 && id != 0 {
         return id;
     }
@@ -1358,8 +1360,10 @@ pub(crate) fn enter(command: &[u8], args: &[&[u8]]) -> c_int {
     if mode < 0 {
         return mode;
     }
-    let mut identity = Identity::zeroed();
-    let ret = identity::read(&mut identity);
+    let ret = match identity::read() {
+        Ok(_) => 0,
+        Err(err) => err,
+    };
     if mode != 0 && ret != 0 {
         return ret;
     }

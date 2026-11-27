@@ -8,7 +8,6 @@
 use core::ffi::c_int;
 
 use crate::errno::{EINTR, EIO, EKEYREJECTED, text};
-use crate::sys::identity::Identity;
 use crate::sys::libc::{errno, getrandom, scrub};
 use crate::util::identity;
 use crate::util::tpm::Tpm;
@@ -51,12 +50,20 @@ fn failed(err: c_int, seed: &mut [u8; DIGEST_LEN], public: &mut [u8; NV_RSA_BYTE
 /// The writer's seed and modulus as init froze them in the identity map;
 /// -EKEYREJECTED when the modulus there is not one, its top bit clear.
 pub(crate) fn read(seed: &mut [u8; DIGEST_LEN], public: &mut [u8; NV_RSA_BYTES]) -> c_int {
-    let mut id = Identity::zeroed();
-    let mut err = identity::read(&mut id);
-
-    if err == 0 && id.nv_writer_public[0] & 0x80 == 0 {
-        err = -EKEYREJECTED;
-    }
+    let id = match identity::read() {
+        Ok(id) => id,
+        Err(err) => {
+            crate::log::err(
+                format!("nv writer: public key lookup failed: {}", text(err)).as_bytes(),
+            );
+            return err;
+        }
+    };
+    let err = if id.nv_writer_public[0] & 0x80 == 0 {
+        -EKEYREJECTED
+    } else {
+        0
+    };
     if err != 0 {
         crate::log::err(format!("nv writer: public key lookup failed: {}", text(err)).as_bytes());
         return err;

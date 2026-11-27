@@ -1235,8 +1235,10 @@ impl Report {
 
         // The anchor init froze is the kernel's record; the live keyring
         // of that kind is what a load would name, and the two must agree.
-        let mut ident = Identity::zeroed();
-        let mut pinned = identity::read(&mut ident);
+        let (ident, mut pinned) = match identity::read() {
+            Ok(id) => (id, 0),
+            Err(err) => (Identity::zeroed(), err),
+        };
         if pinned == 0 {
             pinned = ident.keyring_serial;
         }

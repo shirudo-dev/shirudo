@@ -1416,25 +1416,26 @@ fn apply_policy_labels(u: &Upatch) {
 /// the keyring a signed load names and its serial.
 pub(crate) fn trust_anchor(rep: Option<&mut OpReport>) -> Result<(i32, i32), ()> {
     let mut rep = Rep(rep);
-    let mut id = crate::sys::identity::Identity::zeroed();
-    let ret = identity::read(&mut id);
-    if ret != 0 {
-        log_err(
-            &[
-                &b"no trust anchor frozen this boot: "[..],
-                strerr(-ret),
-                b" (run `shirudo init`)",
-            ]
-            .concat(),
-        );
-        rep.fail(
-            c"pre_flight",
-            c"keyring_missing",
-            -ret,
-            b"no trust anchor frozen this boot",
-        );
-        return Err(());
-    }
+    let id = match identity::read() {
+        Ok(id) => id,
+        Err(ret) => {
+            log_err(
+                &[
+                    &b"no trust anchor frozen this boot: "[..],
+                    strerr(-ret),
+                    b" (run `shirudo init`)",
+                ]
+                .concat(),
+            );
+            rep.fail(
+                c"pre_flight",
+                c"keyring_missing",
+                -ret,
+                b"no trust anchor frozen this boot",
+            );
+            return Err(());
+        }
+    };
     let ring = keyring::bpf_serial();
     if id.keyring_type != SIG_KEYRING_BPF || ring <= 0 || ring != id.keyring_serial {
         log_err(b"the kernel BPF keyring differs from the frozen anchor");

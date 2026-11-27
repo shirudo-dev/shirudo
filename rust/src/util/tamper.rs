@@ -284,7 +284,7 @@ pub(crate) fn counters_read<const N: usize>(map: &GuardMap) -> Result<Counters<N
 }
 
 fn read_map(fd: BorrowedFd<'_>, map: &GuardMap, count: &mut [u64]) -> Result<u64, c_int> {
-    guard_map_check(fd.as_raw_fd(), map)?;
+    guard_map_check(fd, map)?;
     if count.len() != map.def.max_entries as usize {
         return Err(-crate::errno::EPROTO);
     }

@@ -730,9 +730,10 @@ fn check_cert_algorithm(der: &[u8], what: &[u8]) -> c_int {
 /// right now, not only one on disk, when the live target's set is the
 /// one being extended.
 fn check_voucher_live(set: &TrustedSet, voucher: &[u8; 32]) -> c_int {
-    let mut id = Identity::zeroed();
-
-    if identity::read(&mut id) != 0 || id.keyring_type != SIG_KEYRING_BPF {
+    let Ok(id) = identity::read() else {
+        return 0;
+    };
+    if id.keyring_type != SIG_KEYRING_BPF {
         return 0;
     }
     let ring = keyring::bpf_serial();
@@ -1263,8 +1264,10 @@ fn keys_show(args: &[&CStr]) -> c_int {
     if let Some(e) = &mut out {
         e.arr_close();
     }
-    let mut id = Identity::zeroed();
-    let id_rc = identity::read(&mut id);
+    let (id, id_rc) = match identity::read() {
+        Ok(id) => (id, 0),
+        Err(err) => (Identity::zeroed(), err),
+    };
     let n_keys = id.n_keys.min(IDENTITY_KEYS_MAX) as usize;
     let n_dm_keys = (id.n_dm_verity_keys as usize).min(IDENTITY_KEYS_MAX as usize);
     let anchors = [

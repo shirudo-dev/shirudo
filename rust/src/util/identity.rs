@@ -52,26 +52,17 @@ pub(crate) fn enforcement_active() -> c_int {
     }
 }
 
-/// The identity init populated, froze and pinned this boot into `out`,
-/// which is zeroed first: 0, -ENOENT before init, -EPROTO for a map of
-/// another shape, or another -errno.
-pub(crate) fn read(out: &mut Identity) -> c_int {
-    *out = Identity::zeroed();
-    let fd = match obj_get(IDENTITY_PIN) {
-        Ok(fd) => fd,
-        Err(err) => return err,
-    };
-    lookup(fd.as_raw_fd(), out)
+/// The identity init populated, froze and pinned this boot: -ENOENT
+/// before init, -EPROTO for a map of another shape, or another -errno.
+pub(crate) fn read() -> Result<Identity, c_int> {
+    let fd = obj_get(IDENTITY_PIN)?;
+    lookup(fd.as_fd())
 }
 
 /// The identity pin `name` relative to an already opened directory.
-pub(crate) fn read_at(dir: BorrowedFd<'_>, name: &CStr, out: &mut Identity) -> c_int {
-    *out = Identity::zeroed();
-    let fd = match obj_get_at(dir, name) {
-        Ok(fd) => fd,
-        Err(err) => return err,
-    };
-    lookup(fd.as_raw_fd(), out)
+pub(crate) fn read_at(dir: BorrowedFd<'_>, name: &CStr) -> Result<Identity, c_int> {
+    let fd = obj_get_at(dir, name)?;
+    lookup(fd.as_fd())
 }
 
 /// The private bpffs root, checked against the device init froze in its
@@ -85,11 +76,7 @@ fn bpffs_open_identity() -> Result<(OwnedFd, Identity), c_int> {
     }
     // SAFETY: open returned a new descriptor owned here alone.
     let fd = unsafe { OwnedFd::from_raw_fd(fd) };
-    let mut id = Identity::zeroed();
-    let ret = read_at(fd.as_fd(), IDENTITY_PIN_NAME, &mut id);
-    if ret != 0 {
-        return Err(ret);
-    }
+    let id = read_at(fd.as_fd(), IDENTITY_PIN_NAME)?;
     let st = stat_fd(fd.as_fd())?;
     let dev = kernel_dev(libc::makedev(st.stx_dev_major, st.stx_dev_minor));
     if dev != id.sb_dev {
@@ -120,24 +107,23 @@ pub(crate) fn state_root_open() -> Result<OwnedFd, c_int> {
     Ok(fd)
 }
 
-fn lookup(fd: c_int, out: &mut Identity) -> c_int {
-    if let Err(err) = guard_map_check(fd, &GUARD_MAPS[GUARD_IDENTITY]) {
-        return err;
-    }
+fn lookup(fd: BorrowedFd<'_>) -> Result<Identity, c_int> {
+    guard_map_check(fd, &GUARD_MAPS[GUARD_IDENTITY])?;
     let zero = 0u32;
+    let mut id = Identity::zeroed();
     // SAFETY: the map, a key of its size, and room for a value of its
     // size, checked above.
     if unsafe {
         bpf_map_lookup_elem(
-            fd,
+            fd.as_raw_fd(),
             (&raw const zero).cast(),
-            core::ptr::from_mut(out).cast(),
+            (&raw mut id).cast(),
         )
     } != 0
     {
-        return -errno();
+        return Err(-errno());
     }
-    0
+    Ok(id)
 }
 
 #[cfg(test)]

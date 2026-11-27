@@ -19,7 +19,6 @@ use std::os::unix::fs::MetadataExt;
 
 use crate::errno::{EEXIST, EIO, EKEYREJECTED, ENAMETOOLONG, ENOENT, ENOKEY, ENOTBLK, EROFS};
 use crate::ffi;
-use crate::sys::identity::Identity;
 use crate::sys::libc::Zeroed;
 use crate::sys::libc::{
     Statfs, Statvfs, fwrite, mount, statfs, statvfs, stdout, strerror, umount2,
@@ -229,14 +228,12 @@ fn print_preflight_json(r: &PreflightResult) -> c_int {
 /// a re-run, checks that the anchor init froze is still this keyring.
 fn init_keyring(init: &mut Init) -> c_int {
     let ring = keyring::bpf_serial();
-    let mut id = Identity::zeroed();
-
     if ring <= 0 {
         let ret = if ring != 0 { ring } else { -ENOKEY };
         error(&cat!("bpf keyring lookup: ", strerr(-ret)));
         return ret;
     }
-    if identity::read(&mut id) == 0 {
+    if let Ok(id) = identity::read() {
         let same = id.keyring_type == SIG_KEYRING_BPF
             && id.keyring_serial == ring
             && image_runtime::runtime_root() == Some(id.runtime_root);
