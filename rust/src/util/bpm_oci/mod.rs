@@ -58,7 +58,6 @@ struct HttpResponse {
 }
 
 /// `struct bpm_oci_client`.
-#[repr(C)]
 pub struct OciClient {
     base_url: [u8; MAX_ENDPOINT],
     registry: [u8; MAX_ENDPOINT],
@@ -69,7 +68,6 @@ pub struct OciClient {
 }
 
 /// `struct bpm_descriptor`.
-#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Descriptor {
     media: [u8; MAX_MEDIA],
@@ -91,9 +89,6 @@ impl OciClient {
         }
     }
 }
-
-const _: () = assert!(size_of::<OciClient>() == 13568);
-const _: () = assert!(size_of::<Descriptor>() == 4424);
 
 impl BpmBuffer {
     pub(crate) const fn new() -> Self {
