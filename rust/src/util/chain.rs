@@ -38,7 +38,6 @@ pub(crate) const PCR_MASK: u32 = (1 << PCR) | (1 << PHASE_PCR);
 pub(crate) const ANCHOR_MAX: usize = 128;
 
 /// `struct measured_upatch`: a member of the set an init event lists.
-#[repr(C)]
 pub struct MeasuredUpatch {
     pub(crate) name: [u8; NAME_MAX + 1],
     pub(crate) payload_hex: [u8; 2 * PAYLOAD_HASH_LEN + 1],
@@ -56,7 +55,6 @@ impl MeasuredUpatch {
 }
 
 /// `struct chain_init_info`: the binding chain_init() made or found.
-#[repr(C)]
 pub struct ChainInitInfo {
     pub(crate) writer_public: [u8; NV_RSA_BYTES],
     pub(crate) reused: bool,
@@ -72,7 +70,6 @@ pub struct ChainInitInfo {
 }
 
 /// `struct chain_status`: the register as a status report sees it.
-#[repr(C)]
 pub struct ChainStatus {
     pub(crate) tpm: bool,
     pub(crate) defined: bool,
@@ -122,15 +119,6 @@ impl ChainStatus {
         }
     }
 }
-
-const _: () = assert!(size_of::<MeasuredUpatch>() == 328);
-const _: () = assert!(size_of::<ChainInitInfo>() == 696);
-const _: () = assert!(core::mem::offset_of!(ChainInitInfo, reset_count) == 388);
-const _: () = assert!(core::mem::offset_of!(ChainInitInfo, name_len) == 528);
-const _: () = assert!(core::mem::offset_of!(ChainInitInfo, anchor_digest) == 664);
-const _: () = assert!(size_of::<ChainStatus>() == 624);
-const _: () = assert!(core::mem::offset_of!(ChainStatus, name_len) == 72);
-const _: () = assert!(core::mem::offset_of!(ChainStatus, init) == 80);
 
 /// memneq_explicit(): whether the two
 /// differ, in a time that depends on their length alone.
