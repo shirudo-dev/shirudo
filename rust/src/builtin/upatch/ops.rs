@@ -727,18 +727,17 @@ fn preflight(expect_chain: Option<&CStr>, rep: &mut OpReport) -> Result<(), ()> 
         log_err(b"upatch load: --expect-chain must be 64 hex chars");
         return Err(());
     };
-    let mut have = [0u8; DIGEST_LEN];
-    match chain::read(&mut have) {
-        0 => {}
-        r if r == -ENODEV => {
+    let have = match chain::read() {
+        Ok(have) => have,
+        Err(r) if r == -ENODEV => {
             log_err(b"upatch load: pre-flight refused (category: tampered, message: chain_drift): register unreadable, cannot confirm --expect-chain");
             return Err(());
         }
-        r => {
+        Err(r) => {
             log_err(&[b"upatch load: chain read failed: ", strerr(-r)].concat());
             return Err(());
         }
-    }
+    };
     if memneq_explicit(&want, &have) {
         log_err(
             &[

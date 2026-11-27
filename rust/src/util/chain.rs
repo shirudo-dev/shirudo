@@ -788,19 +788,10 @@ fn extend_on(
     Ok(())
 }
 
-/// The register's value this boot into `out`.
-pub(crate) fn read(out: &mut [u8; DIGEST_LEN]) -> c_int {
-    let Ok(tpm) = Tpm::open() else {
-        return -ENODEV;
-    };
-
-    match tpm.nv_read(NV_INDEX) {
-        Ok(value) => {
-            *out = value;
-            0
-        }
-        Err(_) => -ENODEV,
-    }
+/// The register's value this boot. A missing TPM or failed read is ENODEV.
+pub(crate) fn read() -> Result<[u8; DIGEST_LEN], c_int> {
+    let tpm = Tpm::open().map_err(|_| -ENODEV)?;
+    tpm.nv_read(NV_INDEX).map_err(|_| -ENODEV)
 }
 
 /// The register as the TPM reports it, over the session init pinned.

@@ -652,7 +652,6 @@ fn run(args: &[&CStr]) -> c_int {
     if args.len() < 2 {
         return 2;
     }
-    let mut chain = [0u8; 32];
     match (args[1].to_bytes(), args.len()) {
         (b"writer-create", 2) => writer_create(),
         (b"writer-remove", 2) => {
@@ -682,16 +681,18 @@ fn run(args: &[&CStr]) -> c_int {
             Some(event) => extend(&event, None),
             None => 2,
         },
-        (b"read", _) => {
-            let ret = chain::read(&mut chain);
-            out(&format!("rc={ret}\n"));
-            if ret != 0 {
-                return 1;
+        (b"read", _) => match chain::read() {
+            Ok(chain) => {
+                out("rc=0\n");
+                out("value=");
+                puthex(&chain);
+                0
             }
-            out("value=");
-            puthex(&chain);
-            0
-        }
+            Err(ret) => {
+                out(&format!("rc={ret}\n"));
+                1
+            }
+        },
         (b"status", _) => status(),
         // A measurement into a PCR, as systemd's boot phases make them.
         (b"pcr-extend", 4) => {
