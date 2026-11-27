@@ -47,7 +47,6 @@ const FILES: [(&CStr, u64); 4] = [
 
 /// `struct image_download`: the file a fetch writes, why its last write
 /// was refused, and how much it may and did write.
-#[repr(C)]
 struct Download {
     fd: c_int,
     err: c_int,
