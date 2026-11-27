@@ -103,6 +103,20 @@ pub struct CertPubkey {
     pub(crate) y: [u8; 32],
 }
 
+impl CertPubkey {
+    #[cfg(shirudo_fuzz)]
+    const fn empty() -> Self {
+        Self {
+            rsa: false,
+            n: [0; 512],
+            n_len: 0,
+            e: 0,
+            x: [0; 32],
+            y: [0; 32],
+        }
+    }
+}
+
 const _: () = assert!(size_of::<CertPubkey>() == 600);
 const _: () = assert!(size_of::<Sha256Ctx>() == size_of::<*mut c_void>());
 

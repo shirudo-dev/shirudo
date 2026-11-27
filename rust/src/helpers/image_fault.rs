@@ -93,7 +93,7 @@ unsafe fn roots_update(attr: *mut u8, size: c_long) -> c_long {
             return real_bpf(BPF_MAP_UPDATE_ELEM, changed.as_mut_ptr(), size);
         }
         END_CALLS.fetch_add(1, Ordering::Relaxed);
-        let mut current: ExpectedRoot = core::mem::zeroed();
+        let mut current = ExpectedRoot::zeroed();
         let map = attr.cast::<u32>().read_unaligned();
         let key = attr.add(8).cast::<u64>().read_unaligned();
         let mut lookup = match Attr::new()
@@ -178,8 +178,7 @@ fn check_root_cleared() -> c_int {
     }
     // SAFETY: the descriptor just made, owned here.
     let task = unsafe { OwnedFd::from_raw_fd(task as c_int) };
-    // SAFETY: integers, for which zeros are a value.
-    let mut expected: ExpectedRoot = unsafe { core::mem::zeroed() };
+    let mut expected = ExpectedRoot::zeroed();
     let mut ret = lookup(&map, &task.as_raw_fd(), &mut expected)
         .err()
         .unwrap_or(0);
@@ -238,8 +237,7 @@ fn check_classification(device: &DmVerity) -> c_int {
                 break;
             }
         }
-        // SAFETY: integers and arrays, for which zeros are a value.
-        let mut entry: DeviceAuthority = unsafe { core::mem::zeroed() };
+        let mut entry = DeviceAuthority::zeroed();
         if let Err(e) = lookup(&map, &next, &mut entry) {
             ret = e;
             break;

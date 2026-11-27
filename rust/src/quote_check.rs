@@ -59,6 +59,18 @@ pub struct QuoteResult {
 const _: () = assert!(size_of::<QuoteResult>() == 576);
 
 impl QuoteResult {
+    #[cfg(shirudo_fuzz)]
+    const fn empty() -> Self {
+        Self {
+            verdict: 0,
+            ak_name: [0; NAME_LEN],
+            ak_public: [0; PUBLIC_MAX],
+            ak_public_len: 0,
+            reset_count: 0,
+            clock: 0,
+        }
+    }
+
     const fn malformed() -> Self {
         QuoteResult {
             verdict: QUOTE_MALFORMED,

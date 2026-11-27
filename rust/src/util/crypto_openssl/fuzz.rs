@@ -31,8 +31,7 @@ fuzz_target!(shirudo_fuzz_cms, shirudo_fuzz_cms_init, |data| {
         if verified == 0 && signed_by != 1 {
             std::process::abort();
         }
-        // SAFETY: an all-zero CertPubkey is a valid empty output value.
-        let mut public: CertPubkey = unsafe { core::mem::zeroed() };
+        let mut public = CertPubkey::empty();
         // SAFETY: cert and public remain live for the call.
         if unsafe { cert_pubkey(&cert, &mut public) } == 0 && public.n_len > public.n.len() {
             std::process::abort();

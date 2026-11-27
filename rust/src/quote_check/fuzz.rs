@@ -22,8 +22,7 @@ fn abort() -> ! {
 }
 
 fn result() -> QuoteResult {
-    // SAFETY: numbers and arrays, for which zeros are a value.
-    unsafe { core::mem::zeroed() }
+    QuoteResult::empty()
 }
 
 /// The row's four tab-separated fields, or None for another count.

@@ -71,8 +71,7 @@ fn check_mark(pin: &CStr, expected: bool) -> c_int {
         Ok(fd) => fd,
         Err(e) => return c_int::from(e != libc::EACCES || expected),
     };
-    // SAFETY: integers and padding, for which zeros are a value.
-    let mut authority: TaskAuthority = unsafe { core::mem::zeroed() };
+    let mut authority = TaskAuthority::zeroed();
     match lookup(&fd, &pidfd.as_raw_fd(), &mut authority) {
         Err(e) if e != libc::ENOENT => 1,
         _ => c_int::from((authority.trusted != 0) != expected),
@@ -83,8 +82,7 @@ fn check_mark(pin: &CStr, expected: bool) -> c_int {
 fn read_policy(pin: &CStr) -> Result<u64, c_int> {
     let pidfd = self_pidfd()?;
     let fd = pin_open(pin)?;
-    // SAFETY: integers, for which zeros are a value.
-    let mut policy: TaskPolicy = unsafe { core::mem::zeroed() };
+    let mut policy = TaskPolicy::zeroed();
     lookup(&fd, &pidfd.as_raw_fd(), &mut policy)?;
     Ok(policy.active)
 }
