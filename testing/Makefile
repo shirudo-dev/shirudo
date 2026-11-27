@@ -148,10 +148,14 @@ TEST_VM_BUNDLE_INPUTS := $(sort \
 	$(if $(strip $(TEST_VM_PACKAGE_CERT)),$(TEST_VM_PACKAGE_CERT)))
 
 # A bundle carries coverage/ when its target was built with COVERAGE=1,
-# and one built the other way is built again.
+# and one built the other way is built again, as is one whose signing
+# key TEST_VM_HOST_PRIVATE_DIR does not hold.
 COVERAGE ?= 0
 TEST_VM_BUNDLE_COVERAGE := $(if $(wildcard $(TEST_VM_BUNDLE_DIR)/coverage),1,0)
 TEST_VM_BUNDLE_REBUILD := $(if $(filter $(COVERAGE),$(TEST_VM_BUNDLE_COVERAGE)),,test-vm-bundle-rebuild)
+TEST_VM_BUNDLE_REBUILD += $(shell cmp -s \
+	"$(TEST_VM_HOST_PRIVATE_DIR)/operator-keys/keys/cert.der" \
+	"$(TEST_VM_BUNDLE_DIR)/fixtures/cert.der" || echo test-vm-bundle-rebuild)
 .PHONY: test-vm-bundle-rebuild
 test-vm-bundle-rebuild:
 
