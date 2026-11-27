@@ -125,15 +125,17 @@ If you can certify that, add::
 
     Signed-off-by: Random J Developer <random@developer.example.org>
 
-using a known identity. Anonymous or pseudonymous sign-offs are not
-accepted, and neither is an address nobody answers at: a GitHub noreply
-address, the address a coding agent writes with, or anything called
-``[bot]`` is rejected as the author, in a ``Signed-off-by:`` and in a
-``Co-developed-by:``. The sole exception is Dependabot's numbered
-GitHub noreply author identity (the numeric prefix may vary) and
-``dependabot[bot] <support@github.com>`` sign-off, which Dependabot
-uses on generated commits. This is an automation exception, not a human
-certification of the DCO.
+using a known identity: the name you are known by, a given name and a
+surname, as the author and in the sign-off alike. Anonymous or
+pseudonymous sign-offs are not accepted, so a handle, a given name
+alone or a name in lowercase is refused. Neither is an address nobody
+answers at: a GitHub noreply address, the address a coding agent writes
+with, or anything called ``[bot]`` is rejected as the author, in a
+``Signed-off-by:`` and in a ``Co-developed-by:``. The sole exception is
+Dependabot's numbered GitHub noreply author identity (the numeric
+prefix may vary) and ``dependabot[bot] <support@github.com>`` sign-off,
+which Dependabot uses on generated commits. This is an automation
+exception, not a human certification of the DCO.
 ``git commit -s`` and ``git revert -s`` add the line for you.
 
 A commit without a valid sign-off is not merged. A maintainer who
@@ -153,6 +155,14 @@ merge commits:
   contains ``noreply``, ``no-reply`` or ``[bot]``, in any case, except
   for Dependabot's numbered GitHub noreply author identity and
   ``dependabot[bot] <support@github.com>`` sign-off combination.
+- The author, every sign-off and every ``Co-developed-by:`` name a
+  person in full: two words or more, made of letters, with a hyphen, an
+  apostrophe or a period inside a word, and the first and the last word
+  capitalized. ``Random J. van der Developer`` passes; ``rjdev``,
+  ``Random``, ``random developer`` and ``Random Developer2`` do not. A
+  name without an ASCII letter, such as one written in Chinese, can be
+  one word: the check reads ASCII alone and takes every other character
+  for a letter.
 
 CI runs it on every pull request and every push to ``main``, in the
 ``DCO`` workflow.

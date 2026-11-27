@@ -8,7 +8,8 @@
 # Signed-off-by of its author, the Developer's Certificate of Origin, from
 # an identity a person answers at: a noreply address or a bot is no
 # identity, as author, signer or co-developer, except for Dependabot's
-# canonical author and sign-off identity. Merge commits are skipped.
+# canonical author and sign-off identity, and neither is a handle or a
+# given name alone. Merge commits are skipped.
 #
 #   .github/scripts/check-dco.sh [<rev-list arguments>]
 #
@@ -56,6 +57,28 @@ dependabot_signoff() {
 	[ "$(lower "$1")" = 'dependabot[bot] <support@github.com>' ]
 }
 
+# The bytes outside ASCII, which the check takes for letters: no locale
+# tells the letters of every script apart, so it reads ASCII alone.
+high=$(printf '\200-\377')
+full="(a given name and a surname, capitalized, in letters)"
+
+# A known identity names the person: two words or more, a given name
+# and a surname, made of letters, with a hyphen, an apostrophe or a
+# period inside. The first word and the last carry a capital, so a name
+# keeps its particles but not a handle in lowercase. A name in a script
+# without case, as Chinese is written, can be one word.
+full_name() {
+	printf '%s\n' "$1" | LC_ALL=C grep -Eq "^[A-Za-z .'$high-]+\$" ||
+		return 1
+	# shellcheck disable=SC2086 # one word per line, no glob left to expand
+	words=$(printf '%s\n' $1)
+	printf '%s\n' "$words" | LC_ALL=C grep -vq "[A-Za-z$high]" &&
+		return 1
+	printf '%s\n' "$1" | LC_ALL=C grep -q '[A-Za-z]' || return 0
+	[ "$(printf '%s\n' "$words" | LC_ALL=C grep -c .)" -ge 2 ] || return 1
+	! printf '%s\n' "$words" | sed -n '1p; $p' | LC_ALL=C grep -q '^[a-z][^A-Z]*$'
+}
+
 commits=$(git rev-list --no-merges "$@")
 
 for commit in $commits; do
@@ -69,6 +92,11 @@ for commit in $commits; do
 
 	if impersonal "$author" && ! dependabot_identity "$author"; then
 		report "$id: the author is a noreply or bot identity, not a person: $author"
+		bad=$((bad + 1))
+		continue
+	fi
+	if ! dependabot_identity "$author" && ! full_name "${author% <*}"; then
+		report "$id: the author is not named in full $full: $author"
 		bad=$((bad + 1))
 		continue
 	fi
@@ -127,6 +155,8 @@ for commit in $commits; do
 		elif impersonal "$value" &&
 		     { ! dependabot_identity "$author" || ! dependabot_signoff "$value"; }; then
 			problem="a noreply or bot identity cannot certify the DCO: $line"
+		elif ! dependabot_signoff "$value" && ! full_name "${value% <*}"; then
+			problem="a sign-off is not a full name $full: $line"
 		fi
 	done <<EOT
 $signoffs
@@ -135,8 +165,14 @@ EOT
 	# A co-developer is an author too.
 	if [ -z "$problem" ] && [ -n "$codevs" ]; then
 		while IFS= read -r line; do
-			if impersonal "${line#*:}"; then
+			value=$(printf '%s' "${line#*:}" |
+				sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+			if impersonal "$value"; then
 				problem="a noreply or bot identity cannot be a co-developer: $line"
+				break
+			fi
+			if ! full_name "${value% <*}"; then
+				problem="a co-developer is not named in full $full: $line"
 				break
 			fi
 		done <<EOT

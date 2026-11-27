@@ -3,8 +3,9 @@
 # Copyright (c) 2026 Authors of shirudo
 #
 # t0001 -- .github/scripts/check-dco.sh: the subject, body and sign-off every
-# commit needs, the forms it rejects, the author the sign-off must come
-# from and the merge commits it skips, on a throwaway repository.
+# commit needs, the forms it rejects, the full names it wants, the author
+# the sign-off must come from and the merge commits it skips, on a
+# throwaway repository.
 
 cd "$(dirname "$0")/.."
 . ./test-lib.sh
@@ -220,6 +221,107 @@ Co-developed-by: Some Agent <noreply@agent.example.org>
 Signed-off-by: Random J Developer <random@developer.example.org>" &&
 	! check &&
 	grep -q "cannot be a co-developer: Co-developed-by: Some Agent <noreply@agent.example.org>" "$W/err"
+'
+
+test_expect_success 'a handle is no name' '
+	commit "a: handle
+
+Why the change is made.
+
+Signed-off-by: rjdev <random@developer.example.org>" \
+		--author="rjdev <random@developer.example.org>" &&
+	! check &&
+	grep -q "the author is not named in full (a given name and a surname, capitalized, in letters): rjdev <random@developer.example.org>" "$W/err"
+'
+
+test_expect_success 'a given name alone is no full name' '
+	commit "a: given name
+
+Why the change is made.
+
+Signed-off-by: Random <random@developer.example.org>" \
+		--author="Random <random@developer.example.org>" &&
+	! check &&
+	grep -q "the author is not named in full" "$W/err"
+'
+
+test_expect_success 'a name in lowercase is a handle' '
+	commit "a: lowercase
+
+Why the change is made.
+
+Signed-off-by: random developer <random@developer.example.org>" \
+		--author="random developer <random@developer.example.org>" &&
+	! check &&
+	grep -q "the author is not named in full" "$W/err"
+'
+
+test_expect_success 'a name with a digit is a handle' '
+	commit "a: digit
+
+Why the change is made.
+
+Signed-off-by: Random Developer2 <random@developer.example.org>" \
+		--author="Random Developer2 <random@developer.example.org>" &&
+	! check &&
+	grep -q "the author is not named in full" "$W/err"
+'
+
+test_expect_success 'every sign-off names a person in full' '
+	commit "a: maintainer handle
+
+Why the change is made.
+
+Signed-off-by: Random J Developer <random@developer.example.org>
+Signed-off-by: maint <maintainer@example.org>" &&
+	! check &&
+	grep -q "a sign-off is not a full name (a given name and a surname, capitalized, in letters): Signed-off-by: maint <maintainer@example.org>" "$W/err"
+'
+
+test_expect_success 'a co-developer is named in full' '
+	commit "a: co-developer handle
+
+Why the change is made.
+
+Co-developed-by: other <other@example.org>
+Signed-off-by: Other Person <other@example.org>
+Signed-off-by: Random J Developer <random@developer.example.org>" &&
+	! check &&
+	grep -q "a co-developer is not named in full (a given name and a surname, capitalized, in letters): Co-developed-by: other <other@example.org>" "$W/err"
+'
+
+test_expect_success 'particles, hyphens, apostrophes and initials make a name' '
+	commit "a: particles
+
+Why the change is made.
+
+Co-developed-by: Jean-Random O'"'"'Other <other@example.org>
+Signed-off-by: Jean-Random O'"'"'Other <other@example.org>
+Signed-off-by: Random J. van der Developer <random@developer.example.org>" \
+		--author="Random J. van der Developer <random@developer.example.org>" &&
+	check
+'
+
+test_expect_success 'a name outside ASCII is a name' '
+	name=$(printf "Zo\303\253 \303\205ngstr\303\266m") &&
+	commit "a: accents
+
+Why the change is made.
+
+Signed-off-by: $name <random@developer.example.org>" \
+		--author="$name <random@developer.example.org>" &&
+	check
+'
+
+test_expect_success 'a name in a script without case can be one word' '
+	name=$(printf "\347\216\213\345\260\217\346\230\216") &&
+	commit "a: one word
+
+Why the change is made.
+
+Signed-off-by: $name <random@developer.example.org>" \
+		--author="$name <random@developer.example.org>" &&
+	check
 '
 
 test_expect_success 'an unknown range fails' '
