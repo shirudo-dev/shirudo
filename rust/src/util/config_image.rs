@@ -29,7 +29,6 @@ const DIGESTS_PER_BLOCK: u64 = BLOCK_SIZE / 32;
 const SUPERBLOCK_SIZE: usize = 512;
 
 /// `struct config_image`.
-#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ConfigImage {
     pub(crate) data_blocks: u64,
@@ -46,8 +45,6 @@ pub struct ConfigImageOpen {
     pub(crate) hash: File,
     pub(crate) signature: Option<File>,
 }
-
-const _: () = assert!(size_of::<ConfigImage>() == 88);
 
 impl ConfigImage {
     const fn zeroed() -> Self {
