@@ -189,8 +189,8 @@ dentry or a file. The hooks that decide a new entry receive the
 directory they change as a ``struct inode``; its dentry is only the new
 entry's ``d_parent``, a pointer the verifier does not trust. Two kernel
 project patches change that (:doc:`/internals/kernel-patches`):
-0003 adds ``inode_mkdir``, ``inode_link``, ``inode_copy_up`` and the ACL
-and inode flag hooks to the sleepable set, and 0004 lets a program pass
+0022 adds ``inode_mkdir``, ``inode_link``, ``inode_copy_up`` and the ACL
+and inode flag hooks to the sleepable set, and 0023 lets a program pass
 ``dentry->d_parent`` to the read kfuncs. Whether a hook can read the
 label it decides by, the directory's or for ``inode_copy_up`` the copied
 inode's, then comes out as follows:
@@ -209,20 +209,20 @@ inode's, then comes out as follows:
      - Never
    * - ``inode_copy_up``
      - No directory; the copied inode as a dentry
-     - With 0003
-     - With 0003
+     - With 0022
+     - With 0022
    * - ``inode_link``, ``inode_mkdir``
      - An inode, and the new entry as a dentry
-     - With 0003
-     - With 0003 and 0004
+     - With 0022
+     - With 0022 and 0023
    * - ``inode_create``, ``inode_mknod``, ``inode_symlink``
      - An inode, and the new entry as a dentry
      - Yes
-     - With 0004
+     - With 0023
    * - ``inode_rename``
      - Two inodes, and both entries as dentries
      - Yes
-     - With 0004
+     - With 0023
    * - ``file_open``
      - A file, when it opens the directory itself
      - Yes
