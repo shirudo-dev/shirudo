@@ -8,6 +8,8 @@ fn pcrs_are_a_list_up_to_23() {
     assert_eq!(parse_pcrs(b"0"), Ok(1));
     assert_eq!(parse_pcrs(b"0,9,23"), Ok(1 | 1 << 9 | 1 << 23));
     assert_eq!(parse_pcrs(b"9,9"), Ok(1 << 9));
+    assert_eq!(parse_pcrs(b"00000000000000000023,0"), Ok(1 << 23 | 1));
+    assert_eq!(parse_pcrs(b"00000000000000000024"), Err(-EINVAL));
     for bad in [
         &b""[..],
         b"24",
