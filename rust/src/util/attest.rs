@@ -2257,30 +2257,18 @@ fn random(buf: &mut [u8]) -> Result<(), c_int> {
 /// the seed into `seed`: RSA-OAEP of a random seed, or the ephemeral
 /// point of an ECDH whose secret the seed derives from.
 fn seal_seed(rsa: bool, public: &TpmPublic, seed: &mut Seed) -> Result<Vec<u8>, c_int> {
-    let mut secret = [0u8; 256];
-    let mut secret_len = 0usize;
-
     if rsa {
         random(&mut seed.seed)?;
-        // SAFETY: the key's modulus, the label with its NUL, the seed,
-        // and room for the secret and its length.
-        let ret = unsafe {
-            rsa_oaep_encrypt(
-                public.n.as_ptr(),
-                public.n_len,
-                public.rsa_exponent,
-                IDENTITY.as_ptr().cast(),
-                IDENTITY.to_bytes_with_nul().len(),
-                seed.seed.as_ptr(),
-                seed.seed.len(),
-                secret.as_mut_ptr(),
-                secret.len(),
-                &mut secret_len,
-            )
-        };
-        if ret != 0 {
-            return Err(-EIO);
-        }
+        let n = public.n.get(..public.n_len).ok_or(-EIO)?;
+        let mut secret = [0u8; 256];
+        let secret_len = rsa_oaep_encrypt(
+            n,
+            public.rsa_exponent,
+            IDENTITY.to_bytes_with_nul(),
+            &seed.seed,
+            &mut secret,
+        )
+        .map_err(|_| -EIO)?;
         return secret.get(..secret_len).map(<[u8]>::to_vec).ok_or(-EIO);
     }
     let (mut eph_x, mut eph_y) = ([0u8; 32], [0u8; 32]);

@@ -986,53 +986,23 @@ fn set_oaep_label(ctx: &mut PkeyCtx<Public>, label: &[u8]) -> Result<(), ErrorSt
 }
 
 /// RSA-OAEP with SHA-256, MGF1-SHA-256 and the label, to the modulus `n`
-/// with the public exponent `e`, 0 for 65537.
-///
-/// # Safety
-///
-/// `n`, `label` and `inp` hold their lengths, `out` has room for `cap`,
-/// and `out_len` points to a size.
-#[allow(clippy::too_many_arguments)]
-pub(crate) unsafe fn rsa_oaep_encrypt(
-    n: *const u8,
-    n_len: usize,
+/// with the public exponent `e`, 0 for 65537. Returns the ciphertext length.
+pub(crate) fn rsa_oaep_encrypt(
+    n: &[u8],
     e: u32,
-    label: *const c_void,
-    label_len: usize,
-    inp: *const u8,
-    in_len: usize,
-    out: *mut u8,
-    cap: usize,
-    out_len: *mut usize,
-) -> c_int {
-    if n_len > c_int::MAX as usize || label_len > c_int::MAX as usize {
-        return -EINVAL;
+    label: &[u8],
+    inp: &[u8],
+    out: &mut [u8],
+) -> Result<usize, c_int> {
+    if n.len() > c_int::MAX as usize || label.len() > c_int::MAX as usize {
+        return Err(-EINVAL);
     }
-    // SAFETY: the caller's modulus, label and input.
-    let (n, label, inp) = unsafe {
-        (
-            slice(n, n_len),
-            slice(label.cast::<u8>(), label_len),
-            slice(inp, in_len),
-        )
-    };
     let key = (|| {
         let e = BigNum::from_u32(if e != 0 { e } else { 65537 })?;
         PKey::from_rsa(Rsa::from_public_components(BigNum::from_slice(n)?, e)?)
-    })();
-    let Ok(key) = key else {
-        return -EINVAL;
-    };
-    // SAFETY: the caller's size, and its room of cap bytes.
-    let out = unsafe {
-        *out_len = cap;
-        if cap == 0 {
-            &mut []
-        } else {
-            core::slice::from_raw_parts_mut(out, cap)
-        }
-    };
-    let sealed = (|| {
+    })()
+    .map_err(|_| -EINVAL)?;
+    (|| {
         let mut ctx = PkeyCtx::new(&key)?;
 
         ctx.encrypt_init()?;
@@ -1045,15 +1015,8 @@ pub(crate) unsafe fn rsa_oaep_encrypt(
             set_oaep_label(&mut ctx, label)?;
         }
         ctx.encrypt(inp, Some(out))
-    })();
-    match sealed {
-        Ok(len) => {
-            // SAFETY: the caller's size.
-            unsafe { *out_len = len };
-            0
-        }
-        Err(_) => -EIO,
-    }
+    })()
+    .map_err(|_| -EIO)
 }
 
 /// `n` as the 32 bytes of a P-256 coordinate.
