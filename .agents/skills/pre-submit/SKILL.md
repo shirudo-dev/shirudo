@@ -1,6 +1,6 @@
 ---
 name: pre-submit
-description: Run the checks CI runs on a series of shirudo commits before handing it over, and the proofs CI runs only once a series is on main. Covers each commit built on its own, checkpatch, sign-offs, Coccinelle, sparse, SPDX and the documentation check, both compilers, the sanitizer and fuzz runs, the proofs that read the code the series changed, and the VM families the change reaches. Use before saying a change is ready, after rebasing or reordering a series, and to reproduce a CI failure.
+description: Runs the checks CI runs on a series of shirudo commits before handing it over, and the proofs CI runs only once a series is on main. Covers each commit built on its own, checkpatch, sign-offs, Coccinelle, sparse, SPDX and the documentation check, both compilers, the sanitizer and fuzz runs, the proofs that read the code the series changed, and the VM families the change reaches. Use before saying a change is ready, after rebasing or reordering a series, and to reproduce a CI failure.
 ---
 
 # Pre-submit checks
@@ -55,6 +55,9 @@ signs off.
 .github/scripts/check-sparse.sh
 .github/scripts/check-spdx.sh
 .github/scripts/check-unused.sh
+git diff --name-only --diff-filter=d $range -- '*.sh' |
+	xargs -r shellcheck -S error    # Lint's ShellCheck; also any extensionless script changed
+
 scan-build-23 --status-bugs --exclude vendor make ANALYZE=1  # from a clean tree
 make -C Documentation check         # DOCS_CONTAINER=0 without podman or docker
 make -B && make -B shirudo-build && make -B quote-check &&
@@ -91,7 +94,7 @@ so this run is the only one a series gets before it lands, and the only
 one at all of a proof `testing/proofs/cbmc/ci-skip.list` names, which CI
 leaves out. `CHANGED` takes what `git diff` takes and runs the CBMC
 proofs whose harness reads a file changed there, all of them after a
-change to `run.sh` or `proofs.list`. A proof that fails, or that passes
+change to `proof.h`, `run.sh` or `proofs.list`. A proof that fails, or that passes
 and no longer states what the changed code does, is brought back in
 step in the series, with its row in
 `Documentation/contribute/testing/proof-coverage.rst`; so is a Lean 4
@@ -113,8 +116,7 @@ git commit --fixup=<commit>
 GIT_SEQUENCE_EDITOR=: git rebase -q -i --autosquash <base>
 ```
 
-Then run the checks again on the commits that changed. A commit message
-follows `Documentation/contribute/code/contributing.rst`: a subject of
-`area: imperative summary` of at most 75 characters, a body that says
-why before what, and a `Fixes:` tag with the 12-character hash and the
-subject as `git log -1 --format=%s` prints it.
+Fold only a commit not on `origin/main` yet, after `git fetch origin`
+(`git merge-base --is-ancestor <commit> origin/main` exits 1); one
+already there gets the fix on top, with `Fixes:`. Then run the checks
+again on the commits that changed. Messages follow the `commits` skill.
