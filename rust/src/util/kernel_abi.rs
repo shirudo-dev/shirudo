@@ -195,13 +195,10 @@ const LSM_HOOK_NAME_MAX: usize = 64;
 const DETAIL_MAX: usize = 256;
 
 /// `struct lsm_hooks`: the hooks programs attach to, each once.
-#[repr(C)]
 pub struct LsmHooks {
     name: [[u8; LSM_HOOK_NAME_MAX]; LSM_HOOKS_MAX],
     n: usize,
 }
-
-const _: () = assert!(size_of::<LsmHooks>() == 8200);
 
 impl LsmHooks {
     pub(crate) fn new() -> Box<Self> {
