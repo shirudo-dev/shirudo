@@ -511,6 +511,24 @@ obs_socket_record(struct socket *sock, __u16 family, __u16 type,
 	entry->val.last_ns = now;
 }
 
+/*
+ * A dual-stack AF_INET6 socket reaches an IPv4 peer as ::ffff:a.b.c.d, but
+ * the packet hooks see that peer in its IPv4 header and the watch list is
+ * looked up by family. Key such an address as the IPv4 address it maps, so
+ * the socket and packet hooks share one key and the watch list matches it.
+ */
+static __always_inline void obs_key_unmap_v4(struct net_key *key)
+{
+	if (key->family != AF_INET6 || key->addr[0] || key->addr[1] ||
+	    key->addr[2] != bpf_htonl(0x0000ffff))
+		return;
+	key->family = AF_INET;
+	key->addr[0] = key->addr[3];
+	key->addr[1] = 0;
+	key->addr[2] = 0;
+	key->addr[3] = 0;
+}
+
 static __always_inline bool obs_peer_from_sockaddr(struct sockaddr *addr,
 						   int addrlen,
 						   struct net_key *key)
@@ -542,6 +560,7 @@ static __always_inline bool obs_peer_from_sockaddr(struct sockaddr *addr,
 		key->addr[1] = sin6.sin6_addr[1];
 		key->addr[2] = sin6.sin6_addr[2];
 		key->addr[3] = sin6.sin6_addr[3];
+		obs_key_unmap_v4(key);
 		return true;
 	}
 	return false;
@@ -567,6 +586,7 @@ static __always_inline bool obs_peer_from_sock(struct sock *sk,
 		if (bpf_core_read(key->addr, sizeof(key->addr),
 				  &common->skc_v6_daddr))
 			return false;
+		obs_key_unmap_v4(key);
 		return dport != 0;
 	}
 	return false;
@@ -590,6 +610,7 @@ static __always_inline bool obs_local_from_sock(struct sock *sk,
 		if (bpf_core_read(key->addr, sizeof(key->addr),
 				  &common->skc_v6_rcv_saddr))
 			return false;
+		obs_key_unmap_v4(key);
 		return true;
 	}
 	return false;

@@ -118,7 +118,10 @@ offload splits them on the wire.
 `watch.list` holds IPv4 and IPv6 addresses or prefixes; attempts to
 reach them are recorded in `watch` in addition to `net`. The shipped
 list names the cloud instance metadata addresses and the public
-DNS-over-HTTPS resolvers. `file-watch.list` holds base names,
+DNS-over-HTTPS resolvers. A dual-stack IPv6 socket, as a JVM opens by
+default, reaches an IPv4 peer as `::ffff:a.b.c.d`; `net` and `watch`
+record that peer under its IPv4 address, as the packet hooks see it, so
+an IPv4 entry matches it. `file-watch.list` holds base names,
 `parent/name` pairs or `parent/*` directory rules, optionally with a
 trailing `w` for opens for writing only. Both are compiled into the
 signed object: edit the list, run `make lists` in this directory and

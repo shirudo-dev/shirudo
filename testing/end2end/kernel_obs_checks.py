@@ -127,6 +127,11 @@ def t9101_check_watch(argv):
     assert any(r["address"] == "203.0.113.10" and r["proto"] == "tcp" and
                r["port"] == 80 and int(r["attempts"]) >= 1
                for r in tables["watch"]), tables["watch"]
+    assert any(r["address"] == "203.0.113.10" and r["proto"] == "tcp" and
+               r["port"] == 81 and int(r["attempts"]) >= 1
+               for r in tables["watch"]), tables["watch"]
+    assert not any(r["address"].startswith("0000:0000:0000:0000:0000:ffff:")
+                   for r in tables["net"]), tables["net"]
     assert any(r["address"] == "2001:0db8:0000:0000:0000:0000:0000:0010" and
                r["proto"] == "udp" for r in tables["watch"]), tables["watch"]
     assert any(r["address"] == "203.0.113.10" and
@@ -135,7 +140,7 @@ def t9101_check_watch(argv):
     assert metric["name"] == "kernel_obs.watch_attempts", metric
     values = {point["attributes"][0]["value"]["stringValue"]: int(point["asInt"])
               for point in metric["sum"]["dataPoints"]}
-    assert values["matched"] >= 2, values
+    assert values["matched"] >= 3, values
     assert values["checked"] >= values["matched"], values
 
 
