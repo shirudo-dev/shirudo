@@ -58,6 +58,15 @@ int attest_evidence_config(const __u8 *nonce, size_t nonce_len,
 			   char **out, size_t *len, size_t *cap);
 
 /*
+ * Whether a TPM2_NV_Certify of the config's NvPCR names the collected
+ * record: its reset count and its value. A suspend and resume raises the
+ * restart count without resetting the TPM and keeps the index, so the
+ * restart count does not say which boot the record measured.
+ */
+bool attest_config_nvpcr_matches(const struct tpm_attest *certified,
+				 __u32 reset_count, const __u8 value[32]);
+
+/*
  * Operator side. The credential the target has to recover is handed
  * to the caller and kept nowhere else; ek_ca is a PEM bundle or NULL.
  * -EKEYREJECTED when a check failed and no challenge was made.

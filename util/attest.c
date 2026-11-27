@@ -216,6 +216,20 @@ static void emit_certification(struct json_emit *e,
 	emit_hex(e, "after_signature", after->signature, after->signature_len);
 }
 
+/*
+ * Whether a TPM2_NV_Certify of the config's NvPCR names the collected
+ * record. A suspend and resume raises restart_count without resetting the
+ * TPM, and the index keeps its value across it, so the reset count and
+ * the measured value alone identify the boot the record belongs to.
+ */
+bool attest_config_nvpcr_matches(const struct tpm_attest *certified,
+				 __u32 reset_count, const __u8 value[32])
+{
+	return certified->reset_count == reset_count &&
+	       certified->offset == 0 && certified->nv_len == 32 &&
+	       !memcmp(certified->nv_data, value, 32);
+}
+
 int attest_evidence_config(const __u8 *nonce, size_t nonce_len,
 			   __u32 pcr_mask,
 			   const struct attest_challenge *c,
@@ -291,10 +305,8 @@ int attest_evidence_config(const __u8 *nonce, size_t nonce_len,
 			goto out;
 		if (tpm_attest_parse(config_certify.attest,
 				     config_certify.attest_len, &certified) ||
-		    certified.reset_count != config.reset_count ||
-		    certified.restart_count != config.restart_count ||
-		    certified.offset != 0 || certified.nv_len != 32 ||
-		    memcmp(certified.nv_data, config.value, 32)) {
+		    !attest_config_nvpcr_matches(&certified, config.reset_count,
+						 config.value)) {
 			ret = -EUCLEAN;
 			goto out;
 		}

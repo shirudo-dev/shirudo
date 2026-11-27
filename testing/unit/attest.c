@@ -154,12 +154,41 @@ static void record_without_digest_is_refused(void)
 		  -EINVAL);
 }
 
+static void config_nvpcr_names_a_record_of_its_reset(void)
+{
+	static __u8 value[32] = { 0x41 };
+	static const __u8 other[32] = { 0x42 };
+	struct tpm_attest certified = {
+		.type = TPM_ST_ATTEST_NV,
+		.reset_count = 3,
+		.restart_count = 7,
+		.offset = 0,
+		.nv_len = sizeof(value),
+		.nv_data = value,
+	};
+
+	/* A suspend and resume raises restart_count and keeps the index. */
+	certified.restart_count = 8;
+	EXPECT_TRUE(attest_config_nvpcr_matches(&certified, 3, value));
+	certified.reset_count = 4;
+	EXPECT_FALSE(attest_config_nvpcr_matches(&certified, 3, value));
+	certified.reset_count = 3;
+	certified.offset = 8;
+	EXPECT_FALSE(attest_config_nvpcr_matches(&certified, 3, value));
+	certified.offset = 0;
+	certified.nv_len = 31;
+	EXPECT_FALSE(attest_config_nvpcr_matches(&certified, 3, value));
+	certified.nv_len = sizeof(value);
+	EXPECT_FALSE(attest_config_nvpcr_matches(&certified, 3, other));
+}
+
 static const struct unit_case cases[] = {
 	UNIT_CASE(pcrs_are_a_list_up_to_23),
 	UNIT_CASE(pcr_value_is_a_pcr_and_an_equals),
 	UNIT_CASE(name_digest_is_a_name_and_64_digits),
 	UNIT_CASE(report_ends_its_last_line_at_any_size),
 	UNIT_CASE(record_without_digest_is_refused),
+	UNIT_CASE(config_nvpcr_names_a_record_of_its_reset),
 	{}
 };
 
