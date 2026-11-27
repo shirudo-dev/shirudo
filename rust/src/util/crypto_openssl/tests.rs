@@ -85,6 +85,42 @@ fn der_bio_reads_one_certificate_and_rejects_bad_input() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "uses OpenSSL to generate and decrypt an RSA key")]
+fn oaep_encryption_uses_the_supplied_label() {
+    let rsa = Rsa::generate(2048).expect("RSA key");
+    let n = rsa.n().to_vec();
+    let key = PKey::from_rsa(rsa).expect("private key");
+    let mut encrypted = [0u8; 256];
+    let mut plain = [0u8; 256];
+
+    let len =
+        rsa_oaep_encrypt(&n, 0, b"shirudo\0", b"seed", &mut encrypted).expect("encrypt with label");
+    assert_eq!(len, encrypted.len());
+    let mut decrypt = PkeyCtx::new(&key).expect("decrypt context");
+    decrypt.decrypt_init().expect("decrypt init");
+    decrypt.set_rsa_padding(Padding::PKCS1_OAEP).expect("OAEP");
+    decrypt.set_rsa_oaep_md(Md::sha256()).expect("OAEP digest");
+    decrypt.set_rsa_mgf1_md(Md::sha256()).expect("MGF1 digest");
+    assert!(
+        decrypt
+            .decrypt(&encrypted[..len], Some(&mut plain))
+            .is_err()
+    );
+    clear_errors();
+
+    let len = rsa_oaep_encrypt(&n, 0, b"", b"seed", &mut encrypted).expect("encrypt without label");
+    let mut decrypt = PkeyCtx::new(&key).expect("decrypt context");
+    decrypt.decrypt_init().expect("decrypt init");
+    decrypt.set_rsa_padding(Padding::PKCS1_OAEP).expect("OAEP");
+    decrypt.set_rsa_oaep_md(Md::sha256()).expect("OAEP digest");
+    decrypt.set_rsa_mgf1_md(Md::sha256()).expect("MGF1 digest");
+    let written = decrypt
+        .decrypt(&encrypted[..len], Some(&mut plain))
+        .expect("decrypt without label");
+    assert_eq!(&plain[..written], b"seed");
+}
+
+#[test]
 fn base64_decode_keeps_libcrypto_input_rules() {
     let mut out = [0u8; 6];
 
