@@ -12,7 +12,6 @@ on:
       - Build packages
       - CI suite
       - CodeQL
-      - Coverage
       - Coverity
       - DCO
       - Documentation

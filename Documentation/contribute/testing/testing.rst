@@ -69,8 +69,8 @@ pull request and on every push to ``main``. In the merge queue their jobs
 pass without running. The riscv64 build runs on pushes to ``main`` alone.
 
 On pull requests and pushes to ``main``, Lint runs the full-tree Coccinelle
-and unused-function checks. The CI suite, coverage, and sanitizer jobs still
-run the self-tests for both scripts. Local, manually dispatched, and sanitizer
+and unused-function checks. The CI suite and sanitizer jobs still run the
+self-tests for both scripts. Local, manually dispatched, and sanitizer
 tag runs also scan the full tree as part of ``ci-checks``.
 
 The ``CI suite`` workflow uses the x86-64 CI kernel package.
@@ -124,17 +124,9 @@ and waits until the displayed retry time before sending more requests.
 Coverage
 --------
 
-The ``Coverage`` workflow, :src:`.github/workflows/coverage.yml`, runs after
-a push to main, never on a pull request: the ``CI suite`` tests the binaries
-as they ship, and no pull request waits on a coverage figure. It builds the
-userspace C code with coverage instrumentation, the host's binaries and the
-target the test VMs boot, and runs unit tests, four functional shards and
-end-to-end tests in parallel. It merges the six tracefiles and sends one
-LCOV report to Coveralls. A test failure still allows the report to be
-sent if every job produced a tracefile.
-
-Start the workflow by hand on a branch for the figure of a change before it
-lands, or make the report on a host with ``lcov``, from a clean checkout:
+CI makes no coverage report: the ``CI suite`` tests the binaries as they
+ship, without instrumentation. Make the report on a host with ``lcov``,
+from a clean checkout:
 
 .. code-block:: console
 
