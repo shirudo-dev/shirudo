@@ -14,7 +14,7 @@ use std::os::fd::{AsFd, BorrowedFd, IntoRawFd};
 use crate::errno::{EINVAL, EIO, ENOENT, EPERM};
 use crate::sys::libc::{O_RDONLY, close, env, errno, explicit_bzero, scrub};
 use crate::text::{dns_name_valid, parse_u64, strscpy, trim_blanks};
-use crate::util::hex::hex_decode_max;
+use crate::util::hex::decode_max;
 use crate::util::io::{check_secret, check_trusted, open_trusted};
 use crate::util::json::MAX_BYTES;
 
@@ -170,19 +170,10 @@ fn set_owner_auth(cfg: &mut Config, val: &CStr) {
 
     if let Some(hex) = bytes.strip_prefix(b"hex:") {
         let mut auth = [0u8; OWNER_AUTH_MAX];
-        let mut n = 0;
-        // SAFETY: a C string after its prefix, and room for the bytes.
-        let ret = unsafe {
-            hex_decode_max(
-                val.as_ptr().add(bytes.len() - hex.len()),
-                auth.as_mut_ptr(),
-                auth.len(),
-                &mut n,
-            )
-        };
+        let decoded = decode_max(hex, &mut auth);
 
         // An ignored value leaves the one set before intact.
-        if ret == 0 {
+        if let Ok(n) = decoded {
             cfg.tpm_owner_auth[..n].copy_from_slice(&auth[..n]);
             cfg.tpm_owner_auth_len = n;
         } else {

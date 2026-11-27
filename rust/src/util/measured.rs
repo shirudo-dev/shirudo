@@ -13,7 +13,7 @@ use crate::sys::libc::{PATH_MAX, getxattr};
 use crate::text::{at, cstr, strscpy, strsprintf};
 use crate::util::chain::MeasuredUpatch;
 use crate::util::eventlog::{self, UPATCH_INIT, UPATCH_UNLOAD};
-use crate::util::hex::{self, hex_encode};
+use crate::util::hex;
 use crate::util::seal;
 use crate::util::upatch::{NAME_MAX, PAYLOAD_HASH_LEN, TYPE_BPF, TYPE_JAVA, Upatch, member_valid};
 
@@ -230,14 +230,7 @@ impl MeasuredSet {
                 )
             };
             if got == payload.len() as isize {
-                // SAFETY: the digest and room for its hex.
-                unsafe {
-                    hex_encode(
-                        payload.as_ptr(),
-                        payload.len(),
-                        payload_hex.as_mut_ptr().cast(),
-                    )
-                };
+                let _ = strscpy(&mut payload_hex, &hex::encode(&payload));
             }
             if self.holds(cstr(&name), cstr(&payload_hex)) {
                 continue;

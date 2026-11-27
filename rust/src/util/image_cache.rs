@@ -23,11 +23,12 @@ use crate::sys::libc::{
     O_WRONLY, PATH_MAX, S_IFMT, S_IFREG, STATX_BASIC_STATS, Statx, close, errno, fsetxattr, fsync,
     link, mkdtemp, open, read, rmdir, statx, unlink,
 };
+use crate::text::strscpy;
 use crate::util::config_image::{ConfigImageOpen, MAX_BYTES, SIG_MAX};
 use crate::util::config_update::ConfigUpdateTarget;
 use crate::util::curl::Easy;
 use crate::util::dm_verity::{self, DmVerity};
-use crate::util::hex::hex_encode;
+use crate::util::hex::encode;
 use crate::util::io::write_complete;
 use crate::util::seal;
 pub(crate) use crate::util::seal::{LABEL as SEAL_LABEL, XATTR as XATTR_SEAL};
@@ -371,7 +372,7 @@ unsafe fn fetch(
             }
             if ret == 0 {
                 target.root_hash = opened.image.root_hash;
-                hex_encode(target.root_hash.as_ptr(), 32, hex.as_mut_ptr().cast());
+                let _ = strscpy(&mut hex, &encode(&target.root_hash));
                 if crate::text::csprintf!(
                     target.prefix.as_mut_ptr().cast(),
                     target.prefix.len(),

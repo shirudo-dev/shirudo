@@ -11,7 +11,7 @@ use super::config_measure::pcr_valid;
 use crate::errno::{E2BIG, EEXIST, EINVAL, EIO, ENAMETOOLONG, EPERM};
 use crate::sys::libc::{F_DUPFD_CLOEXEC, PATH_MAX, errno, fcntl};
 use crate::text::{contains, cstr, parse_u64, strscpy, trim_blanks};
-use crate::util::hex::hex_decode;
+use crate::util::hex::decode;
 use crate::util::keys::KEYS_MAX;
 use std::ffi::OsStr;
 use std::fs::File;
@@ -80,8 +80,7 @@ fn apply(boot: &mut ImageBootstrap, key: &[u8], value: &CStr, initial: bool) -> 
             if !initial || boot.have_root {
                 return -EINVAL;
             }
-            // SAFETY: a C string, and the room of the root hash.
-            if unsafe { hex_decode(value.as_ptr(), boot.runtime_root.as_mut_ptr(), 32) } != 0 {
+            if decode(value.to_bytes(), &mut boot.runtime_root).is_err() {
                 return -EINVAL;
             }
             boot.have_root = true;

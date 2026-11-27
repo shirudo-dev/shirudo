@@ -68,102 +68,6 @@ pub(crate) fn decode_sha256_digest(digest: &[u8]) -> Result<[u8; 32], c_int> {
 #[cfg(test)]
 mod tests;
 
-mod capi {
-    use core::ffi::{CStr, c_char, c_int};
-
-    use crate::errno::EINVAL;
-
-    use crate::sys::libc::{strlen, strnlen};
-
-    /// # Safety
-    ///
-    /// `inp` holds `n` bytes, and `out` room for `2 * n + 1`.
-    pub unsafe extern "C" fn hex_encode(inp: *const u8, n: usize, out: *mut c_char) {
-        // SAFETY: the caller's bytes and room.
-        let (inp, out) = unsafe {
-            (
-                crate::ffi::slice(inp, n),
-                core::slice::from_raw_parts_mut(out.cast::<u8>(), 2 * n + 1),
-            )
-        };
-        let hex = super::encode(inp);
-        out[..hex.len()].copy_from_slice(&hex);
-        out[hex.len()] = 0;
-    }
-
-    /// # Safety
-    ///
-    /// `hex` is a C string, and `out` room for `n` bytes.
-    pub unsafe extern "C" fn hex_decode(hex: *const c_char, out: *mut u8, n: usize) -> c_int {
-        // SAFETY: the caller's C string.
-        let len = unsafe { strlen(hex) };
-        if Some(len) != n.checked_mul(2) {
-            return -EINVAL;
-        }
-        // SAFETY: the string's digits, and the caller's room.
-        let (hex, out) = unsafe {
-            (
-                crate::ffi::slice(hex.cast::<u8>(), len),
-                core::slice::from_raw_parts_mut(out, n),
-            )
-        };
-        super::decode(hex, out).map_or_else(|e| e, |()| 0)
-    }
-
-    /// # Safety
-    ///
-    /// `hex` is a C string or holds `2 * cap + 1` bytes, `out` is room for
-    /// `cap` bytes and `len` for their count.
-    pub unsafe extern "C" fn hex_decode_max(
-        hex: *const c_char,
-        out: *mut u8,
-        cap: usize,
-        len: *mut usize,
-    ) -> c_int {
-        // SAFETY: the caller's string, read no further than one digit
-        // past the most it may hold, and the caller's room.
-        let (digits, room) = unsafe {
-            let n = strnlen(hex, cap.saturating_mul(2).saturating_add(1));
-
-            (
-                crate::ffi::slice(hex.cast::<u8>(), n),
-                crate::ffi::bytes_mut(out, cap),
-            )
-        };
-        match super::decode_max(digits, room) {
-            Ok(n) => {
-                // SAFETY: the caller's room for the count.
-                unsafe { *len = n };
-                0
-            }
-            Err(e) => e,
-        }
-    }
-
-    /// The 32 bytes of a `sha256:<64 hex digits>` digest.
-    ///
-    /// # Safety
-    ///
-    /// `digest` is NULL or a C string, and `out` room for 32 bytes.
-    #[allow(dead_code)] // Removed after the remaining callers and tests use slices.
-    pub unsafe extern "C" fn sha256_digest_decode(digest: *const c_char, out: *mut u8) -> c_int {
-        if digest.is_null() {
-            return -EINVAL;
-        }
-        // SAFETY: the caller's C string and room.
-        let (digest, out) = unsafe {
-            (
-                CStr::from_ptr(digest).to_bytes(),
-                core::slice::from_raw_parts_mut(out, 32),
-            )
-        };
-        match digest.strip_prefix(b"sha256:") {
-            Some(hex) => super::decode(hex, out).map_or_else(|e| e, |()| 0),
-            None => -EINVAL,
-        }
-    }
-}
-
 /// `SHA256_DIGEST_STR_SIZE`: an OCI digest and its terminator.
 pub(crate) const SHA256_DIGEST_STR_SIZE: usize = 72;
 
@@ -176,6 +80,3 @@ pub(crate) fn sha256_digest_encode(d: &[u8; 32]) -> [u8; SHA256_DIGEST_STR_SIZE]
     out[7..71].copy_from_slice(&encode(d));
     out
 }
-
-#[allow(unused_imports)] // The digest shim remains for the next test commit.
-pub(crate) use capi::{hex_decode, hex_decode_max, hex_encode, sha256_digest_decode};

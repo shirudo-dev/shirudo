@@ -14,14 +14,11 @@ use crate::errno::{EINVAL, EKEYREJECTED};
 use crate::text::cstr;
 use crate::util::bpm_oci::{MAX_DIGEST, MAX_NAME, copy_string, package_name_ok, version_ok};
 use crate::util::crypto_openssl::{pubkey_digest, x509_from_der_bio};
-use crate::util::hex::hex_encode;
+use crate::util::hex::encode;
 use crate::util::json::{JsonField, parse_schema};
 
 /// The most a package's build environment or certificate may hold.
 const MEMBER_MAX: usize = 4 * 1024 * 1024;
-
-/// EVP_MAX_MD_SIZE hex digits and a NUL.
-const HEX_SIZE: usize = 64 * 2 + 1;
 
 /// What build-environment.json says of the package.
 struct Parsed {
@@ -97,13 +94,11 @@ fn identify(archive: &CStr, environment: &[u8], info: &mut PackageInfo) -> c_int
 /// The signer `cert` names, checked against the one the build
 /// environment records, and the identity into `info`.
 fn signed_by(cert: Option<&X509Ref>, parsed: &Parsed, info: &mut PackageInfo) -> c_int {
-    let mut hex = [0u8; HEX_SIZE];
     let Some(Ok(digest)) = cert.map(pubkey_digest) else {
         return -EINVAL;
     };
-    // SAFETY: the digest, and room for its hex and a NUL.
-    unsafe { hex_encode(digest.as_ptr(), digest.len(), hex.as_mut_ptr().cast()) };
-    let hex = cstr(&hex);
+    let hex = encode(&digest);
+    let hex = hex.as_slice();
     if parsed.signer[0] != 0 && !cstr(&parsed.signer).eq_ignore_ascii_case(hex) {
         crate::log::err(
             &[

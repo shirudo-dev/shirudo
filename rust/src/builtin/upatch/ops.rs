@@ -38,7 +38,7 @@ use crate::util::config::{self, Scrubbed};
 use crate::util::crypto_openssl::{Cert, cms_check_signers, cms_signed_by};
 use crate::util::eventlog;
 use crate::util::help::{Help, HelpSection};
-use crate::util::hex::hex_decode;
+use crate::util::hex::decode;
 use crate::util::identity;
 use crate::util::io::{open_beneath_same_mount, read_fd};
 use crate::util::java_agent;
@@ -214,8 +214,7 @@ fn parse<'a>(args: &'a [&'a CStr], unload: bool) -> Result<OpArgs<'a>, c_int> {
 /// The register value a caller expects, as hex_decode() reads it.
 fn decode_chain(hex: &CStr) -> Option<[u8; DIGEST_LEN]> {
     let mut want = [0u8; DIGEST_LEN];
-    // SAFETY: a C string and room for the digest.
-    (unsafe { hex_decode(hex.as_ptr(), want.as_mut_ptr(), DIGEST_LEN) } == 0).then_some(want)
+    decode(hex.to_bytes(), &mut want).ok().map(|()| want)
 }
 
 /// Keep a clipped report message visibly clipped, as the C report did.

@@ -25,7 +25,7 @@ use crate::sys::libc::{
 };
 use crate::text::{cstr, strscpy};
 use crate::util::config_image::{BLOCK_SIZE, ConfigImage, ConfigImageOpen, SIG_MAX, check_files};
-use crate::util::hex::hex_encode;
+use crate::util::hex::encode;
 use crate::util::image_guards::{ConfigRootGuard, config_root_begin, config_root_end};
 use crate::util::keyring;
 
@@ -555,11 +555,8 @@ fn check_table(buf: &mut DmBuffer, image: &ConfigImage, device: &mut DmVerity) -
             return -EKEYREJECTED;
         }
     }
-    // SAFETY: the digests, and rooms for their hex and a NUL.
-    unsafe {
-        hex_encode(image.root_hash.as_ptr(), 32, root.as_mut_ptr().cast());
-        hex_encode(image.salt.as_ptr(), 32, salt.as_mut_ptr().cast());
-    }
+    let _ = strscpy(&mut root, &encode(&image.root_hash));
+    let _ = strscpy(&mut salt, &encode(&image.salt));
     if tokens[7] != b"sha256" || tokens[8] != cstr(&root) || tokens[9] != cstr(&salt) {
         return -EKEYREJECTED;
     }
@@ -728,8 +725,7 @@ fn signature_key(file: &File, description: &mut [u8; 64]) -> i32 {
         }
         done += n as usize;
     }
-    // SAFETY: the bytes, and room for their hex and a NUL.
-    unsafe { hex_encode(random.as_ptr(), random.len(), suffix.as_mut_ptr().cast()) };
+    let _ = strscpy(&mut suffix, &encode(&random));
     // SAFETY: the description's room, and the C's format with its
     // argument.
     if unsafe {
@@ -831,11 +827,8 @@ pub(crate) fn create(image: &ConfigImageOpen, name: &CStr) -> Result<DmVerity, c
             ret = -errno();
             break 'out;
         }
-        // SAFETY: the digests, and rooms for their hex and a NUL.
-        unsafe {
-            hex_encode(image.image.root_hash.as_ptr(), 32, root.as_mut_ptr().cast());
-            hex_encode(image.image.salt.as_ptr(), 32, salt.as_mut_ptr().cast());
-        }
+        let _ = strscpy(&mut root, &encode(&image.image.root_hash));
+        let _ = strscpy(&mut salt, &encode(&image.image.salt));
         // SAFETY: the parameters' room, and the C's format with its
         // arguments.
         let mut n = unsafe {

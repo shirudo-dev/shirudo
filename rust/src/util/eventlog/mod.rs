@@ -29,7 +29,7 @@ use crate::sys::libc::{
 };
 use crate::text::cstr;
 use crate::util::crypto_openssl::sha256_into;
-use crate::util::hex::hex_encode;
+use crate::util::hex::encode;
 use crate::util::identity;
 use crate::util::image_config;
 use crate::util::io::lock_exclusive;
@@ -487,7 +487,7 @@ pub(crate) fn read_boot_id(out: &mut [u8]) {
 pub(crate) fn record_open(e: &mut JsonEmit, ty: &[u8], digest: &[u8; 32]) {
     let mut ts = [0u8; 32];
     let mut boot_id = [0u8; 64];
-    let mut digest_hex = [0u8; 65];
+    let digest_hex = encode(digest);
     let mut nv_index = *b"0x00000000";
 
     timestamp(&mut ts);
@@ -495,14 +495,6 @@ pub(crate) fn record_open(e: &mut JsonEmit, ty: &[u8], digest: &[u8; 32]) {
     for (i, d) in nv_index[2..].iter_mut().enumerate() {
         *d = b"0123456789ABCDEF"[((NV_INDEX >> (28 - 4 * i)) & 0xf) as usize];
     }
-    // SAFETY: the digest, and room for its hex and a NUL.
-    unsafe {
-        hex_encode(
-            digest.as_ptr(),
-            digest.len(),
-            digest_hex.as_mut_ptr().cast(),
-        )
-    };
     e.obj_open();
     e.kv_int(b"schema", 1);
     e.kv_string(b"ts", cstr(&ts));

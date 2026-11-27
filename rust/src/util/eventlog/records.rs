@@ -10,7 +10,7 @@ use core::ffi::{CStr, c_int};
 use super::{sha256_into, walk_boot, walk_log};
 use crate::errno::{EINVAL, ENOENT};
 use crate::text::cstr;
-use crate::util::hex::{self, hex_decode};
+use crate::util::hex;
 use crate::util::json::{JsonField, parse_schema};
 use crate::util::upatch::{NAME_MAX, PAYLOAD_HASH_LEN, TYPE_BPF, TYPE_JAVA, name_valid};
 
@@ -122,11 +122,9 @@ impl EventlogInit {
     }
 }
 
-/// `hex` decoded into `out`, as hex_decode() takes it: 0 or -EINVAL.
+/// `hex` decoded into `out`: 0 or -EINVAL.
 fn decode(hex: &[u8], out: &mut [u8]) -> c_int {
-    // SAFETY: hex ends in a NUL the parser wrote, and out has room for
-    // out.len() bytes.
-    unsafe { hex_decode(hex.as_ptr().cast(), out.as_mut_ptr(), out.len()) }
+    hex::decode(cstr(hex), out).map_or_else(|e| e, |()| 0)
 }
 
 /// The register this boot's records replay to: each digest folded in
