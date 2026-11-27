@@ -120,7 +120,8 @@ impl Drop for Ctx {
             .map(|i| self.map_fd(i))
             .chain((0..self.nr_progs).map(|i| self.prog_fd(i)));
         for fd in fds.filter(|&fd| fd > 0) {
-            // SAFETY: the context owns each descriptor the loader returned.
+            // SAFETY: the context owns loader results and the duplicates transferred
+            // after success. Failure paths clear duplicate slots before their owners drop.
             let _ = unsafe { OwnedFd::from_raw_fd(fd) };
         }
     }
@@ -140,6 +141,34 @@ fn show_log(what: &str, vlog: &[u8]) {
 
 /// The step of a run that failed, and the negative errno.
 pub(crate) type Failed = (&'static str, c_int);
+
+/// Duplicate each reused map before passing it to the loader. On failure,
+/// clear the context first so its drop cannot close a duplicate twice.
+fn duplicate_shared_maps(
+    cx: &mut Ctx,
+    maps: impl Iterator<Item = usize>,
+    shared: impl Fn(usize) -> Option<c_int>,
+) -> Result<Vec<OwnedFd>, Failed> {
+    let mut dups = Vec::new();
+    for i in maps {
+        let Some(fd) = shared(i) else {
+            cx.forget();
+            return Err(("shared map", -ENOENT));
+        };
+        // SAFETY: the caller's descriptor is valid for the duration of the call.
+        let dup = unsafe { fcntl(fd, F_DUPFD_CLOEXEC, 0) };
+        if dup < 0 {
+            let err = -errno();
+            cx.forget();
+            return Err(("shared map", err));
+        }
+        // SAFETY: fcntl made a new descriptor, owned until the loader succeeds.
+        let dup = unsafe { OwnedFd::from_raw_fd(dup) };
+        cx.set_map_fd(i as u32, dup.as_raw_fd());
+        dups.push(dup);
+    }
+    Ok(dups)
+}
 
 /// Runs the loader of `skel`, unsigned, giving it for each map it
 /// reuses a duplicate of the descriptor `shared` names for it: the
@@ -196,21 +225,11 @@ pub(crate) fn run(
     vlog[0] = 0;
     let (nr_maps, nr_progs) = (skel.maps.len() as u32, skel.progs.len() as u32);
     let mut cx = Ctx::new(nr_maps, nr_progs, &mut vlog).ok_or(("loader context", -E2BIG))?;
-    let mut dups = Vec::new();
-    for i in (0..skel.maps.len()).filter(|&i| skel.reuses(i)) {
-        let fd = shared(i).ok_or(("shared map", -ENOENT))?;
-        // SAFETY: the caller's descriptor, duplicated for the context.
-        let dup = unsafe { fcntl(fd, F_DUPFD_CLOEXEC, 0) };
-        if dup < 0 {
-            drop(dups);
-            cx.forget();
-            return Err(("shared map", -errno()));
-        }
-        // SAFETY: fcntl made a new descriptor, owned until the loader succeeds.
-        let dup = unsafe { OwnedFd::from_raw_fd(dup) };
-        cx.set_map_fd(i as u32, dup.as_raw_fd());
-        dups.push(dup);
-    }
+    let dups = duplicate_shared_maps(
+        &mut cx,
+        (0..skel.maps.len()).filter(|&i| skel.reuses(i)),
+        shared,
+    )?;
     let retval = prog_test_run(prog.as_raw_fd(), &mut cx.buf);
     let failed = match retval {
         Ok(r) if (r as i32) >= 0 => None,
