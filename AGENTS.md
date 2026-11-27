@@ -28,6 +28,8 @@ as well:
 - `kernel` for the kernel shirudo needs and its carried patches
 - `user-experience` for anything a user sees: command output, JSON,
   messages, options and help
+- `writing` for the prose of every page, commit message, comment,
+  message and help text
 
 Claude Code lists a skill with `paths:` only once the session has read
 a file it matches, never one in another worktree; until then, read
@@ -78,7 +80,7 @@ change, and a check of whether a reported issue is real, follow the
 | `Documentation/upatches/` | Authoring and shipping upatches: attach kinds, maps and serializers, decoders, the Beefile, publishing, debugging a failed load. |
 | `Documentation/reference/` | Every command (`reference/cli/`), the formats (`reference/formats/`, including the `.upatch` container), the settings (`configuration.rst`), the eventlog, failure categories and exit status, files, units, environment variables, the cheat sheet. |
 | `Documentation/contribute/` | Developer guide, test tiers and the test VM (read `testing.rst` before adding or moving a test), test coverage, the kernel coding style, commits and sign-off (read `contributing.rst` before crafting a commit), and the documentation style guide `writing-docs.rst`. |
-| `.agents/skills/` | Skills for coding agents in the `SKILL.md` format of agentskills.io, which Codex reads there and Claude Code through the `.claude/skills` link, each with its linked references: `coding` writes Rust and BPF C in the tree's style and grows `rust/src/util/`, `commits` writes commit messages and shapes a series, `shell` writes POSIX shell for dash, `testing` runs the test tiers and the test VM, `unit-tests`, `functional-tests` and `end2end-tests` write tests in those tiers, `pre-submit` the checks CI runs on a series, `upatch` writes for the target's preemption model and a low cost, builds, packages and publishes an upatch, `bpf-concurrency` checks upatch code whose runs share state, `bpf-coccinelle` runs and extends the Coccinelle rules for it, `docs` finds and checks the pages a change touches, `fuzz-target` adds a libFuzzer target for a parser, `user-experience` keeps command output and options consistent, `proofs` runs and writes the CBMC and Lean 4 proofs, `kernel` moves the bpf-next pin and manages carried kernel patches, `security-audit` audits the tree against the threat model, and the threat model and the proofs against the tree. |
+| `.agents/skills/` | Skills for coding agents in the `SKILL.md` format of agentskills.io, which Codex reads there and Claude Code through the `.claude/skills` link, each with its linked references: `coding` writes Rust and BPF C in the tree's style and grows `rust/src/util/`, `commits` writes commit messages and shapes a series, `shell` writes POSIX shell for dash, `testing` runs the test tiers and the test VM, `unit-tests`, `functional-tests` and `end2end-tests` write tests in those tiers, `pre-submit` the checks CI runs on a series, `upatch` writes for the target's preemption model and a low cost, builds, packages and publishes an upatch, `bpf-concurrency` checks upatch code whose runs share state, `bpf-coccinelle` runs and extends the Coccinelle rules for it, `docs` finds and checks the pages a change touches, `fuzz-target` adds a libFuzzer target for a parser, `user-experience` keeps command output and options consistent, `writing` keeps prose in pages, commit messages, comments and help plain, `proofs` runs and writes the CBMC and Lean 4 proofs, `kernel` moves the bpf-next pin and manages carried kernel patches, `security-audit` audits the tree against the threat model, and the threat model and the proofs against the tree. |
 
 The kernel side of the signing design is the kernel's own
 `Documentation/bpf/signing.rst`; `bpf_prog_verify_signature()` runs
@@ -137,6 +139,10 @@ invariants, and project policies; the skill explains how to write code.
 Every commit follows `Documentation/contribute/code/contributing.rst` and
 the `commits` skill, which an agent loads before it commits. One logical
 change per commit, each one building and passing on its own.
+
+An agent never adds a `Signed-off-by:`, on its own or anyone else's
+behalf: only a person can give one, and that line is left to the human
+who reviews and submits the work.
 
 ## Invariants that are easy to break
 

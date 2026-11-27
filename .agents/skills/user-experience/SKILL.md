@@ -142,6 +142,9 @@ A command that prints a report people read and gains a JSON form takes
 
 ## Messages
 
+A message and a help text are prose, so the `writing` skill applies to
+them as to a page; the rules below are what output adds.
+
 Every message goes through `log::err()`, `log::warn()`,
 `log::info()` or `log::audit()` (`rust/src/log.rs`): syslog under
 `LOG_AUTHPRIV` and standard error, once only under a systemd unit.

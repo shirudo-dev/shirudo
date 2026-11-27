@@ -42,6 +42,8 @@ Then go through the pages each kind of change has:
 
 ## Write
 
+- Load the `writing` skill for the prose of every page, and run its
+  check on the lines the change adds.
 - Each page has one type, set by its `:page-type:` line, and the voice
   of that type ("Page types" in the style guide): a reference page
   states facts in tables and exact syntax, a how-to gives numbered
