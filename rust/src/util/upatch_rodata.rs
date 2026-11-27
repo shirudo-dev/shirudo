@@ -63,7 +63,6 @@ const ATTR_BTF_SIZE: usize = 16;
 const ATTR_BTF_SIZE_END: u32 = 20;
 
 /// Where a variable of a upatch's .rodata lies.
-#[repr(C)]
 pub struct RodataRange {
     pub(crate) offset: u32,
     pub(crate) size: u32,
@@ -898,7 +897,6 @@ fn decl_printable(btf: &Btf, mut id: u32) -> bool {
 /// What the dumper visits of a value of a type: values printed, types
 /// deep.
 #[derive(Clone, Copy, Default)]
-#[repr(C)]
 pub(crate) struct DumpCost {
     values: u32,
     height: u32,
