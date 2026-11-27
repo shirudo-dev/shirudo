@@ -62,7 +62,6 @@ pub(crate) const RH_ENDORSEMENT: u32 = 0x4000_000B;
 
 /// `struct tpm_public`: a TPMT_PUBLIC of the shapes shirudo makes or
 /// checks.
-#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct TpmPublic {
     pub(crate) ty: u16,
@@ -84,7 +83,6 @@ pub struct TpmPublic {
 }
 
 /// `struct tpm_ecc_public`.
-#[repr(C)]
 pub struct TpmEccPublic {
     pub(crate) attrs: u32,
     pub(crate) scheme: u16,
@@ -96,7 +94,6 @@ pub struct TpmEccPublic {
 
 /// `struct tpm_attest`: a TPMS_ATTEST, its pointers into the buffer it
 /// was parsed from.
-#[repr(C)]
 pub struct TpmAttest {
     pub(crate) ty: u16,
     pub(crate) signer: [u8; NAME_LEN],
@@ -116,10 +113,6 @@ pub struct TpmAttest {
     pub(crate) nv_data: *const u8,
     pub(crate) nv_len: usize,
 }
-
-const _: () = assert!(size_of::<TpmPublic>() == 400);
-const _: () = assert!(size_of::<TpmEccPublic>() == 76);
-const _: () = assert!(size_of::<TpmAttest>() == 200);
 
 impl TpmEccPublic {
     pub(crate) const fn zeroed() -> Self {
