@@ -208,6 +208,7 @@ its traps, messages and exit status: start a script from it.
   `testing/ci-checks/t00<NN>-<script>.sh`, as `t0001-check-dco.sh`
   runs `check-dco.sh` on a throwaway repository. A script that only
   sets up a throwaway machine is checked by the workflow that runs it.
+  The `functional-tests` skill says how to write a test.
 - `t1007-test-vm-cli.sh` greps lines of `testing/vm/guest.sh` and
   `testing/vm/run.sh` as they are written, and `t1006-gen-initrd-cli.sh`
   checks the options of the initrd generator and installer: a change to
