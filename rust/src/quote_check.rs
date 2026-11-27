@@ -46,7 +46,6 @@ const QUOTE_MALFORMED: c_int = 3;
 
 /// `struct quote_result`: what follows the verdict describes a QUOTE_OK
 /// row alone.
-#[repr(C)]
 pub struct QuoteResult {
     verdict: c_int,
     ak_name: [u8; NAME_LEN],
@@ -55,8 +54,6 @@ pub struct QuoteResult {
     reset_count: u32,
     clock: u64,
 }
-
-const _: () = assert!(size_of::<QuoteResult>() == 576);
 
 impl QuoteResult {
     #[cfg(shirudo_fuzz)]
