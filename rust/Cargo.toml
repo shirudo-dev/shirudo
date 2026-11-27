@@ -40,7 +40,7 @@ test-helpers = []
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
 # A fuzz build, which logs nothing.
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(shirudo_fuzz)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(shirudo_fuzz)', 'cfg(kani)'] }
 
 [lints.clippy]
 undocumented_unsafe_blocks = "deny"

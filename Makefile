@@ -51,7 +51,7 @@ export prefix exec_prefix bindir libexecdir sharedir libdir mandir completionsdi
        systemdunitdir udevrulesdir dracutmodulesdir SHIRUDO_TARGET_PKG_CONFIG_PATH \
        SHIRUDO_TARGET_STATIC_LIBDIR
 
-.PHONY: all help target target-deps target-deps-clean shirudo-target target-config shirudo-build quote-check quote-check-deps docs bpf-deps install install-target install-operator clean distclean config tests proofs proofs-cbmc proofs-lean4 sparse tags cscope
+.PHONY: all help target target-deps target-deps-clean shirudo-target target-config shirudo-build quote-check quote-check-deps docs bpf-deps install install-target install-operator clean distclean config tests proofs proofs-cbmc proofs-lean4 proofs-kani sparse tags cscope
 
 all: config
 	+$(Q)$(MAKE) -f Makefile.shirudo PROFILE=operator CONFIG_MK=config.mk all
@@ -95,7 +95,7 @@ help:
 	  '  Install roles: make install-target, make install-operator' \
 	  '  Package: make -C packaging help' \
 	  '  Tests: make tests (all of them), make -C testing help' \
-	  '  Proofs: make proofs (CBMC and Lean 4), make proofs-cbmc [PROOFS=<proof>...], make proofs-lean4' \
+	  '  Proofs: make proofs (CBMC, Kani and Lean 4), make proofs-cbmc [PROOFS=<proof>...], make proofs-kani, make proofs-lean4' \
 	  '  Documentation: make docs (render, serve and watch), make -C Documentation help' \
 	  '  Watch lists: make -C upatches/kernel-obs lists'
 
@@ -153,10 +153,13 @@ cscope:
 	$(Q)($(TAGS_FILES)) > cscope.files
 	$(Q)cscope -b -q -k -i cscope.files
 
-proofs: proofs-cbmc proofs-lean4
+proofs: proofs-cbmc proofs-kani proofs-lean4
 
 proofs-cbmc:
 	$(Q)testing/proofs/cbmc/run.sh $(if $(CHANGED),-c '$(CHANGED)') $(PROOFS)
+
+proofs-kani:
+	$(Q)$(MAKE) -C testing kani KANI_PROOFS="$(KANI_PROOFS)" KANI_SHARD="$(KANI_SHARD)" KANI_SHARDS="$(KANI_SHARDS)"
 
 proofs-lean4:
 	$(Q)testing/proofs/lean4/run.sh

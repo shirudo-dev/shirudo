@@ -29,7 +29,7 @@ test-vm-arch = $(shell TEST_VM_ARCH='$(TEST_VM_ARCH)'; \
 .DEFAULT_GOAL := all
 .PHONY: all help clean unit ci-checks functional end2end backend build-host build-operator build-unit kernel-btf \
 	test-helpers \
-	fuzz afl valgrind miri bundle test-vm-bundle require-vm-kernel vm vm-console vm-ssh vm-enroll vm-sbom vm-stop vm-clean \
+	fuzz afl valgrind miri kani bundle test-vm-bundle require-vm-kernel vm vm-console vm-ssh vm-enroll vm-sbom vm-stop vm-clean \
 	vm-operator-end2end
 
 PACKAGE_FORMAT ?= $(call test-vm-arch,TEST_VM_HOST_PKG_FORMAT)
@@ -486,6 +486,9 @@ miri: build-unit
 	    --target-dir $(ROOT)/build/rust-miri -- \
 	    $(addsuffix ::tests::,$(MIRI_SUITES))
 
+kani:
+	$(Q)KANI_PROOFS="$(KANI_PROOFS)" $(ROOT)/testing/proofs/kani/run.sh $(KANI_SHARD) $(KANI_SHARDS)
+
 bundle: test-vm-bundle
 
 help:
@@ -506,6 +509,7 @@ help:
 	  '  make -C testing afl [AFL_SECONDS=600] [FUZZ_CORPUS=<dir>] [FUZZERS=<target>...]' \
 	  '  make -C testing valgrind                memcheck over unit tests and fuzz corpora' \
 	  '  make -C testing miri [MIRI_TOOLCHAIN=nightly]  Miri over suites that call no C' \
+	  '  make -C testing kani [KANI_PROOFS=string_suffix]  bounded Rust proofs' \
 	  '  make -C testing vm, vm-console, vm-ssh, vm-enroll, vm-sbom, vm-stop, or vm-clean' \
 	  '  VM_KERNEL=bpf-next (default) selects the pinned CI kernel artifact,' \
 	  '  fetched when artifacts/bpf-next-kernel-debs has none' \
