@@ -266,22 +266,25 @@ fn apply(cfg: &mut Config, key: &CStr, val: &CStr) {
             b"false" => cfg.map_export_otel_insecure = false,
             _ => map_export_bad(cfg, key, val, c"expected true or false"),
         },
-        b"map_export.otel_retries" => match parse_u64(v, 10) {
-            Ok(n) => cfg.map_export_otel_retries = n as u32,
-            Err(_) => map_export_bad(cfg, key, val, c"expected 0..10"),
-        },
+        b"map_export.otel_retries" => {
+            match parse_u64(v, 10).and_then(|n| u32::try_from(n).map_err(|_| -EINVAL)) {
+                Ok(n) => cfg.map_export_otel_retries = n,
+                Err(_) => map_export_bad(cfg, key, val, c"expected 0..10"),
+            }
+        }
         b"map_export.s3_uri" => {
             if !set_string(&mut cfg.map_export_s3_uri, val) {
                 map_export_bad(cfg, key, val, c"value too long");
             }
         }
         b"map_export.log_record_max_bytes" | b"map_export.otlp_max_bytes" => {
-            match parse_u64(v, MAX_BYTES as u64) {
+            match parse_u64(v, MAX_BYTES as u64).and_then(|n| u32::try_from(n).map_err(|_| -EINVAL))
+            {
                 Ok(n) if n != 0 => {
                     if k == b"map_export.log_record_max_bytes" {
-                        cfg.map_export_log_record_max_bytes = n as u32;
+                        cfg.map_export_log_record_max_bytes = n;
                     } else {
-                        cfg.map_export_otlp_max_bytes = n as u32;
+                        cfg.map_export_otlp_max_bytes = n;
                     }
                 }
                 _ => map_export_bad(cfg, key, val, c"expected 1..8388608 bytes"),
