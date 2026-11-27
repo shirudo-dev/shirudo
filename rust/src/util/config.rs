@@ -30,7 +30,6 @@ pub(crate) const OTLP_MAX_DEFAULT: u32 = 4 * 1024 * 1024;
 pub(crate) const CONF_PATH: &CStr = c"/etc/shirudo/shirudo.conf";
 
 /// `struct config`.
-#[repr(C)]
 pub struct Config {
     pub(crate) eventlog_max_bytes: u64,
     pub(crate) tpm_owner_auth: [u8; OWNER_AUTH_MAX],
@@ -48,8 +47,6 @@ pub struct Config {
     pub(crate) map_export_log_record_max_bytes: u32,
     pub(crate) map_export_otlp_max_bytes: u32,
 }
-
-const _: () = assert!(size_of::<Config>() == 9888);
 
 /// A configuration scrubbed when it goes, as `__cleanup(config_clear)`
 /// left the C's.
