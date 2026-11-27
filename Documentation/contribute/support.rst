@@ -34,3 +34,9 @@ https://github.com/shirudo-dev/shirudo.
    * - Ideas and design discussions
      - Use the `#ideas-design channel
        <https://shirudo.zulipchat.com/#narrow/channel/659583-ideas-design>`__.
+
+An issue without activity for 90 days is labeled ``stale`` and closed
+after 90 more days, a pull request after 30 days and 30 more. A comment,
+or a push to a pull request, takes the label off again. The ``pinned``
+label, which a maintainer sets, keeps an issue or a pull request open
+regardless.

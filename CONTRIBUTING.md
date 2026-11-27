@@ -58,3 +58,9 @@ rules:
    no obligation to review or answer issues, pull requests and
    discussions, and may close a pull request that does not follow
    these rules without review.
+
+10. An issue without activity for three months is labeled `stale` and
+    closed after three more. A pull request is labeled after one month
+    and closed after one more. A comment or a push takes the label off
+    again, and the maintainers keep an issue or a pull request open
+    regardless with the `pinned` label.
