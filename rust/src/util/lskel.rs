@@ -18,11 +18,11 @@
 use core::ffi::{CStr, c_int};
 use core::marker::PhantomData;
 use std::io::Write;
-use std::os::fd::{AsRawFd, OwnedFd};
+use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, OwnedFd};
 
 use crate::bpf::lskel::{Lskel, Program};
 use crate::errno::{E2BIG, EINVAL, ENOENT};
-use crate::sys::libc::{close, errno, fcntl};
+use crate::sys::libc::{errno, fcntl};
 use crate::util::bpf_sys::{
     Attr, BPF_ANY, BPF_MAP_CREATE, BPF_MAP_FREEZE, BPF_MAP_UPDATE_ELEM, BPF_PROG_LOAD,
     bpf_map_freeze, bpf_map_lookup_elem, bpf_map_update_elem, bpf_obj_pin, link_create,
@@ -120,8 +120,8 @@ impl Drop for Ctx {
             .map(|i| self.map_fd(i))
             .chain((0..self.nr_progs).map(|i| self.prog_fd(i)));
         for fd in fds.filter(|&fd| fd > 0) {
-            // SAFETY: a descriptor the loader made for this process.
-            unsafe { close(fd) };
+            // SAFETY: the context owns each descriptor the loader returned.
+            let _ = unsafe { OwnedFd::from_raw_fd(fd) };
         }
     }
 }
@@ -202,14 +202,13 @@ pub(crate) fn run(
         // SAFETY: the caller's descriptor, duplicated for the context.
         let dup = unsafe { fcntl(fd, F_DUPFD_CLOEXEC, 0) };
         if dup < 0 {
-            for d in dups {
-                // SAFETY: a duplicate made above, closed once.
-                unsafe { close(d) };
-            }
+            drop(dups);
             cx.forget();
             return Err(("shared map", -errno()));
         }
-        cx.set_map_fd(i as u32, dup);
+        // SAFETY: fcntl made a new descriptor, owned until the loader succeeds.
+        let dup = unsafe { OwnedFd::from_raw_fd(dup) };
+        cx.set_map_fd(i as u32, dup.as_raw_fd());
         dups.push(dup);
     }
     let retval = prog_test_run(prog.as_raw_fd(), &mut cx.buf);
@@ -222,12 +221,13 @@ pub(crate) fn run(
         // The loader closed what it made before it failed; the
         // duplicates are ours.
         cx.forget();
-        for d in dups {
-            // SAFETY: a duplicate made above, closed once.
-            unsafe { close(d) };
-        }
+        drop(dups);
         show_log("loader runtime log", &vlog);
         return Err(f);
+    }
+    // The context now owns these descriptors alongside the loader results.
+    for dup in dups {
+        let _ = dup.into_raw_fd();
     }
     Ok(cx)
 }
