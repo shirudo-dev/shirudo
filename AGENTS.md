@@ -13,9 +13,14 @@ alike, and before you write the commit message of such a change. It is
 how code here is written, with
 `Documentation/contribute/code/coding-style.rst` that it builds on.
 Claude Code loads it as the `coding` skill, Codex from `.agents/skills/`,
-and an agent that does not load skills reads the file. Work another
-skill covers, tests, documentation, proofs or an upatch, loads that skill
-as well.
+and an agent that does not load skills reads the file.
+
+Work another skill covers loads that skill as well:
+
+- `testing` for tests
+- `proofs` for proofs
+- `docs` for documentation
+- `upatch` for a upatch
 
 ## What shirudo is
 
@@ -47,7 +52,9 @@ remote-management or transport layers.
 
 Before changing security-relevant code, read
 `Documentation/internals/architecture.rst` and
-`Documentation/security/threat-model.rst`.
+`Documentation/security/threat-model.rst`. An audit of the tree or of a
+change, and a check of whether a reported issue is real, follow the
+`security-audit` skill.
 
 | Path | Purpose |
 |---|---|
@@ -75,11 +82,12 @@ that is added, changed or removed is added, changed or removed in
 change closes leaves the threat model. A page that no longer matches
 the code is a bug, whichever of the two is wrong.
 `.github/scripts/check-docs.sh` catches the names it can; the prose is
-the author's to check. The skills in `.agents/skills/` name commands,
-make targets, options, files, scripts and rules as well: a change to
-one of those checks the skills that mention it (`git grep -n '<name>'
-.agents/skills`) and updates them in the same commit, and a skill that
-no longer matches the tree is a bug like a page.
+the author's to check. The `docs` skill lists the pages each kind of
+change touches and how to check them. The skills in `.agents/skills/`
+name commands, make targets, options, files, scripts and rules as well:
+a change to one of those checks the skills that mention it (`git grep
+-n '<name>' .agents/skills`) and updates them in the same commit, and a
+skill that no longer matches the tree is a bug like a page.
 
 The proofs under `testing/proofs/` follow the code the same way. A
 change to a file or function a CBMC harness includes or reaches (`git
