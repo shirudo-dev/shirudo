@@ -54,6 +54,23 @@ test_expect_success 'a value gets what its placeholder asks for' '
 	grep -qx keys "$W/out"
 '
 
+test_expect_success 'completion keeps spaces in matching paths' '
+	touch "$W/release candidate.upatch" "$W/release notes.txt" "$W/plain.upatch" &&
+	mkdir "$W/operator keys" &&
+	(cd "$W" && complete_words upatch info rel) >"$W/out" &&
+	printf "%s\n" "release candidate.upatch" | cmp -s - "$W/out" &&
+	(cd "$W" && complete_words upatch info pl) >"$W/out" &&
+	printf "%s\n" plain.upatch | cmp -s - "$W/out" &&
+	(cd "$W" && complete_words genkey --keys-dir op) >"$W/out" &&
+	printf "%s\n" "operator keys" | cmp -s - "$W/out"
+'
+
+test_expect_success 'bpm info completes a mode that also names a directory' '
+	mkdir "$W/upatches" &&
+	(cd "$W" && complete_words bpm info upa) >"$W/out" &&
+	printf "%s\n" upatches | cmp -s - "$W/out"
+'
+
 test_expect_success 'a leaf command lists no subcommands and logs nothing' '
 	"$SHIRUDO" upatch load --list-cmds >"$W/out" 2>"$W/err" &&
 	test ! -s "$W/out" && test ! -s "$W/err"
