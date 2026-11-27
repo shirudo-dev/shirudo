@@ -378,3 +378,15 @@ fn find_reads_only_the_counted_bytes() {
     assert_eq!(find(b"", b""), Some(0));
     assert!(!contains(&text[..3], b".."));
 }
+
+#[test]
+fn sprintf_result_keeps_a_fitting_output_and_clears_a_truncated_one() {
+    let mut first = b'x';
+    assert_eq!(sprintf_result(Some(&mut first), 4, 3), 3);
+    assert_eq!(first, b'x');
+
+    assert_eq!(sprintf_result(Some(&mut first), 4, 4), -E2BIG);
+    assert_eq!(first, 0);
+    assert_eq!(sprintf_result(None, 0, 0), -E2BIG);
+    assert_eq!(sprintf_result(None, 0, -1), -E2BIG);
+}
