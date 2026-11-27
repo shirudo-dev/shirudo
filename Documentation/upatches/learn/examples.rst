@@ -11,7 +11,7 @@ Example packages
 The tree ships packages under :src:`upatches/`: ``kernel-obs``, a
 complete observability package with arena tables, serializers, decoders
 and generated ``.rodata``, in ``kernel-cve`` three small CVE
-detectors exported from a mitigation campaign and one CVE mitigation,
+detectors exported from a mitigation campaign and CVE mitigations,
 each a package of its own, and ``app-sandbox``, which enforces with
 policy labels and generated ``.rodata``.
 
@@ -125,6 +125,26 @@ publishes it with the detectors. Beside the source a reproducer,
 through a pipe into an ``AF_ALG`` aead socket and reports whether the
 bug corrupted it; ``t3115-af-alg-block`` drives it to check the
 mitigation refuses the socket.
+
+Two more mitigations are for CVE-2026-99477, a use-after-free in the
+``PAGEMAP_SCAN`` ioctl of ``/proc/<pid>/pagemap``, which walked the
+address space the file was opened on without a reference to its users,
+so that the process could exit under the walk.
+``cve-2026-99477-pagemap-scan-block.bee`` and
+``cve-2026-99477-foreign-scan-block.bee`` build the two sources of
+``sources/cve-2026-99477-fs-proc-pagemap-scan-uaf/mitigation/``, each
+with a program at ``lsm/file_ioctl`` and one at
+``lsm/file_ioctl_compat``. The first refuses every ``PAGEMAP_SCAN``
+with ``ENOTTY``, as a kernel without the ioctl answers, so its users
+fall back to reading ``pagemap``. The second refuses only the scan of
+another process, with ``EACCES``: a task holds a reference to its own
+address space for as long as it runs, so the scan of its own cannot
+race an exit and keeps working. CRIU, which scans the process it dumps,
+fails with the second loaded. Both select ``CONFIG_PROC_PAGE_MONITOR``.
+``reproducer/cve-2026-99477-pagemap-scan-probe.py`` scans its own
+``pagemap`` and a child's and reads the child's, and prints which of the
+three the kernel refused; ``t3122-pagemap-scan-block`` drives it against
+both.
 
 app-sandbox
 -----------

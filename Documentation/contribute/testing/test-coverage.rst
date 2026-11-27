@@ -373,6 +373,15 @@ signed config image.
        call. The ``fmod_ret.s`` program fails the one call it is written
        for, the caller gets its error, the other two programs see that
        call, another call runs, and the unload detaches all three
+   * - ``t3122-pagemap-scan-block``
+     - The CVE-2026-99477 mitigations of ``upatches/kernel-cve``, built
+       from their shipped sources and driven by the shipped probe, which
+       scans its own pagemap and a child's with ``PAGEMAP_SCAN`` and
+       reads the child's: every scan runs before a load, both fail with
+       ``ENOTTY`` while ``cve-2026-99477-pagemap-scan-block`` is loaded,
+       only the child's fails, with ``EACCES``, while
+       ``cve-2026-99477-foreign-scan-block`` is, the read is never
+       refused, and each unload lets the scans through again
 
 ``tpm`` (4)
 ~~~~~~~~~~~
