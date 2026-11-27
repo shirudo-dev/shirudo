@@ -59,4 +59,14 @@ test_expect_success 'a leaf command lists no subcommands and logs nothing' '
 	test ! -s "$W/out" && test ! -s "$W/err"
 '
 
+test_expect_success 'build completes supported input files and directories' '
+	touch "$W/input.bpf.c" "$W/input.bpf.o" "$W/input.jar" \
+	      "$W/input.o" "$W/input.c" "$W/input.txt" &&
+	mkdir "$W/input-dir" &&
+	(cd "$W" && complete_words build inp) >"$W/out" &&
+	printf "%s\n" input-dir input.bpf.c input.bpf.o input.jar input.o \
+		>"$W/want" &&
+	LC_ALL=C sort "$W/out" | cmp -s - "$W/want"
+'
+
 test_done

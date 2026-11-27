@@ -56,7 +56,9 @@ _shirudo_args()
 		COMPREPLY=( $(compgen -f -X '!*.upatch' -- "$cur")
 			    $(compgen -d -- "$cur") ) ;;
 	build)
-		COMPREPLY=( $(compgen -f -X '!*.bpf.[co]' -- "$cur")
+		COMPREPLY=( $(compgen -f -X '!*.bpf.c' -- "$cur")
+			    $(compgen -f -X '!*.o' -- "$cur")
+			    $(compgen -f -X '!*.jar' -- "$cur")
 			    $(compgen -d -- "$cur") ) ;;
 	'bpm info')
 		[[ -n $first ]] || COMPREPLY=( $(compgen -W "upatches data" -- "$cur") )

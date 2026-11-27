@@ -164,7 +164,8 @@ signed config image.
      - The bash completion: commands and subcommands from ``--list-cmds``,
        options from ``--list-opts``, a value by its placeholder, and a
        command without subcommands that answers ``--list-cmds`` with
-       nothing and logs nothing
+       nothing and logs nothing. The ``build`` command completes supported
+       input files and directories.
    * - ``t1012-messages-once``
      - A message goes to standard error and to syslog, and to syslog
        alone where standard error is the journal stream
