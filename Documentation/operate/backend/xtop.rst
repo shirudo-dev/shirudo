@@ -348,8 +348,11 @@ installed versions, and the names and images of the nodes it affects.
 newest scan, with its state (:doc:`sbom-scan`), ``stale`` when that scan
 is older than ``sbom_stale_seconds``, the nodes that run it, its
 findings with how many are critical and high, how long ago it was
-scanned and the version of the matcher's database. An image a node runs
-that has no SBOM in the store reads ``no_sbom``: store one with
+scanned and the version of the matcher's database. A node that reports
+no root is counted on one build, the one ``node_vulns`` binds it to: the
+build stored without a root, else the newest of its id and version that
+has an SBOM, or the newest when none has one. An image a node runs that
+has no SBOM in the store reads ``no_sbom``: store one with
 :doc:`sbom-put`. So does a build a node runs whose root the store does
 not have for that id and version, on a row of its own with that root:
 ``node_vulns`` binds such a node ``root_mismatch``. Enter on an image

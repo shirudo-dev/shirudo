@@ -35,3 +35,26 @@ $CLICKHOUSE_CLIENT --query "INSERT INTO shirudo.checked
 	FROM shirudo.keepalive FINAL WHERE ak_name = '000b23602ab98bfb'"
 query sbom-images.sql 'SELECT image_id, image_version, image_root, state, nodes' \
 	'ORDER BY image_root'
+
+# A node that reports no root is counted once, on the newest build of its
+# id and version that has an SBOM, as node_vulns binds it: not on the
+# older build as well, nor on a newer one whose SBOM is missing.
+$CLICKHOUSE_CLIENT --query "INSERT INTO shirudo.sbom_images
+	(image_id, image_version, image_root, sbom_sha256, state, built_at,
+	 db_version, scanned_at)
+	SELECT 'fleet-os', '2026.11.1', repeat(root, 64),
+		if(state = 'ok', repeat(root, 64), ''), state, built_at, '2', now()
+	FROM values('root String, state String, built_at DateTime',
+		('c', 'ok', '2026-11-03 08:00:00'),
+		('d', 'missing', '2026-11-04 08:00:00'))"
+query sbom-images.sql 'SELECT image_id, image_version, image_root, state, nodes' \
+	'ORDER BY image_root'
+
+# A build stored without a root is that node's own, before a newer one.
+$CLICKHOUSE_CLIENT --query "INSERT INTO shirudo.sbom_images
+	(image_id, image_version, image_root, sbom_sha256, state, built_at,
+	 db_version, scanned_at)
+	SELECT 'fleet-os', '2026.11.1', '', repeat('e', 64), 'ok',
+		'2026-11-01 08:00:00', '2', now()"
+query sbom-images.sql 'SELECT image_id, image_version, image_root, state, nodes' \
+	'ORDER BY image_root'

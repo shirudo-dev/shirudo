@@ -4,11 +4,11 @@
 -- One row per image for the SBOM view of tools/xtop: the newest scan of
 -- every image in sbom_images, its findings and the nodes that run it,
 -- and, as no_sbom, every image a node runs that sbom_images does not
--- have. A node that reports no image root runs an image of its id and
--- version, as node_vulns reads it; one that reports a root sbom_images
--- has not for that id and version runs a build of its own, a no_sbom row
--- with that root, so that every node is counted on a row. Times are
--- epoch milliseconds; a no_sbom row has 0 for them.
+-- have. A node that reports no image root runs one build of its id and
+-- version, the one node_vulns binds it to; one that reports a
+-- root sbom_images has not for that id and version runs a build of its
+-- own, a no_sbom row with that root, so that every node is counted on
+-- one row. Times are epoch milliseconds; a no_sbom row has 0 for them.
 
 WITH
 running AS
@@ -38,13 +38,23 @@ images AS
            scanned_at, db_version
     FROM shirudo.sbom_images FINAL
 ),
-nodes AS
+bound AS
 (
+    -- The order is that of img in node_vulns_mv, so that a node that
+    -- reports no root is counted on the build its findings come from.
     SELECT i.image_id AS image_id, i.image_version AS image_version, i.image_root AS image_root,
-           uniq(r.ak_name) AS nodes
+           r.ak_name AS ak_name
     FROM images AS i
     INNER JOIN running AS r ON r.image_id = i.image_id AND r.image_version = i.image_version
     WHERE r.image_root = i.image_root OR r.image_root = ''
+    ORDER BY r.ak_name, i.image_root = r.image_root DESC,
+             i.state = 'ok' AND i.sbom_sha256 != '' DESC, i.built_at DESC, i.image_root
+    LIMIT 1 BY r.ak_name
+),
+nodes AS
+(
+    SELECT image_id, image_version, image_root, uniq(ak_name) AS nodes
+    FROM bound
     GROUP BY image_id, image_version, image_root
 )
 SELECT *

@@ -9,4 +9,17 @@ image_id	image_version	image_root	state	nodes
 String	String	String	String	UInt64
 fleet-os	2026.11.1	a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c	ok	4
 fleet-os	2026.11.1	bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb	no_sbom	1
+image_id	image_version	image_root	state	nodes
+String	String	String	String	UInt64
+fleet-os	2026.11.1	a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c	ok	2
+fleet-os	2026.11.1	bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb	no_sbom	1
+fleet-os	2026.11.1	cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc	ok	2
+fleet-os	2026.11.1	dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd	missing	0
+image_id	image_version	image_root	state	nodes
+String	String	String	String	UInt64
+fleet-os	2026.11.1		ok	2
+fleet-os	2026.11.1	a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c	ok	2
+fleet-os	2026.11.1	bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb	no_sbom	1
+fleet-os	2026.11.1	cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc	ok	0
+fleet-os	2026.11.1	dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd	missing	0
 findings	2
