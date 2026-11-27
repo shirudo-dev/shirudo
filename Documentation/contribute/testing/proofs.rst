@@ -5,11 +5,11 @@
 :page-type: How-to
 :audience: shirudo contributors
 
-Prove code with CBMC and Lean 4
-===============================
+Prove code with CBMC, Kani and Lean 4
+=====================================
 
 A test checks the inputs someone thought of, and a fuzz target the ones it
-happens to find. shirudo's proofs check all of them, in two ways that
+happens to find. shirudo's proofs check all of them, in three ways that
 complement each other:
 
 - `CBMC <https://www.cprover.org/cbmc/>`_ proves properties of the C
@@ -17,29 +17,33 @@ complement each other:
   and a harness into a formula and ask a SAT solver for an input that
   breaks a property; when none exists, the property holds for every input
   within the harness's bounds.
+- `Kani <https://model-checking.github.io/kani/>`_ checks the Rust
+  implementation against bounded input contracts. Its harnesses live
+  beside the code and are built only with ``cfg(kani)``.
 - `Lean 4 <https://lean-lang.org/>`_ proves properties of a model of an
   algorithm. The proofs under :src:`testing/proofs/lean4/` state the
   algorithm in Lean and prove it meets its specification for every input,
-  of any length, without a bound. Lean does not read shirudo's C: a CBMC
-  proof checks the C against the model within its bounds, where one does.
+  of any length, without a bound. Lean reads neither implementation. A
+  Kani or CBMC comparison proof can link the model to production code
+  within its stated bound.
 
-A CBMC proof states two kinds of property. CBMC adds the first to every
-proof: no read or write outside an object, no null or dangling pointer,
-no signed overflow, no shift past the width of a type, no division by
-zero, no conversion that changes a value, and no loop that runs longer
-than the harness allows. The harness states the second: what the code
-must do, such as that a parser accepts exactly the well-formed inputs and
-that every offset it returns lies inside the input. A CBMC proof covers
-every input up to the bound its harness names. Where the format itself
-bounds what the code reads, as a fixed-size header does, the proof covers
-every input of any size; elsewhere it covers every input up to the stated
-length, and :doc:`proof-coverage` says which is which.
+A bounded proof checks the production function for all inputs inside
+its stated bound. CBMC checks C memory access and arithmetic. Kani checks
+Rust panics and the assertions in its harness, including checks around
+unsafe code where a harness reaches it. The harness states the expected
+behavior, such as the exact values a parser accepts and returns. A
+modelled file, TPM or network call proves only the model; integration
+tests cover the real boundary. :doc:`proof-coverage` gives each input
+bound and records where a model is used.
 
 Before you begin
 ----------------
 
 - CBMC 5.95 or newer, packaged as ``cbmc`` by Debian and Ubuntu. CI
   uses 5.95.1, as `Run the proofs as CI does`_ shows.
+- For Kani, install the version in :src:`testing/proofs/kani/version`
+  with ``cargo install --locked kani-verifier --version <version>``, then
+  run ``cargo kani setup``. Generated BPF objects must be built first.
 - For the Lean 4 proofs, elan, packaged as ``elan``, and the toolchain
   :src:`testing/proofs/lean4/lean-toolchain` names:
 
@@ -73,8 +77,10 @@ Run the proofs
 
    .. code-block:: console
 
+      $ make proofs-kani
+      $ make -C testing kani KANI_PROOFS=string_suffix
       $ make proofs-lean4
-      $ make proofs-cbmc PROOFS="paths-bpffs-name paths-join"
+      $ make proofs-cbmc PROOFS="paths-bpffs-name paths-bpffs-name-model"
       $ make proofs-cbmc CHANGED=origin/main..HEAD
 
    ``CHANGED`` takes what ``git diff`` takes, a range of commits or one
@@ -82,14 +88,14 @@ Run the proofs
    each harness includes, and a proof runs when one of them changed; a
    change to ``run.sh`` or ``proofs.list`` runs every proof. A run that
    finds none prints ``proofs: none reads a file changed in <range>``.
-   No run checks a Lean 4 model against the C it follows by review: read
-   the model against the change.
+   Neither bounded runner checks a Lean 4 model whose correspondence is
+   recorded as review alone: read that model against the change.
 
 3. Read why a CBMC proof failed:
 
    .. code-block:: console
 
-      $ testing/proofs/cbmc/run.sh -v string-number
+      $ testing/proofs/cbmc/run.sh -v paths-bpffs-name
 
    ``-v`` prints CBMC's whole output, with the trace of each failed
    check: the input that breaks it and the steps that lead there. Lean
@@ -101,7 +107,8 @@ Run the proofs as CI does
 The ``Proofs`` workflow, :src:`.github/workflows/proofs.yml`, runs after
 every push to main, never on a pull request, so the run before you send
 a change is the only one it gets before it lands. Its ``Lean4`` job runs
-``make proofs-lean4`` with the toolchain ``lean-toolchain`` names. Its
+``make proofs-lean4`` with the toolchain ``lean-toolchain`` names. The ``Kani`` job runs every
+listed Rust harness under a ten-minute, 6 GiB cap. Its
 ``CBMC`` job runs in eight shards: shard ``<k>`` takes every eighth proof
 of :src:`testing/proofs/cbmc/proofs.list` from the ``<k>``-th and runs
 each alone, under a cap of 6 GB and 60 minutes, so a proof you add has

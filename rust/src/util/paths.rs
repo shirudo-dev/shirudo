@@ -90,5 +90,8 @@ pub(crate) fn path_exists(path: &CStr) -> bool {
     std::fs::metadata(OsStr::from_bytes(path.to_bytes())).is_ok()
 }
 
+#[cfg(kani)]
+#[path = "paths/kani.rs"]
+mod proofs;
 #[cfg(test)]
 mod tests;

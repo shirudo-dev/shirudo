@@ -329,3 +329,7 @@ pub fn sanitize(s: &mut [u8], lines: bool) {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(kani)]
+#[path = "text/kani.rs"]
+mod proofs;

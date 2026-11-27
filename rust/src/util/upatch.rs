@@ -1321,6 +1321,9 @@ impl Specs {
     }
 }
 
+#[cfg(kani)]
+#[path = "upatch/kani.rs"]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

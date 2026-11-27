@@ -819,6 +819,9 @@ pub(crate) fn lock_exclusive(fd: BorrowedFd<'_>) -> Result<(), c_int> {
     Ok(())
 }
 
+#[cfg(kani)]
+#[path = "io/kani.rs"]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

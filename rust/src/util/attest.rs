@@ -2422,5 +2422,8 @@ pub(crate) fn parse_name_digest(spec: &[u8]) -> Result<(&[u8], [u8; 32]), c_int>
 
 #[cfg(shirudo_fuzz)]
 mod fuzz;
+#[cfg(kani)]
+#[path = "attest/kani.rs"]
+mod proofs;
 #[cfg(test)]
 mod tests;

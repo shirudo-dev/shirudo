@@ -75,6 +75,9 @@ pub(crate) fn decode_sha256_digest(digest: &[u8]) -> Result<[u8; 32], c_int> {
     Ok(out)
 }
 
+#[cfg(kani)]
+#[path = "hex/kani.rs"]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

@@ -2,25 +2,15 @@
 -- Copyright (c) 2026 Authors of shirudo
 
 /-!
-The hex codec of rust/src/util/hex.rs. `hex_encode()` writes each byte as two
-lowercase digits from the table `0123456789abcdef`, the high nibble
-first. `hex_nibble()` gives the value of one digit of either case, or -1.
-`hex_decode()` takes a string of exactly `2 * n` digits into `n` bytes,
-after comparing its `strlen()` with `size_mul(n, 2)`, and
-`hex_decode_max()` takes any even count of digits up to `2 * cap`, after
-counting them with `strnlen()` up to `size_add(size_mul(cap, 2), 1)`.
-`size_mul()` and `size_add()` saturate at `SIZE_MAX`.
+The hex codec of rust/src/util/hex.rs. `encode_into()` writes each byte
+as two lowercase digits, high nibble first. `nibble()` accepts either
+case. `decode()` requires exactly two digits per output byte;
+`decode_max()` also accepts a shorter even run.
 
-For strings of every length: an encoding is lowercase hex twice the length
-of its input and decodes back to it, a decoding encodes back to its input
-in lowercase, so each determines the other, `hex_decode()` takes exactly
-the strings of `2 * n` hex digits and `hex_decode_max()` exactly the even
-runs of hex digits of at most `2 * cap`, and what either yields is bytes.
-A string is its bytes before the NUL, each byte its value; a string with
-its NUL fits in memory, so it is shorter than `SIZE_MAX`. The CBMC proof
-that checked util/hex.c against the model, on every input of up to 8 bytes,
-strings of up to 17 digits, and counts and capacities both small and past
-`SIZE_MAX / 2`, went with the C in the port to Rust.
+The model below describes hex bytes and the former C length arithmetic.
+The Kani comparisons cover the Rust encoding and decoding within their
+stated bounds. The model's sizeMul and sizeAdd remain for the original
+length theorems; Rust now uses checked multiplication and slice bounds.
 -/
 
 namespace Shirudo.Hex
@@ -28,33 +18,33 @@ namespace Shirudo.Hex
 /-- `SIZE_MAX`. -/
 def sizeMax : Nat := 18446744073709551615
 
-/-- `size_mul()` of include/shirudo/overflow.h. -/
+/-- The saturating product used by the former C length model. -/
 def sizeMul (a b : Nat) : Nat := if a * b ≤ sizeMax then a * b else sizeMax
 
-/-- `size_add()` of include/shirudo/overflow.h. -/
+/-- The saturating sum used by the former C length model. -/
 def sizeAdd (a b : Nat) : Nat := if a + b ≤ sizeMax then a + b else sizeMax
 
-/-- The digit table `d` of `hex_encode()`. -/
+/-- The digit table `d` of `encode_into()`. -/
 def table : List Nat :=
   [0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39,
    0x61, 0x62, 0x63, 0x64, 0x65, 0x66]
 
-/-- What the loop of `hex_encode()` writes for one byte:
+/-- What the loop of `encode_into()` writes for one byte:
 `d[in[i] >> 4]` and `d[in[i] & 0xf]`. -/
 def encodeByte (b : Nat) : List Nat :=
   [table.getD (b >>> 4) 0, table.getD (b &&& 0xf) 0]
 
-/-- `hex_encode()`, without its NUL. -/
+/-- `encode_into()`, without its NUL. -/
 def encode (bs : List Nat) : List Nat := bs.flatMap encodeByte
 
-/-- `hex_nibble()`; `none` is -1. -/
+/-- `nibble()`; `none` is -1. -/
 def nibble (c : Nat) : Option Nat :=
   if 0x30 ≤ c ∧ c ≤ 0x39 then some (c - 0x30)
   else if 0x61 ≤ c ∧ c ≤ 0x66 then some (c - 0x61 + 10)
   else if 0x41 ≤ c ∧ c ≤ 0x46 then some (c - 0x41 + 10)
   else none
 
-/-- The loop of `hex_decode()`: `(hi << 4) | lo` from each pair of digits,
+/-- The loop of `decode()`: `(hi << 4) | lo` from each pair of digits,
 refusing the first pair that holds anything else. The length check before
 it leaves no single byte over. -/
 def decodePairs : List Nat → Option (List Nat)
@@ -210,7 +200,7 @@ theorem sizeMul_two (n : Nat) (h : 2 * n ≤ sizeMax) : sizeMul n 2 = 2 * n := b
   unfold sizeMul
   split <;> omega
 
-/-- `hex_decode()` takes back what `hex_encode()` writes, for bytes of
+/-- `decode()` takes back what `encode_into()` writes, for bytes of
 every count whose encoding fits in memory. -/
 theorem decode_encode (bs : List Nat) (h : ∀ b ∈ bs, b < 256)
     (hfit : 2 * bs.length ≤ sizeMax) :
@@ -222,7 +212,7 @@ theorem decode_encode (bs : List Nat) (h : ∀ b ∈ bs, b < 256)
 
 /-! ### Decoding -/
 
-/-- The loop of `hex_decode()` takes exactly the even runs of hex digits,
+/-- The loop of `decode()` takes exactly the even runs of hex digits,
 and yields bytes that encode back to the digits in lowercase. -/
 theorem decodePairs_some : ∀ s : List Nat,
     (decodePairs s ≠ none ↔ s.length % 2 = 0 ∧ ∀ c ∈ s, isHex c) ∧
@@ -275,7 +265,7 @@ theorem decodePairs_some : ∀ s : List Nat,
               rfl
 
 /-- `hex_decode(hex, out, n)` takes exactly the strings of `2 * n` hex
-digits of either case, and yields `n` bytes that `hex_encode()` writes
+digits of either case, and yields `n` bytes that `encode_into()` writes
 back as the digits in lowercase. -/
 theorem decode_spec (s : List Nat) (n : Nat) (hs : s.length < sizeMax) :
     (decode s n ≠ none ↔ s.length = 2 * n ∧ ∀ c ∈ s, isHex c) ∧

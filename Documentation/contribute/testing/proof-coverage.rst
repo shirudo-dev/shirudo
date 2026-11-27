@@ -8,13 +8,161 @@
 Proof coverage
 ==============
 
-This page lists the CBMC proofs under :src:`testing/proofs/cbmc/` and the
-Lean 4 proofs under :src:`testing/proofs/lean4/`, what each one proves and
+This page lists the CBMC proofs under :src:`testing/proofs/cbmc/`, the
+Kani proofs beside their Rust code, and the Lean 4 proofs under
+:src:`testing/proofs/lean4/`, what each one proves and
 for which inputs, the source files no proof reads and the parsers no
 proof covers yet. :doc:`proofs` explains how to run and write them. CI
 runs every proof after a push to main but the CBMC proofs
 :src:`testing/proofs/cbmc/ci-skip.list` names, which take hours each:
 only a run a developer starts checks those.
+
+Kani proofs
+-----------
+
+Kani checks the production Rust code for every input within each
+harness's stated bound. The harnesses live beside that code under
+``#[cfg(kani)]``. The project runs them with ``make -C testing kani``;
+:src:`testing/proofs/kani/proofs.list` names each one.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 26 18 34
+
+   * - Proof
+     - Code
+     - Inputs
+     - Properties
+   * - ``string_suffix``
+     - ``name_has_suffix()`` of :src:`rust/src/text.rs`
+     - Names up to 6 bytes, suffixes up to 3
+     - True exactly when the last bytes equal the suffix and the name
+       has at least one byte before it
+   * - ``string_copy``
+     - ``strscpy()`` of :src:`rust/src/text.rs`
+     - Source and destination lengths up to 8 bytes
+     - Exact copy and length on success; partial copy and ``-E2BIG``
+       on truncation; terminator when space exists; other bytes unchanged
+   * - ``hex_roundtrip``
+     - ``encode_into()`` and ``decode()`` of :src:`rust/src/util/hex.rs`
+     - Byte strings of every length from 0 to 4
+     - Encoding matches ``Shirudo.Hex.encodeByte`` and decodes back
+       to the original bytes
+   * - ``attest_fields``
+     - ``record_word()`` of :src:`rust/src/util/attest.rs`
+     - All byte strings up to 16 bytes
+     - Accepts only lowercase ASCII letters and underscores
+   * - ``attest_pcr_value``
+     - ``parse_pcr_value()`` of :src:`rust/src/util/attest.rs`
+     - All byte strings up to 6 bytes
+     - Accepts a decimal PCR from 0 to 23, then an equals sign and any
+       value text, returning its PCR and the exact value slice
+   * - ``string_number_model``
+     - ``parse_u64()`` and ``parse_x64()`` of :src:`rust/src/text.rs`
+     - Up to 4 bytes, any maximum and either base
+     - The value of ``Shirudo.Number.valueFrom`` in
+       :src:`testing/proofs/lean4/Shirudo/Number.lean`, or the exact
+       invalid-input or range error
+   * - ``string_search``
+     - ``find()`` and ``contains()`` of :src:`rust/src/text.rs`
+     - Haystacks up to 5 bytes, needles up to 2 bytes
+     - The first matching position, including the empty needle; the
+       boolean result agrees with whether a position exists
+   * - ``string_utf8``
+     - ``utf8_width()`` of :src:`rust/src/text.rs`
+     - Every 0 to 4 byte prefix, plus an arbitrary fifth byte
+     - The width in Unicode Table 3-7; a later byte does not change
+       the width determined by the first four
+
+   * - ``hex_decode``
+     - ``decode()`` of :src:`rust/src/util/hex.rs`
+     - Up to 8 bytes, or 16 hex digits
+     - Accepts exactly valid digit pairs and writes the bytes they spell
+   * - ``hex_decode_max``
+     - ``decode_max()`` of :src:`rust/src/util/hex.rs`
+     - Text up to 17 bytes and output capacity up to 8 bytes
+     - Accepts exactly even, valid hex within capacity; on success
+       writes the decoded prefix and leaves the rest unchanged
+   * - ``hex_encode_model``
+     - ``encode_into()`` of :src:`rust/src/util/hex.rs`
+     - Up to 8 arbitrary bytes
+     - Writes the lowercase high and low nibbles from
+       ``Shirudo.Hex.encodeByte``
+   * - ``hex_digest_one_digit``
+     - ``decode_sha256_digest()`` of :src:`rust/src/util/hex.rs`
+     - Each of 64 positions, one arbitrary byte among zero digits
+     - Decodes a valid digit at that position and rejects an invalid one
+   * - ``hex_digest_shape``
+     - ``decode_sha256_digest()`` of :src:`rust/src/util/hex.rs`
+     - Lengths 0, 6, 7, 8, 70, 71 and 72; one arbitrary prefix byte
+     - Requires the exact ``sha256:`` prefix and 64 digits
+   * - ``pin_name_one``
+     - ``pin_name()`` of :src:`rust/src/util/upatch.rs`
+     - Every single byte
+     - Replaces a dot with ``~d`` and otherwise copies the byte
+   * - ``pin_name_encode``
+     - ``pin_name_into()`` of :src:`rust/src/util/upatch.rs`
+     - Names up to 8 arbitrary bytes
+     - Encodes every dot as ``~d`` and copies every other byte
+   * - ``pin_name_decode``
+     - ``name_from_pin_into()`` of :src:`rust/src/util/upatch.rs`
+     - Pin names up to 8 arbitrary bytes
+     - Accepts exactly tilde followed by ``d``; restores dots and
+       copies other bytes
+   * - ``pin_name_roundtrip``
+     - Pin-name slice helpers of :src:`rust/src/util/upatch.rs`
+     - Names up to 4 bytes without a tilde
+     - A name decodes back after encoding
+   * - ``io_lines``
+     - ``last_newline_end()`` of :src:`rust/src/util/io.rs`
+     - Text up to 8 arbitrary bytes
+     - Returns the position after the last newline, or zero
+   * - ``io_append_text``
+     - ``append_text()`` of :src:`rust/src/util/io.rs`
+     - Text up to 3 arbitrary bytes
+     - Removes one final newline; rejects an embedded newline or NUL
+   * - ``paths_key_file``
+     - ``key_file_size()`` and ``key_file_into()`` of
+       :src:`rust/src/util/paths.rs`
+     - Directory up to 2 arbitrary bytes, file ``f``
+     - Refuses an empty directory or NUL and adds one separator only
+       when needed, then copies the file name
+   * - ``paths_key_file_parts``
+     - ``key_file_size()`` and ``key_file_into()`` of
+       :src:`rust/src/util/paths.rs`
+     - Directory and file up to 2 bytes each; output capacity 0 to 6
+     - Joins the parts with at most one slash when capacity is exact;
+       otherwise refuses without changing the output
+
+   * - ``attest_pcrs``
+     - ``parse_pcrs()`` of :src:`rust/src/util/attest.rs`
+     - Every text up to 6 arbitrary bytes
+     - Accepts comma-separated decimal PCRs from 0 to 23 and returns
+       the corresponding bit mask
+   * - ``attest_name_digest_one_digit``
+     - ``parse_name_digest()`` of :src:`rust/src/util/attest.rs`
+     - Each of 64 digest positions, one arbitrary byte among zeros;
+       name ``n``
+     - Decodes the digit at that position or rejects an invalid one
+   * - ``attest_name_digest_short_shape``
+     - ``parse_name_digest()`` of :src:`rust/src/util/attest.rs`
+     - Names of 0 to 4 ``n`` bytes and 63 to 65 zero digits
+     - Requires a nonempty name and exactly 64 digest digits
+
+These bounded checks do not prove file-system writes, TPM effects, or
+arbitrary-length inputs. The I/O, key-path and pin-name slice helpers
+are called by the production code; their allocation and external-call
+wrappers are also exercised by unit and functional tests. The two C
+pin-name proofs remain until the lead accepts a complete replacement.
+
+The removed C proofs for full six-byte sanitization, 22-byte number
+parsing, attestation replay, the 256-byte name limit, a complete 64-digit
+PCR value, and pin path construction do not yet have equivalent Kani harnesses. The Rust port
+uses slices and standard methods instead of the old C span, prefix and
+token helpers, so those C-only memory contracts do not have a direct
+production function to prove. The corresponding behavior still needs
+review at its Rust call sites. The claims above are limited to the
+functions and inputs each row names.
 
 CBMC proofs
 -----------
@@ -48,7 +196,7 @@ Lean 4 proofs
 -------------
 
 Each proof holds for every input of the model; the last column says how
-the model follows the C.
+the model follows production code.
 
 .. list-table::
    :header-rows: 1
@@ -57,14 +205,14 @@ the model follows the C.
    * - Model
      - Theorems
      - Assumptions
-     - Follows the C
+     - Follows the code
    * - ``Shirudo.Number``, ``parse_u64()`` and ``parse_x64()`` of
        :src:`rust/src/text.rs`
      - ``parse_exact``: for digit strings of every length, the value they
        spell, or ``-ERANGE`` exactly when it passes ``max``
      - ``max`` fits a ``__u64``
-     - None since the port to Rust; the CBMC model went with
-       ``util/string.c``
+     - Kani comparison ``string_number_model`` covers inputs up to
+       4 bytes
    * - ``Shirudo.Chain``, the register of :src:`rust/src/util/chain.rs`
      - ``register_injective``, ``register_tagged_injective``: equal
        registers come from the same events, tagged the same, in the same
@@ -171,7 +319,10 @@ the model follows the C.
        same through the buffers, ``-ENAMETOOLONG`` exactly where the C
        refuses
      - A C string is shorter than 2^63 bytes
-     - CBMC, ``paths-bpffs-name-model``, up to 8 bytes
+     - Kani ``pin_name_encode``, ``pin_name_decode`` and
+       ``pin_name_roundtrip`` compare the Rust slice helpers within
+       their stated bounds. CBMC ``paths-bpffs-name-model`` still
+       checks the C path.
    * - ``Shirudo.ArchivePath``, ``archive_rel_ok()``,
        ``package_member_name_ok()`` and the member checks of
        ``extract()`` of :src:`rust/src/util/bpm_package/`
@@ -196,8 +347,9 @@ the model follows the C.
        lowercase; ``decodeMax_spec``: ``decode_max()`` takes exactly
        the even runs of at most ``2 * cap``; ``encode_injective``
      - A string is shorter than ``SIZE_MAX``
-     - None since the port to Rust; the CBMC model went with
-       ``util/hex.c``
+     - Kani comparisons ``hex_roundtrip``, ``hex_decode``,
+       ``hex_decode_max`` and ``hex_encode_model`` cover their
+       stated bounds; the C model went with ``util/hex.c``
    * - ``Shirudo.JsonString``, the strict ``put_string()`` that
        ``json_str()`` calls and ``Cursor::string()`` of
        :src:`rust/src/util/json/`
