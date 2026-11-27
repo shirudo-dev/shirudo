@@ -11,7 +11,6 @@ use core::ffi::c_int;
 pub(crate) const MAX_LEN: usize = 64;
 
 /// `struct suggestion`: a candidate and its distance from the input.
-#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Suggestion<T> {
     pub name: T,
