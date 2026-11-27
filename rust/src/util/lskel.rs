@@ -424,3 +424,25 @@ impl Skeleton {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+
+    #[test]
+    fn missing_shared_map_clears_earlier_duplicates() {
+        let source = File::open("/dev/null").unwrap();
+        let mut log = [0u8; 1];
+        let mut cx = Ctx::new(2, 0, &mut log).unwrap();
+
+        let result =
+            duplicate_shared_maps(&mut cx, 0..2, |i| (i == 0).then_some(source.as_raw_fd()));
+
+        assert_eq!(result.err(), Some(("shared map", -ENOENT)));
+        assert_eq!(cx.map_fd(0), 0);
+        assert_eq!(cx.map_fd(1), 0);
+        drop(cx);
+        assert!(source.metadata().is_ok());
+    }
+}
