@@ -87,11 +87,14 @@ reads it is outside shirudo:
   drops the agents.
 - Root, or the user who starts the JVM, can set ``JAVA_TOOL_OPTIONS`` or
   edit the file, and so start a JVM without the agent.
-- A Java 8 JVM reads at most 1024 bytes and 64 options from
-  ``JAVA_TOOL_OPTIONS`` and drops options past that without an error
-  (JDK-8288483). Each agent adds ``-javaagent:/run/shirudo-java/<name>.jar``
-  to what other ``environment.d`` files set, so keep the agents few and
-  their names short where Java 8 runs.
+- A Java 8 JVM reads at most 64 options from ``JAVA_TOOL_OPTIONS`` and
+  drops options past that, and it drops the whole value when that is
+  1024 bytes or more, each without an error (JDK-8288483). One given
+  such a value starts without any agent and without the options other
+  ``environment.d`` files set. Each agent adds
+  ``-javaagent:/run/shirudo-java/<name>.jar`` to what other
+  ``environment.d`` files set, so keep the agents few and their names
+  short where Java 8 runs.
 
 An agent does what Java code in the JVM can do: it is a mitigation
 inside the application, not a boundary the kernel enforces. A BPF upatch
