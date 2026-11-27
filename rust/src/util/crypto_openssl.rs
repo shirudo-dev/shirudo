@@ -298,7 +298,7 @@ pub(crate) unsafe fn base64_encode(
     };
     // SAFETY: the caller's room for need bytes.
     unsafe { ptr::copy_nonoverlapping(text.as_ptr(), out.cast(), text.len()) };
-    // SAFETY: need - 1 is the last byte of the caller's output room.
+    // SAFETY: need - 1 lies within the caller's output room.
     unsafe { *out.add(need - 1) = 0 };
     0
 }
@@ -899,7 +899,7 @@ pub(crate) unsafe fn aes128_cfb_encrypt(
 }
 
 /// An OAEP label allocated by OpenSSL until the key context takes it.
-struct OpenSslLabel(Option<NonNull<c_void>>);
+struct OpenSslLabel(NonNull<c_void>);
 
 impl OpenSslLabel {
     fn copy_from(label: &[u8]) -> Result<Self, ErrorStack> {
@@ -908,20 +908,17 @@ impl OpenSslLabel {
         let p = NonNull::new(p).ok_or_else(ErrorStack::get)?;
         // SAFETY: p holds label.len() bytes and does not overlap label.
         unsafe { ptr::copy_nonoverlapping(label.as_ptr(), p.as_ptr().cast(), label.len()) };
-        Ok(Self(Some(p)))
+        Ok(Self(p))
     }
 
-    fn install(mut self, ctx: &mut PkeyCtx<Public>, len: c_int) -> Result<(), ErrorStack> {
-        let Some(p) = self.0 else {
-            return Err(ErrorStack::get());
-        };
-        // SAFETY: p holds the label, and libcrypto takes it on success.
-        let ret = unsafe { more::EVP_PKEY_CTX_set0_rsa_oaep_label(ctx.as_ptr(), p.as_ptr(), len) };
+    fn install(self, ctx: &mut PkeyCtx<Public>, len: c_int) -> Result<(), ErrorStack> {
+        // SAFETY: the label is live; libcrypto takes it only on success.
+        let ret =
+            unsafe { more::EVP_PKEY_CTX_set0_rsa_oaep_label(ctx.as_ptr(), self.0.as_ptr(), len) };
         if ret > 0 {
-            self.0 = None;
+            core::mem::forget(self);
             Ok(())
         } else {
-            drop(self);
             Err(ErrorStack::get())
         }
     }
@@ -929,10 +926,8 @@ impl OpenSslLabel {
 
 impl Drop for OpenSslLabel {
     fn drop(&mut self) {
-        if let Some(p) = self.0 {
-            // SAFETY: this allocation was not handed to libcrypto.
-            unsafe { ffi::OPENSSL_free(p.as_ptr()) };
-        }
+        // SAFETY: this allocation was not handed to libcrypto.
+        unsafe { ffi::OPENSSL_free(self.0.as_ptr()) };
     }
 }
 

@@ -2130,15 +2130,12 @@ fn challenge_keys(evidence: &[u8]) -> Result<ChallengeKeys, c_int> {
     })
 }
 
-/// A certificate cert_read_der() reads into, owned until this value drops.
-struct HeldCert(Cert);
-
 /// The certificate in the base64 `b64` and its key: none when it does
 /// not decode, parse or hold a key of the kinds a TPM's endorsement key
 /// has.
-fn ek_certificate(b64: &[u8]) -> Option<(HeldCert, CertPubkey)> {
+fn ek_certificate(b64: &[u8]) -> Option<(Cert, CertPubkey)> {
     let mut der = vec![0u8; EK_CERT_MAX];
-    let mut cert = HeldCert(Cert::new());
+    let mut cert = Cert::new();
     let mut key = CertPubkey {
         rsa: false,
         n: [0; 512],
@@ -2151,11 +2148,11 @@ fn ek_certificate(b64: &[u8]) -> Option<(HeldCert, CertPubkey)> {
     let der_len = base64_decode(b64, &mut der).ok()?;
     let der = der.get(..der_len)?;
     // SAFETY: the DER's bytes, and the certificate to read them into.
-    if unsafe { cert_read_der(der.as_ptr(), der.len(), &mut cert.0) } != 0 {
+    if unsafe { cert_read_der(der.as_ptr(), der.len(), &mut cert) } != 0 {
         return None;
     }
     // SAFETY: the certificate read above, and room for its key.
-    if unsafe { cert_pubkey(&cert.0, &mut key) } != 0 {
+    if unsafe { cert_pubkey(&cert, &mut key) } != 0 {
         return None;
     }
     Some((cert, key))
@@ -2164,12 +2161,12 @@ fn ek_certificate(b64: &[u8]) -> Option<(HeldCert, CertPubkey)> {
 /// Whether the certificate chains to the issuer bundle at `bundle`: 0,
 /// -EKEYREJECTED with libcrypto's reason, or -EINVAL for a bundle that
 /// cannot be loaded.
-fn cert_chains(cert: &HeldCert, bundle: &CStr) -> (c_int, &'static [u8]) {
+fn cert_chains(cert: &Cert, bundle: &CStr) -> (c_int, &'static [u8]) {
     let mut reason: *const c_char = c"".as_ptr();
 
     // SAFETY: the certificate, the bundle's path, a C string, and where
     // the reason goes.
-    let ret = unsafe { cert_verify_chain(&cert.0, bundle.as_ptr(), &mut reason) };
+    let ret = unsafe { cert_verify_chain(cert, bundle.as_ptr(), &mut reason) };
     // SAFETY: a static C string of libcrypto's, or the empty one above.
     (ret, unsafe { ffi::c_str(reason) })
 }
