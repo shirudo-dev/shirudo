@@ -5,7 +5,8 @@ runs under dash: the header, `set -eu`, the traps around one scratch
 directory, a usage error with status 2, every finding reported with an
 annotation under `GITHUB_ACTIONS`, status 1 with a count, and one line
 on stdout when it passes. Start a script from it and cut what the
-script does not need.
+script does not need; a test starts from the `functional-tests` skill
+instead.
 
 ```sh
 #!/bin/sh

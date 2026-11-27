@@ -1,6 +1,6 @@
 ---
 name: testing
-description: Run shirudo's tests and its test VM. Covers the unit, ci-checks, functional and end2end tiers, one suite or family of them, the target tests that each boot a QEMU guest with a software TPM, sanitizer and fuzz runs, and booting, reusing or stopping an interactive VM. Use when asked to run, add or debug a test, to boot or use a test VM, or when a task needs shirudo running as a target, which the host cannot do. Takes an optional kernel for the VM, bpf-next by default or a release from 7.4 up.
+description: Runs shirudo's tests and its test VM, and decides which tier a test belongs in. Covers the unit, ci-checks, functional and end2end tiers, one suite or family, the target tests that boot a QEMU guest with a software TPM, sanitizer and fuzz runs, and booting, reusing or stopping an interactive VM. Use when asked to run or debug a test, to choose where a new test goes, to boot or use a test VM, or when a task needs shirudo running as a target. Takes an optional kernel, bpf-next by default or a release from 7.4 up.
 ---
 
 # Testing
@@ -10,6 +10,25 @@ tiers, the families and how tests are named, and the VM under "Boot an
 interactive VM" and "Run a target test by hand".
 `Documentation/contribute/testing/test-coverage.rst` lists what each test
 covers and changes with every test added or removed.
+
+## Choose a tier
+
+Put a test in the lowest tier that can show the change works, then load
+that tier's skill to write it:
+
+| Under test | Tier and file | Cost | Reaches | CI runs it | Skill |
+|---|---|---|---|---|---|
+| A function or parser of `util/`, or an object a suite links through `UNIT_OBJS` | unit, `testing/unit/<m>.c` | seconds | the code in-process, files under `TMPDIR`, a private mount namespace as root; no BPF LSM, keyring, TPM or VM | Build with gcc and clang on every pull request, in the merge queue and on main; the CI suite's unit and arm64 host jobs; ASan, UBSan and MSan on pull requests, TSan on main | `unit-tests` |
+| A script of `.github/scripts/` | ci-checks, `testing/ci-checks/t00<NN>-*.sh` | seconds | a throwaway repository and stubbed commands | the CI suite's unit and arm64 host jobs and the ASan and UBSan job, on pull requests and main | `functional-tests` |
+| A command's behavior on the build host: build, sign, package, publish to a mock registry, `attest verify`, TPM structures under the libtpms simulator, the build and VM scripts | operator test `t<F>0<NN>` in its family's directory | seconds to a minute | the checkout's binaries and helpers, as the user who runs it, root in CI | the CI suite's functional shards and arm64 host job and the ASan and UBSan job, on pull requests and main | `functional-tests` |
+| Enforcement or state on a booted target: an LSM hook, the seal, the keyrings, the register, load and unload, tree sync | target test `t<F>1<NN>` in its family's directory | a bundle build and a VM boot per family, minutes | root in a fresh VM with the test kernel, a software TPM, the initrd, signed fixtures and config images | the CI suite's functional shards, x86-64, on pull requests and main | `functional-tests` |
+| A flow across the operator, a registry, targets and the backend | end2end, `testing/end2end/t91<NN>-*.sh` | the whole tier, the longest run: the operator package built in a VM and up to five target boots | the operator VM, fresh nodes, the registry and the keepalive backend | the CI suite's end-to-end job, x86-64, on pull requests and main | `end2end-tests` |
+
+A parser of input from outside the host also gets a fuzz target (the
+`fuzz-target` skill) and a CBMC proof where one fits (the `proofs`
+skill), which CI runs on main only. The SQL of `tools/backend` is
+tested by `tools/backend/test/<name>.sql`, as "Run the backend tests"
+in `testing.rst` says. The merge queue runs none of the shell tiers.
 
 ## Tiers
 
@@ -32,46 +51,11 @@ tools/backend/test/run.sh <name>...         # only the SQL tests named
 make -C tools/xtop tests                    # xtop: tsc and bun test, needs bun
 ```
 
-The end2end tier runs t9107, and t9109 to t9112 on the host, against
-the keepalive backend of `tools/backend`, which `host.sh` starts for
-every run. The tier boots two VMs at once, each with its own
-swtpm: node A runs the tests, node B (`make -C testing vm-node-end2end`,
-node mode of `vm/run.sh`) takes `role=core` from `config-core` and waits.
-Node mode first runs `vm/tpm-builder.sh`, which creates the node's AK
-and EK with tpm2-tools, writes their names to `tpm-names` in the VM's
-state directory, and stores an EK certificate from a throwaway CA whose
-certificate it leaves in `ek-ca.pem` beside them; host.sh verifies node
-B against the names and t9109 enrolls it in the backend, t9112 enrolls
-the edge node through credential activation against its CA, so node mode
-needs tpm2-tools, the swtpm TCTI of tpm2-tss (`libtss2-tcti-swtpm0t64`),
-swtpm-tools and openssl on the host. The tier needs the quote checker,
-which `make -C testing end2end` builds first. A fresh edge node
-(`END2END_NODE=edge`, `role=edge` from `config-edge`) boots once node A
-has stopped, and `host.sh` runs t9109,
-then t9110, which continues t9109's tree in segments, and t9112, on the
-host against it and node B. Then a second fresh pair boots in their
-place, as `<name>-2-end2end-edge` and `-b`, the registry restarts empty, and
-`host.sh` runs t9111, the backward walk over sealed segments, against
-them. On x86-64 a third fresh edge node then boots alone, as
-`<name>-3-end2end-edge`, the registry restarts empty again, and `host.sh`
-runs t9113 against it: the java-base64 shield published, appended to a
-new tree, pulled and blocking `upatches/test/badDecoder.jar` in a JVM,
-then deleted and gone. Last, on every architecture, a fourth fresh edge
-node boots alone, as `<name>-4-end2end-edge`, the registry restarts
-empty once more, and `host.sh` runs t9114 against it: the app-sandbox
-upatch built with the sandbox of `testing/fixtures/app-sandbox`,
-published, appended to a new tree, pulled and restricting what
-`testing/end2end/app_sandbox_probe.py` executes, connects to and
-writes, then deleted and gone. Their output is
-`build/test-vm/end2end/t9109.log` to `t9114.log`.
-A test reaches the nodes with `node_sh b` or `node_sh edge` of
-`testing/end2end/node-lib.sh`, and does to them, the registry and the
-backend what `testing/end2end/pipeline-lib.sh` offers. Their boot logs
-are `build/test-vm/end2end/node-b.log` and `node-edge.log`, with `-2`
-for the second pair, their state `build/test-vm/vms/<name>-end2end-b/`
-and `-edge/`. Every node
-declares the image of `testing/vm/files/end2end.os-release` without a
-root hash, so the backend binds them `declared`.
+The end2end tier runs node A's tests, t9101 to t9107, over SSH, then
+the host tests t9109 to t9114 in rounds on fresh nodes, against the
+keepalive backend `host.sh` starts. The `end2end-tests` skill says what
+each round boots, what the host needs and where each log goes;
+"Run the end-to-end tests" in `testing.rst` has the whole run.
 
 Host tests run as they are. A target test, `t?1??`, runs in a fresh VM
 per family, which needs KVM, an unlimited `ulimit -l`, the test kernel
@@ -79,17 +63,16 @@ and the bundle, but not root; see
 below. The VM always boots the dm-verity runtime and the signed config
 from a dracut initrd. The runner caches the initrd by kernel, bundle and
 initrd inputs, while each family keeps its own VM and guest state. CI
-runs the same suite through `.github/scripts/tests.sh`. A change to
-`util/<m>.c` adds or updates its cases in `testing/unit/<m>.c`, and a
-parser of input from outside the host gets a target in `testing/fuzz/`.
+runs the same suite through `.github/scripts/tests.sh`, as root.
 
 ## Reading results
 
 - The host tiers print TAP. Look for `not ok`, `runtime error:` and
   `ERROR: AddressSanitizer`, and read the reason of every `# SKIP`: a
-  skip can hide a failure. t7005 and t7006 skip when `bpm build` fails,
-  so a sanitizer abort in `shirudo-build` reads as a skip there, and
-  t3004 skips when the arena serializer does not build.
+  skip can hide a failure. `grep -nE '^not ok|runtime error:|ERROR:
+  AddressSanitizer|# SKIP'` finds each. t3004 skips when the arena serializer does
+  not build, so a sanitizer abort in `shirudo-build` reads as a skip
+  there.
 - A family's target tests print only `[test-vm] result: PASS` or
   `FAIL`. Their TAP output is in
   `build/test-vm/vms/<name>/result/guest.log`, the exit status in
@@ -108,19 +91,15 @@ parser of input from outside the host gets a target in `testing/fuzz/`.
 
 ## Before a VM goal
 
-- `vm`, `test-vm-bundle` and every family with target tests require a CI
-  kernel artifact under `artifacts/bpf-next-kernel-debs/`.
-  `testing/vm/kernel-artifact.sh` pins a build run and a SHA-256 for each
-  architecture. Dispatch Build kernel packages and Publish test kernel
-  on shirudo's main branch for a new pin. Update the run ID and both
-  checksums together. CI builds x86-64 and arm64 from `testing/kernel/`
-  for a run that changes the kernel inputs. Otherwise it downloads the pinned
-  prerelease. Local VM goals use `testing/vm/kernel-artifact.sh fetch`
-  when the kernel is missing. It downloads the prerelease ZIP with
-  `curl` and verifies its checksum before extraction. Use authenticated
-  `gh` with `KERNEL_RUN_ID` for a specific shirudo Actions run. A kernel
-  already staged is left alone: remove the directory to get the pinned
-  one.
+- `vm`, `test-vm-bundle` and every family with target tests need a
+  kernel staged under `artifacts/bpf-next-kernel-debs/`. When none is,
+  the goal runs `testing/vm/kernel-artifact.sh fetch`, which downloads
+  the prerelease the script pins with `curl` and checks its SHA-256
+  before it unpacks it; `KERNEL_RUN_ID=<run>`, with an authenticated
+  `gh`, fetches another run of Build kernel packages instead. A kernel
+  already staged is used as it is: remove the directory to get the
+  pinned one, and say so first. Building, staging or publishing a
+  kernel and moving the pin are the `kernel` skill's.
 - The bundle builds in the build container (`testing/container/`) from
   a copy of the files git sees in the checkout, tracked and untracked but
   not ignored, so uncommitted changes are tested; edit nothing until the
@@ -145,8 +124,10 @@ No VM goal needs root. A terminal installed as a snap, such as
 Alacritty, gives everything it starts its `snap.<name>` AppArmor label
 (`cat /proc/self/attr/current`), and Ubuntu's `swtpm` profile takes
 signals only from unconfined processes and from `swtpm`: Ctrl-C, the
-runner's cleanup and `vm-stop` then leave `swtpm` running. Run the goal
-as a transient user service, which runs unconfined. It starts with the
+runner's cleanup and `vm-stop` then leave `swtpm` running. When `cat
+/proc/self/attr/current` prints anything but `unconfined`, run the
+goal as a transient user service, which runs unconfined; otherwise run
+it directly, with the shell's environment and limits. It starts with the
 environment and limits of the user manager, not the shell's. The
 families build the host tier on the host, and so does the bundle with
 `BUILD_CONTAINER=0`; pass on the `PATH` and `LD_LIBRARY_PATH` a host
@@ -219,10 +200,11 @@ done
 ```
 
 Use a VM that passes all three checks, and name it in every command with
-`VM_NAME=<name>`. Ask the user what to do in any other case: when no VM
-runs, when one runs a different kernel or a stale build, or when several
-pass. Offer to boot a new VM, to stop or replace the old one, or to use it
-anyway. Never stop, replace or clean a VM without that answer.
+`VM_NAME=<name>`. When no VM of this checkout runs, boot one (`make -C
+testing vm`) and say so. Ask the user when one runs a different kernel
+or a stale build, or when several pass: offer to boot a new VM beside
+it, to stop or replace the old one, or to use it anyway. Never stop,
+replace or clean a VM without that answer.
 
 ## Commands
 
