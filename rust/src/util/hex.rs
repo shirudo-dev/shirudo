@@ -23,7 +23,7 @@ pub(crate) fn encode(bytes: &[u8]) -> Vec<u8> {
 /// Write the two lowercase digits of each input byte into a slice with
 /// exactly twice as many bytes as the input.
 fn encode_into(bytes: &[u8], out: &mut [u8]) {
-    for (pair, &byte) in out.chunks_exact_mut(2).zip(bytes) {
+    for (pair, &byte) in out.as_chunks_mut::<2>().0.iter_mut().zip(bytes) {
         pair[0] = DIGITS[usize::from(byte >> 4)];
         pair[1] = DIGITS[usize::from(byte & 0xf)];
     }
