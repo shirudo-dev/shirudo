@@ -121,6 +121,16 @@ shirudo_image_observer_guards[IMAGE_OBSERVER_HOOK_COUNT] = {
 };
 
 const struct image_guard
+shirudo_shared_guards[SHARED_HOOK_COUNT] = {
+	{ "shirudo_lsm_inode_permission",
+	  BPFFS_DIR "/bpf2_inode_permission_link" },
+	{ "shirudo_lsm_bpf_map_free", BPFFS_DIR "/bpf2_bpf_map_free_link" },
+	{ "shirudo_lsm_bpf_prog_free", BPFFS_DIR "/bpf2_bpf_prog_free_link" },
+	{ "shirudo_lsm_bpf_map_create",
+	  BPFFS_DIR "/bpf2_bpf_map_create_link" },
+};
+
+const struct image_guard
 shirudo_gate_guards[GATE_HOOK_COUNT] = {
 	[GUARD_UNLINK] = {
 		"shirudo_lsm_inode_unlink", INODE_UNLINK_LINK_PIN,
@@ -374,13 +384,16 @@ static int guard_link(const struct image_guard *guard,
 	return guard_program_maps(&program, map_ids, maps);
 }
 
-/* Authenticated initrd bootstrap precedes every hostile task. */
-int image_guards_ready(void)
+static int guards_ready(bool shared)
 {
 	const struct {
 		const struct image_guard *guards;
 		size_t count;
 	} groups[] = {
+		{
+			.guards = shirudo_shared_guards,
+			.count = shared ? SHARED_HOOK_COUNT : 0,
+		},
 		{
 			.guards = shirudo_gate_guards,
 			.count = ARRAY_SIZE(shirudo_gate_guards),
@@ -431,4 +444,20 @@ int image_guards_ready(void)
 out:
 	btf__free(kernel);
 	return ret;
+}
+
+/*
+ * Authenticated initrd bootstrap precedes every hostile task. Shared mode
+ * opens bpf() to root, which only its own guards keep from shirudo's
+ * pins and objects, so a shared record without them is refused.
+ */
+int image_guards_ready(void)
+{
+	struct identity id = {};
+	int ret;
+
+	ret = identity_read(&id);
+	if (ret)
+		return ret;
+	return guards_ready(id.enforcement == ENFORCEMENT_SHARED);
 }

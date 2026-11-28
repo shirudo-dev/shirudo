@@ -115,6 +115,7 @@ testing/helper/test-tpm-preopened
 testing/helper/test-config
 testing/helper/test-bpf-load
 testing/helper/test-bpf-cmd
+testing/helper/test-shared-bpf
 testing/helper/test-exec-fail
 testing/helper/test-exec-shared
 testing/helper/test-xfs-attrmulti

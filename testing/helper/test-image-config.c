@@ -7,6 +7,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <shirudo/enforcement.h>
+
 #include "util/config.h"
 #include "util/image_config.h"
 #include "util/image_bootstrap.h"
@@ -20,12 +22,16 @@ static int read_bootstrap(int argc, char **argv)
 	int ret;
 
 	ret = image_bootstrap_read(argv[2], &boot, true);
-	if (!ret && argc == 4)
-		ret = image_bootstrap_read(argv[3], &boot, false);
+	for (i = 3; !ret && i < (size_t)argc; i++) {
+		boot.n_certificates = 0;
+		ret = image_bootstrap_read(argv[i], &boot, false);
+	}
 	if (!ret) {
 		hex_encode(boot.runtime_root, 32, root);
 		printf("runtime=%s\nroot=%s\nconfig=%s\npcr=%u\n",
 		       boot.runtime, root, boot.config, boot.pcr);
+		printf("enforcement=%s\n", boot.enforcement ==
+		       ENFORCEMENT_SHARED ? "shared" : "strict");
 		printf("certificates=%zu\n", boot.n_certificates);
 		for (i = 0; i < boot.n_certificates; i++)
 			printf("certificate=%s\n", boot.certificates[i]);
@@ -39,10 +45,12 @@ int main(int argc, char **argv)
 	struct config bootstrap, effective;
 	int fd, ret;
 
-	if (argc < 3 || argc > 4)
+	if (argc < 3)
 		return 2;
 	if (!strcmp(argv[1], "bootstrap"))
 		return read_bootstrap(argc, argv);
+	if (argc > 4)
+		return 2;
 	fd = open(argv[2], O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
 	if (fd < 0)
 		return 1;

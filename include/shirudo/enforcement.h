@@ -4,6 +4,10 @@
 #ifndef SHIRUDO_ENFORCEMENT_H
 #define SHIRUDO_ENFORCEMENT_H
 
+#ifndef __bpf__
+#include <shirudo/types.h>
+#endif
+
 #define PR_GET_ENFORCEMENT 0x53520001
 #define PR_ENFORCING_ERR 1002
 
@@ -11,6 +15,25 @@
 #define SHIRUDO_PIN_GRANT_BEGIN	0x53520002u
 #define SHIRUDO_PIN_GRANT_END	0x53520003u
 #define SHIRUDO_PIN_GRANT_ACK	1003
+
+/*
+ * The enforcement mode init freezes into the identity record. Strict is
+ * zero, so that a record without a mode enforces in full.
+ */
+#define ENFORCEMENT_STRICT	0u
+#define ENFORCEMENT_SHARED	1u
+
+/*
+ * A map or program bpf2 or seal created, which init records by id in
+ * shirudo_boot_objects before the bpf() gates attach.
+ */
+#define BOOT_OBJECT_MAP		1u
+#define BOOT_OBJECT_PROG	2u
+
+struct boot_object {
+	__u32	kind;	/* BOOT_OBJECT_MAP or _PROG */
+	__u32	id;
+};
 
 /*
  * vmlinux.h carries no UAPI macros, so BPF code takes the ioctl number

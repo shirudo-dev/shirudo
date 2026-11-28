@@ -119,6 +119,48 @@ test_expect_success 'the config NvPCR replaces the config PCR, as the runtime im
 	done
 '
 
+test_expect_success 'the runtime image selects the enforcement mode, strict by default' '
+	"$H" bootstrap "$WORK/initrd.conf" "$WORK/runtime.conf" >"$WORK/result" &&
+	grep -qx "enforcement=strict" "$WORK/result" &&
+	for mode in strict shared; do
+		cp "$WORK/runtime.conf" "$WORK/mode.conf" &&
+		printf "enforcement.mode = %s\n" "$mode" >>"$WORK/mode.conf" &&
+		"$H" bootstrap "$WORK/initrd.conf" "$WORK/mode.conf" \
+			>"$WORK/result" &&
+		grep -qx "enforcement=$mode" "$WORK/result" || exit 1
+	done
+'
+
+test_expect_success 'the enforcement mode comes from the runtime image alone' '
+	cp "$WORK/initrd.conf" "$WORK/bad.conf" &&
+	printf "enforcement.mode = shared\n" >>"$WORK/bad.conf" &&
+	! "$H" bootstrap "$WORK/bad.conf" &&
+	for setting in "enforcement.mode = loose" "enforcement.mode =" \
+		"enforcement.mode = Shared" "enforcement.unknown = shared"; do
+		cp "$WORK/runtime.conf" "$WORK/bad.conf" &&
+		printf "%s\n" "$setting" >>"$WORK/bad.conf" &&
+		! "$H" bootstrap "$WORK/initrd.conf" "$WORK/bad.conf" || exit 1
+	done
+'
+
+test_expect_success 'a runtime bootstrap read again sets the mode afresh' '
+	cp "$WORK/runtime.conf" "$WORK/shared.conf" &&
+	printf "enforcement.mode = shared\n" >>"$WORK/shared.conf" &&
+	"$H" bootstrap "$WORK/initrd.conf" "$WORK/shared.conf" \
+		"$WORK/shared.conf" >"$WORK/result" &&
+	grep -qx "enforcement=shared" "$WORK/result" &&
+	"$H" bootstrap "$WORK/initrd.conf" "$WORK/shared.conf" \
+		"$WORK/runtime.conf" >"$WORK/result" &&
+	grep -qx "enforcement=strict" "$WORK/result"
+'
+
+test_expect_success 'a repeated enforcement mode is rejected' '
+	cp "$WORK/runtime.conf" "$WORK/bad.conf" &&
+	printf "enforcement.mode = strict\nenforcement.mode = shared\n" \
+		>>"$WORK/bad.conf" &&
+	! "$H" bootstrap "$WORK/initrd.conf" "$WORK/bad.conf"
+'
+
 test_expect_success 'unknown image settings and malformed lines are rejected' '
 	for setting in "runtime.unknown = value" "config.unknown = value" "missing equals"; do
 		printf "%s\n" "$setting" >"$WORK/bad.conf" &&

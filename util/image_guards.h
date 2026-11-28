@@ -13,6 +13,7 @@
 #define MOUNT_HOOK_COUNT 6
 #define OBSERVER_HOOK_COUNT 10
 #define IMAGE_OBSERVER_HOOK_COUNT 4
+#define SHARED_HOOK_COUNT 4
 
 struct image_guard {
 	const char *prog;
@@ -44,6 +45,9 @@ extern const struct image_guard
 	shirudo_observer_guards[OBSERVER_HOOK_COUNT];
 extern const struct image_guard
 	shirudo_gate_guards[GATE_HOOK_COUNT];
+/* Attached and checked only when the identity record says shared. */
+extern const struct image_guard
+	shirudo_shared_guards[SHARED_HOOK_COUNT];
 
 struct config_root_guard {
 	int map_fd;

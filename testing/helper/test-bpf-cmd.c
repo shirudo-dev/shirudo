@@ -47,6 +47,7 @@ static const struct {
 	{ "ITER_CREATE",		BPF_ITER_CREATE },
 	{ "LINK_DETACH",		BPF_LINK_DETACH },
 	{ "PROG_BIND_MAP",		BPF_PROG_BIND_MAP },
+	{ "TOKEN_CREATE",		BPF_TOKEN_CREATE },
 };
 
 int main(int argc, char **argv)

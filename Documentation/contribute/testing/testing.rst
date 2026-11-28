@@ -285,10 +285,12 @@ A shell test is named ``t<F><K><NN>-<what>.sh``:
        revocation and interruption; ``image-reboot`` boots a VM of its
        own twice, for what only the next boot does with a config
    * - 6
-     - ``functional/tamperproof/``, ``functional/labels/``
+     - ``functional/tamperproof/``, ``functional/labels/``,
+       ``functional/shared/``
      - Attacks on the admission and BPF command policy, bpffs, the
        seal, task authority, task and socket policy inheritance, the
-       keyrings and the TPM path
+       keyrings and the TPM path; shared enforcement, whose VM boots the
+       runtime image built with ``enforcement.mode = shared``
    * - 7
      - ``functional/bpm/``, ``functional/bpm-segments/``,
        ``functional/bpm-pending/``
@@ -732,6 +734,9 @@ Boot an interactive VM
    * - ``TEST_VM_VERBOSE=1``
      - Streams the console of a VM that runs tests to the terminal, and
        what the end-to-end tests print over SSH.
+   * - ``TEST_VM_ENFORCEMENT=shared``
+     - Boots the runtime image built with ``enforcement.mode = shared``,
+       as the ``shared`` family always does.
 
 Inside the guest:
 

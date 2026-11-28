@@ -1297,3 +1297,8 @@ __u32 shirudo_image_config_pcr(void)
 {
 	return image.bootstrap.pcr;
 }
+
+__u32 shirudo_image_enforcement(void)
+{
+	return image.bootstrap.enforcement;
+}

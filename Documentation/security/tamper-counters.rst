@@ -37,7 +37,9 @@ counter.
    * - ``LoadNotLoader``
      - program load that is not a signed loader
      - ``lsm/bpf``: ``BPF_PROG_LOAD`` of a type other than
-       ``BPF_PROG_TYPE_SYSCALL``, every userspace caller
+       ``BPF_PROG_TYPE_SYSCALL``, every userspace caller; in shared
+       enforcement ``lsm/bpf_prog_load`` instead: an LSM or a
+       modify-return program from a task without runtime authority
      - ``EACCES``
    * - ``LoadUnsigned``
      - loader-type program load without a signature
@@ -70,8 +72,9 @@ counter.
      - ``EACCES``
    * - ``MapFdWrite``
      - writable map descriptor for another executable
-     - ``lsm/bpf_map``: a writable descriptor
-     - ``EACCES``
+     - ``lsm/bpf_map``: a writable descriptor; in shared enforcement,
+       one of a map shirudo owns
+     - ``EACCES``, ``ENOENT`` in shared enforcement
    * - ``ProgRun``
      - test run of a program by another executable
      - ``lsm/bpf``: ``BPF_PROG_TEST_RUN``
@@ -89,7 +92,9 @@ counter.
      - ``lsm/bpf``: every command not listed elsewhere, such as
        ``BPF_LINK_DETACH``, ``BPF_LINK_UPDATE``, ``BPF_PROG_ATTACH``,
        ``BPF_BTF_LOAD`` and the map deletions, from every userspace
-       caller, shirudo included
+       caller, shirudo included; in shared enforcement only
+       ``BPF_TOKEN_CREATE`` and unclassified commands from a task
+       without runtime authority
      - ``EACCES``
    * - ``ExeIdentity``
      - executable change through PR_SET_MM
@@ -199,7 +204,10 @@ counter.
    * - ``PinEntry``
      - directory or link made in the private bpffs by another executable
      - ``lsm/inode_mkdir``, ``lsm/inode_symlink``, ``lsm/inode_link`` in
-       the ``bpf2`` object
+       the ``bpf2`` object; in shared enforcement also
+       ``lsm/inode_permission``: a write to a directory of the private
+       bpffs, which a pin needs, and an unlink or a rename there, which
+       then never reach the hooks of ``PinUnlink``
      - ``EPERM``
    * - ``SealCopyUp``
      - overlay copy-up of a sealed inode
@@ -228,8 +236,12 @@ counter.
        ``BPF_LINK_GET_FD_BY_ID``; ``lsm/bpf_map``: a read-only
        descriptor; ``lsm/bpf_prog``: an XDP program descriptor;
        ``lsm/file_open`` in the ``bpf2`` object: a
-       non-directory inode in the private bpffs
-     - ``EACCES``
+       non-directory inode in the private bpffs. In shared enforcement
+       ``lsm/bpf_map`` and ``lsm/bpf_prog``: a descriptor of an object
+       shirudo owns; ``lsm/inode_permission``: a non-directory inode in
+       the private bpffs
+     - ``EACCES``, ``ENOENT`` for an object shirudo owns in shared
+       enforcement
    * - ``SealSignal``
      - signal to a shirudo task (let through)
      - ``lsm/task_kill``: a signal other than 0 to a marked task from a

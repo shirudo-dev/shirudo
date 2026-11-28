@@ -119,6 +119,14 @@ Bootstrap keys
      - Allowed
      - Required, or ``config.pcr``
      - Extend the config NvPCR, NV index ``0x01818E04``, instead of a PCR
+   * - ``enforcement.mode``
+     - ``strict`` or ``shared``
+     - Refused
+     - Optional, ``strict`` when absent
+     - How much of ``bpf()`` the guards keep from tasks without runtime
+       authority, see :doc:`/internals/enforcement`. ``shared`` leaves
+       other BPF users running beside shirudo on a host whose root is
+       trusted.
 
 The runtime bootstrap's ``config.*`` values are the ones in effect: the
 root file system's run of ``init`` and every later command read only the
@@ -128,9 +136,12 @@ Bootstrap rules:
 
 - A ``runtime.*`` key in the runtime bootstrap is refused with
   ``EINVAL``.
-- A ``config.*`` or ``runtime.*`` key not in the table is refused with
-  ``EINVAL``. A repeated ``runtime.image`` or ``runtime.root_hash`` is
-  refused with ``EINVAL``.
+- An ``enforcement.*`` key in the initrd bootstrap is refused with
+  ``EINVAL``, so the mode is part of the runtime image the initrd pins.
+- A ``config.*``, ``runtime.*`` or ``enforcement.*`` key not in the table
+  is refused with ``EINVAL``. A repeated ``runtime.image``,
+  ``runtime.root_hash`` or ``enforcement.mode`` is refused with
+  ``EINVAL``, as is a mode other than ``strict`` or ``shared``.
 - A repeated ``config.verification_key`` adds another allowed certificate.
   A repeated path is refused with ``EEXIST`` and more than 16 entries
   with ``E2BIG``. Runtime loading also rejects duplicate public keys and

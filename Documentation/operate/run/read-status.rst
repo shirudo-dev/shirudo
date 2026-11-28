@@ -193,6 +193,12 @@ Header
     operator and target split: remove it and treat the key as exposed,
     see :doc:`/operate/maintain/keys`.
 
+``Enforcement``
+    ``strict`` or ``shared``, the mode the runtime image selected and
+    ``init`` froze, see :doc:`/internals/enforcement`. Absent when
+    ``init`` has not run this boot. A target that should not share BPF
+    with root shows ``strict``.
+
 ``Status``
     The verdict, followed by the reason in parentheses when it is not
     ``ok``. :ref:`status-verdicts` explains each verdict.
@@ -847,6 +853,9 @@ Read the counters with these rules:
   uses BPF or inspects processes is refused too. A freshly booted test
   VM shows counts for ``LoadNotLoader``, ``MapCreate`` and
   ``BpfCommand`` before any upatch is loaded.
+  In shared enforcement ``ObjGet`` grows each time a BPF datapath or
+  ``bpftool`` walks every id and passes over shirudo's objects, and
+  ``BpfCommand`` each time cilium/ebpf starts and tries a token.
 - Alert on a counter that moves beyond the baseline, and on any count of
   a counter that stays at zero on your hosts.
 - Find the actor in the journal and on the host. The counter does not
