@@ -4,8 +4,8 @@
 </picture>
 <br/><br/>
 
-shirudo is a BPF-based security platform for Linux. After boot-time
-initialization, it restricts BPF program loads from userspace to signed
+shirudo is an eBPF-based security platform for Linux. After boot-time
+initialization, it restricts eBPF program loads from userspace to signed
 loaders. Operators ship signed micropatches, called
 [upatches](https://docs.shirudo.dev/upatches/learn/concepts.html),
 and verify a target's measured upatch state with TPM-signed evidence.
@@ -36,9 +36,9 @@ The operator and target may use different architectures. See
 - **Runtime security and observability.** Observe process executions,
   network activity, and privilege changes with the included
   [`kernel-obs` package](upatches/kernel-obs/README.md).
-- **Live mitigations.** Use BPF upatches to block vulnerable paths at kernel
+- **Live mitigations.** Use eBPF upatches to block vulnerable paths at kernel
   hooks or Java upatches to guard application code.
-- **System hardening.** Use BPF upatches to enforce policies for
+- **System hardening.** Use eBPF upatches to enforce policies for
   containers, Kubernetes Pods, and LLM agents.
 - **Embedded and edge devices.** Deliver signed mitigations to devices
   with long update cycles.
@@ -49,7 +49,7 @@ The operator and target may use different architectures. See
   when `shirudo init` attaches its guards from the initrd. The guards
   protect shirudo's runtime and state from root on the target without
   the operator's signing key.
-- **Signed and sealed BPF.** BPF upatch loads and unloads go through
+- **Signed and sealed eBPF.** eBPF upatch loads and unloads go through
   loaders that the kernel verifies against the sealed `.bpf` keyring.
 - **Signed Java agents.** shirudo verifies Java upatches in userspace.
   Configured JVMs load the agents at startup. See
@@ -71,7 +71,7 @@ states where each of these mechanisms stops.
 
 [![The operator host builds, signs and pushes to an OCI registry. The target pulls, its kernel checks the signature and runs the loader, its TPM extends the register and signs evidence, which the operator verifies.](Documentation/images/start-how-it-works.svg)](https://docs.shirudo.dev/start/how-it-works.html)
 
-BPF upatch lifecycle, from signing through offline verification.
+eBPF upatch lifecycle, from signing through offline verification.
 [Follow the numbered steps](https://docs.shirudo.dev/start/how-it-works.html).
 
 ## By role
