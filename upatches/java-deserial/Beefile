@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+
+[package]
+name = "java-deserial"
+description = "A Java agent that refuses known deserialization gadget classes in ObjectInputStream"
+license = "BSD-2-Clause"
+authors = ["Authors of shirudo"]
+
+[[upatches]]
+type = "java"
+source = "java-deserial.jar"
+
+[upatches.tree]
+id = "java-deserial"
