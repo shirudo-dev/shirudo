@@ -162,9 +162,10 @@ signed config image.
      - VM-first service configuration and stable public trust across starts
    * - ``t1011-completion``
      - The bash completion: commands and subcommands from ``--list-cmds``,
-       options from ``--list-opts``, a value by its placeholder, and a
-       command without subcommands that answers ``--list-cmds`` with
-       nothing and logs nothing
+       options from ``--list-opts``, a value by its placeholder, file and
+       directory names with a space each as one candidate, and a command
+       without subcommands that answers ``--list-cmds`` with nothing and
+       logs nothing
    * - ``t1012-messages-once``
      - A message goes to standard error and to syslog, and to syslog
        alone where standard error is the journal stream

@@ -59,4 +59,19 @@ test_expect_success 'a leaf command lists no subcommands and logs nothing' '
 	test ! -s "$W/out" && test ! -s "$W/err"
 '
 
+test_expect_success 'a path with a space is one file candidate' '
+	mkdir "$W/dir with space" &&
+	touch "$W/dir with space/release candidate.upatch" \
+		"$W/dir with space/plain.txt" &&
+	(cd "$W" && complete_words upatch info "dir with space/rel") >"$W/out" &&
+	[ "$(wc -l <"$W/out")" -eq 1 ] &&
+	grep -qx "dir with space/release candidate.upatch" "$W/out"
+'
+
+test_expect_success 'a path with a space is one directory candidate' '
+	(cd "$W" && complete_words genkey --keys-dir "dir with") >"$W/out" &&
+	[ "$(wc -l <"$W/out")" -eq 1 ] &&
+	grep -qx "dir with space" "$W/out"
+'
+
 test_done

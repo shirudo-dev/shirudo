@@ -24,6 +24,16 @@ _shirudo_listed()
 	return 1
 }
 
+# One COMPREPLY entry per name compgen offers for its arguments, so that a
+# name with a space stays one candidate.
+_shirudo_compgen()
+{
+	local -a names
+
+	mapfile -t names < <(compgen "$@")
+	COMPREPLY+=( "${names[@]}" )
+}
+
 # What to offer for the value of an option whose placeholder is $1.
 _shirudo_value()
 {
@@ -37,12 +47,14 @@ _shirudo_value()
 	esac
 	case $1 in
 	*dir*)
-		COMPREPLY=( $(compgen -d -- "$cur") ) ;;
+		compopt -o filenames 2>/dev/null
+		_shirudo_compgen -d -- "$cur" ;;
 	'<hex>'|'<64-hex>'|'<n>'|'<0-10>'|'<id>'|'<url>'|'<uri>'|'<version>'|\
 	'<ref>'|'<list>'|'<upatch-name>'|*'=<hex>'|*':'*|sha256:*|"'<flags>'")
 		;;
 	*)
-		COMPREPLY=( $(compgen -f -- "$cur") ) ;;
+		compopt -o filenames 2>/dev/null
+		_shirudo_compgen -f -- "$cur" ;;
 	esac
 }
 
@@ -53,26 +65,32 @@ _shirudo_args()
 
 	case $1 in
 	'upatch load'|'upatch unload'|'upatch info')
-		COMPREPLY=( $(compgen -f -X '!*.upatch' -- "$cur")
-			    $(compgen -d -- "$cur") ) ;;
+		compopt -o filenames 2>/dev/null
+		_shirudo_compgen -f -X '!*.upatch' -- "$cur"
+		_shirudo_compgen -d -- "$cur" ;;
 	build)
-		COMPREPLY=( $(compgen -f -X '!*.bpf.[co]' -- "$cur")
-			    $(compgen -d -- "$cur") ) ;;
+		compopt -o filenames 2>/dev/null
+		_shirudo_compgen -f -X '!*.bpf.[co]' -- "$cur"
+		_shirudo_compgen -d -- "$cur" ;;
 	'bpm info')
+		compopt -o filenames 2>/dev/null
 		[[ -n $first ]] || COMPREPLY=( $(compgen -W "upatches data" -- "$cur") )
-		COMPREPLY+=( $(compgen -f -X '!*.bee' -- "$cur")
-			     $(compgen -f -X '!*.upatch' -- "$cur")
-			     $(compgen -d -- "$cur") ) ;;
+		_shirudo_compgen -f -X '!*.bee' -- "$cur"
+		_shirudo_compgen -f -X '!*.upatch' -- "$cur"
+		_shirudo_compgen -d -- "$cur" ;;
 	'bpm install'|'bpm push'|'bpm tree append'|'bpm config update')
-		COMPREPLY=( $(compgen -f -X '!*.bee' -- "$cur")
-			    $(compgen -d -- "$cur") ) ;;
+		compopt -o filenames 2>/dev/null
+		_shirudo_compgen -f -X '!*.bee' -- "$cur"
+		_shirudo_compgen -d -- "$cur" ;;
 	'bpm build')
-		COMPREPLY=( $(compgen -d -- "$cur") ) ;;
+		compopt -o filenames 2>/dev/null
+		_shirudo_compgen -d -- "$cur" ;;
 	'upatch get'|'upatch map'|'bpm uninstall'|'bpm pull'|'bpm repo update'|\
 	'bpm config register'*|'bpm tree show')
 		;;
 	*)
-		COMPREPLY=( $(compgen -f -- "$cur") ) ;;
+		compopt -o filenames 2>/dev/null
+		_shirudo_compgen -f -- "$cur" ;;
 	esac
 }
 
