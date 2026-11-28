@@ -7,6 +7,7 @@ import net.bytebuddy.agent.builder.AgentBuilder;
 import net.bytebuddy.asm.Advice;
 import net.bytebuddy.matcher.ElementMatchers;
 import java.lang.instrument.Instrumentation;
+import java.sql.Connection;
 import java.sql.Statement;
 
 public class RaspAgent {
@@ -20,8 +21,20 @@ public class RaspAgent {
                     .and(ElementMatchers.not(ElementMatchers.isInterface())))
             .transform((builder, typeDescription, classLoader, module, protectionDomain) ->
                 builder.method(
-                    // execute(), executeQuery() and executeUpdate() of a String.
-                    ElementMatchers.nameStartsWith("execute")
+                    // execute(), executeQuery(), executeUpdate() and
+                    // addBatch() of a String.
+                    ElementMatchers.nameStartsWith("execute").or(ElementMatchers.named("addBatch"))
+                        .and(ElementMatchers.takesArgument(0, String.class))
+                )
+                .intercept(Advice.to(SqlInjectionAdvisor.class))
+            )
+            // The same for the SQL a connection prepares: concatenation
+            // into prepareStatement() is as common an injection site.
+            .type(ElementMatchers.isSubTypeOf(Connection.class)
+                    .and(ElementMatchers.not(ElementMatchers.isInterface())))
+            .transform((builder, typeDescription, classLoader, module, protectionDomain) ->
+                builder.method(
+                    ElementMatchers.namedOneOf("prepareStatement", "prepareCall")
                         .and(ElementMatchers.takesArgument(0, String.class))
                 )
                 .intercept(Advice.to(SqlInjectionAdvisor.class))
