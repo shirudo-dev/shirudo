@@ -145,6 +145,23 @@ jobs:
               SHIRUDO_GEN_RUNTIME=/usr/libexec/shirudo/gen-image/shirudo-gen-runtime \
               sh .github/scripts/check-runtime-image.sh shirudo-target
 
+            # The target deb must reach the TPM through the static TCTI.
+            # Built with --enable-dl, the device TCTI lives in a
+            # libtss2-tcti-*.so that the host of a package install need
+            # not have, and attest never opens /dev/tpmrm0.
+            rm -rf /tmp/shirudo-target-root
+            dpkg-deb -x /host/shirudo-target_*.deb /tmp/shirudo-target-root
+            strace -f -e trace=/^open -o /tmp/shirudo-target-attest.strace \
+              /tmp/shirudo-target-root/usr/bin/shirudo attest >/dev/null 2>&1 || true
+            if grep -q 'libtss2-tcti' /tmp/shirudo-target-attest.strace; then
+              printf 'shirudo: the target deb loads a TCTI library; build tpm2-tss with --enable-nodl\n' >&2
+              exit 1
+            fi
+            if ! grep -q '/dev/tpmrm0' /tmp/shirudo-target-attest.strace; then
+              printf 'shirudo: the target deb did not open /dev/tpmrm0\n' >&2
+              exit 1
+            fi
+
             # Verify that shirudo build works without a local copy of vmlinux.h
             rm -rf /tmp/shirudo-smoke && mkdir -p /tmp/shirudo-smoke
             cp testing/fixtures/basic.bpf.c /tmp/shirudo-smoke/

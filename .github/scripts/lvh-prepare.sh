@@ -43,6 +43,7 @@ apt-get install -y --no-install-recommends \
 	uuid-dev \
 	dpkg-dev \
 	rpm \
+	strace \
 	curl \
 	binutils \
 	file \
