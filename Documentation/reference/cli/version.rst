@@ -12,7 +12,8 @@ Print the release and the ``SHIRUDO_VERSION_ID`` that ``upatch load
 --expect-version-id`` compares against.
 
 Runs on: any host, with any copy of the binary, since the image gate does
-not apply. Requires: nothing. Changes measured state: no.
+not apply. Requires: locked process memory, like every command
+(:doc:`shirudo`). Changes measured state: no.
 
 Usage
 -----

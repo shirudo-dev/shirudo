@@ -11,7 +11,8 @@ shirudo config
 Print the effective shirudo configuration in ``shirudo.conf`` syntax.
 
 Runs on: any host, and on a target as root with the runtime binary. Requires:
-nothing. Changes measured state: no.
+locked process memory, like every command (:doc:`shirudo`). Changes
+measured state: no.
 
 Usage
 -----

@@ -12,8 +12,8 @@ List the upatches archived on this host next to the ones loaded now, and
 flag drift between the two.
 
 Runs on: target, as root with the runtime binary. On a host without
-shirudo state it lists nothing. Requires: nothing. Changes measured state:
-no.
+shirudo state it lists nothing. Requires: locked process memory, like
+every command (:doc:`shirudo`). Changes measured state: no.
 
 Usage
 -----

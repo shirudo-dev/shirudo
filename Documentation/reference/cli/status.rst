@@ -14,8 +14,8 @@ its body.
 
 Runs on: any host, and on a target as root with the runtime binary. It is the
 only command that runs while a config activation is pending or cannot be
-verified. Requires: nothing. It runs before ``init`` too. Changes measured
-state: no.
+verified. Requires: locked process memory, like every command
+(:doc:`shirudo`). It runs before ``init`` too. Changes measured state: no.
 
 Usage
 -----
