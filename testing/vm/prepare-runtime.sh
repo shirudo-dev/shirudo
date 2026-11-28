@@ -69,9 +69,12 @@ trap cleanup EXIT
 
 # Started as root, passt changes to nobody before it writes its PID file
 # into the directory libguestfs keeps for root, and the appliance never
-# starts. libguestfs takes passt to be missing when "passt --help" exits
-# with neither 0 nor 1, and then networks the appliance through qemu.
-if [[ "$EUID" == 0 ]]; then
+# starts. On ubuntu-26.04 a non-root build's appliance has no working
+# network through passt either: its resolver is empty and nothing
+# answers. libguestfs takes passt to be missing when "passt --help"
+# exits with neither 0 nor 1, and then networks the appliance through
+# qemu, which works there. TEST_VM_NO_PASST=1 hides passt for that.
+if [[ "$EUID" == 0 || "${TEST_VM_NO_PASST:-0}" == 1 ]]; then
 	mkdir -p -- "$NO_PASST"
 	printf '%s\n' '#!/bin/sh' 'exit 127' >"$NO_PASST/passt"
 	chmod +x -- "$NO_PASST/passt"

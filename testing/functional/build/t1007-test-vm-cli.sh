@@ -369,26 +369,34 @@ test_expect_success 'a failed runtime image shows what apt could not fetch' '
 	grep -q "Temporary failure resolving archive.ubuntu.com" "$WORK/aptfail.out"
 '
 
-test_expect_success 'as root the runtime image is built without passt' '
+test_expect_success 'the runtime image is built without passt where it cannot work' '
 	mkdir -p "$WORK/passt-bin" &&
 	printf "%s\n" "#!/bin/sh" "exit 0" >"$WORK/passt-bin/passt" &&
 	printf "%s\n" "#!/bin/sh" \
 		"passt --help >/dev/null 2>&1; echo \$? >\"\$GF_OUT\"" \
 		>"$WORK/passt-bin/virt-customize" &&
 	chmod +x "$WORK/passt-bin/passt" "$WORK/passt-bin/virt-customize" &&
-	env PATH="$WORK/passt-bin:$WORK/dns-bin:$PATH" GF_OUT="$WORK/passt-out" \
-		TMPDIR="$WORK" LIBGUESTFS_CACHEDIR="$WORK/passt-cache" \
-		vm/prepare-runtime.sh \
-		--rootfs "$WORK/dns-rootfs" --cache-dir "$WORK/passt-cache/img" \
-		--package-file vm/runtime-packages \
-		--runtime-key passt --key-output "$WORK/passt-cache/key" \
-		>/dev/null 2>&1 &&
+	passt_run() {
+		rm -f "$WORK/passt-cache/img/passt-test.qcow2" &&
+		env -u TEST_VM_NO_PASST "$@" \
+			PATH="$WORK/passt-bin:$WORK/dns-bin:$PATH" \
+			GF_OUT="$WORK/passt-out" TMPDIR="$WORK" \
+			LIBGUESTFS_CACHEDIR="$WORK/passt-cache" \
+			vm/prepare-runtime.sh \
+			--rootfs "$WORK/dns-rootfs" \
+			--cache-dir "$WORK/passt-cache/img" \
+			--package-file vm/runtime-packages \
+			--runtime-key passt-test \
+			--key-output "$WORK/passt-cache/key" \
+			>/dev/null 2>&1 &&
+		cat "$WORK/passt-out"
+	} &&
 	if [ "$(id -u)" = 0 ]; then
-		test "$(cat "$WORK/passt-out")" = 127
+		test "$(passt_run)" = 127
 	else
-		test "$(cat "$WORK/passt-out")" = 0
-	fi &&
-	! ls -a "$WORK/passt-cache/img" | grep -q no-passt
+		test "$(passt_run)" = 0 &&
+		test "$(passt_run TEST_VM_NO_PASST=1)" = 127
+	fi
 '
 
 test_expect_success 'the kernel package format follows the host package manager' '

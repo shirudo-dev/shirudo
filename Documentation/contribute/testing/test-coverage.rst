@@ -149,7 +149,8 @@ signed config image.
        boot settings, the bundle stamp, the build container, serve mode,
        node mode only for a core or edge node of the end-to-end tier,
        whose vTPM keys the builder helper creates before boot, the
-       operator VM's role and its signing key
+       operator VM's role and its signing key, and the runtime image's
+       passt fallback
    * - ``t1009-upatch-isa``
      - The upatch build compiles for BPF instruction set v4, and a
        ``-mcpu`` in ``--extra-cflags`` replaces it; a dense ``switch``

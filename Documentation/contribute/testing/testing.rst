@@ -726,6 +726,11 @@ Boot an interactive VM
        default.
    * - ``TEST_VM_QEMU=<path>``
      - Another emulator, such as RHEL's ``/usr/libexec/qemu-kvm``.
+   * - ``TEST_VM_NO_PASST=1``
+     - Hides ``passt`` from the libguestfs appliance, so that it uses
+       QEMU user-mode networking. ``root``'s runtime image builds always
+       do; set it where passt's appliance has no working network, as on
+       ubuntu-26.04.
    * - ``TEST_VM_TIMEOUT=<seconds>``
      - How long a VM that runs tests may run, 3600 by default. CI sets
        900.
