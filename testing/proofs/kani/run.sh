@@ -22,8 +22,36 @@ esac
     echo 'kani: shard must be between 1 and total' >&2
     exit 1
 }
-export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$PWD/build/kani/target}
 mkdir -p build/kani
+# Proofs belong in kani.rs modules, where their module path is known.
+if find rust/src -name '*.rs' ! -name kani.rs -exec grep -lF '#[kani::proof]' {} + |
+    grep . >build/kani/unlisted-source.list; then
+    cat build/kani/unlisted-source.list >&2
+    echo 'kani: proof outside a kani.rs module' >&2
+    exit 1
+fi
+# Every source harness must be named by the run list. Keep its module path
+# for --exact, which otherwise matches another harness with the same suffix.
+find rust/src -name kani.rs | while IFS= read -r source; do
+    module=${source#rust/src/}
+    module=${module%/kani.rs}
+    module=$(printf '%s' "$module" | sed 's|/|::|g')
+    awk -v module="$module" '
+        /#\[kani::proof\]/ { proof = 1; next }
+        proof && /^fn [A-Za-z0-9_]+\(/ {
+            name = $2; sub(/\(.*/, "", name)
+            print name, module "::proofs::" name
+            proof = 0
+        }
+    ' "$source"
+done | sort >build/kani/source.names
+awk '{ print $1 }' build/kani/source.names | sort >build/kani/source.list
+awk 'NF && $1 !~ /^#/ { print $1 }' testing/proofs/kani/proofs.list | sort >build/kani/declared.list
+if ! diff -u build/kani/source.list build/kani/declared.list; then
+    echo 'kani: source harnesses differ from proofs.list' >&2
+    exit 1
+fi
+export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$PWD/build/kani/target}
 if [ -n "${KANI_PROOFS:-}" ]; then
     printf '%s\n' $KANI_PROOFS >build/kani/selected.list
 else
@@ -35,9 +63,14 @@ while IFS= read -r proof; do
     case "$proof" in ''|\#*) continue ;; esac
     number=$((number + 1))
     [ $(((number - 1) % total + 1)) -eq "$shard" ] || continue
+    full_name=$(awk -v name="$proof" '$1 == name { print $2 }' build/kani/source.names)
+    [ -n "$full_name" ] || {
+        printf 'kani: unknown harness %s\n' "$proof" >&2
+        exit 1
+    }
     start=$(date +%s)
     # A proof that grows past 6 GiB fails without exhausting Genoa or CI.
-    if (cd rust && ulimit -v 6291456 && timeout -k 15s 600s cargo kani --default-unwind 16 --harness "$proof") >"build/kani/$proof.log" 2>&1; then
+    if (cd rust && ulimit -v 6291456 && timeout -k 15s 600s cargo kani --default-unwind 16 --harness "$full_name" --exact) >"build/kani/$proof.log" 2>&1; then
         elapsed=$(($(date +%s) - start))
         printf 'kani: %s holds (%ss)\n' "$proof" "$elapsed"
     else
