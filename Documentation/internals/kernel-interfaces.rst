@@ -579,7 +579,9 @@ kernel, since a target need not have ``/proc/config.gz``: from a BTF
 function only the option builds, ``__module_address`` for
 ``CONFIG_MODULES`` and ``mod_verify_sig`` for ``CONFIG_MODULE_SIG``.
 Without ``CONFIG_MODULE_SIG``, ``module_sig_check()`` is a stub that
-asks no LSM about an unsigned module.
+asks no LSM about an unsigned module. ``compat_syscalls`` reads the
+same BTF: ``compat_ptr_ioctl`` is a function only ``CONFIG_COMPAT``
+builds.
 
 The test kernel configuration sets these options and the
 additional options the test fixtures and VM need.

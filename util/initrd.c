@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <shirudo/string.h>
+
 #include "initrd.h"
 #include "paths.h"
 
@@ -26,6 +28,14 @@ const char *sysroot(void)
 		getenv("SHIRUDO_SYSROOT");
 
 	return env && *env ? env : "/sysroot";
+}
+
+int state_source(char *buf, size_t cap)
+{
+	if (!in_initrd())
+		return strscpy(buf, VAR_LIB, cap) < 0 ? -ENAMETOOLONG : 0;
+	return strsprintf(buf, cap, "%s%s", sysroot(), VAR_LIB) < 0 ?
+	       -ENAMETOOLONG : 0;
 }
 
 const char *get_keys_dir(void)

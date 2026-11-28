@@ -68,7 +68,9 @@ Kernel configuration
        device under ``/var/lib/shirudo`` changes sealed state without
        any of them. With the option off, the kernel refuses writes to a
        mounted block device.
-     - no
+     - init fails: pre-flight ``bdev_write_mounted``. It opens the
+       device that holds the state tree for writing; with the option off
+       the kernel refuses it with ``EBUSY``
    * - No resume device: no ``resume=`` on the command line, an empty
        ``CONFIG_PM_STD_PARTITION`` and none named in the initrd, or no
        hibernation (``CONFIG_HIBERNATION=n``, ``nohibernate`` or
@@ -76,10 +78,11 @@ Kernel configuration
      - Resuming from a hibernation image replaces kernel memory with
        what the image holds, and the initrd resumes before ``init``,
        from an image root can write to swap.
-     - partly: from ``init`` on, hibernating is refused, and so is a
-       write of the ``HibernateLocation`` EFI variable through which
-       systemd's initrd finds an image the UKI does not name, counted
-       as ``HibernateLocation``
+     - init fails: pre-flight ``resume_device``. From ``init`` on,
+       hibernating is refused, and so is a write of the
+       ``HibernateLocation`` EFI variable through which systemd's initrd
+       finds an image the UKI does not name, counted as
+       ``HibernateLocation``
    * - Kexec
      - A kexec boots a kernel and initrd of root's choosing while the
        TPM keeps this boot's register and PCRs.
@@ -88,7 +91,7 @@ Kernel configuration
    * - 64-bit userspace only: ``CONFIG_COMPAT=n``, and on x86-64
        ``CONFIG_IA32_EMULATION=n`` and ``CONFIG_X86_X32_ABI=n``
      - shirudo's LSM programs are written for 64-bit callers.
-     - no
+     - init fails: pre-flight ``compat_syscalls``
    * - ``CONFIG_DM_VERITY_VERIFY_ROOTHASH_SIG=y``
      - The kernel checks the config image's signature only with this
        option.

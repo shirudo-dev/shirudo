@@ -7,6 +7,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -122,6 +123,36 @@ static void check_bpf_lsm(struct preflight_result *r)
 		fail(r, c,
 		     "/sys/kernel/security/lsm has no \"bpf\" entry "
 		     "(needs CONFIG_BPF_LSM=y, bpf in CONFIG_LSM)");
+}
+
+#define POWER_DISK_MAX		256u
+#define POWER_RESUME_MAX	64u
+
+/*
+ * The first line of the sysfs attribute at path, its line ending cut,
+ * in buf; NULL when the attribute is absent or holds no line.
+ */
+static const char *power_line(const char *path, char *buf, size_t cap)
+{
+	char *line = NULL;
+	size_t capacity = 0, len;
+	FILE *f;
+	int got;
+
+	f = fopen(path, "re");
+	if (!f)
+		return NULL;
+	got = read_text_line(f, &line, &capacity, cap - 1);
+	fclose(f);
+	if (got != 1) {
+		libc_free(line);
+		return NULL;
+	}
+	len = span_until(line, strlen(line), "\r\n");
+	if (span_to_str(buf, cap, line, len))
+		buf[0] = '\0';
+	libc_free(line);
+	return buf[0] ? buf : NULL;
 }
 
 #define FILESYSTEMS_LINE_MAX	127u
@@ -240,6 +271,109 @@ static void check_module_signatures(struct preflight_result *r,
 		     "signatures (needs CONFIG_MODULE_SIG=y, or CONFIG_MODULES=n)");
 }
 
+static void check_compat_syscalls(struct preflight_result *r,
+				  const struct kernel_options *opts)
+{
+	struct preflight_check *c =
+		next_slot(r, PRE_COMPAT, "compat_syscalls");
+
+	if (!opts)
+		fail(r, c, "cannot read the kernel BTF");
+	else if (!opts->compat)
+		pass(c);
+	else
+		fail(r, c,
+		     "the kernel runs 32-bit compatibility syscalls "
+		     "(needs CONFIG_COMPAT=n, and on x86-64 "
+		     "CONFIG_IA32_EMULATION=n and CONFIG_X86_X32_ABI=n)");
+}
+
+static void check_resume_device(struct preflight_result *r)
+{
+	struct preflight_check *c =
+		next_slot(r, PRE_RESUME, "resume_device");
+	char disk[POWER_DISK_MAX], resume[POWER_RESUME_MAX];
+	const char *d, *p;
+
+	d = power_line("/sys/power/disk", disk, sizeof(disk));
+	p = power_line("/sys/power/resume", resume, sizeof(resume));
+	if (!kernel_hibernation_resumes(d, p))
+		pass(c);
+	else
+		fail(r, c, "the boot may resume from a hibernation image "
+		     "(resume device %s; needs CONFIG_HIBERNATION=n, "
+		     "nohibernate, or no resume device)", p);
+}
+
+#define MOUNTS_LINE_MAX	4096u
+
+/*
+ * Whether the kernel allows writing to the block device that a file
+ * system holds mounted under the state tree: it refuses open() for
+ * writing with -EBUSY when CONFIG_BLK_DEV_WRITE_MOUNTED is off. The
+ * mount that holds the state tree covers the option and the command
+ * line's bdev_allow_write_mounted= alike. A file system that is no
+ * block device has nothing to probe, and any other failure leaves the
+ * property unknown; both read as not writable.
+ */
+static bool mounted_device_writable(void)
+{
+	char state[PATH_MAX], source[PATH_MAX] = {};
+	char *line = NULL;
+	size_t capacity = 0, best = 0;
+	FILE *f;
+	int fd, ret;
+
+	ret = state_source(state, sizeof(state));
+	if (ret)
+		return false;
+	f = fopen("/proc/mounts", "re");
+	if (!f)
+		return false;
+	while (read_text_line(f, &line, &capacity, MOUNTS_LINE_MAX) == 1) {
+		char dev[PATH_MAX];
+		size_t depth;
+
+		if (!kernel_prereq_mount_source(line, state, &depth, dev,
+						sizeof(dev)))
+			continue;
+		/* A later mount over the same mountpoint is the visible one. */
+		if (depth < best)
+			continue;
+		if (strscpy(source, dev, sizeof(source)) < 0)
+			continue;
+		best = depth;
+	}
+	libc_free(line);
+	fclose(f);
+	if (!best || !str_has_prefix(source, "/dev/"))
+		return false;
+	/*
+	 * The path is a field of /proc/mounts, which the kernel writes,
+	 * and starts with /dev/, so it names no tree the caller chose.
+	 * openat() with AT_FDCWD is open() here; CodeQL's path injection
+	 * query takes the field for caller input and flags open().
+	 */
+	fd = openat(AT_FDCWD, source, O_WRONLY | O_CLOEXEC);
+	if (fd < 0)
+		return false;
+	close(fd);
+	return true;
+}
+
+static void check_bdev_write_mounted(struct preflight_result *r)
+{
+	struct preflight_check *c =
+		next_slot(r, PRE_BDEV, "bdev_write_mounted");
+
+	if (mounted_device_writable())
+		fail(r, c, "the kernel allows writes to the mounted block "
+		     "device that holds the state tree (needs "
+		     "CONFIG_BLK_DEV_WRITE_MOUNTED=n)");
+	else
+		pass(c);
+}
+
 /* A BTF that cannot be read fails the check that needs it. */
 static void check_kernel_options(struct preflight_result *r)
 {
@@ -254,6 +388,9 @@ static void check_kernel_options(struct preflight_result *r)
 		btf__free(btf);
 	}
 	check_module_signatures(r, have);
+	check_compat_syscalls(r, have);
+	check_resume_device(r);
+	check_bdev_write_mounted(r);
 }
 
 static void check_cert(struct preflight_result *r)

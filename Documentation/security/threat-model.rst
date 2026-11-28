@@ -199,7 +199,9 @@ without the protection.
        also ``CONFIG_IA32_EMULATION=n`` and ``CONFIG_X86_X32_ABI=n``.
      - The device-mapper and perf checks hook the native and the compat
        ioctl paths; no other 32-bit entry point is considered.
-     - No.
+     - Yes. The pre-flight check ``compat_syscalls`` refuses a kernel
+       whose BTF has ``compat_ptr_ioctl``, which only ``CONFIG_COMPAT``
+       builds.
    * - A6
      - The target boots with Secure Boot from a signed, measured UKI
        whose initrd carries shirudo, its bootstrap settings and the
@@ -241,13 +243,20 @@ without the protection.
        left.
        The behavior of the register across hibernation is not analyzed
        here.
-     - No.
+     - Yes. The pre-flight check ``resume_device`` refuses a boot where
+       ``/sys/power/disk`` says hibernation is available and
+       ``/sys/power/resume`` names a device, which the command line,
+       ``CONFIG_PM_STD_PARTITION`` or the initrd set.
    * - A10
      - No process writes to the block device under a mounted file
        system: ``CONFIG_BLK_DEV_WRITE_MOUNTED=n``.
      - The seal guards file operations. A write to the device under
        ``/var/lib/shirudo`` bypasses it.
-     - No. See R19.
+     - Yes. The pre-flight check ``bdev_write_mounted`` opens the block
+       device that holds the state tree for writing: with the option off
+       the kernel refuses it with ``EBUSY``, and with it on the open
+       succeeds. A file system that is no block device has nothing to
+       probe. Writes between boots remain R19.
    * - A11
      - The kernel command line is authenticated as part of the UKI. It
        carries ``lsm=`` with ``bpf``, ``bpf.keyring_unsealed=1`` and
@@ -2168,16 +2177,6 @@ U9 init can rebind the register after hiding this boot's record
    :Meanwhile: Always pass ``--expect-bind-pcr=9`` and
       ``--expect-bind-pcr=11`` with the initrd's values, or
       ``--expect-pcr=9`` with the predicted value.
-
-U10 Kernel prerequisites are not checked
-   :Affects: A5, A9 and A10.
-   :Consequence: A target with 32-bit compatibility, with a resume
-      device in its UKI or with writes under mounted file systems
-      allowed initializes without an error and without the protection
-      those assumptions give.
-   :Status: Confirmed in code: the pre-flight checks none of them.
-   :Meanwhile: Build the kernel and its command line as
-      :doc:`/operate/plan/hardening` describes.
 
 U11 The boot continues when init fails
    :Affects: ``shirudo-initrd.service`` and the root file system's

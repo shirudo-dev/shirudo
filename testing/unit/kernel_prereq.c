@@ -50,13 +50,14 @@ static void options_of(const char *const *names, size_t n,
 static void options_of_a_kernel_with_all(void)
 {
 	static const char *const names[] = {
-		"__module_address", "mod_verify_sig",
+		"__module_address", "mod_verify_sig", "compat_ptr_ioctl",
 	};
 	struct kernel_options opts;
 
 	options_of(names, ARRAY_SIZE(names), &opts);
 	EXPECT_TRUE(opts.modules);
 	EXPECT_TRUE(opts.module_sig);
+	EXPECT_TRUE(opts.compat);
 }
 
 static void options_of_a_kernel_with_none(void)
@@ -67,6 +68,7 @@ static void options_of_a_kernel_with_none(void)
 	options_of(names, ARRAY_SIZE(names), &opts);
 	EXPECT_FALSE(opts.modules);
 	EXPECT_FALSE(opts.module_sig);
+	EXPECT_FALSE(opts.compat);
 }
 
 static void modules_without_signatures(void)
@@ -79,10 +81,73 @@ static void modules_without_signatures(void)
 	EXPECT_FALSE(opts.module_sig);
 }
 
+static void hibernation_without_a_resume_device(void)
+{
+	EXPECT_FALSE(kernel_hibernation_resumes("[platform] shutdown reboot "
+						"suspend disk", "0:0"));
+	EXPECT_FALSE(kernel_hibernation_resumes("[platform] shutdown reboot "
+						"suspend disk", NULL));
+}
+
+static void hibernation_with_a_resume_device(void)
+{
+	EXPECT_TRUE(kernel_hibernation_resumes("[platform] shutdown reboot "
+					       "suspend disk", "259:2"));
+}
+
+static void no_hibernation(void)
+{
+	EXPECT_FALSE(kernel_hibernation_resumes(NULL, "259:2"));
+	EXPECT_FALSE(kernel_hibernation_resumes("[disabled]", "259:2"));
+}
+
+static void the_root_mount_holds_the_state_tree(void)
+{
+	char source[64];
+	size_t depth;
+
+	EXPECT_TRUE(kernel_prereq_mount_source("/dev/sda2 / ext4 rw 0 0",
+					       "/var/lib/shirudo", &depth,
+					       source, sizeof(source)));
+	EXPECT_UEQ(depth, 1);
+	EXPECT_STREQ(source, "/dev/sda2");
+}
+
+static void a_mount_above_the_path_holds_it(void)
+{
+	char source[64];
+	size_t depth;
+
+	EXPECT_TRUE(kernel_prereq_mount_source("/dev/sdb1 /var ext4 rw 0 0",
+					       "/var/lib/shirudo", &depth,
+					       source, sizeof(source)));
+	EXPECT_UEQ(depth, 4);
+	EXPECT_STREQ(source, "/dev/sdb1");
+}
+
+static void a_mount_elsewhere_holds_nothing(void)
+{
+	char source[64];
+	size_t depth;
+
+	EXPECT_FALSE(kernel_prereq_mount_source("tmpfs /run tmpfs rw 0 0",
+						"/var/lib/shirudo", &depth,
+						source, sizeof(source)));
+	EXPECT_FALSE(kernel_prereq_mount_source("/dev/sda2 /va ext4 rw 0 0",
+						"/var/lib/shirudo", &depth,
+						source, sizeof(source)));
+}
+
 static const struct unit_case cases[] = {
 	UNIT_CASE(options_of_a_kernel_with_all),
 	UNIT_CASE(options_of_a_kernel_with_none),
 	UNIT_CASE(modules_without_signatures),
+	UNIT_CASE(hibernation_without_a_resume_device),
+	UNIT_CASE(hibernation_with_a_resume_device),
+	UNIT_CASE(no_hibernation),
+	UNIT_CASE(the_root_mount_holds_the_state_tree),
+	UNIT_CASE(a_mount_above_the_path_holds_it),
+	UNIT_CASE(a_mount_elsewhere_holds_nothing),
 	{}
 };
 

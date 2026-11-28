@@ -99,6 +99,18 @@ Pre-flight checks
      - The kernel has every LSM hook the embedded programs attach to.
    * - ``module_signatures``
      - The kernel checks module signatures, or loads no modules.
+   * - ``compat_syscalls``
+     - The kernel has no 32-bit compatibility syscalls:
+       ``CONFIG_COMPAT=n``, and on x86-64 ``CONFIG_IA32_EMULATION=n``
+       and ``CONFIG_X86_X32_ABI=n``.
+   * - ``resume_device``
+     - The boot resumes from no hibernation image: ``/sys/power/disk``
+       is absent or says ``[disabled]``, or ``/sys/power/resume`` names
+       no device.
+   * - ``bdev_write_mounted``
+     - The kernel refuses writes to a mounted block device: the device
+       that holds the state tree refuses ``open()`` for writing
+       (``CONFIG_BLK_DEV_WRITE_MOUNTED=n``).
    * - ``cert_on_disk``
      - The primary certificate exists: ``/etc/shirudo/keys/cert.der`` in
        the initrd, ``/run/shirudo/runtime/keys/cert.der`` with an active
@@ -189,13 +201,16 @@ Run the pre-flight checks on a target:
      OK    signed_loader_kernel_abi
      OK    kernel_lsm_hooks
      OK    module_signatures
+     OK    compat_syscalls
+     OK    resume_device
+     OK    bdev_write_mounted
      OK    cert_on_disk
      OK    cert_algorithm
      OK    cert_kernel_support
      OK    kernel_keyring
      OK    embedded_loader
      OK    tpm2_reachable: TCTI from the config: device:/dev/tpmrm0
-   12 of 12 passed
+   15 of 15 passed
 
 Related
 -------

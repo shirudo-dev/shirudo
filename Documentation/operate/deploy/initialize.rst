@@ -203,13 +203,16 @@ It changes no persistent or enforcement state:
      OK    signed_loader_kernel_abi
      OK    kernel_lsm_hooks
      OK    module_signatures
+     OK    compat_syscalls
+     OK    resume_device
+     OK    bdev_write_mounted
      OK    cert_on_disk
      OK    cert_algorithm
      OK    cert_kernel_support
      OK    kernel_keyring
      OK    embedded_loader
      OK    tpm2_reachable: TCTI from the config: device:/dev/tpmrm0
-   12 of 12 passed
+   15 of 15 passed
 
 :doc:`/reference/cli/init` describes each check.
 

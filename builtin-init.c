@@ -1514,14 +1514,6 @@ static const struct help init_help = {
 	.n_sections = ARRAY_SIZE(init_help_sections),
 };
 
-/* Where the state tree is on the root file system, which the initrd binds. */
-static int state_source(char *buf, size_t cap)
-{
-	if (!initrd_mode)
-		return strscpy(buf, VAR_LIB, cap);
-	return strsprintf(buf, cap, "%s%s", sysroot(), VAR_LIB);
-}
-
 static void initrd_leave(void)
 {
 	if (umount2(VAR_LIB, MNT_DETACH) != 0)

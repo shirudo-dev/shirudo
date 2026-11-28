@@ -206,7 +206,9 @@ these options and additional ones that the tests use.
 (``CONFIG_MODULES``) without ``CONFIG_MODULE_SIG``: it loads an unsigned
 module without asking the LSM. The pre-flight check
 ``module_signatures`` tells that from the kernel's BTF, not from
-``/proc/config.gz``.
+``/proc/config.gz``. So does ``compat_syscalls``, for a kernel that runs
+32-bit compatibility syscalls, and ``resume_device`` refuses a boot that
+may resume from a hibernation image, from ``/sys/power``.
 
 :doc:`/operate/plan/hardening` lists the options the trust model assumes
 beyond this table, ``CONFIG_COMPAT`` and others, why kernel lockdown is
@@ -386,6 +388,16 @@ Pre-flight checks
      - The kernel BTF has no ``__module_address``, so the kernel loads no
        modules, or has ``mod_verify_sig``, which only
        ``CONFIG_MODULE_SIG`` builds.
+   * - ``compat_syscalls``
+     - The kernel BTF has no ``compat_ptr_ioctl``, which only
+       ``CONFIG_COMPAT`` builds.
+   * - ``resume_device``
+     - ``/sys/power/disk`` is absent or says ``[disabled]``, or
+       ``/sys/power/resume`` names no device.
+   * - ``bdev_write_mounted``
+     - The block device the state tree is mounted from refuses
+       ``open()`` for writing, so ``CONFIG_BLK_DEV_WRITE_MOUNTED=n``, or
+       ``bdev_allow_write_mounted=`` off with the option on.
    * - ``cert_on_disk``
      - The primary certificate exists, is a regular file and is not
        empty.
@@ -414,13 +426,16 @@ Run the checks as root on a target:
      OK    signed_loader_kernel_abi
      OK    kernel_lsm_hooks
      OK    module_signatures
+     OK    compat_syscalls
+     OK    resume_device
+     OK    bdev_write_mounted
      OK    cert_on_disk
      OK    cert_algorithm
      OK    cert_kernel_support
      OK    kernel_keyring
      OK    embedded_loader
      OK    tpm2_reachable: TCTI from the config: device:/dev/tpmrm0
-   12 of 12 passed
+   15 of 15 passed
 
 A failed check prints ``FAIL`` and its reason, and the command exits 1
 after ``init: pre-flight failed, <failed> of <total> checks``.

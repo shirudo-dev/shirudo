@@ -19,6 +19,13 @@ bool in_initrd(void);
 const char *sysroot(void);
 
 /*
+ * Where the state tree is on the root file system, which the initrd
+ * binds at /var/lib/shirudo: <sysroot>/var/lib/shirudo while the initrd
+ * runs, /var/lib/shirudo otherwise. 0 or -ENAMETOOLONG.
+ */
+int state_source(char *buf, size_t cap);
+
+/*
  * The keys init enrols: the initrd's own, measured copies while the
  * initrd runs, the state tree's otherwise. cert.der is the primary
  * certificate in that directory.
