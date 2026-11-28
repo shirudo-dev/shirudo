@@ -10,6 +10,13 @@
 
 #include <stdbool.h>
 
+/*
+ * The status of a command that caught SIGINT and cleaned up. main() then
+ * ends the process by the signal: a shell stops a script for a command
+ * that SIGINT ended, and goes on after one that exited.
+ */
+#define EXIT_INTERRUPTED	130
+
 /* Operator-side. */
 int cmd_genkey(int argc, const char **argv);
 int cmd_build(int argc, const char **argv);

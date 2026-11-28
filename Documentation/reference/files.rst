@@ -205,7 +205,8 @@ the label as foreign. In the initrd, ``init`` binds
    * - ``images/incoming-XXXXXX/``
      - ``image update``, ``image stage``
      - none
-     - Staging directory of a fetch.
+     - Staging directory of a fetch. The next fetch removes one that a
+       killed fetch left behind.
 
 The paths in the table are relative to ``/var/lib/shirudo/``.
 

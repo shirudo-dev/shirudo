@@ -2840,7 +2840,7 @@ static int bpm_install(const char *ref, struct bpm_tables *t)
 static int bpm_upgrade(const char *unused, struct bpm_tables *t)
 {
 	struct bpm_state_entry *state = t->state;
-	int n_state, lock, ret, wrc, i;
+	int n_state, lock, ret, i;
 
 	ret = bpm_needs_enforcement("upgrade");
 	if (ret)
@@ -2875,25 +2875,24 @@ static int bpm_upgrade(const char *unused, struct bpm_tables *t)
 			break;
 		if (bpm_semver_compare(selected.version, state[i].version) <= 0)
 			continue;
-		ret = package_install(&source_cfg, &selected,
-				      state[i].version);
-		if (ret)
-			break;
-		bpm_copy_string(state[i].version, sizeof(state[i].version),
-				selected.version);
 		if (strsprintf(path, sizeof(path), "%s/%s/%s",
 			       BPM_PACKAGES_DIR, state[i].name,
 			       selected.version) < 0) {
 			ret = -ENAMETOOLONG;
 			break;
 		}
+		ret = package_install(&source_cfg, &selected,
+				      state[i].version);
+		if (ret)
+			break;
+		bpm_copy_string(state[i].version, sizeof(state[i].version),
+				selected.version);
 		bpm_copy_string(state[i].path, sizeof(state[i].path), path);
+		ret = bpm_state_write(state, n_state);
+		if (ret)
+			return bpm_finish(lock, ret, "write state");
 	}
-	/* Packages upgraded before a failure stay on record. */
-	wrc = bpm_state_write(state, n_state);
-	if (ret)
-		return bpm_finish(lock, ret, "upgrade");
-	return bpm_finish(lock, wrc, "write state");
+	return bpm_finish(lock, ret, "upgrade");
 }
 
 enum bpm_info_opt {

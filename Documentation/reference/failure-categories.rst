@@ -408,8 +408,10 @@ every verdict, ``tampered`` included. Parse ``.status`` of
        missing.
    * - ``image`` without a subcommand
      - 2.
-   * - ``image update``
-     - 0; 1 on failure; 2 for a usage error.
+   * - ``image update``, ``image stage``
+     - 0; 1 on failure; 2 for a usage error. Ctrl-C during an HTTPS
+       transfer ends the command by SIGINT once it removed the staged
+       downloads.
    * - ``image status``
      - 0 when the activation is consistent and not pending; 1 when it is
        pending or inconsistent (after the JSON) or no record exists.

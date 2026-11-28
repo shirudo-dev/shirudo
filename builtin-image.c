@@ -59,6 +59,8 @@ static const struct help image_help = {
 
 static int image_done(const char *sub, int ret)
 {
+	if (ret == -EINTR)
+		return EXIT_INTERRUPTED;
 	if (ret == -EINPROGRESS)
 		pr_err("image: activation is pending; further changes are blocked");
 	else if (ret)

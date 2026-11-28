@@ -566,6 +566,9 @@ install extracted is removed again.
 it installs the greatest version in the cached index when that version is
 greater than the installed one: it unloads the old version with its
 directives, loads the new one and restores the old one when that fails.
+It writes each completed upgrade to ``state.json`` before starting the
+next package. Interrupting a later download preserves the recorded
+versions of those already upgraded.
 ``upgrade`` fetches no index itself. ``shirudo-bpm-repo-update.timer`` runs
 ``repo update`` and then ``upgrade`` at boot and 60 seconds after each
 run, so a new version in a registered index reaches every target that
