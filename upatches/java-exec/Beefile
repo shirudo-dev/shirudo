@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+
+[package]
+name = "java-exec"
+description = "A Java agent that refuses shell commands that chain or substitute commands"
+license = "BSD-2-Clause"
+authors = ["Authors of shirudo"]
+
+[[upatches]]
+type = "java"
+source = "java-exec.jar"
+
+[upatches.tree]
+id = "java-exec"
