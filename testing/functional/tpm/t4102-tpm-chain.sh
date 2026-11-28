@@ -58,8 +58,19 @@ PY
 
 PAYLOAD=$("$SHIRUDO_BIN" upatch info "$LOAD" --json | report_field payload_sha256) || exit 1
 
+check_status_eventlog() {
+	"$SHIRUDO_BIN" status --json >"$W/default.json" &&
+	"$SHIRUDO_BIN" status --json --include-eventlog >"$W/events.json" &&
+	python3 functional/tpm/t4102-tpm-chain.py /var/lib/shirudo/eventlog \
+		"$W/default.json" "$W/events.json" "$@"
+}
+
 test_expect_success 'eventlog replay reproduces the live register value' '
 	[ "$(tpm_chain chain_matches_eventlog)" = "True" ]
+'
+
+test_expect_success 'status counts the saved eventlog and lists its records on request' '
+	check_status_eventlog
 '
 
 test_expect_success 'initialization reuses the kernel writer and register without another event' '
@@ -76,7 +87,8 @@ test_expect_success 'a real signed load extends the register by exactly its meas
 	"$SHIRUDO_BIN" upatch load "$LOAD" --no-precheck &&
 	[ -e "$PIN" ] &&
 	[ "$(tpm_chain chain)" = "$expected" ] &&
-	[ "$(tpm_chain chain_matches_eventlog)" = "True" ]
+	[ "$(tpm_chain chain_matches_eventlog)" = "True" ] &&
+	check_status_eventlog upatch_load "$NAME" "$PAYLOAD"
 '
 
 test_expect_success 'a real signed unload extends the register and remains replayable' '
@@ -85,7 +97,8 @@ test_expect_success 'a real signed unload extends the register and remains repla
 	"$SHIRUDO_BIN" upatch unload "$UNLOAD" --no-precheck &&
 	[ ! -e "$PIN" ] &&
 	[ "$(tpm_chain chain)" = "$expected" ] &&
-	[ "$(tpm_chain chain_matches_eventlog)" = "True" ]
+	[ "$(tpm_chain chain_matches_eventlog)" = "True" ] &&
+	check_status_eventlog upatch_unload "$NAME" "$PAYLOAD"
 '
 
 test_expect_success 'the installed binary emits evidence that verifies against the live register' '
