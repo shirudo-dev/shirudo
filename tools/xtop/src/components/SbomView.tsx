@@ -10,10 +10,10 @@ import { Box, Text, useInput } from "ink";
 import type { Backend } from "../lib/backend.ts";
 import { ago } from "../lib/format.ts";
 import { useRefreshing } from "../lib/useRefreshing.ts";
-import { literalSearch } from "../lib/search.ts";
 import {
   FINDING_STATUS_RANK,
   IMAGE_STATES,
+  imageDrillQuery,
   imageKey,
   type Finding,
   type FindingStatus,
@@ -129,7 +129,7 @@ const FINDING_COLUMNS: readonly Column<Finding>[] = [
   },
 ];
 
-const findingFields = (f: Finding) =>
+export const findingFields = (f: Finding) =>
   [
     f.vulnId,
     f.package,
@@ -138,7 +138,7 @@ const findingFields = (f: Finding) =>
     f.upatchId,
     f.status,
     ...f.installed,
-    ...f.nodes.flatMap((n) => [n.name, imageKey(n)]),
+    ...f.nodes.flatMap((n) => [n.name, imageKey(n), n.imageRoot]),
   ];
 
 const findingTiebreak = (a: Finding, b: Finding) =>
@@ -303,7 +303,7 @@ export function SbomView({ backend, mode, onModeChange, height, active, onClose,
         onClose={onClose}
         onOpen={(i) => {
           setOnTabs(false);
-          setDrill(literalSearch(imageKey(i)));
+          setDrill(imageDrillQuery(i));
           onModeChange("findings");
         }}
         summary={(rows, sortedBy) => {

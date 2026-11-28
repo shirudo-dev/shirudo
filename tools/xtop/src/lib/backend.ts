@@ -259,8 +259,8 @@ export type FindingRow = {
   withdrawn: number;
   unshielded: number;
   stale: boolean | number;
-  /** (node_id, ak_name, exposure, image_id, image_version, installed, binding, status) */
-  nodes: [string, string, string, string, string, string, string, string][];
+  /** (node_id, ak_name, exposure, image_id, image_version, image_root, installed, binding, status) */
+  nodes: [string, string, string, string, string, string, string, string, string][];
 };
 
 export function toFinding(r: FindingRow): Finding {
@@ -280,12 +280,13 @@ export function toFinding(r: FindingRow): Finding {
     withdrawn: r.withdrawn,
     unshielded: r.unshielded,
     stale: Boolean(r.stale),
-    nodes: r.nodes.map(([name, akName, exposure, imageId, imageVersion, installed, binding, status]) => ({
+    nodes: r.nodes.map(([name, akName, exposure, imageId, imageVersion, imageRoot, installed, binding, status]) => ({
       name,
       akName,
       exposure: oneOf<Exposure>(EXPOSURES, exposure, "exposure"),
       imageId,
       imageVersion,
+      imageRoot,
       installed,
       binding,
       status,

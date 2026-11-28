@@ -342,7 +342,8 @@ The summary line says when the findings come from a scan older than
 shield, and every node it affects with its exposure, image, installed
 version, the binding of its image to an SBOM and its status. ``/``
 searches the advisory, package, severity, source, shield, status, the
-installed versions, and the names and images of the nodes it affects.
+installed versions, and the names, images and roots of the nodes it
+affects.
 
 ``t`` switches to the images: every image of ``sbom_images`` at its
 newest scan, with its state (:doc:`sbom-scan`), ``stale`` when that scan
@@ -353,4 +354,6 @@ that has no SBOM in the store reads ``no_sbom``: store one with
 :doc:`sbom-put`. So does a build a node runs whose root the store does
 not have for that id and version, on a row of its own with that root:
 ``node_vulns`` binds such a node ``root_mismatch``. Enter on an image
-shows its findings.
+shows the findings that affect the nodes of that build: two builds of
+one image id and version differ in their roots, so the findings are
+scoped to the row's root.

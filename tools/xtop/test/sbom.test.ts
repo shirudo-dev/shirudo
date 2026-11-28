@@ -7,7 +7,8 @@
 
 import { describe, expect, test } from "bun:test";
 import { toFinding, toSbomImage, type FindingRow, type ImageRow } from "../src/lib/backend.ts";
-import { findingStatus, imageKey } from "../src/lib/sbom.ts";
+import { findingFields } from "../src/components/SbomView.tsx";
+import { findingStatus, imageDrillQuery, imageKey, type SbomImage } from "../src/lib/sbom.ts";
 import { literalSearch, parseSearch } from "../src/lib/search.ts";
 
 const ROOT = "a3c3f1b0e4c2d7f09e3b6b2a8b1d5e7c4f6a9d0b2c8e1f3a5b7d9c0e2f4a6b8c";
@@ -30,8 +31,8 @@ function finding(over: Partial<FindingRow>): FindingRow {
     unshielded: 0,
     stale: false,
     nodes: [
-      ["node-a", "000b23602ab98bfb", "shielded", "fleet-os", "2026.11.1", "7.4.2", "verified", "healthy"],
-      ["node-b", "000b9d72e08380a1", "shield_excludes_node", "fleet-os", "2026.11.1", "7.4.2", "declared", "healthy"],
+      ["node-a", "000b23602ab98bfb", "shielded", "fleet-os", "2026.11.1", ROOT, "7.4.2", "verified", "healthy"],
+      ["node-b", "000b9d72e08380a1", "shield_excludes_node", "fleet-os", "2026.11.1", "", "7.4.2", "declared", "healthy"],
     ],
     ...over,
   };
@@ -67,6 +68,7 @@ describe("toFinding", () => {
       exposure: "shield_excludes_node",
       imageId: "fleet-os",
       imageVersion: "2026.11.1",
+      imageRoot: "",
       installed: "7.4.2",
       binding: "declared",
       status: "healthy",
@@ -90,7 +92,7 @@ describe("toFinding", () => {
 
   test("refuses an exposure it does not know", () => {
     expect(() =>
-      toFinding(finding({ nodes: [["n", "k", "patched", "", "", "", "verified", "healthy"]] })),
+      toFinding(finding({ nodes: [["n", "k", "patched", "", "", "", "", "verified", "healthy"]] })),
     ).toThrow(/unknown exposure/);
   });
 });
@@ -110,6 +112,43 @@ describe("imageKey", () => {
     expect(imageKey(bare)).toBe("fleet-os");
     expect(parseSearch(literalSearch(imageKey(bare))).test([imageKey(bare)])).toBe(true);
     expect(imageKey({ imageId: "fleet-os", imageVersion: "2026.11.1" })).toBe("fleet-os 2026.11.1");
+  });
+});
+
+describe("imageDrillQuery", () => {
+  test("scopes the findings to the build, not its sibling of the same image", () => {
+    const a: SbomImage = {
+      imageId: "fleet-os",
+      imageVersion: "2026.11.1",
+      imageRoot: ROOT,
+      state: "ok",
+      sbomFormat: "cyclonedx-json",
+      sbomSha256: "",
+      builtAt: null,
+      scannedAt: null,
+      dbVersion: "",
+      stale: false,
+      vulns: 0,
+      critical: 0,
+      high: 0,
+      nodes: 1,
+    };
+    const b = { ...a, imageRoot: "b".repeat(64) };
+    const fa = toFinding(
+      finding({ nodes: [["node-a", "k", "shielded", a.imageId, a.imageVersion, a.imageRoot, "7.4.2", "verified", "healthy"]] }),
+    );
+    const fb = toFinding(
+      finding({ nodes: [["node-a", "k", "shielded", b.imageId, b.imageVersion, b.imageRoot, "7.4.2", "verified", "healthy"]] }),
+    );
+    const search = parseSearch(imageDrillQuery(a));
+    expect(search.test(findingFields(fa))).toBe(true);
+    expect(search.test(findingFields(fb))).toBe(false);
+  });
+
+  test("names a build without a root by its image alone", () => {
+    const bare = { imageId: "fleet-os", imageVersion: "", imageRoot: "" };
+    expect(imageDrillQuery(bare)).toBe("^fleet-os$");
+    expect(parseSearch(imageDrillQuery(bare)).test([imageKey(bare)])).toBe(true);
   });
 });
 

@@ -5,6 +5,8 @@
 // nodes, from node_vulns, and how far the SBOM store is scanned, from
 // sbom_images.
 
+import { literalSearch } from "./search.ts";
+
 /** node_vulns.exposure of one node. */
 export type Exposure =
   | "shielded"
@@ -33,6 +35,8 @@ export type FindingNode = {
   exposure: Exposure;
   imageId: string;
   imageVersion: string;
+  /** The verity root of the node's image; empty without verity. */
+  imageRoot: string;
   installed: string;
   /** How the node's image was bound to an SBOM: verified, declared, ... */
   binding: string;
@@ -116,3 +120,11 @@ export function findingStatus(f: Pick<Finding, "upatchId" | "affected" | "shield
 /** "id version", or the id alone for an image without a version, as literalSearch finds it. */
 export const imageKey = (i: Pick<SbomImage, "imageId" | "imageVersion">) =>
   i.imageVersion ? `${i.imageId} ${i.imageVersion}` : i.imageId;
+
+/**
+ * The findings search that scopes to one build. Two builds of an image
+ * share its id and version and differ in their roots, so the root is a
+ * second term; without one, the id and version alone name the build.
+ */
+export const imageDrillQuery = (i: Pick<SbomImage, "imageId" | "imageVersion" | "imageRoot">) =>
+  i.imageRoot ? `${literalSearch(imageKey(i))} ${literalSearch(i.imageRoot)}` : literalSearch(imageKey(i));

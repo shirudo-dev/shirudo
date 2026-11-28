@@ -1197,7 +1197,8 @@ The unit tests of :src:`tools/xtop/test/` cover how xtop turns the rows
 of those queries into nodes, shields, findings and images, the health
 percent, the roll-up by image, the status and severity of a shield, the
 status of a finding, the commands that create a tree, the search of its
-tables and its ClickHouse client;
+tables, the search that drills into one build of an image rather than
+the builds that share its id and version, and its ClickHouse client;
 ``make -C tools/xtop tests`` type-checks the
 program and runs them (:ref:`testing-xtop`).
 

@@ -4,7 +4,8 @@
 -- One row per finding, an advisory in a package, over the nodes it
 -- affects in node_vulns, for the SBOM view of tools/xtop: how many of
 -- them the upatch linked to it shields, and every affected node with its
--- exposure. total is the number of nodes in node_status.
+-- exposure and the root of the image it runs. total is the number of
+-- nodes in node_status.
 
 SELECT
     v.vuln_id AS vuln_id,
@@ -23,8 +24,10 @@ SELECT
     uniqIf(v.ak_name, v.exposure = 'exposed_no_shield') AS unshielded,
     max(v.sbom_stale) AS stale,
     arraySort(groupArray(tuple(v.node_id, v.ak_name, toString(v.exposure), v.image_id, v.image_version,
-                               v.installed, toString(v.binding), toString(v.status)))) AS nodes
+                               ifNull(l.image_root, ''), v.installed, toString(v.binding),
+                               toString(v.status)))) AS nodes
 FROM shirudo.node_vulns AS v
+LEFT JOIN shirudo.latest AS l ON l.ak_name = v.ak_name
 WHERE v.vuln_id != ''
 GROUP BY v.vuln_id, v.package
 ORDER BY vuln_id, package
