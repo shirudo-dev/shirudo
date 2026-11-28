@@ -103,6 +103,14 @@ install() {
 	# anyone else, it writes every member of the archive as 0:0.
 	if [[ $EUID == 0 ]]; then
 		chown -R 0:0 "$initdir/etc/shirudo" || return 1
+	else
+		# systemd-sysusers, which dracut's systemd-sysusers module
+		# runs on the image, creates shadow and gshadow with mode
+		# 0000. Root packs them regardless; anyone else has to be
+		# able to read them, or cpio fails and dracut writes no image.
+		for f in "$initdir/etc/shadow" "$initdir/etc/gshadow"; do
+			[[ ! -f $f ]] || chmod u+r "$f" || return 1
+		done
 	fi
 	inst_simple "$unit" "$systemdsystemunitdir/shirudo-initrd.service" ||
 		return 1

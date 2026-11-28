@@ -668,7 +668,7 @@ Boot an interactive VM
 
    .. code-block:: console
 
-      # make -C testing vm VM_NAME=<name>
+      $ make -C testing vm VM_NAME=<name>
 
    ``<name>`` names the VM state directory
    ``build/test-vm/vms/<name>/``. Without ``VM_NAME`` the script picks a
@@ -679,7 +679,7 @@ Boot an interactive VM
 
    .. code-block:: console
 
-      # make -C testing vm-ssh VM_NAME=<name>
+      $ make -C testing vm-ssh VM_NAME=<name>
 
    Without ``VM_NAME``, ``vm-ssh`` connects to the most recently created
    VM. From a terminal, the shell it opens has ``shirudo`` as an alias
@@ -698,14 +698,14 @@ Boot an interactive VM
 
    .. code-block:: console
 
-      # make -C testing vm-console VM_NAME=<name>
+      $ make -C testing vm-console VM_NAME=<name>
 
 5. Stop the VM and keep its state, or remove its state and logs:
 
    .. code-block:: console
 
-      # make -C testing vm-stop VM_NAME=<name>
-      # make -C testing vm-clean VM_NAME=<name>
+      $ make -C testing vm-stop VM_NAME=<name>
+      $ make -C testing vm-clean VM_NAME=<name>
 
    Without ``VM_NAME``, ``vm-clean`` stops every VM and removes the state
    and logs of them all, ``build/test-vm/vms/`` and

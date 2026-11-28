@@ -16,6 +16,12 @@ endif
 export Q V
 export TEST_FILTER
 
+# Debian and Ubuntu keep depmod, dhclient and other tools the test VM
+# needs in the sbin directories, which are not on the PATH of an ordinary
+# user there. The VM scripts take PATH as they find it, so a caller of
+# theirs can still narrow it.
+export PATH := $(PATH):/usr/sbin:/sbin
+
 # make tests at the top exports the install paths, and dracut takes the
 # prefix it finds in the environment for the initrd a test VM boots.
 unexport prefix exec_prefix bindir libexecdir sharedir libdir mandir \
