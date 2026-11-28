@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Authors of shirudo
+
+[package]
+name = "java-jndi"
+description = "A Java agent that refuses JNDI names with a remote URL scheme (CVE-2021-44228 and kin)"
+license = "BSD-2-Clause"
+authors = ["Authors of shirudo"]
+
+[[upatches]]
+type = "java"
+source = "java-jndi.jar"
+
+[upatches.tree]
+id = "java-jndi"
+fixes = ["CVE-2021-44228", "CVE-2021-45046"]
