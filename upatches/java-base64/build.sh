@@ -9,7 +9,9 @@
 # Needs a JDK of release 24 or newer for the Class-File API (javac and
 # jar on PATH). The agent carries GuardCheck in a nested guard-check.jar
 # that premain appends to the bootstrap loader, so java.util.Base64 can
-# call it; the whole agent is one signed Java upatch.
+# call it; the whole agent is one signed Java upatch. Base64GuardAgent,
+# the premain, is built for release 8, so that an older JVM loads it and
+# starts without the guard rather than failing to start.
 
 set -eu
 
@@ -26,17 +28,19 @@ start=$PWD
 cd "$pkg"
 rm -rf target
 mkdir -p target/classes target/stage/com/shirudo/base64guard
-javac --release 24 -d target/classes src/com/shirudo/base64guard/*.java
+javac --release 8 -Xlint:-options -d target/classes src/com/shirudo/base64guard/Base64GuardAgent.java
+javac --release 24 -cp target/classes -d target/classes \
+	src/com/shirudo/base64guard/GuardCheck.java src/com/shirudo/base64guard/Base64GuardInstaller.java
 # GuardCheck rides alone in a nested jar for the bootstrap loader.
 jar cf target/guard-check.jar -C target/classes com/shirudo/base64guard/GuardCheck.class
-cp target/classes/com/shirudo/base64guard/Base64GuardAgent*.class \
+cp target/classes/com/shirudo/base64guard/Base64Guard*.class \
 	target/stage/com/shirudo/base64guard/
 cp target/guard-check.jar target/stage/com/shirudo/base64guard/guard-check.jar
 cat > target/MANIFEST.MF <<'MF'
 Manifest-Version: 1.0
 Premain-Class: com.shirudo.base64guard.Base64GuardAgent
 Agent-Class: com.shirudo.base64guard.Base64GuardAgent
-Main-Class: com.shirudo.base64guard.Base64GuardAgent
+Main-Class: com.shirudo.base64guard.Base64GuardInstaller
 Can-Retransform-Classes: true
 MF
 jar cfm java-base64.jar target/MANIFEST.MF -C target/stage .

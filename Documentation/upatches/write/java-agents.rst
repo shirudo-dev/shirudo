@@ -92,6 +92,14 @@ reads it is outside shirudo:
   (JDK-8288483). Each agent adds ``-javaagent:/run/shirudo-java/<name>.jar``
   to what other ``environment.d`` files set, so keep the agents few and
   their names short where Java 8 runs.
+- Every JVM those options reach loads every loaded agent, whatever its
+  release. A JVM does not start when it cannot load an agent's
+  ``Premain-Class``, for instance one built for a newer release, or when
+  ``premain`` throws. Build the ``Premain-Class`` for the oldest release
+  the host runs, and have it return without installing on a JVM the
+  agent does not support. ``java-base64`` builds its premain for release
+  8 and installs the guard, which needs release 24, only on a JVM of
+  release 24 or newer.
 
 An agent does what Java code in the JVM can do: it is a mitigation
 inside the application, not a boundary the kernel enforces. A BPF upatch

@@ -16,6 +16,13 @@ third-party dependency. `GuardCheck`, which the instrumented
 agent appends to the bootstrap loader when it installs, so the whole
 mitigation is one signed jar.
 
+The guard needs a JVM of release 24 or newer for the Class-File API.
+Its premain is built for release 8, so an older JVM that the shirudo
+`JAVA_TOOL_OPTIONS` reach still starts: it prints
+`Base64 guard not installed: it needs a JVM of release 24 or newer`
+and runs without the guard. Such a JVM is not protected by this
+upatch; if its release is affected, the fix is a patched JDK.
+
 The agent reaches a JVM two ways:
 
 - As a shirudo Java upatch it is applied with `-javaagent` at JVM start,
