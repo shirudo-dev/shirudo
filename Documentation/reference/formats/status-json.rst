@@ -24,11 +24,43 @@ the keepalive body that ``status --keepalive`` prints, see
 reads ``status`` and the fields in `Fields to alert on`_, never the
 exit status alone.
 
+.. _status-json-schema:
+
+Schema and compatibility
+------------------------
+
+``schema`` is the version of this document, ``1``. A consumer must
+compare it with the version it reads and refuse a report it does not
+know, rather than read the fields it recognizes and ignore the rest.
+
+Within one schema version, the producer only adds fields: it never
+removes or renames a field, changes a field's type, or changes what a
+value means. Such a change bumps ``schema``. ``missed_runs`` and
+``integrity_attempts`` were added within ``1``. A consumer therefore
+ignores a key it does not know, and relies on the meaning this page
+gives the keys it does.
+
+A key this page lists is present unless the page gives a condition:
+``system`` without ``--include-system``, ``tpm.eventlog.events``
+without ``--include-eventlog``, and the ``upatch_tree`` state fields,
+which ``state`` replaces when there is no state. A producer older
+than a key omits it, as one from before ``missed_runs`` and
+``integrity_attempts`` does. An absent key, a ``null`` value and a
+value the producer measured differ, and a consumer keeps them apart:
+
+- an absent key: the report does not carry the value, because the
+  page makes the key conditional, the option that adds it is off, or
+  the producer predates it;
+- ``null``: the report carries no value, and the key's row says when
+  it is ``null``;
+- a value, ``0`` and ``false`` included: the producer determined it,
+  so ``0`` missed runs is not an unknown count.
+
 Top-level fields
 ----------------
 
-Fields appear in this order. ``null`` stands for a value that cannot be
-determined, as noted.
+Fields appear in this order; a consumer reads by key. ``null`` stands
+for a value that cannot be determined, as noted.
 
 .. list-table::
    :header-rows: 1
