@@ -431,7 +431,10 @@ signed config image.
        ``EINVAL`` and no ``BpffsMount`` count
    * - ``t4102-tpm-chain``
      - Replay, measured load and unload, evidence from the VM's TPM,
-       challenges with ECC and RSA endorsement keys
+       challenges with ECC and RSA endorsement keys. Default and requested
+       status JSON give the saved log's size and entry count before a load,
+       after it and after the unload. Only the requested report lists the
+       projected records, in file order.
    * - ``t4103-nv-writer``
      - The ``tpm_command`` guard: root without authority cannot extend
        the register, through inherited and nonblocking descriptors
@@ -1483,8 +1486,7 @@ Commands and procedures
 - ``upatch load`` or ``upatch unload`` refusing ``tampered`` for a
   stale ``--expect-chain``. Only ``attest verify`` is tested with that
   option.
-- ``status --show-full``, and ``--include-eventlog`` on a target:
-  ``t4007`` reads a log on the host.
+- The eventlog section of ``status --show-full`` on a target.
 - ``upatch rewrite-rodata`` in ``shirudo-build``, which
   ``kernel-obs`` uses to rewrite its watch lists.
 - The ``kernel-cve`` packages, and :src:`tools/put-shields`, which
