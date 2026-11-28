@@ -109,6 +109,13 @@ def watch_event():
     client.close()
     if rc not in (0, errno.EINPROGRESS, errno.ENETUNREACH, errno.EHOSTUNREACH):
         raise RuntimeError(f"watched TCP connect returned errno {rc}")
+    # A dual-stack socket, as a JVM uses, reaches the IPv4 entry as ::ffff:.
+    client = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+    client.setblocking(False)
+    rc = client.connect_ex(("::ffff:" + WATCH_V4, 81))
+    client.close()
+    if rc not in (0, errno.EINPROGRESS, errno.ENETUNREACH, errno.EHOSTUNREACH):
+        raise RuntimeError(f"watched mapped TCP connect returned errno {rc}")
     sender = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
     try:
         sender.sendto(b"obs", (WATCH_V6, 9))
