@@ -6,6 +6,7 @@ string_number_model
 attest_pcr_value
 attest_fields
 hex_roundtrip
+hex_encode_alloc
 hex_decode
 hex_decode_max
 hex_encode_model
@@ -21,4 +22,5 @@ hex_digest_one_digit
 hex_digest_shape
 attest_name_digest_one_digit
 attest_name_digest_short_shape
+attest_name_missing_equals
 paths_key_file_parts

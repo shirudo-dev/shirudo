@@ -74,10 +74,16 @@ harness's stated bound. The harnesses live beside that code under
      - The width in Unicode Table 3-7; a later byte does not change
        the width determined by the first four
 
+   * - ``hex_encode_alloc``
+     - ``encode()`` of :src:`rust/src/util/hex.rs`
+     - Every input length from 0 to 8 bytes
+     - Allocates exactly twice the input length and writes the lowercase
+       high and low digit of every byte
    * - ``hex_decode``
      - ``decode()`` of :src:`rust/src/util/hex.rs`
-     - Up to 8 bytes, or 16 hex digits
-     - Accepts exactly valid digit pairs and writes the bytes they spell
+     - Text up to 16 bytes and output capacity up to 8 bytes
+     - Accepts only valid digit pairs when the text is exactly twice the
+       output length, and writes the bytes they spell
    * - ``hex_decode_max``
      - ``decode_max()`` of :src:`rust/src/util/hex.rs`
      - Text up to 17 bytes and output capacity up to 8 bytes
@@ -148,21 +154,64 @@ harness's stated bound. The harnesses live beside that code under
      - ``parse_name_digest()`` of :src:`rust/src/util/attest.rs`
      - Names of 0 to 4 ``n`` bytes and 63 to 65 zero digits
      - Requires a nonempty name and exactly 64 digest digits
+   * - ``attest_name_missing_equals``
+     - ``parse_name_digest()`` of :src:`rust/src/util/attest.rs`
+     - Every byte string up to 6 bytes without ``=``
+     - Refuses a missing separator
 
 These bounded checks do not prove file-system writes, TPM effects, or
 arbitrary-length inputs. The I/O, key-path and pin-name slice helpers
-are called by the production code; their allocation and external-call
-wrappers are also exercised by unit and functional tests. The two C
-pin-name proofs remain until the lead accepts a complete replacement.
+are called by production code; their wrappers are exercised by unit and
+functional tests. The two kept C pin-name proofs check
+:src:`util/paths.h`, which no build includes. They do not prove the Rust
+implementation.
 
-The removed C proofs for full six-byte sanitization, 22-byte number
-parsing, attestation replay, the 256-byte name limit, a complete 64-digit
-PCR value, and pin path construction do not yet have equivalent Kani harnesses. The Rust port
-uses slices and standard methods instead of the old C span, prefix and
-token helpers, so those C-only memory contracts do not have a direct
-production function to prove. The corresponding behavior still needs
-review at its Rust call sites. The claims above are limited to the
-functions and inputs each row names.
+The differences from the former C proofs are explicit:
+
+* ``string_utf8`` checks lengths 0 through 5. This is enough for the
+  function's width decision, which reads at most the first four bytes.
+* ``string_search`` checks ``find()`` and ``contains()``. The C
+  ``span_until`` and case-insensitive comparison contracts have no
+  direct Rust function to check; their call sites use slice methods.
+* ``hex_digest_one_digit`` and ``hex_digest_shape`` vary one digest or
+  prefix byte at a time, with all other digits fixed to zero. They do
+  not check every 70 to 72 byte string as the C digest proof did. A
+  fully symbolic 64-digit decode is too large for this runner's memory
+  and time limits; the shorter shape and position cases still check
+  useful boundaries. The C null-pointer case does not apply to a safe
+  Rust slice argument. The old ``SIZE_MAX / 2`` length case is also
+  outside the Kani bound: a slice that large cannot fit the 6 GiB cap.
+* ``attest_name_digest_one_digit`` and
+  ``attest_name_digest_short_shape`` similarly hold the name and most
+  digits fixed. A separate proof rejects missing ``=`` in short
+  inputs, but they do not replace the C
+  proof over every 64 to 70 byte input. A separate 255 to 257 byte
+  name-bound attempt reached the 6 GiB Kani cap and was removed.
+* ``io_append_text`` checks line syntax, and ``io_lines`` checks where
+  to cut a torn tail. They do not prove the whole append transaction or
+  its stat, write, sync and rollback failures. Those operations cross
+  the OS boundary; the former C proof used stubbed syscalls. Rust unit
+  tests exercise real files, including a short write and rollback.
+* The C proof for 22-byte number parsing covered overflow,
+  ``parse_s64()`` and digit scanning. ``string_number_model`` covers
+  only four bytes, which cannot overflow ``u64``; the larger symbolic
+  parse needs a separate proof within the Kani resource cap.
+* The full six-byte sanitization proof has no Rust replacement yet.
+  ``sanitize()`` changes control bytes and invalid UTF-8, so it needs
+  a separate reference model for both rules.
+* The attestation replay proof modeled records and the register state.
+  The new parser proofs do not model TPM or event-log operations; the
+  Lean replay model still requires a bridge to production Rust.
+* The complete 64-digit ``on_pcr`` value and pin path construction have
+  no equivalent Kani harness. The short PCR parser proofs do not read
+  a full value. The pin path proofs cover slice construction, not the
+  allocation and file-system calls around it.
+
+The Rust port uses slices and standard methods instead of the old C
+span, prefix and token helpers, so those C-only memory contracts have
+no direct production function to prove. The corresponding behavior
+still needs review at its Rust call sites. Claims above apply only to
+inputs and functions each row names.
 
 CBMC proofs
 -----------
@@ -322,7 +371,7 @@ the model follows production code.
      - Kani ``pin_name_encode``, ``pin_name_decode`` and
        ``pin_name_roundtrip`` compare the Rust slice helpers within
        their stated bounds. CBMC ``paths-bpffs-name-model`` still
-       checks the C path.
+       checks :src:`util/paths.h`, which no build includes.
    * - ``Shirudo.ArchivePath``, ``archive_rel_ok()``,
        ``package_member_name_ok()`` and the member checks of
        ``extract()`` of :src:`rust/src/util/bpm_package/`

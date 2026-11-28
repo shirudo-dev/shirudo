@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 // Copyright (c) 2026 Authors of shirudo
 
-use super::{decode, decode_max, decode_sha256_digest, encode_into};
+use super::{decode, decode_max, decode_sha256_digest, encode, encode_into};
 
 // Shirudo.Hex.encodeByte in Hex.lean uses the high and low nibbles;
 // this arithmetic spelling is independent of the production table.
@@ -30,7 +30,7 @@ fn hex_roundtrip() {
     assert_eq!(&decoded[..len], &bytes[..len]);
 }
 
-// Shirudo.Hex.hexVal in Hex.lean gives each ASCII hex digit its value.
+// Shirudo.Hex.nibble in Hex.lean gives each ASCII hex digit its value.
 fn model_value(c: u8) -> Option<u8> {
     match c {
         b'0'..=b'9' => Some(c - b'0'),
@@ -40,27 +40,45 @@ fn model_value(c: u8) -> Option<u8> {
     }
 }
 
+// Check the allocating wrapper as well as the slice writer.
+#[kani::proof]
+fn hex_encode_alloc() {
+    let bytes: [u8; 8] = kani::any();
+    let len: usize = kani::any();
+    kani::assume(len <= bytes.len());
+    let digits = encode(&bytes[..len]);
+    assert_eq!(digits.len(), 2 * len);
+    for i in 0..len {
+        assert_eq!(digits[2 * i], model_digit(bytes[i] >> 4));
+        assert_eq!(digits[2 * i + 1], model_digit(bytes[i] & 0x0f));
+    }
+}
+
 #[kani::proof]
 fn hex_decode() {
     let text: [u8; 16] = kani::any();
     let len: usize = kani::any();
-    kani::assume(len <= 8);
+    let capacity: usize = kani::any();
+    kani::assume(len <= text.len() && capacity <= 8);
     let mut out = [0u8; 8];
-    let actual = decode(&text[..2 * len], &mut out[..len]);
-    let mut valid = true;
-    for i in 0..len {
-        match (model_value(text[2 * i]), model_value(text[2 * i + 1])) {
-            (Some(hi), Some(lo)) => {
-                if actual.is_ok() {
-                    assert_eq!(out[i], (hi << 4) | lo);
+    let actual = decode(&text[..len], &mut out[..capacity]);
+    let mut valid = len == 2 * capacity;
+    if valid {
+        for i in 0..capacity {
+            match (model_value(text[2 * i]), model_value(text[2 * i + 1])) {
+                (Some(hi), Some(lo)) => {
+                    if actual.is_ok() {
+                        assert_eq!(out[i], (hi << 4) | lo);
+                    }
                 }
+                _ => valid = false,
             }
-            _ => valid = false,
         }
     }
     assert_eq!(actual.is_ok(), valid);
 }
 
+// Shirudo.Hex.decodeMax in Hex.lean accepts valid even runs within capacity.
 #[kani::proof]
 fn hex_decode_max() {
     let text: [u8; 17] = kani::any();

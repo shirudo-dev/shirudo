@@ -39,40 +39,45 @@ fn attest_fields() {
     assert_eq!(record_word(&bytes[..len]), expected);
 }
 
-// Parse the short decimal tokens directly, rather than using the
-// production split_at() and parse_u64() combination.
+// Reference grammar: one or more decimal PCR numbers, separated by commas.
+// Parse each token separately, independent of the production character scan.
 #[kani::proof]
 fn attest_pcrs() {
     let bytes: [u8; 6] = kani::any();
     let len: usize = kani::any();
     kani::assume(len <= bytes.len());
 
-    let mut value = 0u32;
-    let mut have_digit = false;
     let mut mask = 0u32;
     let mut valid = len > 0;
-    for i in 0..len {
-        let c = bytes[i];
-        if c.is_ascii_digit() {
-            value = value * 10 + u32::from(c - b'0');
-            have_digit = true;
-        } else if c == b',' && have_digit && value <= 23 && i + 1 < len {
-            mask |= 1u32 << value;
-            value = 0;
-            have_digit = false;
-        } else {
-            valid = false;
+    let mut start = 0usize;
+    for end in 0..=len {
+        if end != len && bytes[end] != b',' {
+            continue;
         }
-    }
-    valid &= have_digit && value <= 23;
-    if valid {
+        if end == start {
+            valid = false;
+            break;
+        }
+        let mut value = 0u32;
+        for &digit in &bytes[start..end] {
+            if !digit.is_ascii_digit() {
+                valid = false;
+                break;
+            }
+            value = value * 10 + u32::from(digit - b'0');
+        }
+        if !valid || value > 23 {
+            valid = false;
+            break;
+        }
         mask |= 1u32 << value;
+        start = end + 1;
     }
     let expected = if valid { Ok(mask) } else { Err(-EINVAL) };
     assert_eq!(parse_pcrs(&bytes[..len]), expected);
 }
 
-// Shirudo.Hex.hexVal in Hex.lean gives each ASCII hex digit its value.
+// Shirudo.Hex.nibble in Hex.lean gives each ASCII hex digit its value.
 fn digest_digit(c: u8) -> Option<u8> {
     match c {
         b'0'..=b'9' => Some(c - b'0'),
@@ -116,5 +121,16 @@ fn attest_name_digest_short_shape() {
         assert_eq!(actual, Ok((&spec[..name_len], [0u8; 32])));
     } else {
         assert_eq!(actual, Err(-EINVAL));
+    }
+}
+
+// Without an equals sign, no name/digest pair exists.
+#[kani::proof]
+fn attest_name_missing_equals() {
+    let bytes: [u8; 6] = kani::any();
+    let len: usize = kani::any();
+    kani::assume(len <= bytes.len());
+    if !bytes[..len].contains(&b'=') {
+        assert_eq!(parse_name_digest(&bytes[..len]), Err(-EINVAL));
     }
 }

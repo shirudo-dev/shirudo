@@ -263,8 +263,8 @@ for model in testing/proofs/lean4/Shirudo/*.lean; do
 done >>"$work/proofs"
 awk 'NF && $1 !~ /^#/ { print $1 }' testing/proofs/kani/proofs.list >>"$work/proofs"
 while IFS= read -r proof; do
-    grep -qF "* - \`\`$proof\`\`" "$coverage" ||
-        report "$coverage" "no row for the proof $proof"
+	grep -qF "* - \`\`$proof\`\`" "$coverage" ||
+		report "$coverage" "no row for the proof $proof"
 done <"$work/proofs"
 while IFS= read -r page; do
 	field Proofs "$page" | grep -oE '``[A-Za-z0-9.-]+``' | tr -d '`' |

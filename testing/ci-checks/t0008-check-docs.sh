@@ -91,8 +91,8 @@ test_expect_success 'a tree whose fields continue on a second line passes' '
 '
 
 test_expect_success 'a Kani proof needs a coverage row' '
-    good && put testing/proofs/kani/proofs.list rust_example &&
-    refuses "no row for the proof rust_example"
+	good && put testing/proofs/kani/proofs.list rust_example &&
+	refuses "no row for the proof rust_example"
 '
 
 # A page whose console block holds the given lines.
