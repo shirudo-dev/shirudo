@@ -122,6 +122,30 @@ test_expect_success 'a run the issue already names is not added twice' '
 	test ! -s "$fixture/writes"
 '
 
+test_expect_success 'reading the issue must succeed before a failure is added' '
+	state "$(runs 12:failure)" "$(ci_suite_issue)" "fails at sha12: $url/12" "[]" &&
+	mv "$fixture/issue.json" "$fixture/saved" &&
+	! report && test ! -s "$fixture/writes" &&
+	mv "$fixture/saved" "$fixture/issue.json" &&
+	report && test ! -s "$fixture/writes"
+'
+
+test_expect_success 'reading the comments must succeed before a failure is added' '
+	state "$(runs 12:failure)" "$(ci_suite_issue)" "fails at sha11: $url/11" \
+		"[{\"body\":\"Still failing at sha12: $url/12\"}]" &&
+	mv "$fixture/comments.json" "$fixture/saved" &&
+	! report && test ! -s "$fixture/writes" &&
+	mv "$fixture/saved" "$fixture/comments.json" &&
+	report && test ! -s "$fixture/writes"
+'
+
+test_expect_success 'a cleared issue body leaves the run in its comments' '
+	state "$(runs 12:failure)" "$(ci_suite_issue)" "" \
+		"[{\"body\":\"Still failing at sha12: $url/12\"}]" &&
+	printf "%s\n" "{\"body\":null}" >"$fixture/issue.json" &&
+	report && test ! -s "$fixture/writes"
+'
+
 test_expect_success 'a pass closes the open issue' '
 	state "$(runs 13:success 12:failure)" "$(ci_suite_issue)" "fails on main at sha12: $url/12" "[]" &&
 	report &&
