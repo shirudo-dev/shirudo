@@ -111,7 +111,8 @@ signed config image.
    * - ``t0011-main-status``
      - ``main-status.sh``: the issue a failure on main opens, with its
        commit, run and failed jobs, the label created once, a later
-       failure added to the open issue once, a pass closing it and a
+       failure added to the open issue once, a failed read of the issue
+       or its comments leaving it alone, a pass closing it and a
        failure that finishes after it changing nothing, cancelled and
        skipped runs passed over, and the issue of another workflow left
        alone

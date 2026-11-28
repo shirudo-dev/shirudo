@@ -40,8 +40,15 @@ failed_jobs() {
 
 # Two runs of this script can judge main by the same run.
 reported() {
-	gh api "$repo/issues/$1" --jq .body | grep -qF "$2" ||
-		gh api --paginate "$repo/issues/$1/comments" --jq '.[].body' | grep -qF "$2"
+	RUN_URL=$2
+	export RUN_URL
+	match=$(gh api "$repo/issues/$1" \
+		--jq 'select((.body // "") | contains(env.RUN_URL)) | true') || exit 1
+	if [ -z "$match" ]; then
+		match=$(gh api --paginate "$repo/issues/$1/comments" \
+			--jq '.[] | select((.body // "") | contains(env.RUN_URL)) | true') || exit 1
+	fi
+	[ -n "$match" ]
 }
 
 # Another workflow's run can create the label first.
