@@ -134,8 +134,8 @@ Install the target package
 
       # apt install ./shirudo-target_<version>_<arch>.deb
       ...
-      shirudo: shirudo.service enabled; it runs 'shirudo init' early on the
-      shirudo: next boot. To enforce now: systemctl start shirudo.service
+      shirudo: shirudo.service enabled; it runs 'shirudo init' once the host
+      shirudo: boots through the shirudo initrd. Nothing is enforced until then.
       shirudo: shirudo-map-export.timer enabled for the next boot
       shirudo: shirudo-keepalive.timer enabled for the next boot
       shirudo: shirudo-xdp-reconcile.timer enabled for the next boot
@@ -148,9 +148,9 @@ Install the target package
 
    The package enables ``shirudo.service`` and the five timers for the next
    boot and starts none of them. Starting ``shirudo.service`` by hand does
-   nothing yet, whatever the message says: the unit runs only when
-   ``/run/shirudo/runtime`` is mounted, and the shirudo initrd mounts it at
-   boot. Removing the package disables the units again.
+   nothing yet: the unit runs only when ``/run/shirudo/runtime`` is
+   mounted, and the shirudo initrd mounts it at boot. Removing the package
+   disables the units again.
 
 2. Check the pre-flight on the target:
 

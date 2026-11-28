@@ -119,8 +119,8 @@ if [ "$1" = configure ] && command -v systemctl >/dev/null 2>&1; then
 	udevadm control --reload >/dev/null 2>&1 || true
 	systemctl enable shirudo-bpm-repo-update.timer >/dev/null 2>&1 || true
 	systemctl enable shirudo-bpm-tree-sync.timer >/dev/null 2>&1 || true
-	echo "shirudo: shirudo.service enabled; it runs 'shirudo init' early on the"
-	echo "shirudo: next boot. To enforce now: systemctl start shirudo.service"
+	echo "shirudo: shirudo.service enabled; it runs 'shirudo init' once the host"
+	echo "shirudo: boots through the shirudo initrd. Nothing is enforced until then."
 	echo "shirudo: shirudo-map-export.timer enabled for the next boot"
 	echo "shirudo: shirudo-keepalive.timer enabled for the next boot"
 	echo "shirudo: shirudo-xdp-reconcile.timer enabled for the next boot"
