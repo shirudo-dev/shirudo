@@ -1064,7 +1064,7 @@ OCI registry. The macOS workflow checks the Lima template with
 Unit suites and fuzz targets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The unit suites in :src:`testing/unit/` cover 45 of the modules in
+The unit suites in :src:`testing/unit/` cover 46 of the modules in
 :src:`util/`: ``attest``, ``bpm_cleanup``, ``bpm_install``, ``bpm_oci``,
 ``bpm_package``, ``bpm_state``,
 ``bpm_tree``, ``bpm_tree_overlap``, ``bpm_tree_state``, ``chain``,
@@ -1072,13 +1072,15 @@ The unit suites in :src:`testing/unit/` cover 45 of the modules in
 ``curl``, ``eventlog``, ``format``, ``hex``, ``identity``, ``io``,
 ``java_agent``, ``json``, ``kconfig``, ``kernel_abi``,
 ``keepalive``, ``keepalive_quote``, ``kernel_build_id``,
-``kernel_prereq``, ``kernel_release``, ``keys``, ``log``, ``measured``,
-``options``,
+``kernel_prereq``, ``kernel_release``, ``keyring``, ``keys``, ``log``,
+``measured``, ``options``,
 ``paths``, ``report``, ``seal``, ``string``, ``sysinfo``, ``timefmt``, ``upatch``,
 ``upatch_decode``, ``upatch_pins``, ``upatch_resolve``, ``upatch_verify``
 and ``xdp``, and
 ``overflow`` the arithmetic of
-:src:`include/shirudo/overflow.h`. ``jar`` covers the
+:src:`include/shirudo/overflow.h`. ``keyring`` covers the reads of a
+keyring that gains a link between them, and one that keeps gaining
+them. ``jar`` covers the
 ``shirudo-build`` checks of a Java agent's jar in
 :src:`tools/shirudo-build/jar.c`: stored and deflated manifests, a
 missing or empty ``Premain-Class``, one outside the main section, and

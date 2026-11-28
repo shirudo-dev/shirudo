@@ -67,7 +67,8 @@ struct keyring_link {
 /*
  * Every link of <keyring>, unlike keyring_list() also those it cannot
  * describe: a key hidden from view still verifies. Freed with
- * xfree(*links, *n * sizeof(**links)).
+ * xfree(*links, *n * sizeof(**links)). A keyring that keeps gaining
+ * links while it is read is -EAGAIN rather than a short list.
  */
 int keyring_links(key_serial_t keyring, struct keyring_link **links,
 		  size_t *n);

@@ -1144,6 +1144,7 @@ build/unit/%: testing/unit/%.c testing/unit/unit.c testing/unit/unit.h \
 		$(UNIT_OBJS) $(UNIT_LIB) $(LIBBPF_A) $(DYNAMIC_LIBS)
 
 build/unit/curl: LDFLAGS += -Wl,--wrap=curl_slist_free_all
+build/unit/keyring: LDFLAGS += -Wl,--wrap=syscall
 build/unit/upatch_pins: LDFLAGS += -Wl,--wrap=opendir,--wrap=readdir64
 
 unit-tests: $(UNIT_TESTS)

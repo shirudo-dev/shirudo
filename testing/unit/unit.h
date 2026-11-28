@@ -105,4 +105,14 @@ void unit_fail_mem(const char *file, int line, const char *what,
 #define ASSERT_STREQ(a, b)	UNIT_STREQ(1, a, b)
 #define ASSERT_MEMEQ(a, b, n)	UNIT_MEMEQ(1, a, b, n)
 
+/*
+ * A suite that wraps a libc function with the linker's --wrap defines
+ * __wrap_<name> and calls __real_<name>, the one it replaced. Both are
+ * declared here because a .c file carries no prototype of its own.
+ */
+long __real_syscall(long number, long arg1, long arg2, long arg3, long arg4,
+		    long arg5);
+long __wrap_syscall(long number, long arg1, long arg2, long arg3, long arg4,
+		    long arg5);
+
 #endif /* SHIRUDO_TESTING_UNIT_H */

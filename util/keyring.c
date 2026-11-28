@@ -29,6 +29,9 @@
 #define KEYCTL_RESTRICT_KEYRING	29
 #endif
 
+/* How often read_links() grows its buffer before it refuses the keyring. */
+#define READ_LINKS_TRIES	4
+
 static long sys_add_key(const char *type, const char *desc,
 			const void *payload, size_t plen, key_serial_t ring)
 {
@@ -79,44 +82,42 @@ static int read_links(key_serial_t keyring, key_serial_t **out, size_t *n,
 	key_serial_t *serials = NULL;
 	size_t cap = 64 * sizeof(*serials);
 	long ret;
+	void *bigger;
+	int tries;
 
 	serials = xmalloc(cap);
 	if (!serials)
 		return -ENOMEM;
 
-	ret = sys_keyctl(KEYCTL_READ, keyring, (long)serials, (long)cap, 0);
-	if (ret < 0) {
-		xfree(serials, cap);
-		return -errno;
-	}
-	if ((size_t)ret > cap) {
-		void *bigger = xreallocarray(serials, cap, (size_t)ret, 1);
-
+	/*
+	 * KEYCTL_READ copies nothing and returns the size it needs when the
+	 * buffer is too small. The keyring can gain a link between two reads,
+	 * so a read that did not fit is read again into a buffer of that
+	 * size; one that keeps gaining links past the retries is refused
+	 * rather than reported short.
+	 */
+	for (tries = 0; tries < READ_LINKS_TRIES; tries++) {
+		ret = sys_keyctl(KEYCTL_READ, keyring, (long)serials, (long)cap, 0);
+		if (ret < 0) {
+			xfree(serials, cap);
+			return -errno;
+		}
+		if ((size_t)ret <= cap) {
+			*out = serials;
+			*n = (size_t)ret / sizeof(*serials);
+			*size = cap;
+			return 0;
+		}
+		bigger = xreallocarray(serials, cap, (size_t)ret, 1);
 		if (!bigger) {
 			xfree(serials, cap);
 			return -ENOMEM;
 		}
 		serials = bigger;
 		cap = (size_t)ret;
-		ret = sys_keyctl(KEYCTL_READ, keyring, (long)serials,
-				 (long)cap, 0);
-		if (ret < 0) {
-			xfree(serials, cap);
-			return -errno;
-		}
-		/*
-		 * The keyring can grow again between the two reads;
-		 * KEYCTL_READ then returns the full size while filling only
-		 * cap bytes. Clamp to what the buffer actually holds so no
-		 * caller reads past the allocation.
-		 */
-		if ((size_t)ret > cap)
-			ret = (long)cap;
 	}
-	*out = serials;
-	*n = (size_t)ret / sizeof(*serials);
-	*size = cap;
-	return 0;
+	xfree(serials, cap);
+	return -EAGAIN;
 }
 
 int keyring_list(key_serial_t keyring,
