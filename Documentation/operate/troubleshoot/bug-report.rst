@@ -172,7 +172,8 @@ identify your hosts and your infrastructure:
      - Where
      - Identifies
    * - Host name
-     - ``system.hostname``, the journal
+     - ``status.json`` (``host`` and, when present, ``system.hostname``)
+       and the journal
      - The host
    * - ``machine_id``, ``boot_id``
      - ``status.json``. ``boot_id`` also in the evidence document
