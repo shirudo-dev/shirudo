@@ -51,7 +51,7 @@ before rating it; the page changes with the fix either way.
 ## Proofs against the code
 
 The proofs of `testing/proofs/` are evidence only while they hold for
-the code as it is, and CI runs them only after a push to main, without
+the code as it is, and CI runs them only every night on main, without
 the CBMC proofs `testing/proofs/cbmc/ci-skip.list` names. An audit runs
 all of them at the commit it audits, `make proofs`, those on that list
 for hours each, so start it first as the `proofs` skill says, and

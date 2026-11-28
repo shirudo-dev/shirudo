@@ -1,15 +1,15 @@
 name: Scorecard
 
-# On main only: the OpenSSF Scorecard rates the default branch, and each
-# run publishes its result as the project's score.
+# On main only: the OpenSSF Scorecard rates the default branch, its
+# settings and its history rather than a commit, and each run publishes
+# its result as the project's score. Once a week is enough.
 on:
   # The Branch-Protection check follows the rules of the branch.
   branch_protection_rule:
-  push:
-    branches:
-      - main
+  schedule:
+    - cron: '37 5 * * 1'
 
-# Only the newest push is worth a run, as each replaces the last.
+# Only the newest run is worth finishing, as each replaces the last.
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true

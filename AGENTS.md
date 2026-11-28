@@ -356,8 +356,8 @@ one usually still compiles and passes tests.
 - `make proofs` runs the CBMC proofs of `testing/proofs/cbmc/`, which
   check parsers and emitters for every input within a bound, and the Lean
   4 proofs of `testing/proofs/lean4/`, which prove models of algorithms
-  for every input. They take hours of CPU, so CI runs them after a push
-  to main, in the `Proofs` workflow, never on a pull request, and leaves
+  for every input. They take hours of CPU, so CI runs them every night
+  on main, in the `Proofs` workflow, never on a pull request, and leaves
   out the CBMC proofs `testing/proofs/cbmc/ci-skip.list` names, which
   need more time or memory than CI gives a proof. A change to code a
   proof covers, or to an algorithm a model follows, runs those proofs

@@ -43,7 +43,7 @@ make proofs-lean4                            # the Lean 4 proofs
 .github/scripts/proofs.sh run 3 8            # CI's shard 3 of 8
 ```
 
-The `Proofs` workflow runs them after a push to main, never on a pull
+The `Proofs` workflow runs them every night on main, never on a pull
 request, as they take hours of CPU: before a change is sent, run the
 ones covering the code you changed, which `CHANGED` picks from what
 each harness includes, and all of them after a change to `proof.h`, `run.sh` or `proofs.list`, which `CHANGED` does too. Cap the memory of a long run, `ulimit

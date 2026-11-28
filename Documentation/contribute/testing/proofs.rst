@@ -98,9 +98,9 @@ Run the proofs
 Run the proofs as CI does
 -------------------------
 
-The ``Proofs`` workflow, :src:`.github/workflows/proofs.yml`, runs after
-every push to main, never on a pull request, so the run before you send
-a change is the only one it gets before it lands. Its ``Lean4`` job runs
+The ``Proofs`` workflow, :src:`.github/workflows/proofs.yml`, runs every
+night on main, never on a pull request, so the run before you send a
+change is the only one it gets before it lands. Its ``Lean4`` job runs
 ``make proofs-lean4`` with the toolchain ``lean-toolchain`` names. Its
 ``CBMC`` job runs in eight shards: shard ``<k>`` takes every eighth proof
 of :src:`testing/proofs/cbmc/proofs.list` from the ``<k>``-th and runs

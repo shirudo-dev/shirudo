@@ -1,15 +1,16 @@
 name: Coverity
 
-# On the latest main only: a scan replaces the project's results on
-# Coverity Scan, which a pull request's code should not, and the token is
-# not given to a pull request from a fork.
+# On main only, every night and by hand: a scan replaces the project's
+# results on Coverity Scan, which a pull request's code should not, and
+# the token is not given to a pull request from a fork. Each defect it
+# reports names its file and line, so a night of merges needs no
+# bisecting.
 on:
-  push:
-    branches:
-      - main
+  schedule:
+    - cron: '41 3 * * *'
   workflow_dispatch:
 
-# Only the newest push is worth a scan, as each replaces the last.
+# Only the newest run is worth finishing, as each scan replaces the last.
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true
