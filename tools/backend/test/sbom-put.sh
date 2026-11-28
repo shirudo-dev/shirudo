@@ -6,10 +6,12 @@
 # test/stub-aws.sh in place of the AWS command line and
 # test/stub-trivy.sh as the matcher of --scan. An image is stored, its
 # files are those sbom-scan reads, and --scan loads it; storing it again
-# with the same SBOM changes nothing, with another is refused. Then what
-# it refuses before writing anything: a key out of the layout, a root
-# that is not a root, a time out of form, an SBOM that is not CycloneDX
-# and one that is not there, a store that is not one and wrong usage.
+# with the same SBOM changes nothing, with another is refused, also when
+# a put running meanwhile has placed its SBOM but not yet image.json.
+# Then what it refuses before writing anything: a key out of the layout,
+# a root that is not a root, a time out of form, an SBOM that is not
+# CycloneDX and one that is not there, a store that is not one and wrong
+# usage.
 
 set -eu
 
@@ -52,6 +54,16 @@ SBOM_STORE=file://$work/store run 'no root, default time' "$job" \
 sed 's/"built_at":"[0-9]\{4\}-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z"/"built_at":"<now>"/' \
 	"$work/store/fleet-os/2026.11.6/-/image.json"
 
+# Another put that placed its SBOM first and has not yet placed image.json.
+raced=$work/store/fleet-os/2026.11.7/-
+mkdir -p "$raced"
+cp "$other" "$raced/sbom.cdx.json"
+run 'raced, another sbom' "$job" --store "file://$work/store" \
+	--image-id fleet-os --image-version 2026.11.7 "$sbom"
+cmp "$other" "$raced/sbom.cdx.json" && echo 'the SBOM placed first is kept'
+run 'raced, same sbom' "$job" --store "file://$work/store" \
+	--image-id fleet-os --image-version 2026.11.7 --built-at 2026-11-03T08:00:00Z "$other"
+
 mkdir -p "$work/s3/fleet-images"
 export STUB_S3_ROOT="$work/s3"
 S3_CLIENT=$test/stub-aws.sh run 's3 put' "$job" --store s3://fleet-images/sboms \
@@ -83,3 +95,4 @@ run 'no store directory' "$job" --store file://no-such-store --image-id fleet-os
 run 'no image id' put --image-version 1 "$sbom"
 run 'two sboms' put --image-id fleet-os --image-version 1 "$sbom" "$sbom"
 (cd "$work/store" && find . -type f | sort)
+(cd "$work/store" && find . -name '.put.*')

@@ -64,7 +64,7 @@ What it writes
 The image's directory, as :doc:`sbom-scan` reads it: the SBOM as
 ``sbom.cdx.json``, byte for byte, then an ``image.json`` naming the key,
 ``cyclonedx-json``, the SBOM's SHA-256 and the build time. ``image.json``
-goes last and, in a ``file://`` store, each file is renamed into place,
+goes last and, in a ``file://`` store, each file is linked into place,
 so a scan running meanwhile sees the image whole or not at all.
 
 The SBOM is checked as the scan would check it before anything is
@@ -77,6 +77,15 @@ SHA-256, is left as it is, and the job says so and exits with status 0,
 so a pipeline can run it again. One with another SBOM is refused with
 status 1: a rebuild that changes the SBOM is a new version, or a new
 root.
+
+A link never replaces a file, so of two puts of one image at the same
+time into a ``file://`` store, the SBOM placed first is the one kept,
+and the other put is checked against it as above. Such a store must be
+on a file system with hard links. A put stopped between its SBOM and its
+``image.json`` leaves the SBOM, which a later put is checked against the
+same way; to store another, remove it once no put of the image runs. An
+``s3://`` store is checked only before the job writes, so puts of one
+image into it must run one at a time.
 
 Exit status
 -----------

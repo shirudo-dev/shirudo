@@ -80,6 +80,9 @@ sbom=$1
 
 make_work
 mkdir "$work/new" "$work/old"
+# A put stopped while it stages a file in the store leaves nothing there.
+staged=
+trap 'cleanup; [ -z "$staged" ] || rm -rf "$staged"' EXIT
 
 python3 "$here/sbom-rows.py" put "$work/new" "$image_id" "$image_version" \
 	"$image_root" "$built_at" "$sbom" >"$work/put" || exit 1
@@ -90,8 +93,29 @@ IFS='	' read -r path sha components <"$work/put"
 stored()
 {
 	[ -f "$1" ] || return 1
-	python3 "$here/sbom-rows.py" stored "$1" "$sha" ||
-		die "$path is already in the store with another SBOM; the store is written once"
+	python3 "$here/sbom-rows.py" stored "$1" "$sha" || refuse
+}
+
+refuse()
+{
+	die "$path is already in the store with another SBOM; the store is written once"
+}
+
+# place <name>: link the file into the image's directory of a file://
+# store; false when another put has placed one there first. It stages in
+# a directory of its own, since mktemp makes a file only its owner can
+# read, under a name the scan does not take for an image.json.
+place()
+{
+	staged=$(mktemp -d "$target/.put.XXXXXX") || die "cannot write in $target"
+	if cp "$work/new/$1" "$staged/$1.new" &&
+	   ln "$staged/$1.new" "$target/$1" 2>/dev/null; then
+		rm -rf "$staged"
+		return 0
+	fi
+	rm -rf "$staged"
+	[ -f "$target/$1" ] || die "cannot write $target/$1"
+	return 1
 }
 
 case "$store" in
@@ -103,15 +127,18 @@ file://?*)
 		printf 'sbom-put: %s: already stored with this SBOM\n' "$path"
 	else
 		mkdir -p "$target" || die "cannot make $target"
-		# Each file is renamed into place, the SBOM first: a scan in
+		# Each file is linked into place, the SBOM first: a scan in
 		# between sees no image.json, or a whole one naming a whole SBOM.
-		for name in sbom.cdx.json image.json; do
-			cp "$work/new/$name" "$target/.$name.tmp" &&
-				mv -f "$target/.$name.tmp" "$target/$name" ||
-				die "cannot write $target/$name"
-		done
-		printf 'sbom-put: %s: stored, sha256 %s, components: %s\n' \
-			"$path" "$sha" "$components"
+		# A link replaces nothing: the first file placed is the one kept.
+		place sbom.cdx.json ||
+			cmp -s "$work/new/sbom.cdx.json" "$target/sbom.cdx.json" || refuse
+		if place image.json; then
+			printf 'sbom-put: %s: stored, sha256 %s, components: %s\n' \
+				"$path" "$sha" "$components"
+		else
+			stored "$target/image.json" || die "cannot read $target/image.json"
+			printf 'sbom-put: %s: already stored with this SBOM\n' "$path"
+		fi
 	fi ;;
 s3://?*)
 	target=${store%/}/$path

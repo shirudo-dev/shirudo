@@ -1179,8 +1179,9 @@ history it reads, ``node_vulns`` and its inputs, the
 retention script and the views that keep boot baselines, the tree
 ingest job on a single publication and on a walk over sealed segments,
 the SBOM scan job on a store that holds an image in every state, the
-SBOM put job into a ``file://`` and an ``s3://`` store, again and with
-another SBOM, and what it refuses (``test/sbom-put``), the label put job
+SBOM put job into a ``file://`` and an ``s3://`` store, again, with
+another SBOM and after another put placed only its SBOM, and what it
+refuses (``test/sbom-put``), the label put job
 and the labels each node reads from it (``test/labels-put``), the
 enroll put job, a key bound once and what it refuses
 (``test/enroll-put``), the helper that allows builds
