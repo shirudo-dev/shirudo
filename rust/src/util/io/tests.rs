@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Authors of shirudo
 
 use super::*;
-use crate::errno::{EBADF, EINVAL, EIO, EISDIR, ELOOP, ENOTDIR, EPERM, ESTALE};
+use crate::errno::{EFBIG, EINVAL, EIO, EISDIR, ELOOP, ENOTDIR, EPERM, ESTALE};
 use crate::sys::libc::O_WRONLY;
 use crate::testutil::TempDir;
 use std::fs::{File, OpenOptions};
@@ -172,12 +172,39 @@ fn append_line_takes_one_line_alone() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "needs a child process and setrlimit")]
 fn append_line_failed_write_keeps_the_log() {
-    let dir = TempDir::new();
-    drop(log_with(&dir, b"x\n"));
-    let read_only = File::open(dir.join("log")).unwrap();
+    // File-size limits apply to the process. Run this case in its own test
+    // process so parallel unit tests keep their normal limits.
+    if std::env::var_os("SHIRUDO_APPEND_LIMIT_CHILD").is_none() {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .arg("append_line_failed_write_keeps_the_log")
+            .env("SHIRUDO_APPEND_LIMIT_CHILD", "1")
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            output.status.success() && stdout.contains("1 passed; 0 failed"),
+            "{stdout}{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
 
-    assert_eq!(append(&read_only, b"y"), Err(-EBADF));
+    let dir = TempDir::new();
+    let f = log_with(&dir, b"x\n");
+    // Permit one byte of the next record, then refuse the remaining two.
+    let limit = libc::rlimit {
+        rlim_cur: 3,
+        rlim_max: 3,
+    };
+    // SAFETY: this isolated child ignores SIGXFSZ so the failed write
+    // returns EFBIG; the child exits without restoring its signal state.
+    unsafe { libc::signal(libc::SIGXFSZ, libc::SIG_IGN) };
+    // SAFETY: limit points to an initialized rlimit in this child process.
+    assert_eq!(unsafe { libc::setrlimit(libc::RLIMIT_FSIZE, &limit) }, 0);
+
+    assert_eq!(append(&f, b"yz"), Err(-EFBIG));
     assert_eq!(log_of(&dir), b"x\n");
 }
 
